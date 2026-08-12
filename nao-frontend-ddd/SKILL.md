@@ -3,449 +3,95 @@ name: "nao-frontend-ddd"
 description: "Frontend Domain-Driven Design architecture guide based on Vue 3 + TypeScript + Pinia. Invoke when user wants to implement DDD, create new domains, or refactor project structure."
 ---
 
-# Frontend DDD Architecture Skill (重构版)
-
-## When Invoked
-
-遵循以下决策工作流：
-
-1. **评估项目规模**（代码行数、团队人数、功能数量、跨应用数量）。
-2. **根据评估选择对应的 DDD 等级**（1级/2级/3级）。
-3. **应用该等级对应的最小化结构**。
-4. **提供该等级的代码模式**。
-5. **当达到明确的量化指标时，建议升级**。
-
----
-
-## 架构哲学：依赖倒置与端口-适配器
-
-### 五层分层（自底向上）
-
-| 层级               | 职责                                                                                | 示例目录                   | 关键规则                                                                |
-| :----------------- | :---------------------------------------------------------------------------------- | :------------------------- | :---------------------------------------------------------------------- |
-| **Infrastructure** | **防腐层实现**：HTTP Client、LocalStorage、IndexedDB、第三方 SDK                    | `packages/infrastructure/` | 实现 Domain 层定义的 **Repository 接口**                                |
-| **Domain**         | **核心业务逻辑**：聚合根、实体、值对象、领域服务、**仓储接口（Ports）**             | `packages/domain/`         | **零外部依赖**（无 Vue、无 Axios、无 Pinia）                            |
-| **Application**    | **用例编排**：实现业务工作流，协调 Domain 实体，**定义 UI 所需的状态接口（Ports）** | `packages/application/`    | 依赖 Domain，但**不依赖 UI 框架**；定义 `IPresenter` 或 `IStateGateway` |
-| **Presentation**   | **UI 适配层**：Vue 组件、Pinia Store（实现状态端口）、Composables                   | `packages/presentation/`   | 依赖 Domain + Application；**实现** Application 定义的状态端口          |
-| **Views**          | **页面组装层**：路由页面，仅组装 Presentation 组件，**不含业务逻辑**                | `apps/web/src/views/`      | 仅依赖 Presentation                                                     |
-
-**依赖方向**：Views → Presentation → Application → Domain ← Infrastructure（依赖倒置，Domain 定义接口，Infrastructure 实现）
-
----
-
-## Monorepo 结构 (Level 3+)
-
-```text
-project-root/
-├── packages/
-│   ├── core-utils/                      # 【纯 TS】通用工具（日期、防抖、类型工具），零前端框架依赖
-│   │   └── src/
-│   │       ├── date/
-│   │       └── debounce/
-│   │
-│   ├── ui-kit/                          # 【Vue组件库】通用纯UI组件（Button, Input, Modal），无业务逻辑
-│   │   └── src/
-│   │       ├── components/
-│   │       └── hooks/                   # 仅 UI 交互钩子（如 useClickOutside）
-│   │
-│   ├── domain/                          # 【纯 TS】领域层
-│   │   ├── task/
-│   │   │   ├── aggregates/              # 【新增】聚合根（TaskList）
-│   │   │   ├── entities/                # 实体（Task, Comment）
-│   │   │   ├── valueobjects/            # 值对象（TaskPriority, TaskStatus）
-│   │   │   ├── repositories/            # 【端口接口】ITaskRepository
-│   │   │   └── services/                # 纯业务领域服务
-│   │   └── user/
-│   │       └── ...
-│   │
-│   ├── application/                     # 【纯 TS】应用层
-│   │   ├── task/
-│   │   │   ├── usecases/                # TaskUseCase（编排逻辑）
-│   │   │   ├── ports/                   # 【端口】ITaskStateGateway (由Presentation实现)
-│   │   │   └── dtos/                    # 数据传输对象（原 viewobjects）
-│   │   └── ...
-│   │
-│   ├── infrastructure/                  # 【TS + 外部依赖】基础设施层
-│   │   ├── repositories/
-│   │   │   ├── HttpTaskRepository.ts    # 实现 ITaskRepository（调用 Axios）
-│   │   │   └── LocalTaskRepository.ts   # 实现 ITaskRepository（调用 LocalStorage）
-│   │   └── http/
-│   │       └── client.ts
-│   │
-│   └── presentation/                    # 【Vue/Pinia】表现层
-│       ├── task/
-│       │   ├── components/              # TaskCard, TaskEditor（依赖领域实体）
-│       │   ├── store/
-│       │   │   ├── useTaskStore.ts      # 【业务状态】管理 Task 聚合
-│       │   │   └── useTaskUiStore.ts    # 【UI状态】管理 loading, filter, selectedId
-│       │   └── composables/
-│       │       └── useTask.ts           # 组装 UseCase + Repository，暴露给组件
-│       └── ...
-│
-└── apps/
-    ├── web/
-    └── desktop/
-```
-
----
-
-## Level 1：轻量级 DDD（小型项目，<5k LOC）
-
-### 适用场景
-
-- 1-2 名开发者，5-10 个页面。
-- 业务逻辑相对简单，但**仍需保障核心业务规则内聚**。
-
-### 最小化结构（保留充血模型）
-
-```text
-src/
-├── core/                                # 核心业务逻辑（零依赖 Vue）
-│   ├── entities/                        # 【强制】实体类（充血模型）
-│   │   └── Task.ts                      # 包含 isOverdue(), complete() 等方法
-│   ├── value-objects/                   # 值对象（如 TaskStatus）
-│   └── repositories/                    # 仓储接口（用于依赖倒置）
-│       └── ITaskRepository.ts
-│
-├── infrastructure/                      # 基础设施实现（API调用）
-│   └── HttpTaskRepository.ts            # 实现 ITaskRepository
-│
-├── composables/                         # Vue 组合式函数（业务组装 + UI状态）
-│   ├── useTask.ts                       # 初始化 Repository，暴露 CRUD 方法
-│   └── useTaskFilters.ts                # UI 筛选状态
-│
-├── components/                          # UI 组件（纯展示 + 调用 composable）
-├── views/                               # 页面
-└── main.ts
-```
-
-### 核心模式：充血实体类
-
-**不要**直接使用 API 返回的 Plain Object。必须实例化 Entity 类。
-
-```typescript
-// core/entities/Task.ts
-export class Task {
-    constructor(
-        public readonly id: string,
-        public title: string,
-        public done: boolean,
-        public dueDate: Date,
-    ) {}
-
-    // 业务规则封装在实体内部
-    public complete(): void {
-        if (this.done) throw new Error("Task already completed");
-        this.done = true;
-    }
-
-    public isOverdue(): boolean {
-        return !this.done && this.dueDate < new Date();
-    }
-}
-```
-
-### 量化升级指标（Level 1 → 2）
-
-- 单个 `core/entities` 文件超过 **300 行**。
-- 存在 **3 个以上** 相互关联的实体（如 Task、List、Tag）。
-- 出现跨实体的复杂业务校验（需要引入聚合根）。
-
----
-
-## Level 2：基础 DDD（中型项目，5k-20k LOC）
-
-### 适用场景
-
-- 3-5 名开发者，10-30 个功能。
-- 多个关联实体，存在明确的聚合根。
-
-### 结构增强
-
-```text
-src/
-├── domains/
-│   └── task/
-│       ├── aggregates/                  # 【新增】聚合根
-│       │   └── TaskList.ts              # 管理 Task 实体，确保一致性
-│       ├── entities/
-│       │   └── Task.ts
-│       ├── value-objects/
-│       ├── repositories/
-│       │   └── ITaskRepository.ts
-│       └── services/                    # 跨聚合的业务服务
-│
-├── application/                         # 【新增】应用层
-│   └── task/
-│       ├── usecases/
-│       │   └── TaskUseCase.ts
-│       └── dtos/
-│           └── TaskDTO.ts
-│
-├── infrastructure/
-│   └── repositories/
-│       └── HttpTaskRepository.ts
-│
-├── presentation/                        # 【新增】表现层（区分 UI 状态）
-│   ├── task/
-│   │   ├── components/
-│   │   ├── store/
-│   │   │   ├── useTaskStore.ts          # 业务状态（持有 TaskList 聚合）
-│   │   │   └── useTaskUiStore.ts        # UI 状态（loading, keyword, selectedIds）
-│   │   └── composables/
-│   │       └── useTask.ts
-└── ...
-```
-
-### 关键模式：聚合根（Aggregate Root）
-
-外部只能通过聚合根操作内部实体，保证业务不变式（Invariants）。
-
-```typescript
-// domains/task/aggregates/TaskList.ts
-import { Task } from "../entities/Task";
-
-export class TaskList {
-    private tasks: Task[] = [];
-
-    constructor(tasks: Task[]) {
-        this.tasks = tasks;
-    }
-
-    // 聚合根负责添加任务并触发领域事件（可选）
-    public addTask(task: Task): void {
-        if (this.tasks.some((t) => t.id === task.id)) {
-            throw new Error("Duplicate task ID");
-        }
-        this.tasks.push(task);
-    }
-
-    public completeTask(id: string): void {
-        const task = this.tasks.find((t) => t.id === id);
-        if (!task) throw new Error("Task not found");
-        task.complete(); // 委托给实体
-    }
-
-    public getOverdueTasks(): Task[] {
-        return this.tasks.filter((t) => t.isOverdue());
-    }
-}
-```
-
-### 关键模式：UI 状态与业务状态分离
-
-**禁止**在业务 Store 中混入 UI 状态。
-
-```typescript
-// store/useTaskStore.ts (业务)
-export const useTaskStore = defineStore("task", () => {
-    const taskList = ref<TaskList>(new TaskList([]));
-    const add = (task: Task) => {
-        taskList.value.addTask(task);
-    };
-    return { taskList, add };
-});
-
-// store/useTaskUiStore.ts (UI)
-export const useTaskUiStore = defineStore("taskUi", () => {
-    const isLoading = ref(false);
-    const keyword = ref("");
-    const selectedId = ref<string | null>(null);
-    return { isLoading, keyword, selectedId };
-});
-```
-
-### 量化升级指标（Level 2 → 3）
-
-- 代码库超过 **20k LOC**。
-- 领域数量超过 **3 个**（Task, User, Payment, etc.）。
-- 出现跨域 Store 直接引入（`import ... from '../user/store'`）超过 **3 次**。
-- 需要开发 **2 个以上** 独立应用（Web + Desktop + Mobile），需要 Monorepo。
-
----
-
-## Level 3：完整 DDD + 端口-适配器（大型/企业项目）
-
-### 适用场景
-
-- 5+ 名开发者，多团队协同。
-- 微前端或微服务后端架构，独立部署需求。
-- 多应用（Web、Desktop、Mobile）共享核心逻辑。
-
-### 核心原则：依赖倒置 (Dependency Inversion)
-
-**Domain** 和 **Application** 层定义接口（Ports），**Infrastructure** 和 **Presentation** 层实现接口（Adapters）。
-
-### 实现模式：在 Composable 中组装依赖
-
-#### 1. 定义端口（Application/Ports）
-
-应用层定义 UI 层需要实现的状态网关，**不包含任何 Vue/Pinia 类型**。
-
-```typescript
-// application/task/ports/ITaskStateGateway.ts
-import type { TaskList } from "@nao-todo/domain/task";
-
-export interface ITaskStateGateway {
-    getState(): TaskList;
-    updateState(list: TaskList): void;
-}
-```
-
-#### 2. 实现用例（Application/UseCases）
-
-用例接收端口，不直接依赖 Store。
-
-```typescript
-// application/task/usecases/TaskUseCase.ts
-import type { ITaskRepository } from "@nao-todo/domain/task/repositories";
-import type { ITaskStateGateway } from "../ports/ITaskStateGateway";
-
-export class TaskUseCase {
-    constructor(
-        private repo: ITaskRepository,
-        private gateway: ITaskStateGateway,
-    ) {}
-
-    async loadTasks() {
-        const tasks = await this.repo.findAll();
-        const list = new TaskList(tasks);
-        this.gateway.updateState(list);
-    }
-
-    async completeTask(id: string) {
-        const list = this.gateway.getState();
-        list.completeTask(id); // 聚合根执行业务逻辑
-        await this.repo.save(list.getTasks());
-        this.gateway.updateState(list);
-    }
-}
-```
-
-#### 3. 实现适配器（Presentation/Store）
-
-Pinia Store 实现应用层定义的网关接口。
-
-```typescript
-// presentation/task/store/useTaskStore.ts
-import type { ITaskStateGateway } from "@nao-todo/application/task/ports";
-
-export const useTaskStore = defineStore("task", () => {
-    const taskList = ref<TaskList>(new TaskList([]));
-
-    // 实现 ITaskStateGateway 接口
-    const gateway: ITaskStateGateway = {
-        getState: () => taskList.value,
-        updateState: (list) => {
-            taskList.value = list;
-        },
-    };
-
-    return { taskList, gateway };
-});
-```
-
-#### 4. 组装层（Presentation/Composables）
-
-在 Composable 中实例化 UseCase，注入具体的 Repository（Infrastructure）和 Gateway（Store）。
-
-```typescript
-// presentation/task/composables/useTask.ts
-import { HttpTaskRepository } from "@nao-todo/infrastructure/repositories";
-import { TaskUseCase } from "@nao-todo/application/task/usecases";
-import { useTaskStore } from "../store/useTaskStore";
-
-export function useTask() {
-    const store = useTaskStore();
-
-    // 依赖注入组装点
-    const useCase = new TaskUseCase(
-        new HttpTaskRepository(), // Infrastructure 实现
-        store.gateway, // Presentation 实现
-    );
-
-    const load = async () => {
-        await useCase.loadTasks();
-    };
-    const complete = async (id: string) => {
-        await useCase.completeTask(id);
-    };
-
-    return {
-        tasks: store.taskList,
-        load,
-        complete,
-    };
-}
-```
-
----
-
-## 组件归属决策表
-
-| 条件                                           | 归属位置                                     |
-| :--------------------------------------------- | :------------------------------------------- |
-| 组件**依赖**领域实体（Task, User）或业务 Store | `packages/presentation/<domain>/components/` |
-| 组件**无业务含义**（Button, Input, Card）      | `packages/ui-kit/`                           |
-| 组件被 **≥2 个领域** 复用且无业务逻辑          | `packages/ui-kit/`                           |
-| 纯 TS 工具函数（日期、数学、类型体操）         | `packages/core-utils/`                       |
-
----
-
-## 迁移路径
-
-### Level 1 → Level 2
-
-1. 识别聚合根（如 `TaskList`），将 `entities/` 中的逻辑上提到 `aggregates/`。
-2. 将 API 调用从 Composable 剥离，下沉至 `infrastructure/repositories/`。
-3. 引入 `application/usecases/`，将 Composable 中的业务编排逻辑移入 UseCase。
-4. 拆分 Store：业务逻辑保留，UI 状态（Loading、Filter）移至新 Store 或局部 ref。
-
-### Level 2 → Level 3
-
-1. 创建 `packages/` 目录，配置 pnpm workspace。
-2. 将 `domains/` 迁移至 `packages/domain/`，确保零前端依赖。
-3. 将 `application/` 迁移至 `packages/application/`，定义 Ports 接口。
-4. 将 `infrastructure/` 迁移至 `packages/infrastructure/`。
-5. 将 `presentation/` 迁移至 `packages/presentation/`，实现 Ports 接口。
-6. 拆分 `shared/` 为 `core-utils` (纯TS) 和 `ui-kit` (Vue组件)。
-
----
-
-## 禁止事项（红线）
-
-- ❌ **禁止**在 Domain 层导入 Vue、Pinia、Axios 等框架库。
-- ❌ **禁止**在 Application 层导入 Vue 或 Pinia（只能导入纯 TS）。
-- ❌ **禁止**组件直接调用 `axios` 或 `localStorage`（必须通过 Repository 接口）。
-- ❌ **禁止**在 Page 组件中写 `if/else` 业务逻辑（Page 只做组装）。
-- ❌ **禁止**将 UI 状态（Loading, ModalVisible）放入业务 Store。
-- ❌ **禁止**跨域直接导入 Store（`from '../user/store'`），应通过 Application 层协调。
-
----
-
-## 架构审查清单 (Code Review)
-
-- [ ] Domain 层是否零依赖（`package.json` 无 Vue/Pinia/Axios）？
-- [ ] 实体是否为**充血模型**（包含业务方法，而非贫血 getter/setter）？
-- [ ] 聚合根是否保证了业务不变式（如不能重复添加 ID）？
-- [ ] Application 层的 UseCase 是否只依赖 Ports（接口），而非具体实现？
-- [ ] Infrastructure 层是否实现了 Domain 定义的 Repository 接口？
-- [ ] Store 是否拆分为了业务状态（`useXxxStore`）和 UI 状态（`useXxxUiStore`）？
-- [ ] Composable 是否是依赖注入的组装工厂（`new UseCase(new Repo(), store.gateway)`）？
-- [ ] `ui-kit` 是否仅包含纯展示组件，不包含 `import { useTaskStore }`？
-
----
-
-## 常见问题 (FAQ)
-
-**Q1：如果我只有 5 个页面，真的需要实体类吗？**
-A：**需要**。哪怕只有 1 个实体，将 `isOverdue()` 逻辑封装在 `Task` 类中，也比散落在组件中好得多。这不会增加复杂度，反而提升了可测试性。
-
-**Q2：Pinia Store 和 Aggregate Root 职责如何区分？**
-A：**Aggregate Root** 是纯 TypeScript 逻辑，负责业务规则（如 `completeTask` 校验）。**Pinia Store** 是 Vue 的响应式容器，负责持有 Aggregate Root 实例并驱动 UI 更新。业务规则必须写在 Aggregate 里，Store 只做转发。
-
-**Q3：如果不使用 Monorepo（Level 3），如何实现依赖倒置？**
-A：在 Level 2 中，可以简化为在 `domains/task/repositories/` 定义接口，在 `infrastructure/` 中实现，并在 `composables/` 中手动 `new HttpTaskRepository()` 传入。无需 Monorepo 也能实践端口-适配器模式。
-
-**Q4：如何处理跨域通信（Task 完成后通知 User）？**
-A：在 **Application 层**的 UseCase 中协调，**严禁**在 Presentation 层跨域导入 Store。例如，`TaskUseCase` 可以接收 `ITaskCompleteNotifier` 端口，由 `User` 领域实现通知逻辑，或通过全局事件总线（`mitt`）解耦。
+# Frontend DDD Architecture
+
+## 1. 核心架构分层（框架无关）
+
+| 层级                             | 职责                                                                                             | 框架依赖                                         | 存放位置                                            |
+| :------------------------------- | :----------------------------------------------------------------------------------------------- | :----------------------------------------------- | :-------------------------------------------------- |
+| **Domain（领域层）**             | 聚合根、实体、值对象、仓储接口。**纯 TS 类**，包含业务方法。                                     | **零依赖**（无 Vue/React/JSX）                   | `packages/domain/` 或 `src/core/`                   |
+| **Application（应用层）**        | UseCase、DTO、**出站端口**（如 `ITaskStateGateway`）。编排业务流，不包含 UI 状态。               | **零依赖**（仅引用 Domain）                      | `packages/application/` 或 `src/application/`       |
+| **Infrastructure（基础设施层）** | 仓储接口实现（HTTP/LocalStorage）。负责 API 调用并实例化领域实体。                               | 依赖 HTTP 客户端（如 axios），**无 UI 框架依赖** | `packages/infrastructure/` 或 `src/infrastructure/` |
+| **Presentation（表现层）**       | **框架适配层**。包含 Store/Zustand、Hooks/Composables、领域组件。**唯一与 Vue/React 耦合的层**。 | **强依赖** Vue 或 React                          | `packages/presentation/` 或 `src/presentation/`     |
+| **Views（视图层）**              | 路由页面（Pages）。组装领域组件，传递路由参数。**不含业务逻辑**。                                | 依赖路由库（Vue Router / React Router）          | `apps/*/src/views/` 或 `src/views/`                 |
+
+## 2. Presentation 与 Views 层的框架差异对照表
+
+| 架构要素              | **Vue 3 实现方式**                                             | **React 实现方式**                                                | **核心职责（相同）**                                                         |
+| :-------------------- | :------------------------------------------------------------- | :---------------------------------------------------------------- | :--------------------------------------------------------------------------- |
+| **业务状态管理**      | Pinia Store（`defineStore`），持有聚合根实例。                 | Zustand / Jotai 的 Store 或 Atom，持有聚合根实例。                | **实现 Application 层定义的 `ITaskStateGateway` 端口**，存储领域状态。       |
+| **UI 状态管理**       | 独立的 Pinia Store（如 `useTaskUiStore`）或组件内 `ref`。      | Zustand 切片（Slice）或 `useState` / `useReducer`。               | 仅存储 `loading`、`keyword`、`selectedId` 等界面状态，**不与业务状态混存**。 |
+| **逻辑复用单元**      | Composables（`useTask.ts`），内部调用 Pinia Store 和 UseCase。 | Custom Hooks（`useTask.ts`），内部调用 Zustand Store 和 UseCase。 | **依赖注入组装点**：在此实例化 UseCase，注入 Repository 和 Store/Gateway。   |
+| **响应式机制**        | Proxy 响应式（`ref`/`reactive`），直接修改属性触发更新。       | 不可变数据（Immer 或展开运算符），通过 Setter 触发重渲染。        | 组件通过调用 Hooks/Composables 返回的数据驱动 UI。                           |
+| **领域组件定义**      | SFC（`<script setup>` + `<template>`）。                       | TSX / JSX 函数组件（`const Component = () => {}`）。              | **仅依赖 Hooks/Composables**，不直接调用 UseCase 或 Repository。             |
+| **页面组件（Views）** | Vue Router 的 `router-view` 配合 `<script setup>`。            | React Router 的 `<Routes>` 配合函数组件。                         | 仅做路由参数读取和子组件编排，禁止写 `if/else` 业务分支。                    |
+| **依赖注入机制**      | 通过 Composable 中的 `new UseCase(...)` 显式组装。             | 通过 Custom Hook 中的 `new UseCase(...)` 显式组装。               | **禁止**使用 Context 或 Provide/Inject 传递业务依赖（仅用于主题/语言）。     |
+
+## 3. 跨框架共享策略（Monorepo 实践）
+
+在 Level 3（Monorepo）中，采用以下分包策略最大化复用：
+
+| 包类型                        | 内容                                             | 框架依赖                     | 被谁引用                                  |
+| :---------------------------- | :----------------------------------------------- | :--------------------------- | :---------------------------------------- |
+| `packages/domain`             | 聚合根、实体、仓储接口                           | 无                           | Application、Infrastructure、Presentation |
+| `packages/application`        | UseCase、DTO、端口定义                           | 无                           | Presentation                              |
+| `packages/infrastructure`     | Http/Local 仓储实现                              | axios（无 UI 框架）          | Presentation（通过 Composable 实例化）    |
+| `packages/presentation-vue`   | **Vue 适配**：Pinia Store、Composables、领域组件 | Vue 3、Pinia                 | `apps/web-vue`、`apps/desktop-vue`        |
+| `packages/presentation-react` | **React 适配**：Zustand Store、Hooks、领域组件   | React、Zustand               | `apps/web-react`、`apps/mobile-react`     |
+| `packages/shared/ui-kit`      | 纯 UI 组件库（Button、Input、Modal）             | Vue 或 React（各自独立实现） | 对应的 Presentation 包                    |
+| `packages/shared/core-utils`  | 纯 TS 工具函数                                   | 无                           | 所有包                                    |
+
+> **原则**：若需同时支持 Vue 和 React，**Presentation 层必须拆分为两个独立包**，而 Domain/Application/Infrastructure 完全共享。
+
+## 4. 组件归属决策（框架无关）
+
+| 条件                                                              | 归属位置                                                           |
+| :---------------------------------------------------------------- | :----------------------------------------------------------------- |
+| 组件**依赖**领域类型（Task、User）或业务状态。                    | `presentation/<framework>/<domain>/components/`                    |
+| 组件**无业务含义**，仅用于布局或通用交互（Button、Card、Modal）。 | `shared/ui-kit/<framework>/`                                       |
+| 逻辑包含业务编排（调用 API、更新 Store）。                        | 放入 `Composables`（Vue）或 `Hooks`（React），**不放入组件内部**。 |
+| 逻辑仅涉及 UI 交互（弹窗开关、滚动监听）。                        | 放入 `Composables`/`Hooks` 的 `ui` 子目录或组件内局部状态。        |
+
+## 5. 代码审查红线（框架无关 + 框架特定）
+
+**通用红线（所有框架）**：
+
+- [ ] `packages/domain/` 或 `src/core/` 中是否有 `import { ref } from 'vue'` 或 `import { useState } from 'react'`？（应为零）
+- [ ] 实体类是否为**充血模型**（包含 `complete()`、`isOverdue()` 方法），而非贫血接口？
+- [ ] 应用层 UseCase 是否只依赖仓储接口和端口，未直接引用 Pinia/Zustand 的 API？
+- [ ] 页面组件（Views）是否仅做组装，不包含 `if (task.status === 'done')` 业务分支？
+
+**Vue 特定红线**：
+
+- [ ] Pinia Store 是否严格区分为业务 Store（存聚合根）和 UI Store（存 loading）？
+- [ ] Composable 是否作为依赖注入的唯一入口（`new UseCase(...)` 在此完成）？
+- [ ] 是否避免了在组件中用 `watch` 监听路由变化并直接修改 Store（应通过 Composable 封装）？
+
+**React 特定红线**：
+
+- [ ] Zustand/Jotai Store 是否仅存储领域状态，UI 状态是否用 `useState` 或独立 Slice 隔离？
+- [ ] Custom Hook 是否作为依赖注入的唯一入口（`new UseCase(...)` 在此完成）？
+- [ ] 是否避免了在 JSX 中直接调用 UseCase 方法（必须通过 Hook 暴露的方法触发）？
+
+## 6. 框架选择决策速查
+
+| 项目特征                                | 推荐框架               | 配套状态方案                                    |
+| :-------------------------------------- | :--------------------- | :---------------------------------------------- |
+| 团队熟悉 Vue 生态，中小型项目           | **Vue 3**              | Pinia（业务） + 组件内 `ref`（UI）              |
+| 团队熟悉 React 生态，需要强类型和灵活性 | **React + TypeScript** | Zustand（业务） + `useState`/`useReducer`（UI） |
+| 需要极高性能和细粒度渲染控制            | **React**              | Jotai（原子化状态）                             |
+| 快速原型开发，需内置状态管理            | **Vue 3**              | Pinia（开箱即用）                               |
+
+## 7. 常见误区澄清（框架视角）
+
+- **误区一**：DDD 的前端实现必须依赖特定状态库（如 Pinia 或 Redux）。
+  **纠正**：状态库是 Presentation 层的**适配器**，而非核心。Domain 层根本不关心状态如何响应式更新，它只负责业务规则。
+
+- **误区二**：React 的 Context 可以用来传递业务依赖（如 UseCase）。
+  **纠正**：Context 适合传递主题、语言等**基础设施级**信息。业务依赖（UseCase、Repository）应在 Custom Hook 中显式组装，避免 Context 导致的性能陷阱和测试困难。
+
+- **误区三**：Vue 的 `reactive` 可以直接包裹聚合根实例。
+  **纠正**：可以包裹，但严禁在组件中直接修改聚合根内部属性（如 `task.status = 'done'`）。必须通过聚合根的公开方法（`task.complete()`）修改，以保障业务不变量。
+
+- **误区四**：Vue 和 React 的 Presentation 层无法共享任何代码。
+  **纠正**：领域组件虽然无法共享，但**领域组件的逻辑规格**（如 Props 定义、事件回调命名）可以抽象为 `presentation/shared/types.ts`，供两个框架的组件共同遵循，保证跨应用交互的一致性。
