@@ -4,19 +4,19 @@ Agent skills collection for OpenCode / Sisyphus. Made by [Nathan Lee](https://gi
 
 ## Skills
 
-### `frontend-ddd`
+### `nao-frontend-ddd`
 
-Frontend Domain-Driven Design architecture guide based on **Vue 3 + TypeScript + Pinia**. Provides a progressive 3-level DDD framework:
+Frontend Domain-Driven Design architecture guide based on **Vue 3 + TypeScript / React + TypeScript**. Provides a progressive 3-level DDD framework:
 
 | Level                     | Scope                | Key Patterns                               |
 | ------------------------- | -------------------- | ------------------------------------------ |
 | **Level 1** — Lightweight | < 5k LOC, 1–2 devs   | Composable-based business logic            |
-| **Level 2** — Basic DDD   | 5k–20k LOC, 3–5 devs | Pinia stores per domain                    |
+| **Level 2** — Basic DDD   | 5k–20k LOC, 3–5 devs | Per-domain stores (Pinia/Zustand) + UseCase |
 | **Level 3** — Full DDD    | > 20k LOC, monorepo  | Domain / Application / Presentation layers |
 
 When invoked, the skill assesses project size, selects the appropriate DDD level, and provides the minimal structure and code patterns with clear graduation criteria for when to level up.
 
-See [frontend-ddd/SKILL.md](frontend-ddd/SKILL.md) for the full architecture guide, patterns, and migration paths.
+See [nao-frontend-ddd/SKILL.md](nao-frontend-ddd/SKILL.md) for the full architecture guide, patterns, and migration paths.
 
 ### `my-nueui`
 
@@ -39,17 +39,11 @@ See [my-nueui/SKILL.md](my-nueui/SKILL.md) for the full guide, component catalog
 
 ```text
 nao-skills/
-├── frontend-ddd/          # Frontend DDD architecture skill
-│   ├── SKILL.md           # Main skill definition
-│   └── refs/              # Level-specific pattern references
-│       ├── patterns-level1.md
-│       ├── patterns-level2.md
-│       ├── patterns-level3-key.md
-│       ├── patterns-level3-store-usecase.md
-│       └── quick-start.md
-├── my-nueui/              # NueUI component library skill
-│   ├── SKILL.md           # Main skill definition
-│   └── reference/         # Component & API reference docs
+├── nao-frontend-ddd/       # Frontend DDD architecture skill
+│   └── SKILL.md            # Main skill definition
+├── my-nueui/               # NueUI component library skill
+│   ├── SKILL.md            # Main skill definition
+│   └── reference/          # Component & API reference docs
 │       ├── components-*.md
 │       ├── recipes.md
 │       ├── programmatic-api.md
