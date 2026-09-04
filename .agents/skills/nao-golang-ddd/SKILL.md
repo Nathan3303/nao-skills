@@ -1,97 +1,104 @@
 ---
 name: "nao-golang-ddd"
-description: "Backend Domain-Driven Design architecture guide based on Golang. Invoke when user wants to implement DDD, create new domains, or refactor project structure."
+description: "DDD guide for Golang backend. Progressive 3‑level framework, dependency inversion, Go idioms, and red lines."
 ---
 
-# Backend DDD Architecture (Golang)
+# Golang DDD
 
-## 1. 决策工作流（何时选择何种形态）
+## 1. When to Apply DDD (Decision Tree)
 
-启动新项目或重构旧系统时，按以下逻辑树确定 DDD 的实施深度：
+1. **Is it pure CRUD?** → Use Transaction Script (no DDD).
+2. **Has complex rules?** (state machines, pricing, inventory) → proceed.
+3. **Single team & single deployable?** → Level 1 (lightweight) or Level 2 (modular).
+4. **Multiple teams / multiple services?** → Level 3 (microservices).
+5. **Legacy system?** Extract the core aggregate first; move validation into entity methods.
 
-- **第一步：判断业务本质**
-    - 若系统仅为简单的增删改查（CRUD），无复杂状态流转或审批流程 → 无需完整 DDD，采用 **事务脚本（Transaction Script）** 模式即可，仅将业务规则放入 Service 层。
-    - 若系统包含复杂业务规则（如订单状态机、金额计算、库存扣减策略）→ 进入第二步。
+## 2. Go Project Layout (Standard)
 
-- **第二步：判断部署与组织架构**
-    - **单团队、单部署包**（单体应用）：选择 **Level 1（轻量）** 或 **Level 2（模块化）**。
-    - **多团队、多部署包**（微服务架构）：选择 **Level 3（完整）**。
+| Directory               | Responsibility                                                                                           | Visibility      |
+|-------------------------|----------------------------------------------------------------------------------------------------------|-----------------|
+| `cmd/`                  | Entry points (`main.go`): `api`, `worker`, `migrate`.                                                    | Executable      |
+| `internal/`             | Private code – all business logic, adapters.                                                             | Internal        |
+| `internal/domain/`      | Aggregates, Entities, VOs, **Repository interfaces**, domain errors. **Zero external dependencies**.     | Internal        |
+| `internal/domain/shared/` | Shared VOs (Money, Address) and common errors.                                                        | Internal        |
+| `internal/application/` | UseCase handlers (Services), DTOs (Commands/Queries), **outbound ports** (e.g., EventPublisher).         | Internal        |
+| `internal/infrastructure/` | Repository impls, MQ clients, RPC clients, mappers (DB ↔ Domain).                                     | Internal        |
+| `internal/interfaces/`  | HTTP/gRPC handlers, middleware, consumers. Param binding, auth, DTO conversion – **no business logic**. | Internal        |
+| `pkg/`                  | Public contracts (Protobuf/OpenAPI structs). **No business logic**.                                      | External        |
 
-- **第三步：确定领域边界**
-    - 若业务中仅有一个核心概念（如仅“任务管理”），不存在多子域冲突 → Level 1。
-    - 若存在多个明显业务模块（订单、用户、库存、支付），且它们之间有清晰的数据隔离需求 → Level 2 或 Level 3。
+## 3. Progressive Levels
 
-- **第四步：迁移/演进策略**
-    - **新项目**：按选定等级直接落地。
-    - **遗留系统**：先识别并抽离最核心的“充血模型”（聚合根），将校验逻辑从 Service 层上移至实体方法；待核心域稳定后，再逐步拆解外围子域。
+| Aspect                | Level 1 (Lightweight Monolith)                                  | Level 2 (Modular Monolith)                                                                 | Level 3 (Microservices)                                                                         |
+|-----------------------|----------------------------------------------------------------|--------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
+| **Domain depth**      | Anemic/rich entities, simple interfaces.                       | Aggregates, Repository interfaces, domain events defined.                                   | Same as L2 + strict Bounded Contexts.                                                           |
+| **Transaction mgmt**  | `db.Begin()` in Application service.                           | **Context‑propagated `*sql.Tx`** with closure‑based commit/rollback.                      | Same as L2, plus **Saga** or **Outbox** patterns.                                               |
+| **Domain Events**     | Optional.                                                      | In‑memory bus: events collected inside transaction, dispatched after commit.               | Message queue with Outbox table for at‑least‑once delivery.                                    |
+| **Modularity**        | All code under one `internal` package.                         | Sub‑directories per domain (e.g., `order/`, `user/`); shared kernel allowed.               | Multiple `cmd/` processes (API, worker); cross‑service via `pkg/contracts`.                    |
+| **Concurrency**       | Database row locks.                                            | **Optimistic lock (version field)** on aggregates.                                         | Same as L2 + distributed locks (Redis) when needed.                                            |
 
-## 2. 推荐项目结构（Go 标准布局）
+## 4. Dependency Inversion (The Golden Rule)
 
-采用 Go 官方推荐的 `internal` + `cmd` + `pkg` 布局，确保领域层的物理隔离与外部依赖的最小暴露。
+**Flow:** `Interface → Application → Domain ← Infrastructure`
 
-| 目录                       | 职责定义                                                                                                                                                               | 可见性       |
-| :------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------- |
-| `cmd/`                     | 存放应用入口（`main.go`）。按部署形态拆分：`cmd/api/`（HTTP 服务）、`cmd/worker/`（消息队列消费进程）、`cmd/migrate/`（数据库迁移工具）。                              | 外部可执行   |
-| `internal/`                | **私有代码**，外部项目无法引用。存放所有业务逻辑、实现细节和适配器。                                                                                                   | 仅本项目可见 |
-| `internal/domain/`         | **核心领域层**。存放聚合根（Aggregate）、实体（Entity）、值对象（VO）、**仓储接口（Interface）** 以及领域异常定义。**零外部依赖**（仅限 Go 标准库）。                  | 内部私有     |
-| `internal/domain/shared/`  | 共享内核（Shared Kernel）。存放被多个子域共用的纯值对象（如金额、地址）和基础异常。                                                                                    | 内部私有     |
-| `internal/application/`    | **应用层**。存放用例处理程序（Handler/Service）、输入输出 DTO（Command/Query）、以及**出站端口定义**（如 EventPublisher 接口）。负责编排事务边界，**不包含业务规则**。 | 内部私有     |
-| `internal/infrastructure/` | **基础设施层**。存放所有**端口的具体实现**：数据库仓库（Repository Impl）、消息队列发布/订阅、RPC 客户端、缓存服务。负责 DB 模型与领域模型的映射转换。                 | 内部私有     |
-| `internal/interfaces/`     | **接口适配层**。存放 HTTP/gRPC 控制器（Handler）、中间件（Middleware）和消息消费者（Consumer）。仅做参数绑定、权限校验和 DTO 转换，**不包含业务逻辑**。                | 内部私有     |
-| `pkg/`                     | **可公开的共享库**。存放供其他微服务或外部系统引用的**纯契约（Contract）**，如 Protobuf/OpenAPI 生成的 Go 结构体、公共 DTO。**严禁**在此处放入业务逻辑或领域行为。     | 外部可引用   |
+- **Domain** defines repository interfaces (abstractions).
+- **Infrastructure** implements them.
+- **Application** depends only on Domain interfaces – never on concrete infra.
+- Assembly in `main.go` or Wire (explicit constructor injection). **No Service Locator, no reflection.**
 
-## 3. 等级差异速览
+## 5. Upgrade Triggers
 
-| 项目              | Level 1（轻量单体）                | Level 2（模块化单体）                                                         | Level 3（微服务）                                                                      |
-| :---------------- | :--------------------------------- | :---------------------------------------------------------------------------- | :------------------------------------------------------------------------------------- |
-| **领域层深度**    | 仅定义贫血/充血实体和简单接口。    | 引入聚合根（Aggregate）、仓储接口和领域事件定义。                             | 同 Level 2，但严格划分限界上下文（Bounded Context）。                                  |
-| **事务管理**      | 在应用服务中直接 `db.Begin()`。    | 使用 **`context` 传递事务句柄（`*sql.Tx`）**，通过闭包管理事务生命周期。      | 同 Level 2，且须支持 **Saga（补偿事务）** 或 **Outbox（发件箱）** 模式。               |
-| **领域事件**      | 不强制。                           | **内存式事件总线**（事件在事务内收集，事务提交成功后同步分发至本地处理器）。  | **消息队列（MQ）** 分发，并须实现 Outbox 表保证事件至少投递一次。                      |
-| **模块/服务拆分** | 所有代码置于单一 `internal` 包下。 | 按业务域（订单、用户）在 `internal/domain` 下分目录，允许 `shared` 共享内核。 | `cmd/` 下拆分多个独立启动进程（API 与 Worker 分离）；跨服务通过 `pkg/contracts` 通信。 |
-| **并发控制**      | 仅依赖数据库锁（如行锁）。         | 聚合根增加 **乐观锁（Version 字段）**，更新时检查版本号。                     | 同 Level 2，必要时引入分布式锁（Redis）。                                              |
+- **L1 → L2** when:
+  - An aggregate has >3 child entities.
+  - Cross‑entity invariants need aggregate root consistency.
+  - Team >3, requiring clear module boundaries.
 
-## 4. 依赖倒置（核心铁律）
+- **L2 → L3** when:
+  - Databases must be split per domain.
+  - Cross‑domain operations need eventual consistency (e.g., async notifications).
+  - A single module requires independent horizontal scaling.
 
-**自上而下的依赖流向**：Interface 层 → Application 层 → Domain 层 ← Infrastructure 层。
+## 6. Code Review Red Lines (Mandatory)
 
-- Domain 层定义**仓储接口**（抽象），Infrastructure 层**实现该接口**。
-- Application 层仅依赖 Domain 层定义的接口，不依赖 Infrastructure 层的具体实现类。
-- 所有依赖的组装发生在 `main.go` 或依赖注入容器（如 Google Wire）中，采用**显式构造函数注入**，禁止反射或 Service Locator 模式。
+- [ ] `internal/domain/` imports **no** ORM (GORM), web (Gin), or RPC framework.
+- [ ] Application layer contains **no business rules** like `if order.Status == Paid` – move to domain method.
+- [ ] HTTP handlers do **not** call Repository directly – must go through Application Service.
+- [ ] Cross‑service sharing uses `pkg/contracts` or separate Protobuf repo – **never** share `internal/domain`.
+- [ ] Aggregate updates check version field (optimistic locking) for concurrency.
 
-## 5. 演进条件（升级触发器）
+## 7. Go‑Specific Idioms & Conventions
 
-- **Level 1 → Level 2**：
-    - 单个实体关联的子实体超过 3 个（如订单关联多个商品及物流信息）。
-    - 出现跨实体的复杂校验规则，需要聚合根保证一致性。
-    - 团队人数超过 3 人，需要明确模块边界以减少合并冲突。
+- **DI:** Manual construction in `cmd/api/main.go` – Config → DB → Repo → Service → Handler. No framework annotations.
+- **Errors:** Domain defines sentinel errors (`var ErrOrderCanceled = errors.New("...")`). Application layer maps them to HTTP statuses (e.g., 409). **Never `panic` in business logic.**
+- **Value Objects:** Provide factory functions (e.g., `NewMoney(amount, currency)`) – avoid bare structs to prevent zero‑value pollution.
+- **Context:** All I/O methods (DB, RPC) take `context.Context` as **first parameter** for tracing, timeouts, and transaction propagation.
 
-- **Level 2 → Level 3**：
-    - 必须将数据存储拆分为独立数据库（不同模块拥有独立 DB）。
-    - 跨模块的操作必须允许**最终一致性**（如支付成功后异步通知订单和库存）。
-    - 单个模块负载过高，需独立部署以水平扩展。
+## 8. Common Misconceptions
 
-## 6. 代码审查红线（强制检查）
+- **DDD = Microservices?** No – DDD is a modelling approach; it works perfectly in monoliths.
+- **Every module needs DDD?** Only the **Core Domain** – support features can use simple scripts.
+- **Must use Event Sourcing / CQRS?** Only if audit trails or drastically different read/write models are required. Default to relational DB + lightweight domain events.
+- **Repository must always return aggregates?** For queries that don’t change state, return read‑only DTOs directly to avoid unnecessary hydration.
 
-- [ ] `internal/domain/` 是否导入了任何 ORM（GORM）、Web 框架（Gin）或 RPC 框架的包？
-- [ ] Application 层的逻辑是否包含 `if order.Status == Paid` 这样的业务规则（应上移至 Domain 方法）？
-- [ ] HTTP 控制器是否直接调用了 Repository 接口（必须经过 Application Service）？
-- [ ] 跨微服务是否共享了 `internal/domain` 中的代码（必须使用 `pkg/contracts` 或独立 Protobuf 仓库）？
-- [ ] 更新聚合根时，是否通过版本号（乐观锁）校验了并发冲突？
+## 9. Testing Strategy
 
-## 7. Go 特有落地约定
+| Layer           | Tools                     | Focus                                                      |
+|-----------------|---------------------------|------------------------------------------------------------|
+| Domain          | `testing` + `go-cmp`      | Entity invariants, VO methods, error scenarios.           |
+| Application     | `testing` + mocks         | UseCase orchestration, transaction boundaries, port calls. |
+| Infrastructure  | `testing` + `testcontainers` | Repository mapping, SQL correctness, MQ/RPC integration. |
+| Interfaces      | `httptest` / `grpctest`   | Handler request/response, status codes, middleware.       |
 
-- **依赖注入**：禁用框架注解。在 `cmd/api/main.go` 中按顺序手工初始化依赖（Config → DB → Repository → Service → Handler）。
-- **错误处理**：领域层定义哨兵错误（`var ErrOrderCanceled = errors.New("...")`），应用层/接口层根据错误类型映射 HTTP 状态码（如 409 Conflict），严禁在业务逻辑中使用 `panic`。
-- **零值陷阱**：值对象（VO）必须提供工厂函数（如 `NewMoney(amount, currency)`），禁止直接使用裸结构体，防止无效零值污染业务逻辑。
-- **上下文传递**：所有涉及 I/O 的方法（数据库、RPC）的首个参数须为 `context.Context`，用于传递链路追踪 ID、超时信号以及事务句柄。
+## 10. Migration Paths (Legacy to DDD)
 
-## 8. 常见决策误区澄清
+1. **Identify core aggregate** and extract it into `internal/domain/`.
+2. Move validation logic from Service layer into entity methods.
+3. Define Repository interface in Domain; keep existing DB access as initial implementation.
+4. Replace direct DB calls in Services with Repository calls.
+5. Gradually extract sub‑domains into separate packages (L2) or services (L3).
 
-- **误区一**：DDD 必须搭配微服务。
-  **纠正**：DDD 是业务建模方法，完全可用于单体应用，且级别越高（Level 3）才越涉及分布式议题。
+## 11. Quick FAQ
 
-- **误区二**：所有业务模块都必须做 DDD。
-  **纠正**：只对**核心域（Core Domain）**实施 DDD，辅助功能（如日志、纯配置管理）采用简单事务脚本即可，切勿过度设计。
-
-- **误区三**：必须使用事件溯源（Event Sourcing）或 CQRS。
-  **纠正**：仅当存在严苛的审计需求或读模型与写模型差异极大时再引入，否则徒增复杂度。默认采用传统关系型数据库+领域事件即可。
+- **Transaction in Application?** Yes – use a closure that receives `*sql.Tx`; rollback on error, commit on success.
+- **How to handle concurrency?** Use version field in aggregates; increment and check in UPDATE `WHERE version = old`.
+- **How to pass user identity?** Put user context (e.g., `userID`) into `context.Context` at the middleware level, retrieve in Application.
+- **What about caching?** Cache is infrastructure – defined as a separate port in Application, implemented in Infrastructure. Cache invalidation is a domain concern, but the cache store is not.
