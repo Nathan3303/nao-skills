@@ -18,8 +18,8 @@ Role prompts in `.agents/prompts/`. Use as a role system prompt in a session (e.
 
 | Prompt | Role | Highlights |
 | --- | --- | --- |
-| [`product-manager`](.agents/prompts/product-manager.md) | 产品经理（调度者） | 需求全生命周期：grill-me 澄清、9 模块 PRD、RICE 优先级、AC 五覆盖、零代码红线；§12 pi-intercom 多会话调度（开工确认卡 → fleet.sh 拉起 → send/ask 派发 → 验收闭环），§13 docs/prds 交付归档 |
-| [`architecture-designer`](.agents/prompts/architecture-designer.md) | 系统架构师（评审/咨询） | 分布式系统架构设计：业务驱动五原则、技术选型四步法、架构模式速查、交付红线与检查清单 |
+| [`product-manager`](.agents/prompts/product-manager.md) | 产品经理（调度者） | 需求全生命周期：grill-me 澄清、9 模块 PRD、RICE 优先级、AC 五覆盖、零代码红线；§12 pi-intercom 多会话调度（开工确认卡 → 架构评审闸门 → fleet.sh 拉起 → send/ask 派发 → 验收闭环），§13 docs/prds 交付归档 |
+| [`architecture-designer`](.agents/prompts/architecture-designer.md) | 系统架构师（评审/咨询） | 分布式系统架构设计：业务驱动五原则、技术选型四步法、架构模式速查、交付红线与检查清单；§11 pi-intercom 协作协议（评审签字 + ADR 归档） |
 | [`frontend-developer`](.agents/prompts/frontend-developer.md) | 前端研发（RD） | 基于 `nao-frontend-ddd`：五层分层、DDD 等级选择、代码审查红线（通用/Vue/React）、序列化边界 |
 | [`backend-developer`](.agents/prompts/backend-developer.md) | 后端研发（RD） | 基于 `nao-golang-ddd`：Go 标准布局与依赖倒置、事务脚本 / L1–L3 决策、手工 DI、哨兵错误、上下文传递 |
 | [`test-engineer`](.agents/prompts/test-engineer.md) | 测试工程师（QA） | 质量保障全流程、测试金字塔与 DDD 分层对齐、AC=测试用例、CI/CD 门禁 |
