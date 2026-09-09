@@ -26,15 +26,15 @@ Role prompts in `.agents/prompts/`. Use as a role system prompt in a session (e.
 
 ## Scripts
 
-### `nao-fleet.sh`
+### `nao-fleet.sh`（`.agents/scripts/`）
 
-按角色一键拉起 pi 会话窗口，供产品经理在开工确认后自动补齐缺线的 RD/架构师/QA 会话（见 `product-manager.md` §12「舰队启动」）。
+按角色一键拉起 pi 会话窗口，供产品经理在开工确认后自动补齐缺线的 RD/架构师/QA 会话（见 `product-manager.md` §12「舰队启动」）。脚本与角色卡同处 `.agents/` agent 工作区：
 
 ```bash
-scripts/nao-fleet.sh status                                    # 列出本机可识别的角色会话
-scripts/nao-fleet.sh ensure arch rd-fe                         # 拉起缺失角色（工作区=当前目录）
-scripts/nao-fleet.sh ensure rd-be@/path/to/nao-todo-server     # 前后端分离：显式指定后端 repo
-scripts/nao-fleet.sh ensure -m deepseek-v4-flash:high arch     # 仅当用户指定模型时才传 --model
+.agents/scripts/nao-fleet.sh status                                    # 列出本机可识别的角色会话
+.agents/scripts/nao-fleet.sh ensure arch rd-fe                         # 拉起缺失角色（工作区=当前目录）
+.agents/scripts/nao-fleet.sh ensure rd-be@/path/to/nao-todo-server     # 前后端分离：显式指定后端 repo
+.agents/scripts/nao-fleet.sh ensure -m deepseek-v4-flash:high arch     # 仅当用户指定模型时才传 --model
 ```
 
 - 角色别名 → 角色卡：`pm`→product-manager、`arch`/`arch-designer`→architecture-designer、`rd-fe`→frontend-developer、`rd-be`→backend-developer、`qa`→test-engineer。
@@ -61,12 +61,12 @@ nao-skills/
 │   │   ├── frontend-developer.md
 │   │   ├── backend-developer.md
 │   │   └── test-engineer.md
-│   └── commands/               # Slash commands
-│       ├── commit.md
-│       ├── nao-frontend-review.md
-│       └── nao-golang-review.md
-├── scripts/
-│   └── nao-fleet.sh            # Role session launcher (multi-session fleet)
+│   ├── commands/               # Slash commands
+│   │   ├── commit.md
+│   │   ├── nao-frontend-review.md
+│   │   └── nao-golang-review.md
+│   └── scripts/                # Agent operation scripts
+│       └── nao-fleet.sh        # Role session launcher (multi-session fleet)
 └── package.json
 ```
 

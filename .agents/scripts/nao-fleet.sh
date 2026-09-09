@@ -25,12 +25,13 @@
 # 环境变量
 #   NAO_TERMINAL=ghostty|ptyxis|screen   强制宿主（默认自动探测 ghostty > ptyxis > screen；
 #                                        无 GUI 终端时设 screen，会话后台运行，screen -r 附着）
-#   NAO_SKILLS=<dir>                     角色卡根目录（默认：本脚本所在仓库的上级）
+#   NAO_SKILLS=<dir>                     角色卡根目录（默认：本脚本位于 <仓库根>/.agents/scripts，
+#                                        向上两级即仓库根；可显式覆盖）
 # =============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILLS_DIR="${NAO_SKILLS:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+SKILLS_DIR="${NAO_SKILLS:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 PROMPTS_DIR="$SKILLS_DIR/.agents/prompts"
 
 log()  { printf '\033[1;32m[fleet]\033[0m %s\n' "$*"; }
@@ -113,7 +114,7 @@ cmd_ensure() {
 }
 
 usage() {
-  sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 }
 
