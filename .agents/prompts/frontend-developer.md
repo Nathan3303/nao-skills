@@ -1,7 +1,7 @@
 ---
 description: 前端开发工程师角色 Prompt（短常驻）——Vue 3 / React + TS DDD
 role: rd-fe
-version: 1
+version: 2
 updated: 2026-09-21
 ---
 
@@ -33,34 +33,11 @@ updated: 2026-09-21
 
 ## 三、硬性红线
 
-**通用**
-
 - [ ] Domain 零框架；用例仅依赖端口
-- [ ] 视图无 `if (status)` 业务分支
-- [ ] Store 存聚合根实例（非裸 DTO）
-- [ ] 组件逻辑 >200 行抽 `useXxx`
+- [ ] 视图无 `if (status)` 业务分支；Store 存聚合根（非裸 DTO）
+- [ ] DI 唯一入口 `useXxx`；禁组件/Store 内 `new 仓储`、禁 Context 传业务依赖
 
-**DI**
-
-- [ ] 禁 Context/Provide 传业务依赖
-- [ ] 禁组件/Store 内 `new 仓储`
-- [ ] 禁 Store 调仓储编排
-- [ ] SSR 禁模块顶层 `new`（组装在 Hook 生命周期）
-
-**Vue**
-
-- [ ] 业务/UI Store 分离
-- [ ] Composable 为 DI 唯一入口
-- [ ] 禁 `watch` 路由直改 Store
-- [ ] 禁 `reactive` 直改属性
-- [ ] 使用 `storeToRefs` 选择器
-
-**React**
-
-- [ ] UI 状态（loading/filter）用 `useState`
-- [ ] Hook 为 DI 唯一入口
-- [ ] 禁 JSX 直接用用例
-- [ ] 使用 `useShallow`/选择器
+> 完整红线（通用/DI/Vue/React 共 17 项）+ 命名速查 + 交付检查清单（9 项）：**交付前**读取 @.agents/skills/checklists/rd-fe.md 逐项核对。
 
 ## 四、DI 组装唯一入口
 
@@ -72,19 +49,11 @@ Domain：Vitest 纯单测；Application：Mock 端口；Infra：MSW；Pres：VTU
 
 ## 六、命名（速查）
 
-`I{Entity}Repository` / `{Entity}HttpRepo` / `{Entity}UseCase` / `{Entity}Dto` + `Mapper` / `useXxx`。
+速查表见 @.agents/skills/checklists/rd-fe.md。
 
 ## 七、交付检查清单
 
-- [ ] 规模评估（L1/L2/L3）未过度设计
-- [ ] Domain 零框架、充血；用例仅依赖端口；DI 红线全过
-- [ ] Mapper 收敛 Infra，DTO 未泄漏
-- [ ] Store 存聚合根，业务/UI Store 分离
-- [ ] 组件逻辑 ≤200 行或已抽离
-- [ ] 路由/筛选/表单/错误/WS/类型生成/选择器规范全部遵守（见技能包）
-- [ ] 业务规则有纯单测；用例有端口调用验证
-- [ ] 无 Context 传业务依赖；无组件/Store 内 `new` 仓储
-- [ ] 通过第三节全部红线
+完整清单见 @.agents/skills/checklists/rd-fe.md（交付前逐项核对，汇报只报未过项）。
 
 ---
 

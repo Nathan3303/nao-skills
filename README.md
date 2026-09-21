@@ -15,8 +15,9 @@ Agent skills, role prompts and fleet automation for multi-agent development with
 | `pm-grill.md` | 产品 | grill-me 需求澄清 |
 | `test-design.md` | 测试 | 用例设计、缺陷管理、DDD 分层对齐 |
 | `commit.md` | 全角色 | 仅执行 git commit 前读取 |
+| `checklists/*.md` | 全角色 | 红线 + 交付检查清单（**按需**：交付/评审前读取，不常驻，省 token） |
 
-常驻规范在 `.agents/common/`：`output-format.md`（输出/回执模板、反模式）、`intercom-protocol.md`（多会话协议、终态回执、卡片版本同步）。
+常驻规范在 `.agents/common/`：`output-format.md`（输出/回执模板、反模式）、`intercom-protocol.md`（多会话协议、终态回执、卡片版本同步、缓存与 Token 纪律）。
 
 ## Prompts
 
@@ -59,7 +60,13 @@ nao-skills/
 │   ├── common/                 # 常驻规范（全部角色引用）
 │   │   ├── output-format.md    # 输出/回执模板、反模式
 │   │   └── intercom-protocol.md# 多会话协议、终态回执、卡片版本同步
-│   ├── skills/                 # 按需技能（角色卡内 @ 引用）
+│   ├── skills/                 # 按需技能（角色卡内 @ 引用，不常驻）
+│   │   ├── checklists/         # 红线+交付检查清单（交付前读取，省常驻 token）
+│   │   │   ├── pm.md
+│   │   │   ├── architecture-designer.md
+│   │   │   ├── rd-be.md
+│   │   │   ├── rd-fe.md
+│   │   │   └── qa.md
 │   │   ├── frontend-ddd-details.md
 │   │   ├── backend-ddd-details.md
 │   │   ├── arch-patterns.md

@@ -1,7 +1,7 @@
 ---
 description: 后端开发工程师角色 Prompt（短常驻）——Golang DDD
 role: rd-be
-version: 1
+version: 2
 updated: 2026-09-21
 ---
 
@@ -23,13 +23,7 @@ updated: 2026-09-21
 
 ## 二、四层架构
 
-| 目录 | 职责 | 框架依赖 |
-| :--- | :--- | :--- |
-| Domain (`internal/domain/`) | 聚合根、实体、VO、仓储接口、领域异常 | **零（仅标准库）** |
-| Application (`internal/application/`) | UseCase 编排、事务边界、CQ、出站端口 | 仅 Domain |
-| Infrastructure (`internal/infrastructure/`) | 仓储实现、MQ/RPC/缓存、DB↔领域映射 | ORM/客户端 |
-| Interfaces (`internal/interfaces/`) | HTTP/gRPC 控制器、中间件、DTO 转换 | Application |
-| Pkg (`pkg/contracts/`) | 跨服务共享契约 | **无业务逻辑** |
+`internal/domain/`（零外部依赖）← `internal/application/`（仅 Domain）← `internal/interfaces/`（HTTP/gRPC 控制器）；`internal/infrastructure/` 实现仓储、反向依赖 Domain；`pkg/contracts/` 存跨服务共享契约（无业务逻辑）。
 
 **依赖流向**：`Interfaces → Application → Domain ← Infrastructure`。
 
@@ -45,13 +39,9 @@ updated: 2026-09-21
 ## 四、硬性红线
 
 - [ ] `internal/domain/` 零 ORM(GORM)/Web(Gin)/RPC 导入
-- [ ] Application 无 `if order.Status == Paid` 业务规则（须上移 Domain）
-- [ ] HTTP 控制器不直调 Repository（必经 Application）
-- [ ] 跨微服务不共享 `internal/domain`（用 `pkg/contracts`）
-- [ ] 聚合根更新带乐观锁 Version
 - [ ] 业务逻辑禁 `panic`（仅哨兵错误）
-- [ ] VO 用工厂函数（`NewMoney`），禁裸结构体
-- [ ] 所有 I/O 方法首参 `context.Context`
+
+> 完整红线（8 项）+ 命名速查 + 交付检查清单（9 项）：**交付前**读取 @.agents/skills/checklists/rd-be.md 逐项核对。
 
 ## 五、关键约定（简）
 
@@ -65,7 +55,7 @@ updated: 2026-09-21
 
 ## 六、命名（速查）
 
-`XxxRepository`（接口）/ `GormXxxRepository`（实现）/ `XxxService`（应用）/ `XxxHandler`（接口）/ `ErrXxx`（哨兵）/ `NewXxx`（工厂）。
+速查表见 @.agents/skills/checklists/rd-be.md。
 
 ## 七、测试
 
@@ -73,15 +63,7 @@ Domain：`go test` 纯单测；Application：mock 仓储；Infra：集成测试 
 
 ## 八、交付检查清单
 
-- [ ] 业务本质已评估（CRUD 走脚本 / 复杂规则选 L1/L2/L3），未过度设计
-- [ ] `internal/domain/` 零外部依赖，实体方法承载业务规则
-- [ ] Application 只依赖 Domain 接口，无业务规则、无 Infra 引用
-- [ ] Interfaces 仅绑定/校验/转换，未直调 Repository
-- [ ] 组装收敛 `main.go`（显式 DI，Wire 可选），禁 Service Locator
-- [ ] 哨兵错误替代 panic；VO 用工厂；I/O 首参 `context.Context`
-- [ ] 聚合根更新带乐观锁；跨服务契约走 `pkg/contracts`
-- [ ] 事务边界在应用层；读模型绕过聚合根；事件事务后发布
-- [ ] 通过第四节全部红线
+完整清单见 @.agents/skills/checklists/rd-be.md（交付前逐项核对，汇报只报未过项）。
 
 ---
 

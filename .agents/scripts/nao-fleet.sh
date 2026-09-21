@@ -110,26 +110,25 @@ card_field() {
   ' "$1"
 }
 
-# 校验卡片/公共规范中的 @.agents/... 引用均存在（跨仓库会话能解析的关键保障）
+# 校验卡片/公共规范/清单中的 @.agents/... 引用均存在（含 checklists/ 子目录；跨仓库会话能解析的关键保障）
 check_cross_refs() {
-  local rc=0 src ref dir file
+  local rc=0 src ref
   local -a srcs=()
   shopt -s nullglob
-  srcs+=("$PROMPTS_DIR"/*.md "$COMMON_DIR"/*.md)
+  srcs+=("$PROMPTS_DIR"/*.md "$COMMON_DIR"/*.md "$SKILLS_SUB"/*.md "$SKILLS_SUB"/checklists/*.md)
   shopt -u nullglob
   for src in "${srcs[@]}"; do
     while IFS= read -r ref; do
       [[ -z "$ref" ]] && continue
-      dir="${ref%/*}"; file="${ref##*/}"
-      case "$dir" in
-        common|skills|prompts|scripts) ;;
+      case "$ref" in
+        common/*|skills/*|prompts/*|scripts/*) ;;
         *) continue ;;
       esac
-      if [[ ! -f "$SKILLS_DIR/.agents/$dir/$file" ]]; then
-        printf '  ✗ %s → @.agents/%s/%s 缺失\n' "$(basename "$src")" "$dir" "$file"
+      if [[ ! -e "$SKILLS_DIR/.agents/$ref" ]]; then
+        printf '  ✗ %s → @.agents/%s 缺失\n' "$(basename "$src")" "$ref"
         rc=1
       fi
-    done < <(grep -hoE '@\.agents/(common|skills|prompts|scripts)/[A-Za-z0-9._-]+' "$src" | sed 's/^@\.agents\///' | sort -u)
+    done < <(grep -hoE '@\.agents/(common|skills|prompts|scripts)/[A-Za-z0-9._/-]+' "$src" | sed 's/^@\.agents\///' | sort -u)
   done
   [[ $rc -eq 0 ]] && echo '  ✓ 全部引用文件存在'
   return $rc
@@ -314,12 +313,7 @@ build_system_prompt() {
   f="$(mktemp "/tmp/nao-fleet-$(basename "$card" .md)-XXXXXX.md")"
   {
     cat "$card"
-    printf '\n## 环境锚点（由 nao-fleet.sh 注入，本机绝对路径）\n'
-    printf -- '- NAO_SKILLS: %s\n' "$SKILLS_DIR"
-    printf -- '- 角色卡: %s\n' "$card"
-    printf -- '- 通用规范: %s/common/output-format.md、%s/common/intercom-protocol.md\n' "$COMMON_DIR" "$COMMON_DIR"
-    printf -- '- 技能目录: %s/skills/\n' "$SKILLS_SUB"
-    printf -- '- 卡片内 @.agents/... 引用以会话 cwd 解析；cwd 无 .agents 时一律改用以上绝对路径。\n'
+    printf '\n## 环境锚点\n- NAO_SKILLS=%s（@.agents/... 引用以会话 cwd 解析；cwd 无 .agents 时以 NAO_SKILLS 为根拼接绝对路径）\n' "$SKILLS_DIR"
   } > "$f"
   echo "$f"
 }
