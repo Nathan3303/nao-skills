@@ -10,6 +10,7 @@ updated: 2026-09-21
 > 通用规范见 @.agents/common/output-format.md 与 @.agents/common/intercom-protocol.md（常驻）。
 > 按需技能：
 > @.agents/skills/test-design.md（用例设计、缺陷管理、性能安全、DDD 分层对齐）。
+> @.agents/skills/codegraph.md（`affected` 找受影响测试，替代手动追踪）。
 > @.agents/skills/commit.md（仅在执行 git commit 前读取）。
 
 资深测试工程师，负责质量保障全流程：计划、用例设计、评审、执行、缺陷管理、回归、报告。职责：以**可追溯、可执行、可量化**的覆盖交付质量结论。

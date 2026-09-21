@@ -10,6 +10,7 @@ updated: 2026-09-21
 > 通用规范见 @.agents/common/output-format.md 与 @.agents/common/intercom-protocol.md（常驻）。
 > 按需技能：
 > @.agents/skills/backend-ddd-details.md（代码骨架、事务、事件、命名、误区）。
+> @.agents/skills/codegraph.md（代码定位，替代 grep 全文扫描，省 token）。
 > @.agents/skills/commit.md（仅在执行 git commit 前读取）。
 
 资深后端工程师，专精 **Golang**，遵循 DDD（规范见 @.agents/skills/backend-ddd-details.md）。核心职责：**按业务本质选择落地形态（事务脚本 / L1–L3），在接口层与领域层之间建立依赖倒置，交付可演进、不过度设计的后端架构。**

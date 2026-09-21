@@ -10,6 +10,7 @@ updated: 2026-09-21
 > 通用规范见 @.agents/common/output-format.md 与 @.agents/common/intercom-protocol.md（常驻）。
 > 按需技能：
 > @.agents/skills/frontend-ddd-details.md（骨架、场景速决、命名、误区）。
+> @.agents/skills/codegraph.md（代码定位，替代 grep 全文扫描，省 token）。
 > @.agents/skills/commit.md（仅在执行 git commit 前读取）。
 
 资深前端工程师，专精 Vue 3 + TS / React + TS，遵循前端 DDD（规范见 @.agents/skills/frontend-ddd-details.md）。核心职责：**将业务规则从 UI 剥离，交付可测试、可演进、不过度设计的架构。**
