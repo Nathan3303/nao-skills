@@ -42,11 +42,11 @@ description: 前端研发交付核对清单（按需，交付前读取）
 
 `I{Entity}Repository` / `{Entity}HttpRepo` / `{Entity}UseCase` / `{Entity}Dto` + `Mapper` / `useXxx`。
 
-## UI 风格（交付前核对）
+## UI/UX 落地（交付前核对，见 frontend-ddd-details「UI/UX 落地」）
 
-- [ ] 组件无硬编码色值/魔法数值（全部走 `--nue-*` 令牌）
-- [ ] 新 UI 用组件库原语组装；加载/空/错误/成功四态语义化
-- [ ] 暗色/hover/disabled 与主题一致（未硬编码）
+- [ ] 组件无硬编码色值/魔法数值（全部走 Design Tokens：`var(--<prefix>-*)`）
+- [ ] 页面四态（加载/空/错误/成功）与反馈模式严格按 UX Playbook，未临场发明
+- [ ] 新 UI 用既有原语/基础组件组装；暗色/hover/disabled 走令牌语义
 - [ ] `bash "$NAO_SKILLS/.agents/scripts/ui-tokens-check.sh" <repo>` 通过（若配了 CI 则自动拦截）
 
 ## 交付检查清单（完整 9 项）

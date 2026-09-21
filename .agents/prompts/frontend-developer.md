@@ -9,7 +9,8 @@ updated: 2026-09-21
 
 > 通用规范见 @.agents/common/output-format.md 与 @.agents/common/intercom-protocol.md（常驻）。
 > 按需技能：
-> @.agents/skills/frontend-ddd-details.md（骨架、场景速决、命名、误区）。
+> @.agents/skills/frontend-ddd-details.md（骨架、场景速决、命名、误区、UI/UX 落地）。
+> @.agents/skills/frontend-design/SKILL.md（**设计方向类任务先读**：视觉方向/反 AI 味，官方 anthropics/skills）。
 > @.agents/skills/codegraph.md（代码定位，替代 grep 全文扫描，省 token）。
 > @.agents/skills/commit.md（仅在执行 git commit 前读取）。
 

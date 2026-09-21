@@ -121,14 +121,14 @@ check_cross_refs() {
     while IFS= read -r ref; do
       [[ -z "$ref" ]] && continue
       case "$ref" in
-        common/*|skills/*|prompts/*|scripts/*) ;;
+        common/*|skills/*|prompts/*|scripts/*|templates/*) ;;
         *) continue ;;
       esac
       if [[ ! -e "$SKILLS_DIR/.agents/$ref" ]]; then
         printf '  ✗ %s → @.agents/%s 缺失\n' "$(basename "$src")" "$ref"
         rc=1
       fi
-    done < <(grep -hoE '@\.agents/(common|skills|prompts|scripts)/[A-Za-z0-9._/-]+' "$src" | sed 's/^@\.agents\///' | sort -u)
+    done < <(grep -hoE '@\.agents/(common|skills|prompts|scripts|templates)/[A-Za-z0-9._/-]+' "$src" | sed 's/^@\.agents\///' | sort -u)
   done
   [[ $rc -eq 0 ]] && echo '  ✓ 全部引用文件存在'
   return $rc
