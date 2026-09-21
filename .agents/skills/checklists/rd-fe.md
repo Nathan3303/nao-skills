@@ -42,6 +42,13 @@ description: 前端研发交付核对清单（按需，交付前读取）
 
 `I{Entity}Repository` / `{Entity}HttpRepo` / `{Entity}UseCase` / `{Entity}Dto` + `Mapper` / `useXxx`。
 
+## UI 风格（交付前核对）
+
+- [ ] 组件无硬编码色值/魔法数值（全部走 `--nue-*` 令牌）
+- [ ] 新 UI 用组件库原语组装；加载/空/错误/成功四态语义化
+- [ ] 暗色/hover/disabled 与主题一致（未硬编码）
+- [ ] `bash "$NAO_SKILLS/.agents/scripts/ui-tokens-check.sh" <repo>` 通过（若配了 CI 则自动拦截）
+
 ## 交付检查清单（完整 9 项）
 
 - [ ] 规模评估（L1/L2/L3）未过度设计

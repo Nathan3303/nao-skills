@@ -54,6 +54,16 @@ class Mapper {
 
 `I{Entity}Repository` / `{Entity}HttpRepo` / `{Entity}UseCase` / `{Entity}Dto` + `Mapper` / `useXxx`
 
+## UI 风格落地
+
+> 视觉决策收敛到主题令牌，**禁硬编码色值/魔法数值**；不靠审美，靠约束。
+
+- **单一事实来源**：`--nue-*` 令牌（颜色/间距/圆角/阴影/字号层级）+ 主题包（如 nue-ui-theme-shadlike）；暗色/hover/disabled 由主题语义提供，不自己造。
+- **红线**：组件/样式内禁裸色值（`#fff`/`rgba()`/`#d4a72c`）、禁无令牌的魔法尺寸/圆角/阴影——一律 `var(--nue-*)`；仅主题文件自身允许定义令牌。
+- **组装**：新 UI 用组件库原语（Button/Input/Dialog…）组装，不新造组件外观；页面不另起风格。
+- **四态覆盖**：加载/空/错误/成功 用组件库语义属性 + 令牌，与主题一致。
+- **交付前**：跑 `bash "$NAO_SKILLS/.agents/scripts/ui-tokens-check.sh" <repo>` 确认零硬编码色值（进 CI 则自动拦截）。
+
 ## 测试
 
 Domain：Vitest 纯单测；Application：Mock 端口；Infra：MSW；Pres：VTU/Testing-Library
