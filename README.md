@@ -1,89 +1,139 @@
 # nao-skills
 
-Agent skills, role prompts and fleet automation for multi-agent development with [pi](https://pi.dev). Made by [Nathan Lee](https://github.com/nathan).
+多角色 AI 开发舰队的**角色卡 / 技能 / 协作协议 / 工具链**包，基于 [pi](https://pi.dev)（Agent Skills 标准 + pi-intercom 多会话）。Made by [Nathan Lee](https://github.com/nathan)。
 
-## Skills
+核心命题：**用最少的 Token，把多个专业 Agent 会话组织成一个可靠交付的团队**——常驻精简、按需加载、机器强制、终态回执。
 
-按需技能，位于 `.agents/skills/`，由角色卡在需要时读取（`@.agents/skills/<name>.md`）。
+## 整体架构
 
-| Skill | Applies to | Core content |
-| --- | --- | --- |
-| `frontend-ddd-details.md` | Vue 3 / React + TS | 前端 DDD 落地细节：骨架、场景速决、命名、误区 |
-| `backend-ddd-details.md` | Golang | 后端 DDD 落地细节：代码骨架、事务、事件、命名、误区 |
-| `arch-patterns.md` | 架构 | 架构模式速查、ADR 模板 |
-| `pm-rice.md` | 产品 | RICE 优先级打分 |
-| `pm-grill.md` | 产品 | grill-me 需求澄清 |
-| `test-design.md` | 测试 | 用例设计、缺陷管理、DDD 分层对齐 |
-| `commit.md` | 全角色 | 仅执行 git commit 前读取 |
-| `checklists/*.md` | 全角色 | 红线 + 交付检查清单（**按需**：交付/评审前读取，不常驻，省 token） |
-
-常驻规范在 `.agents/common/`：`output-format.md`（输出/回执模板、反模式）、`intercom-protocol.md`（多会话协议、终态回执、卡片版本同步、缓存与 Token 纪律）。
-
-## Prompts
-
-Role prompts in `.agents/prompts/`. Use as a role system prompt in a session (e.g. `--append-system-prompt .agents/prompts/product-manager.md`), reference inline with `@.agents/prompts/<name>.md`, or load as a template.
-
-| Prompt | Role | Highlights |
-| --- | --- | --- |
-| [`product-manager`](.agents/prompts/product-manager.md) | 产品经理（调度者） | 需求全生命周期：grill-me 澄清、9 模块 PRD、RICE 优先级、AC 五覆盖、零代码红线；§六 pi-intercom 多会话调度（开工确认卡 → 架构评审闸门 → fleet.sh 拉起 → send/ask 派发 → 终态回执闸门 → 验收闭环），§十 docs/prds 交付归档 |
-| [`architecture-designer`](.agents/prompts/architecture-designer.md) | 系统架构师（评审/咨询） | 分布式系统架构设计：业务驱动五原则、技术选型四步法、架构模式速查、交付红线与检查清单；§十 评审签字（含终态回执 PM）+ §十一 ADR 归档；§十四 降级 |
-| [`frontend-developer`](.agents/prompts/frontend-developer.md) | 前端研发（RD） | 基于 `frontend-ddd-details`：五层分层、DDD 等级选择、代码审查红线（通用/Vue/React）、序列化边界 |
-| [`backend-developer`](.agents/prompts/backend-developer.md) | 后端研发（RD） | 基于 `backend-ddd-details`：Go 标准布局与依赖倒置、事务脚本 / L1–L3 决策、手工 DI、哨兵错误、上下文传递 |
-| [`test-engineer`](.agents/prompts/test-engineer.md) | 测试工程师（QA） | 质量保障全流程、测试金字塔与 DDD 分层对齐、AC=测试用例、CI/CD 门禁 |
-
-## Scripts
-
-### `nao-fleet.sh`（`.agents/scripts/`）
-
-按角色一键拉起 pi 会话窗口、查看在线状态、静态体检，供产品经理在开工确认后自动补齐缺线的 RD/架构师/QA 会话（见 `product-manager.md` §六「舰队启动」）。角色 id / 别名 / 卡片映射以 `.agents/roles.yaml` 为单一事实来源。脚本与角色卡同处 `.agents/` agent 工作区：
-
-```bash
-.agents/scripts/nao-fleet.sh status                                    # 列出本机可识别的角色会话
-.agents/scripts/nao-fleet.sh ensure arch rd-fe                         # 拉起缺失角色（工作区=当前目录）
-.agents/scripts/nao-fleet.sh ensure rd-be@/path/to/nao-todo-server     # 前后端分离：显式指定后端 repo
-.agents/scripts/nao-fleet.sh ensure -m deepseek-v4-flash:high arch     # 仅当用户指定模型时才传 --model
+```text
+┌──────────────────────────────────────────────────────────────────┐
+│ 协作层    pi-intercom 多会话：派发 / ask-reply / 终态回执闸门       │
+│          PM 为 leader：开工确认卡 → 架构评审 → 派发 → 回执 → 验收   │
+├──────────────────────────────────────────────────────────────────┤
+│ 单一事实来源   roles.yaml（aliases→id→card）                      │
+│          角色卡 frontmatter（role/version/updated）               │
+├──────────────────────────────────────────────────────────────────┤
+│ 常驻层（每轮计费，刻意精简）                                      │
+│          角色卡：身份/职责/2-3 条最硬红线/按需指针                  │
+│          common/：output-format（回执模板）+ intercom-protocol    │
+├──────────────────────────────────────────────────────────────────┤
+│ 按需层（渐进式披露，零常驻 token）                                │
+│          skills/   DDD 细节 · codegraph · commit                 │
+│          skills/checklists/   完整红线+交付清单（交付前读）        │
+│          skills/frontend-design/   官方设计方向 skill（按需）     │
+│          templates/frontend-ui/   tokens.css + ux-playbook 骨架  │
+├──────────────────────────────────────────────────────────────────┤
+│ 工具层    nao-fleet.sh（ensure/check/status）+ ui-tokens-check   │
+├──────────────────────────────────────────────────────────────────┤
+│ 外部能力  CodeGraph 索引（代码定位，替代 grep 全文扫描）           │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-- 角色别名 → 角色卡：见 `.agents/roles.yaml`（当前 `pm` / `arch`(arch-designer) / `rd-fe` / `rd-be` / `qa`）。
-- `check` 校验：roles.yaml 可解析、卡片 frontmatter（role/version/updated）与 manifest 一致、`@.agents/...` 交叉引用文件齐备、白名单与布局合法性。
-- `status` 展示各角色在线状态（pgrep `--name` 探测；权威名单以 `intercom({ action: "list" })` 为准）。
-- 角色卡经 `--append-system-prompt` 在启动期注入（含环境锚点：本机绝对路径，供跨仓库会话解析 `@` 引用兜底）；`--name` 注册 intercom 身份（名字+工作区）。
-- **模型纪律**：默认不传 `--model`（走 pi 全局默认），不继承 PM 自身模型，仅在显式 `-m` 时拼参数。
-- 终端宿主自动探测 `ghostty → ptyxis → screen`；无 GUI 环境用 `NAO_TERMINAL=screen` 后台运行（`screen -r nao-<别名>` 附着）。
-- 内置 `--name` 判重跳过（`--force` 覆盖）；权威在线名单仍以 `intercom({ action: "list" })` 为准。
+### 分层职责
 
-## Project Structure
+| 层 | 内容 | Token 特性 |
+| --- | --- | --- |
+| **协作层** | pi-intercom：`--name` 注册身份，send/ask/reply 线程化；终态回执闸门（`[编号] done \| <role>` 必回） | 消息短、详情落盘 |
+| **单一事实来源** | `roles.yaml` 管别名→角色；卡片 frontmatter `version` 管版本；两处互相校验（`check`） | 无重复维护 |
+| **常驻层** | 5 张角色卡（60–112 行）+ 2 份 common 规范——每轮每会话计费，**刻意保持最小** | 最贵，最小化 |
+| **按需层** | skills/checklists/templates：只有 description 常驻，完整指令按需读取（Agent Skills 标准渐进式披露） | 常态零成本 |
+| **工具层** | fleet 拉起/体检/状态；ui-tokens-check 硬编码色值扫描（可接 CI） | 一次性执行 |
+| **外部能力** | CodeGraph：`context` 一次返回相关符号+代码块（实测约 1/17 于 grep+全文） | 查找精准化 |
+
+## 核心设计：Token 优先
+
+1. **常驻最小化**：红线/清单/速查表全部按需化到 `skills/checklists/`，卡片只留最硬红线 + 指针。
+2. **按需加载**：Agent Skills 渐进式披露——DDD 细节、官方 frontend-design、checklists 均按需读，不占常驻。
+3. **缓存友好**：system prompt 稳定 = 前缀缓存命中（cacheRead 约 1/10 价）；改卡**批量一次到位**，易变内容放消息体不进卡片；`cacheWarming: "idle"` + `/session` 观察。
+4. **查找精准**：CodeGraph `context`/`node`/`callers`/`impact` 替代 grep+cat 全文；不可用时降级 grep + `sed` 行段读取（禁 cat 全文）。
+5. **上下文生命周期**：任务闭环 → `ensure --force` 重开会话（优于自动压缩）；PM 靠 `docs/` 落盘延续，不靠历史消息堆叠。
+
+## 协作闭环（PM 为 leader）
+
+```
+用户提需求 → PM grill-me 澄清 → 9 模块 PRD + RICE
+  → 开工确认卡（用户确认）→ fleet ensure 拉起缺线角色
+  → 架构评审闸门（arch 签字 / ADR）→ send 派发（含 AC/NFRs/路径）
+  → worker 终态回执 `[编号] done`（未回执 PM 主动追讨）
+  → 验收闭环（AC 五覆盖）→ docs/prds 当日归档
+```
+
+- **终态回执硬闸门**：所有角色（含 arch 评审）必须以回执模板结束任务；`send` 失败降级 `ask` → 再失败才降级交付。
+- **卡片版本同步**：改卡 bump `version` 并广播 `card <role> vN`（不贴全文）；worker 接任务前核对版本，stale 则重读。
+- **降级**：PM 可达必须回执；intercom 不可用才允许"本会话直接产出 + 用户转交"。
+
+## 代码定位（CodeGraph）
+
+`@.agents/skills/codegraph.md`（按需）——`query`/`context`/`node`/`callers`/`callees`/`impact`/`affected` 速查 + token 纪律 + 降级 grep 规则。索引项目级维护：`status` → `init`/`sync`；`nao-fleet.sh` 的 `check`/`ensure` 自动探测索引健康并提醒。
+
+## UI/UX 落地（三层，不绑定组件库）
+
+| 层 | 载体 | 职责 |
+| --- | --- | --- |
+| 设计质量层 | 官方 `frontend-design` skill（按需） | 视觉方向、反 AI 味、typography |
+| 约束层 | Design Tokens（`--<prefix>-*`）+ UX Playbook + `ui-tokens-check.sh` | 令牌收敛、四态/反馈一致、机器扫描 |
+| 验收层 | checklist rd-fe / qa | 交付前核对 + QA 视觉验收 |
+
+模板：`templates/frontend-ui/tokens.css.example` + `ux-playbook.md.example`（任意项目复制裁剪）。
+
+## 角色卡（常驻 system prompt）
+
+| Prompt | Role | 核心职责 |
+| --- | --- | --- |
+| `product-manager.md` | 产品经理（调度者） | 需求全生命周期、9 模块 PRD、RICE、多会话调度、终态回执闸门、docs/prds 归档 |
+| `architecture-designer.md` | 系统架构师（评审/咨询） | 技术选型四步法、评审签字 + ADR、终态回执 PM、降级规则 |
+| `frontend-developer.md` | 前端研发 | 前端 DDD 五层、UI/UX 三层落地（引用 frontend-design） |
+| `backend-developer.md` | 后端研发 | Go DDD 四层、依赖倒置、事务/事件/错误约定 |
+| `test-engineer.md` | 测试工程师 | 测试金字塔、AC=用例、缺陷闭环、视觉验收 |
+
+## 按需技能
+
+| Skill | 用途 |
+| --- | --- |
+| `frontend-ddd-details.md` | 前端 DDD 骨架/场景速决/命名/误区 + UI/UX 落地 |
+| `backend-ddd-details.md` | 后端 DDD 骨架/事务/事件/命名/误区 |
+| `arch-patterns.md` | 架构模式、ADR 模板 |
+| `pm-rice.md` / `pm-grill.md` | RICE 优先级 / 需求澄清 |
+| `test-design.md` | 用例设计、缺陷管理、分层对齐 |
+| `codegraph.md` | 代码定位（替代 grep 全文） |
+| `commit.md` | git commit 规范（仅提交前读） |
+| `frontend-design/` | 官方视觉方向 skill（设计类任务先读） |
+| `checklists/*.md` | 各角色完整红线 + 交付检查清单（交付前读） |
+
+## 工具链
+
+```bash
+.agents/scripts/nao-fleet.sh check                    # 体检：roles.yaml/卡片/交叉引用/白名单/布局/CodeGraph
+.agents/scripts/nao-fleet.sh status                   # 角色在线状态（权威名单见 intercom list）
+.agents/scripts/nao-fleet.sh ensure arch rd-fe        # 拉起缺失角色
+.agents/scripts/nao-fleet.sh ensure rd-be@/path/repo  # 指定后端 repo（含 CodeGraph 索引提醒）
+.agents/scripts/ui-tokens-check.sh <repo>             # 扫 UI 硬编码色值（绕过 Design Tokens）
+```
+
+## 目录结构
 
 ```text
 nao-skills/
-├── .agents/
-│   ├── common/                 # 常驻规范（全部角色引用）
-│   │   ├── output-format.md    # 输出/回执模板、反模式
-│   │   └── intercom-protocol.md# 多会话协议、终态回执、卡片版本同步
-│   ├── skills/                 # 按需技能（角色卡内 @ 引用，不常驻）
-│   │   ├── checklists/         # 红线+交付检查清单（交付前读取，省常驻 token）
-│   │   │   ├── pm.md
-│   │   │   ├── architecture-designer.md
-│   │   │   ├── rd-be.md
-│   │   │   ├── rd-fe.md
-│   │   │   └── qa.md
-│   │   ├── frontend-ddd-details.md
-│   │   ├── backend-ddd-details.md
-│   │   ├── arch-patterns.md
-│   │   ├── pm-rice.md
-│   │   ├── pm-grill.md
-│   │   ├── test-design.md
-│   │   └── commit.md
-│   ├── prompts/                # 角色卡（frontmatter: role/version/updated）
-│   │   ├── product-manager.md
-│   │   ├── architecture-designer.md
-│   │   ├── frontend-developer.md
-│   │   ├── backend-developer.md
-│   │   └── test-engineer.md
-│   ├── roles.yaml              # 角色清单（aliases→id→card，单一事实来源）
-│   └── scripts/                # Agent operation scripts
-│       └── nao-fleet.sh        # 角色会话拉起 / 在线状态 / 静态体检
-└── package.json
+└── .agents/
+    ├── common/                    # 常驻规范（全部角色引用）
+    │   ├── output-format.md       # 输出/回执模板、反模式
+    │   └── intercom-protocol.md   # 多会话协议、终态回执、版本同步、缓存纪律
+    ├── roles.yaml                 # 角色清单（aliases→id→card，单一事实来源）
+    ├── prompts/                   # 角色卡（frontmatter: role/version/updated）
+    │   ├── product-manager.md     └── architecture-designer.md
+    │   ├── frontend-developer.md  └── backend-developer.md
+    │   └── test-engineer.md
+    ├── skills/                    # 按需技能（渐进式披露）
+    │   ├── checklists/            # 红线+交付清单（交付前读，省常驻 token）
+    │   ├── frontend-design/       # 官方设计方向 skill（按需）
+    │   ├── frontend-ddd-details.md / backend-ddd-details.md
+    │   ├── arch-patterns.md / pm-rice.md / pm-grill.md
+    │   ├── test-design.md / codegraph.md / commit.md
+    ├── templates/frontend-ui/     # tokens.css + ux-playbook 骨架
+    └── scripts/
+        ├── nao-fleet.sh           # 会话拉起 / 在线状态 / 静态体检
+        └── ui-tokens-check.sh     # UI 硬编码色值扫描
 ```
 
 ## License
