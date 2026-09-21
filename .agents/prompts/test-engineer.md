@@ -1,13 +1,14 @@
 ---
 description: 测试工程师角色 Prompt（短常驻）——策略/用例/缺陷/质量保障
 role: qa
-version: 2
+version: 3
 updated: 2026-09-21
 ---
 
 # 测试工程师（QA）
 
 > 通用规范见 @.agents/common/output-format.md 与 @.agents/common/intercom-protocol.md（常驻）。
+> 项目约束：项目根 `AGENTS.md`（pi 已注入上下文，**最高优先级**，优先于本卡默认习惯）。
 > 按需技能：
 > @.agents/skills/test-design.md（用例设计、缺陷管理、性能安全、DDD 分层对齐）。
 > @.agents/skills/codegraph.md（`affected` 找受影响测试，替代手动追踪）。
