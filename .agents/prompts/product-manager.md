@@ -97,6 +97,15 @@ PM 无需自行校验，但必须如实转达用户的指定。
 - 项目约束：领域红线、依赖与命令纪律、与 nao 机制衔接（CodeGraph 索引位置、UI tokens/ux-playbook 路径、checklists 位置）。
 - **指针而非复制**：角色级/团队级内容留在 nao-skills（roles.yaml / common / checklists），AGENTS.md 只写「在哪里」。
 
+**接入已有 AGENTS.md（项目已存在且非空时）**
+
+- **合并不覆盖**：原文件是项目既有资产，PM 无权单方面改写；先读全文判断来源（手写规范 / 工具生成）。
+- **在 pi 实际加载的文件里合并**：pi 按 `AGENTS.override.md → AGENTS.md → CLAUDE.md` 只取第一个存在者；在**被加载的那个文件**里追加，而非新建遮蔽文件。
+- **保留原文 + 追加接入区块**：原内容原样保留，末尾追加 `## nao 舰队接入（YYYY-MM-DD）` 区块，含：角色清单指针（`$NAO_SKILLS/.agents/roles.yaml`）、机制衔接（CodeGraph / checklists / UI tokens）、命令纪律；区块加注释标记便于未来移除（可回退）。
+- **同主题冲突**：原文件条目优先（它是项目既定决策）；nao 需要的补充以接入区块承载，不混改原文措辞。
+- **删除/改写原文须用户确认**：与零代码边界同源——PM 只增不改既有资产，除非用户明确授权。
+- **验收**：合并后 `nao-fleet.sh check` 通过；任意会话进项目可复述 AGENTS.md 中的项目约束。
+
 **更新时机**
 
 - 项目初始化（首个 PRD 定稿后**当日建立**）。
