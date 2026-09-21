@@ -134,6 +134,27 @@ check_cross_refs() {
   return $rc
 }
 
+# CodeGraph 索引健康（ensure 拉起前 / check 用；缺失或过期仅 warn，不阻塞）
+check_codegraph() {
+  local repo="$1" name st
+  name="$(basename "$repo")"
+  command -v codegraph >/dev/null 2>&1 || { warn "$name codegraph 未安装（RD 定位将回退 grep，属预期）"; return 0; }
+  if [[ ! -d "$repo/.codegraph" ]]; then
+    warn "$name 无 CodeGraph 索引（RD 定位将回退 grep；建议 codegraph init）"
+    return 0
+  fi
+  st="$(cd "$repo" 2>/dev/null && codegraph status 2>&1)"
+  if [[ "$st" == *"Index is up to date"* ]]; then
+    log "$name CodeGraph 索引 ✓ up to date"
+  elif [[ "$st" == *"Pending Changes"* ]]; then
+    warn "$name CodeGraph 索引有未同步变更（建议 codegraph sync）"
+  elif [[ "$st" == *"Not initialized"* ]]; then
+    warn "$name .codegraph 存在但未初始化（建议 codegraph init）"
+  else
+    warn "$name codegraph status 输出不可解析"
+  fi
+}
+
 # ---------------------------------------------------------------------------
 resolve_role() {
   local id="${ALIAS_ROLE[$1]:-}"
@@ -412,6 +433,25 @@ cmd_check() {
   echo "== 交叉引用（@.agents/common|skills|prompts|scripts/... 均须存在）=="
   check_cross_refs || rc=1
 
+  echo "== CodeGraph 索引（业务 repo 的索引在 ensure 拉起时检查）=="
+  if command -v codegraph >/dev/null 2>&1; then
+    if [[ -d "$PWD/.codegraph" ]]; then
+      local cgst
+      cgst="$(codegraph status 2>&1)"
+      if [[ "$cgst" == *"up to date"* ]]; then
+        echo '  ✓ 当前目录索引 up to date'
+      elif [[ "$cgst" == *"Pending Changes"* ]]; then
+        echo '  ! 当前目录索引有未同步变更（codegraph sync）'; rc=1
+      else
+        echo '  · 当前目录有索引，状态见 codegraph status'
+      fi
+    else
+      echo '  · 当前目录无索引（业务 repo 的索引在 ensure 拉起时检查）'
+    fi
+  else
+    echo '  · codegraph 未安装（回退 grep 属预期行为）'
+  fi
+
   echo "== 模型白名单 =="
   if [[ -z "$MODEL_WHITELIST" ]]; then
     echo "  （未设置 NAO_MODEL_WHITELIST，-m 不校验）"
@@ -485,7 +525,8 @@ cmd_status() {
 # ---------------------------------------------------------------------------
 cmd_ensure() {
   local force="$1" model="$2"; shift 2
-  local spec role repo
+  local spec role repo key seen k
+  local -a cg_done=()
   [[ $# -eq 0 ]] && die "ensure 需要至少一个角色，如: nao-fleet.sh ensure arch rd-fe"
   for spec in "$@"; do
     if [[ "$spec" == *"@"* ]]; then
@@ -495,6 +536,10 @@ cmd_ensure() {
     fi
     resolve_role "$role"
     [[ -n "$repo" ]] || repo="${ROLE_WS[$NAME]:-$PWD}"
+    # CodeGraph 索引健康（同 repo 只查一次，不阻塞拉起）
+    key="$repo"; seen=0
+    for k in "${cg_done[@]:-}"; do [[ "$k" == "$key" ]] && seen=1; done
+    if (( ! seen )); then check_codegraph "$repo"; cg_done+=("$key"); fi
     if [[ "$force" != "true" ]] && running "$NAME"; then
       warn "$NAME 已在运行（--name 识别），跳过；确需重开请加 --force"
       continue
