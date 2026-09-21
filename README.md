@@ -54,7 +54,7 @@
 ```
 用户提需求 → PM grill-me 澄清 → 9 模块 PRD + RICE
   → 开工确认卡（用户确认）→ fleet ensure 拉起缺线角色
-  → 架构评审闸门（arch 签字 / ADR）→ send 派发（含 AC/NFRs/路径）
+  → 架构评审闸门（arch 签字 / ADR）→ send 派发（忙闲闸门：idle 才派 / 忙则排队 / 紧急抢占）
   → worker 终态回执 `[编号] done`（未回执 PM 主动追讨）
   → 验收闭环（AC 五覆盖）→ docs/prds 当日归档
 ```
