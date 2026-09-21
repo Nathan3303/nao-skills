@@ -6,6 +6,7 @@ description: pi-intercom 多会话协作协议（常驻引用）
 
 ## 角色与接入
 
+- **上下文分层**：项目级 `AGENTS.md`（项目根，PM 维护）→ 团队级本文件/roles.yaml → 角色级角色卡；各层只写自己的内容，不互相复制。
 - 会话由 `nao-fleet.sh` 以 `--name <别名>` 拉起，角色卡经 `--append-system-prompt` 启动期注入。
 - **角色 id / 别名 / 卡片映射以 `.agents/roles.yaml` 为唯一事实来源**（下表为当前快照，改动先改 roles.yaml）。
 - 被点名先回执：`已按 <role> 角色执行`。

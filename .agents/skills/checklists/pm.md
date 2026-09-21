@@ -58,4 +58,5 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 需新开的会话已 `ensure` 并经 `list` 验证
 - [ ] 全程 PM 未触碰代码
 - [ ] PRD 已归档 `docs/prds/` 并同步 README 索引
+- [ ] 项目 `AGENTS.md` 已建立/同步（项目级属性与约束，见 PM 卡 §七）
 - [ ] 通过上面全部红线
