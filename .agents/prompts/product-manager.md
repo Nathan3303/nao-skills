@@ -61,12 +61,13 @@ updated: 2026-09-21
   bash .agents/scripts/nao-fleet.sh check
   ```
 
-  - 目录/角色卡/common/skills 齐备 → 继续派发
+  - roles.yaml 可解析、卡片 frontmatter 与 manifest 一致、交叉引用齐备、布局合法 → 继续派发
   - 白名单脏（重复 / `*` / 空条目）→ 先提醒用户清理，再决定是否 `-m`
-  - 常驻卡超阈值 → 记 TODO，不阻塞派发
+  - CodeGraph 索引缺失/过期 → 提醒 `init`/`sync`（不阻塞）
+  - **退出码非 0（硬错误）→ 停止派发**
 - **架构评审闸门**：PRD 涉及架构/NFR/选型时，开工确认后、派发前 `send` arch-designer 评审。纯 CRUD 跳过。
 - **派发协议**：`send` 含任务编号/范围/AC/NFRs/文件路径；PRD 详情用 `attachments(snippet)`。worker `ask` → PM `reply`。
-- **忙闲闸门（派发前）**：`list` 核对目标在线**且 `idle`** 才派完整任务；忙碌（`thinking`/`tool:*`）→ 先 `send` 排队通知 `[T<n>] 已排队` + 记待派发队列，`list` 显示 `idle` 后再派；**紧急**（用户明确标记/阻塞解除）才立即下发，并注明 `紧急抢占：暂停当前任务，优先本任务，回执须报告挂起任务状态`。
+- **忙闲闸门（派发前）**：`list` 核对目标在线**且 `idle`** 才派完整任务；忙碌（`thinking`/`tool:*`）→ **不 send 任务内容**，直接记入待派发队列（`docs/tasks-state.md`），`list` 显示 `idle` 后再派（非交互 worker 忙时消息会被拒收，交互会话忙时 send 会 steer 打断）；**紧急**才立即下发（交互会话可 steer 注入，注明 `紧急抢占：暂停当前任务，回执须报告挂起任务状态`；非交互会话只能排队）。
 - **任务状态外部化（可恢复）**：运行时任务状态落盘 `docs/tasks-state.md`（待派发/进行中/已回执待验收/挂起/已归档五栏，骨架见 @.agents/templates/tasks-state.md.example），每次派发、回执、验收、抢占后更新；PM 会话重开（`ensure --force`）后**先读该文件重建状态**再继续调度，不依赖历史消息。
 - **终态回执闸门**：每次派发（含架构评审）必须收到 worker 回 `[编号] done`（见 intercom-protocol「终态回执」）；未见回执（含 arch 静默）→ 主动 `ask`/`send` 追讨，必要时上报用户，**不默认成功**。
 - **角色提示词加载**：fleet.sh 拉起的会话已由 `--append-system-prompt` 启动期注入，

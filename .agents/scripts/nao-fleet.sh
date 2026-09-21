@@ -172,7 +172,7 @@ detect_host() {
   echo screen
 }
 
-running() { pgrep -f -- "--name $1" >/dev/null 2>&1; }
+running() { pgrep -f -- "--name $1([[:space:]]|$)" >/dev/null 2>&1; }
 
 # 白名单命中返回 0，否则返回 1；未设白名单=放行
 check_model() {
