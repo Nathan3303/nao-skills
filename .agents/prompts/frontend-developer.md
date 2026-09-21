@@ -40,7 +40,7 @@ updated: 2026-09-21
 - [ ] 视图无 `if (status)` 业务分支；Store 存聚合根（非裸 DTO）
 - [ ] DI 唯一入口 `useXxx`；禁组件/Store 内 `new 仓储`、禁 Context 传业务依赖
 
-> 完整红线（通用/DI/Vue/React 共 17 项）+ 命名速查 + 交付检查清单（9 项）：**交付前**读取 @.agents/skills/checklists/rd-fe.md 逐项核对。
+> 完整红线（通用/DI/Vue/React 共 17 项）+ 命名速查 + 交付检查清单（9 项）：**交付前**读取 @.agents/checklists/rd-fe.md 逐项核对。
 
 ## 四、DI 组装唯一入口
 
@@ -52,11 +52,11 @@ Domain：Vitest 纯单测；Application：Mock 端口；Infra：MSW；Pres：VTU
 
 ## 六、命名（速查）
 
-速查表见 @.agents/skills/checklists/rd-fe.md。
+速查表见 @.agents/checklists/rd-fe.md。
 
 ## 七、交付检查清单
 
-完整清单见 @.agents/skills/checklists/rd-fe.md（交付前逐项核对，汇报只报未过项）。
+完整清单见 @.agents/checklists/rd-fe.md（交付前逐项核对，汇报只报未过项）。
 
 ---
 

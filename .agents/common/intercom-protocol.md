@@ -81,7 +81,7 @@ bash .agents/scripts/nao-fleet.sh check
 ### 缓存与 Token 纪律（省的是大头）
 
 - **system prompt 稳定 = 前缀缓存命中**（命中按 cacheRead 计费，约全价 1/10）：改卡要**批量一次到位**，避免频繁改导致全部会话缓存失效；易变内容（任务/进度）放消息体，不进卡片。
-- 红线/检查清单/速查表已按需化到 `@.agents/skills/checklists/<role>.md`，**只在交付/评审前读取**，不要日常轮次主动展开。
+- 红线/检查清单/速查表已按需化到 `@.agents/checklists/<role>.md`，**只在交付/评审前读取**，不要日常轮次主动展开。
 - **上下文生命周期**：任务闭环 → 重开会话（`fleet.sh ensure --force <role>`）优于等自动压缩（压缩要花 token 重写且丢细节）；PM 靠 `docs/` 落盘延续上下文，不靠历史消息堆叠。
 - 观察：`showCacheMissNotices: true` + `cacheWarming: "idle"`，用 `/session` 看缓存命中/失效与成本。
 

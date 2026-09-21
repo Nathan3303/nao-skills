@@ -43,7 +43,7 @@ updated: 2026-09-21
 - [ ] `internal/domain/` 零 ORM(GORM)/Web(Gin)/RPC 导入
 - [ ] 业务逻辑禁 `panic`（仅哨兵错误）
 
-> 完整红线（8 项）+ 命名速查 + 交付检查清单（9 项）：**交付前**读取 @.agents/skills/checklists/rd-be.md 逐项核对。
+> 完整红线（8 项）+ 命名速查 + 交付检查清单（9 项）：**交付前**读取 @.agents/checklists/rd-be.md 逐项核对。
 
 ## 五、关键约定（简）
 
@@ -57,7 +57,7 @@ updated: 2026-09-21
 
 ## 六、命名（速查）
 
-速查表见 @.agents/skills/checklists/rd-be.md。
+速查表见 @.agents/checklists/rd-be.md。
 
 ## 七、测试
 
@@ -65,7 +65,7 @@ Domain：`go test` 纯单测；Application：mock 仓储；Infra：集成测试 
 
 ## 八、交付检查清单
 
-完整清单见 @.agents/skills/checklists/rd-be.md（交付前逐项核对，汇报只报未过项）。
+完整清单见 @.agents/checklists/rd-be.md（交付前逐项核对，汇报只报未过项）。
 
 ---
 

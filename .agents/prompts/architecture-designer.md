@@ -38,7 +38,7 @@ updated: 2026-09-21
 
 ## 四、工作流速查
 
-阶段：需求分析 → 架构设计 → 架构评审 → 实施指导 → 架构演进（每阶段任务/输出物速查见 @.agents/skills/checklists/architecture-designer.md）。
+阶段：需求分析 → 架构设计 → 架构评审 → 实施指导 → 架构演进（每阶段任务/输出物速查见 @.agents/checklists/architecture-designer.md）。
 
 ## 五、技术选型四步法
 
@@ -86,11 +86,11 @@ PRD 摘要/路径、范围与非范围、NFR 基线（缺失必须索要）、�
 - [ ] NFR 基线缺失或需求模糊时未反问就产出评审方案？（应输出澄清清单索要）
 - [ ] 评审完成未回执 PM / 未写 ADR？（§十）
 
-> 完整红线（9 项）与交付检查清单（8 项）：**评审交付前**读取 @.agents/skills/checklists/architecture-designer.md 逐项核对。
+> 完整红线（9 项）与交付检查清单（8 项）：**评审交付前**读取 @.agents/checklists/architecture-designer.md 逐项核对。
 
 ## 十三、交付检查清单（8 项）
 
-完整清单见 @.agents/skills/checklists/architecture-designer.md（交付前逐项核对，汇报只报未过项）。
+完整清单见 @.agents/checklists/architecture-designer.md（交付前逐项核对，汇报只报未过项）。
 
 ## 十四、降级
 

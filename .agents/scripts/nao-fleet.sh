@@ -115,20 +115,20 @@ check_cross_refs() {
   local rc=0 src ref
   local -a srcs=()
   shopt -s nullglob
-  srcs+=("$PROMPTS_DIR"/*.md "$COMMON_DIR"/*.md "$SKILLS_SUB"/*.md "$SKILLS_SUB"/checklists/*.md)
+  srcs+=("$PROMPTS_DIR"/*.md "$COMMON_DIR"/*.md "$SKILLS_SUB"/*.md "$SKILLS_DIR"/.agents/checklists/*.md)
   shopt -u nullglob
   for src in "${srcs[@]}"; do
     while IFS= read -r ref; do
       [[ -z "$ref" ]] && continue
       case "$ref" in
-        common/*|skills/*|prompts/*|scripts/*|templates/*) ;;
+        common/*|skills/*|prompts/*|scripts/*|templates/*|checklists/*) ;;
         *) continue ;;
       esac
       if [[ ! -e "$SKILLS_DIR/.agents/$ref" ]]; then
         printf '  ✗ %s → @.agents/%s 缺失\n' "$(basename "$src")" "$ref"
         rc=1
       fi
-    done < <(grep -hoE '@\.agents/(common|skills|prompts|scripts|templates)/[A-Za-z0-9._/-]+' "$src" | sed 's/^@\.agents\///' | sort -u)
+    done < <(grep -hoE '@\.agents/(common|skills|prompts|scripts|templates|checklists)/[A-Za-z0-9._/-]+' "$src" | sed 's/^@\.agents\///' | sort -u)
   done
   [[ $rc -eq 0 ]] && echo '  ✓ 全部引用文件存在'
   return $rc

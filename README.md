@@ -21,7 +21,7 @@
 ├──────────────────────────────────────────────────────────────────┤
 │ 按需层（渐进式披露，零常驻 token）                                │
 │          skills/   DDD 细节 · codegraph · commit                 │
-│          skills/checklists/ · skills/frontend-design/            │
+│          checklists/（独立于 skills/，避 pi 注册）· frontend-design/│
 │          templates/   frontend-ui · AGENTS.md · tasks-state 骨架 │
 ├──────────────────────────────────────────────────────────────────┤
 │ 工具层    nao-fleet.sh（ensure/check/status）+ ui-tokens-check   │
@@ -38,13 +38,13 @@
 | **协作层** | pi-intercom：`--name` 注册身份，send/ask/reply 线程化；终态回执闸门（`[编号] done \| <role>` 必回） | 消息短、详情落盘 |
 | **单一事实来源** | `roles.yaml` 管别名→角色；卡片 frontmatter `version` 管版本；两处互相校验（`check`） | 无重复维护 |
 | **常驻层** | 5 张角色卡（60–112 行）+ 2 份 common 规范——每轮每会话计费，**刻意保持最小** | 最贵，最小化 |
-| **按需层** | skills/checklists/templates：只有 description 常驻，完整指令按需读取（Agent Skills 标准渐进式披露） | 常态零成本 |
+| **按需层** | skills + checklists + templates：只有 description 常驻，完整指令按需读取（Agent Skills 标准渐进式披露） | 常态零成本 |
 | **工具层** | fleet 拉起/体检/状态；ui-tokens-check 硬编码色值扫描（可接 CI） | 一次性执行 |
 | **外部能力** | CodeGraph：`context` 一次返回相关符号+代码块（实测约 1/17 于 grep+全文） | 查找精准化 |
 
 ## 核心设计：Token 优先
 
-1. **常驻最小化**：红线/清单/速查表全部按需化到 `skills/checklists/`，卡片只留最硬红线 + 指针。
+1. **常驻最小化**：红线/清单/速查表全部按需化到 `checklists/`（独立目录，避开 pi skill 扫描），卡片只留最硬红线 + 指针。
 2. **按需加载**：Agent Skills 渐进式披露——DDD 细节、官方 frontend-design、checklists 均按需读，不占常驻。
 3. **缓存友好**：system prompt 稳定 = 前缀缓存命中（cacheRead 约 1/10 价）；改卡**批量一次到位**，易变内容放消息体不进卡片；`cacheWarming: "idle"` + `/session` 观察。
 4. **查找精准**：CodeGraph `context`/`node`/`callers`/`impact` 替代 grep+cat 全文；不可用时降级 grep + `sed` 行段读取（禁 cat 全文）。
@@ -152,8 +152,9 @@ nao-skills/
     │   ├── product-manager.md     └── architecture-designer.md
     │   ├── frontend-developer.md  └── backend-developer.md
     │   └── test-engineer.md
+    ├── checklists/                 # 红线+交付清单（交付前读；独立于 skills/ 避免被 pi 注册为同名 skill）
+    │   ├── pm.md / architecture-designer.md / rd-be.md / rd-fe.md / qa.md
     ├── skills/                    # 按需技能（渐进式披露）
-    │   ├── checklists/            # 红线+交付清单（交付前读，省常驻 token）
     │   ├── frontend-design/       # 官方设计方向 skill（按需）
     │   ├── frontend-ddd-details.md / backend-ddd-details.md
     │   ├── arch-patterns.md / pm-rice.md / pm-grill.md

@@ -28,7 +28,7 @@
 
 - **CodeGraph**：本仓库 `.codegraph/` 索引；写完代码 `codegraph sync` 保持新鲜。
 - **UI/UX**：Design Tokens 在 `<src/styles/tokens.css>`；UX Playbook 在 `<docs/ux-playbook.md>`；硬编码色值禁入（`ui-tokens-check.sh` 兜底）。
-- **交付核对**：交付前读取 `@.agents/skills/checklists/<role>.md`（完整红线 + 清单）。
+- **交付核对**：交付前读取 `@.agents/checklists/<role>.md`（完整红线 + 清单）。
 
 ## 指针（勿复制内容）
 

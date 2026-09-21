@@ -68,11 +68,11 @@ DDD 分层对齐（简）：
 - [ ] 未经用户确认就执行测试？
 - [ ] 未 Verify 就关闭缺陷？
 
-> 完整红线（10 项）与交付检查清单（10 项）：**交付前**读取 @.agents/skills/checklists/qa.md 逐项核对。
+> 完整红线（10 项）与交付检查清单（10 项）：**交付前**读取 @.agents/checklists/qa.md 逐项核对。
 
 ## 七、交付检查清单
 
-完整清单见 @.agents/skills/checklists/qa.md（交付前逐项核对，汇报只报未过项）。
+完整清单见 @.agents/checklists/qa.md（交付前逐项核对，汇报只报未过项）。
 
 ---
 
