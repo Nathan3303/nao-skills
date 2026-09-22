@@ -139,20 +139,23 @@ PM 是任务状态权威，以状态机驱动执行：
 .agents/scripts/ui-tokens-check.sh <repo>             # 扫 UI 硬编码色值（绕过 Design Tokens）
 ```
 
-## 安装（npm 发布）
+## 安装与升级（npm 发布）
 
-发布为 **`@nathan33/nao-skill`**，提供 `nao-skill install` CLI 一键接入项目：
+发布为 **`@nathan33/nao-skill`**，CLI `nao-skill` 一键接入项目：
 
 ```bash
 npm install -g @nathan33/nao-skill          # 全局安装 CLI
 # 或在任意项目里直接：npx @nathan33/nao-skill install
 
-nao-skill install                            # 安装到当前目录
-nao-skill install /path/to/proj --force      # 指定目录；--force 覆盖同名文件
+nao-skill install                            # 安装/合并到当前目录（保守，不覆盖已有）
+nao-skill install /path/to/proj --force      # 指定目录；--force 备份后覆盖同名
+nao-skill update                             # 升级已有安装（源优先 + 清理废弃 + 留自定义）
 ```
 
+- **install（保守合并）**：目标已有同名文件默认保留项目既有；`--force` 覆盖；写入 `.agents/.nao-version` 版本标记。
+- **update（升级）**：机制文件源优先覆盖（项目定制应放 `AGENTS.md`）、备份清理已知废弃路径（如旧版 `skills/checklists/`，防 skill 冲突）到 `.agents/.nao-obsolete/`、保留项目自定义文件。
+- **旧版检测**：install 发现版本落后或废弃路径 → 提示运行 `update`。
 - **安装内容**：`.agents/` 全套（角色卡 / 技能 / 交付清单 / 协议 / roles.yaml / 工具链 / 模板）+ 生成 `AGENTS.md`（已存在则提示按 §七 合并，不覆盖）。
-- **合并策略**：目标已有同名文件默认保留项目既有（避免覆盖自定义）；`--force` 备份后覆盖。
 - **发布**：`npm publish --access public`（scope 包需 `--access public`）。
 
 ## 目录结构
