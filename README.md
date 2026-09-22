@@ -84,6 +84,12 @@ PM 是任务状态权威，以状态机驱动执行：
 
 - **忙闲闸门**：`list` 的 live status（`idle`/`thinking`/`tool:*`）为判定依据；忙时**不 send 任务内容**（非交互拒收 / 交互 steer 打断），直接排队；紧急才抢占（交互可 steer 注入 + 注明挂起，非交互只能排队）。
 - **状态外部化**：`docs/tasks-state.md` 五栏（待派发/进行中/待验收/挂起/已归档）随每次派发·回执·验收更新；PM 会话重开先读文件重建状态，不依赖历史消息。
+- **回执 = 已核对清单**：回执须声明已读 `checklists/<role>.md`（未过项必列），未核对不回执。
+- **离线检测与恢复**：`list` 发现已派发目标离线 → 标记挂起 → `ensure --force` 重拉 → 按挂起快照重派。
+- **队列唤醒**：回执/汇报/用户输入时顺带检查待派发队列（不单独轮询），避免排队任务悬置。
+- **降级回流**：intercom 不可用的降级交付经用户转交后，PM 补登记 tasks-state + 归档（标注「降级回流」）。
+- **常驻 vs 派生**：串行任务用常驻角色（忙闲排队）；并行/隔离任务用派生会话 `ensure --task <编号>`（`<角色>-<编号>`，如 `rd-be-T1`，任务完成即结束）。
+- **单 PM 纪律**：同一项目同一时刻仅一个 PM 调度会话。
 
 - **终态回执硬闸门**：所有角色（含 arch 评审）必须以回执模板结束任务；`send` 失败降级 `ask` → 再失败才降级交付。
 - **卡片版本同步**：改卡 bump `version` 并广播 `card <role> vN`（不贴全文）；worker 接任务前核对版本，stale 则重读。
@@ -92,6 +98,8 @@ PM 是任务状态权威，以状态机驱动执行：
 ## 代码定位（CodeGraph）
 
 `@.agents/skills/codegraph.md`（按需）——`query`/`context`/`node`/`callers`/`callees`/`impact`/`affected` 速查 + token 纪律 + 降级 grep 规则。索引项目级维护：`status` → `init`/`sync`；`nao-fleet.sh` 的 `check`/`ensure` 自动探测索引健康并提醒。
+
+**全角色行为指令**（非可选引用）：rd-be 关键约定「先 codegraph 后 grep」、rd-fe 硬性红线「未先试 codegraph 即违规」、qa `node/affected` 定位被测代码、arch `impact/callers` 影响面评审、PM 验收 `node --file/--limit` 行段读取——**禁 cat 全文**是本机制通用读码纪律。
 
 ## UI/UX 落地（三层，不绑定组件库）
 
@@ -107,7 +115,7 @@ PM 是任务状态权威，以状态机驱动执行：
 
 | Prompt | Role | 核心职责 |
 | --- | --- | --- |
-| `product-manager.md` | 产品经理（调度者） | 需求全生命周期、9 模块 PRD、RICE、多会话调度、终态回执闸门、**§七 AGENTS.md 项目上下文治理**、§十一 docs/prds 归档 |
+| `product-manager.md` | 产品经理（调度者） | 需求全生命周期、9 模块 PRD、RICE、多会话调度、终态回执闸门、**§七 AGENTS.md 项目上下文治理**、§十一 docs/prds 归档、验收读码（codegraph 行段） |
 | `architecture-designer.md` | 系统架构师（评审/咨询） | 技术选型四步法、评审签字 + ADR、终态回执 PM、降级规则 |
 | `frontend-developer.md` | 前端研发 | 前端 DDD 五层、UI/UX 三层落地（先读项目既有风格→定方向→tokens/组件库，引用 frontend-design） |
 | `backend-developer.md` | 后端研发 | Go DDD 四层、依赖倒置、事务/事件/错误约定 |
@@ -157,6 +165,7 @@ nao-skill update                             # 升级已有安装（源优先 + 
 - **update（升级）**：机制文件源优先覆盖（项目定制应放 `AGENTS.md`）、备份清理已知废弃路径（如旧版 `skills/checklists/`，防 skill 冲突）到 `.agents/.nao-obsolete/`、保留项目自定义文件。
 - **旧版检测**：install 发现版本落后或废弃路径 → 提示运行 `update`。
 - **安装内容**：`.agents/` 全套（角色卡 / 技能 / 交付清单 / 协议 / roles.yaml / 工具链 / 模板）+ 生成 `AGENTS.md`（已存在则提示按 §七 合并，不覆盖）。
+- **pi 插件管理**：`nao-skill plugins list` / `install <名...>` / `install-all`——舰队生态插件（intercom / ask-me / subagents / web-access / codegraph），透传 `pi install npm:<pkg>`，幂等跳过已装。
 - **发布**：`npm publish --access public`（scope 包需 `--access public`）。
 
 ## 目录结构
