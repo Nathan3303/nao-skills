@@ -1,6 +1,6 @@
 {
   "name": "@nathan33/nao-skill",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "nao 多角色 AI 开发舰队：角色卡 / 技能 / 协作协议 / 工具链，一键接入项目（pi / Claude / 任意 Agent）",
   "type": "module",
   "bin": {
