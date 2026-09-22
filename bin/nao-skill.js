@@ -43,26 +43,39 @@ const VERSION_FILE = '.agents/.nao-version';
 const log = (...a) => console.log('[nao-skill]', ...a);
 const warn = (...a) => console.error('[nao-skill]', ...a);
 
-function copyDir(src, dst, force) {
-  const entries = readdirSync(src, { withFileTypes: true });
-  let copied = 0, skipped = 0, overwritten = 0;
-  for (const e of entries) {
-    const s = join(src, e.name);
-    const d = join(dst, e.name);
-    if (existsSync(d)) {
-      if (force) {
-        rmSync(d, { recursive: true, force: true });
-        cpSync(s, d, { recursive: true });
-        overwritten++;
+function syncTree(src, dst, { mode, force, verbose }) {
+  // 递归文件级同步：mode='install'（保守）| 'update'（源优先）
+  // 源文件 → 目标无：copy；同内容：same（跳过）；不同内容：install 默认 keep（--force 覆盖）/ update 总是 overwrite
+  // 目标独有：不动（项目自定义保留）
+  const stats = { copied: 0, overwritten: 0, same: 0, kept: 0 };
+  const base = dst;
+  const rel = (p) => p.replace(base + '/', '');
+  const walk = (s, d) => {
+    if (!existsSync(d)) mkdirSync(d, { recursive: true });
+    for (const e of readdirSync(s, { withFileTypes: true })) {
+      const sp = join(s, e.name);
+      const dp = join(d, e.name);
+      if (e.isDirectory()) { walk(sp, dp); continue; }
+      if (!existsSync(dp)) {
+        cpSync(sp, dp);
+        stats.copied++;
+        if (verbose) log(`  copy      ${rel(dp)}`);
+      } else if (readFileSync(sp).equals(readFileSync(dp))) {
+        stats.same++;
+        if (verbose) log(`  same      ${rel(dp)}`);
+      } else if (mode === 'update' || force) {
+        rmSync(dp, { force: true });
+        cpSync(sp, dp);
+        stats.overwritten++;
+        if (verbose) log(`  overwrite ${rel(dp)}`);
       } else {
-        skipped++;
+        stats.kept++;
+        if (verbose) log(`  keep      ${rel(dp)}（内容不同，--force 覆盖）`);
       }
-    } else {
-      cpSync(s, d, { recursive: true });
-      copied++;
     }
-  }
-  return { copied, skipped, overwritten };
+  };
+  walk(src, dst);
+  return stats;
 }
 
 // 已知 pi 插件（nao 舰队生态），name → npm 包
@@ -126,7 +139,7 @@ function pluginsInstall(names, all = false) {
   }
 }
 
-function install(target, force) {
+function install(target, force, verbose) {
   if (!existsSync(SRC)) {
     warn(`包内 .agents 缺失：${SRC}（发布物损坏？）`);
     process.exit(1);
@@ -137,10 +150,10 @@ function install(target, force) {
     cpSync(SRC, dst, { recursive: true });
     log(`已完整安装 .agents/ → ${dst}`);
   } else {
-    const r = copyDir(SRC, dst, force);
-    log(`合并完成：复制 ${r.copied}，跳过 ${r.skipped}（已存在），覆盖 ${r.overwritten}`);
-    if (r.skipped > 0 && !force) {
-      warn('同名文件保留项目既有版本（避免覆盖自定义）；需要覆盖加 --force。');
+    const r = syncTree(SRC, dst, { mode: 'install', force, verbose });
+    log(`合并完成：复制 ${r.copied}，覆盖 ${r.overwritten}，相同跳过 ${r.same}，保留项目版 ${r.kept}`);
+    if (r.kept > 0 && !force) {
+      warn('内容不同的文件保留项目既有（避免覆盖自定义）；--force 覆盖，或 update 模式源优先。');
     }
   }
 
@@ -215,9 +228,9 @@ function help() {
   console.log(`nao-skill v${PKG.version} — nao 多角色 AI 开发舰队安装器
 
 用法:
-  nao-skill install [dir] [--force]   安装/合并 .agents/ 到目标项目（默认当前目录）
-  nao-skill install --plugins          项目接入时顺带安装 pi 舰队插件
-  nao-skill update [dir]              升级已有安装：源优先覆盖 + 清理废弃路径 + 保留项目自定义
+  nao-skill install [dir] [--force] [-v]   安装/合并 .agents/ 到目标项目（默认当前目录；-v 显示每文件过程）
+  nao-skill install --plugins [-v]         项目接入时顺带安装 pi 舰队插件
+  nao-skill update [dir] [-v]              升级已有安装：源优先覆盖 + 清理废弃路径 + 保留项目自定义
   nao-skill plugins list              列出已知 pi 插件与安装状态
   nao-skill plugins install <名...>   安装指定插件（intercom/ask-me/subagents/web-access/codegraph）
   nao-skill plugins install-all       安装全部舰队插件
@@ -246,10 +259,12 @@ if (cmd === '--version' || cmd === '-v' || cmd === 'version') {
   let target = process.cwd();
   let force = false;
   let withPlugins = false;
+  let verbose = false;
   const rest = args.slice(1);
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === '--force' || rest[i] === '-f') force = true;
     else if (rest[i] === '--plugins') withPlugins = true;
+    else if (rest[i] === '--verbose' || rest[i] === '-v') verbose = true;
     else if (rest[i] === '--target') target = resolve(rest[++i]);
     else if (!rest[i].startsWith('-')) target = resolve(rest[i]);
     else { warn(`未知参数: ${rest[i]}`); process.exit(2); }
@@ -258,7 +273,7 @@ if (cmd === '--version' || cmd === '-v' || cmd === 'version') {
     warn(`目标目录无效: ${target}`);
     process.exit(2);
   }
-  install(target, force);
+  install(target, force, verbose);
   if (withPlugins) pluginsInstall([], true);
 } else if (cmd === 'plugins' || cmd === 'plugin') {
   const sub = args[1];
@@ -275,9 +290,11 @@ if (cmd === '--version' || cmd === '-v' || cmd === 'version') {
   }
 } else if (cmd === 'update' || cmd === 'u') {
   let target = process.cwd();
+  let verbose = false;
   const rest = args.slice(1);
   for (let i = 0; i < rest.length; i++) {
-    if (rest[i] === '--target') target = resolve(rest[++i]);
+    if (rest[i] === '--verbose' || rest[i] === '-v') verbose = true;
+    else if (rest[i] === '--target') target = resolve(rest[++i]);
     else if (!rest[i].startsWith('-')) target = resolve(rest[i]);
     else { warn(`未知参数: ${rest[i]}`); process.exit(2); }
   }
@@ -285,7 +302,7 @@ if (cmd === '--version' || cmd === '-v' || cmd === 'version') {
     warn(`目标目录无效: ${target}`);
     process.exit(2);
   }
-  update(target);
+  update(target, verbose);
 } else {
   warn(`未知命令: ${cmd}（可用: install, update, plugins）`);
   process.exit(2);
