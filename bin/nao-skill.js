@@ -17,6 +17,7 @@
  *   bash .agents/scripts/nao-fleet.sh check / ensure arch rd-fe ...
  *   角色卡经 fleet 拉起时 --append-system-prompt 注入；checklists 按需读取
  */
+import { execFileSync } from 'node:child_process';
 import {
   cpSync,
   existsSync,
@@ -62,6 +63,67 @@ function copyDir(src, dst, force) {
     }
   }
   return { copied, skipped, overwritten };
+}
+
+// 已知 pi 插件（nao 舰队生态），name → npm 包
+const PI_PLUGINS = {
+  intercom:   { pkg: 'pi-intercom',            desc: '多会话协作（舰队机制核心依赖）' },
+  'ask-me':   { pkg: 'pi-ask-me',              desc: '提问/访谈工具' },
+  subagents:  { pkg: 'pi-subagents',           desc: '子代理委派' },
+  'web-access': { pkg: 'pi-web-access',        desc: '网页访问' },
+  codegraph:  { pkg: '@sean_pedersen/pi-codegraph', desc: 'CodeGraph 代码定位（pi 集成）' },
+};
+
+function piSettingsPath() {
+  return join(process.env.HOME || process.env.USERPROFILE || '', '.pi', 'agent', 'settings.json');
+}
+
+function readPackages() {
+  try {
+    const d = JSON.parse(readFileSync(piSettingsPath(), 'utf8'));
+    return Array.isArray(d.packages) ? d.packages : [];
+  } catch {
+    return [];
+  }
+}
+
+function installedPlugins() {
+  const pkgs = readPackages();
+  const out = {};
+  for (const [name, { pkg }] of Object.entries(PI_PLUGINS)) {
+    out[name] = pkgs.includes(`npm:${pkg}`) || pkgs.includes(pkg);
+  }
+  return out;
+}
+
+function pluginsList() {
+  const installed = installedPlugins();
+  log(`pi 插件状态（settings: ${piSettingsPath()}）`);
+  for (const [name, { pkg, desc }] of Object.entries(PI_PLUGINS)) {
+    console.log(`  ${installed[name] ? '✓' : '·'} ${name.padEnd(11)} ${pkg.padEnd(26)} ${desc}${installed[name] ? '' : '（缺失）'}`);
+  }
+  console.log('\n安装: nao-skill plugins install <name...> | plugins install-all');
+}
+
+function pluginsInstall(names, all = false) {
+  const targets = all ? Object.keys(PI_PLUGINS) : names;
+  const todo = [];
+  for (const n of targets) {
+    const p = PI_PLUGINS[n];
+    if (!p) { warn(`未知插件: ${n}（可用: ${Object.keys(PI_PLUGINS).join(', ')}）`); continue; }
+    if (installedPlugins()[n]) { log(`已安装: ${n}`); continue; }
+    todo.push([n, p]);
+  }
+  if (!todo.length) { log('全部插件已就绪。'); return; }
+  for (const [n, p] of todo) {
+    log(`安装 ${n} → pi install npm:${p.pkg} ...`);
+    try {
+      execFileSync('pi', ['install', `npm:${p.pkg}`], { stdio: 'inherit' });
+      log(`✓ ${n} 安装完成（重启 pi 会话后生效）`);
+    } catch (e) {
+      warn(`✗ ${n} 安装失败: ${e.message}（确认 pi 已安装且在 PATH）`);
+    }
+  }
 }
 
 function install(target, force) {
@@ -154,7 +216,11 @@ function help() {
 
 用法:
   nao-skill install [dir] [--force]   安装/合并 .agents/ 到目标项目（默认当前目录）
+  nao-skill install --plugins          项目接入时顺带安装 pi 舰队插件
   nao-skill update [dir]              升级已有安装：源优先覆盖 + 清理废弃路径 + 保留项目自定义
+  nao-skill plugins list              列出已知 pi 插件与安装状态
+  nao-skill plugins install <名...>   安装指定插件（intercom/ask-me/subagents/web-access/codegraph）
+  nao-skill plugins install-all       安装全部舰队插件
   nao-skill --version                 显示版本
   nao-skill --help                    显示本帮助
 
@@ -179,9 +245,11 @@ if (cmd === '--version' || cmd === '-v' || cmd === 'version') {
 } else if (cmd === 'install' || cmd === 'i') {
   let target = process.cwd();
   let force = false;
+  let withPlugins = false;
   const rest = args.slice(1);
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === '--force' || rest[i] === '-f') force = true;
+    else if (rest[i] === '--plugins') withPlugins = true;
     else if (rest[i] === '--target') target = resolve(rest[++i]);
     else if (!rest[i].startsWith('-')) target = resolve(rest[i]);
     else { warn(`未知参数: ${rest[i]}`); process.exit(2); }
@@ -191,6 +259,20 @@ if (cmd === '--version' || cmd === '-v' || cmd === 'version') {
     process.exit(2);
   }
   install(target, force);
+  if (withPlugins) pluginsInstall([], true);
+} else if (cmd === 'plugins' || cmd === 'plugin') {
+  const sub = args[1];
+  const rest = args.slice(2);
+  if (sub === 'list' || sub === 'ls' || !sub) {
+    pluginsList();
+  } else if (sub === 'install' || sub === 'add') {
+    pluginsInstall(rest);
+  } else if (sub === 'install-all' || sub === 'installAll') {
+    pluginsInstall([], true);
+  } else {
+    warn(`未知插件命令: ${sub}（可用: list / install / install-all）`);
+    process.exit(2);
+  }
 } else if (cmd === 'update' || cmd === 'u') {
   let target = process.cwd();
   const rest = args.slice(1);
