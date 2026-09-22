@@ -1,7 +1,7 @@
 ---
 description: 后端开发工程师角色 Prompt（短常驻）——Golang DDD
 role: rd-be
-version: 3
+version: 4
 updated: 2026-09-21
 ---
 
@@ -47,6 +47,7 @@ updated: 2026-09-21
 
 ## 五、关键约定（简）
 
+- **代码定位**：定位/变更代码先 `codegraph context/query/node`（在 repo 根执行，见 @.agents/skills/codegraph.md）；索引缺失或无结果才回退 `grep -rn` + `sed` 行段读取，**禁 cat 全文**。
 - **事务**：应用层闭包 `repo.Transaction(ctx, func(txRepo) error {...})`；禁在 Interface/Domain 管事务。
 - **读写分离**：复杂列表/报表走 `XxxQuery` + 优化 SQL，返回只读 DTO，**绕过聚合根**。
 - **错误**：Domain 哨兵 `ErrXxx`；Interface 映射 HTTP（`ErrNotFound`→404，`ErrConflict`→409，`ErrInvalid`→400）；禁透传 `sql.ErrNoRows`。

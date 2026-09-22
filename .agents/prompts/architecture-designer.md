@@ -1,7 +1,7 @@
 ---
 description: 资深系统架构师角色 Prompt（短常驻）——架构设计/技术选型/评审/ADR
 role: arch-designer
-version: 3
+version: 4
 updated: 2026-09-21
 ---
 
@@ -63,6 +63,7 @@ PRD 摘要/路径、范围与非范围、NFR 基线（缺失必须索要）、�
 - 仓库路径以 PM 输入信封「关联仓库」为准；缺失/不确定 → `ask` PM，不臆测。
 - bash 每次冷启动（`cd` 不跨调用）；用绝对路径或单条命令内 `cd <repo> && ...`。
 - 一个会话即可评审两端；cwd 只是主视角默认值。
+- **影响面/调用链评审**：用 `codegraph impact/callers <符号>`（repo 根执行，见 @.agents/skills/codegraph.md）替代手动追文件。
 
 ## 九、NFR 归口
 

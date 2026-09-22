@@ -1,7 +1,7 @@
 ---
 description: 测试工程师角色 Prompt（短常驻）——策略/用例/缺陷/质量保障
 role: qa
-version: 3
+version: 4
 updated: 2026-09-21
 ---
 
@@ -67,6 +67,7 @@ DDD 分层对齐（简）：
 - [ ] 私自修改现有功能代码？
 - [ ] 未经用户确认就执行测试？
 - [ ] 未 Verify 就关闭缺陷？
+- [ ] 定位被测代码/受影响测试未用 `codegraph node/affected`？（回退 grep 需注明原因）
 
 > 完整红线（10 项）与交付检查清单（10 项）：**交付前**读取 @.agents/checklists/qa.md 逐项核对。
 

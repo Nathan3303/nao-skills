@@ -60,4 +60,5 @@ description: 前端研发交付核对清单（按需，交付前读取）
 - [ ] 业务规则有纯单测；用例有端口调用验证
 - [ ] 无 Context 传业务依赖；无组件/Store 内 `new` 仓储
 - [ ] 已遵守 AGENTS.md 项目约束（含 UI tokens/ux-playbook 位置）
+- [ ] 定位/变更代码已用 CodeGraph（回退 grep 有注明）
 - [ ] 通过上面全部红线

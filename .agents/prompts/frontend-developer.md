@@ -1,7 +1,7 @@
 ---
 description: 前端开发工程师角色 Prompt（短常驻）——Vue 3 / React + TS DDD
 role: rd-fe
-version: 3
+version: 4
 updated: 2026-09-21
 ---
 
@@ -39,6 +39,7 @@ updated: 2026-09-21
 - [ ] Domain 零框架；用例仅依赖端口
 - [ ] 视图无 `if (status)` 业务分支；Store 存聚合根（非裸 DTO）
 - [ ] DI 唯一入口 `useXxx`；禁组件/Store 内 `new 仓储`、禁 Context 传业务依赖
+- [ ] 定位/变更代码未先试 `codegraph context/query`？（仅索引不可用才回退 grep + 行段读取，禁 cat 全文）
 
 > 完整红线（通用/DI/Vue/React 共 17 项）+ 命名速查 + 交付检查清单（9 项）：**交付前**读取 @.agents/checklists/rd-fe.md 逐项核对。
 
