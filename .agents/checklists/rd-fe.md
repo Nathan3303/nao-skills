@@ -44,6 +44,7 @@ description: 前端研发交付核对清单（按需，交付前读取）
 
 ## UI/UX 落地（交付前核对，见 frontend-ddd-details「UI/UX 落地」）
 
+- [ ] 改/新增组件延续了项目既有风格（结构/样式模式/状态处理与现有组件一致；仅用户指定新风格才脱离）
 - [ ] 新建页面/组件已按 frontend-design 产出 token plan 并对照自查
 - [ ] 组件无硬编码色值/魔法数值（全部走 Design Tokens：`var(--<prefix>-*)`）
 - [ ] 页面四态（加载/空/错误/成功）与反馈模式严格按 UX Playbook，未临场发明

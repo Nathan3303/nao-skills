@@ -109,7 +109,7 @@ PM 是任务状态权威，以状态机驱动执行：
 | --- | --- | --- |
 | `product-manager.md` | 产品经理（调度者） | 需求全生命周期、9 模块 PRD、RICE、多会话调度、终态回执闸门、**§七 AGENTS.md 项目上下文治理**、§十一 docs/prds 归档 |
 | `architecture-designer.md` | 系统架构师（评审/咨询） | 技术选型四步法、评审签字 + ADR、终态回执 PM、降级规则 |
-| `frontend-developer.md` | 前端研发 | 前端 DDD 五层、UI/UX 三层落地（引用 frontend-design） |
+| `frontend-developer.md` | 前端研发 | 前端 DDD 五层、UI/UX 三层落地（先读项目既有风格→定方向→tokens/组件库，引用 frontend-design） |
 | `backend-developer.md` | 后端研发 | Go DDD 四层、依赖倒置、事务/事件/错误约定 |
 | `test-engineer.md` | 测试工程师 | 测试金字塔、AC=用例、缺陷闭环、视觉验收 |
 

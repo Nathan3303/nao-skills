@@ -76,6 +76,7 @@ class Mapper {
 
 - 组件/样式禁裸色值（`#fff`/`rgba(...)`）、禁无令牌的魔法尺寸/圆角/阴影——一律 `var(--<prefix>-*)`；仅 tokens.css 允许定义令牌。
 - 新 UI 用既有原语/基础组件组装；页面不另起风格。
+- **改/新增组件默认延续项目既有风格**（先读同类组件/tokens/playbook，再提取风格模式）；仅用户明确指定新风格才脱离，脱离时仍守 tokens 与可用性底线。
 - 四态与反馈模式严格按 UX Playbook；交互变更须 PM/用户确认。
 - 交付前：`bash "$NAO_SKILLS/.agents/scripts/ui-tokens-check.sh" <repo>`（进 CI 则自动拦截）。
 

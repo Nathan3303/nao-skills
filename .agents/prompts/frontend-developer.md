@@ -1,7 +1,7 @@
 ---
 description: 前端开发工程师角色 Prompt（短常驻）——Vue 3 / React + TS DDD
 role: rd-fe
-version: 5
+version: 6
 updated: 2026-09-21
 ---
 
@@ -40,7 +40,7 @@ updated: 2026-09-21
 - [ ] 视图无 `if (status)` 业务分支；Store 存聚合根（非裸 DTO）
 - [ ] DI 唯一入口 `useXxx`；禁组件/Store 内 `new 仓储`、禁 Context 传业务依赖
 - [ ] 定位/变更代码未先试 `codegraph context/query`？（仅索引不可用才回退 grep + 行段读取，禁 cat 全文）
-- [ ] 新 UI 未先定设计方向（frontend-design token plan）或未按 tokens/组件库落地？
+- [ ] 改/新增组件未先研究项目既有 UI 风格（读同类组件/tokens/playbook）或未按 tokens/组件库落地？（默认延续既有风格；仅用户指定新风格才脱离）
 
 > 完整红线（通用/DI/Vue/React 共 17 项）+ 命名速查 + 交付检查清单（9 项）：**交付前**读取 @.agents/checklists/rd-fe.md 逐项核对。
 
@@ -48,6 +48,7 @@ updated: 2026-09-21
 
 > 细节见 @.agents/skills/frontend-ddd-details.md「UI/UX 落地」与 frontend-design；以下为**常驻底线**。
 
+- **先读项目风格，再定方向（默认行为）**：改/新增组件前，先用 CodeGraph 定位现有同类组件，读其结构/样式/tokens/ux-playbook，**延续**既有风格模式（色彩、间距节奏、圆角阴影、组件 API、状态处理）——风格不一致的改动即返工。**仅当用户明确指定新风格时才脱离**；脱离时仍遵守 tokens 与可用性底线。
 - **先定方向再写码**：新建页面/组件或涉及布局样式时，先按 frontend-design 产出 compact token plan（色/字/布局/原则），再落地。
 - **四态完整**：加载/空/错误/成功全部覆盖（UX Playbook）；交互有反馈（hover/active/disabled/loading）。
 - **令牌一致**：颜色/间距/圆角/阴影走 `--<prefix>-*`（位置见 AGENTS.md）；禁裸色值/魔法数值。
