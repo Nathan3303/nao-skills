@@ -185,21 +185,15 @@ function install(target, force, verbose) {
   log('  角色卡：.agents/prompts/ · 技能：.agents/skills/ · 交付清单：.agents/checklists/');
 }
 
-function update(target) {
+function update(target, verbose) {
   // 源优先升级：机制文件以包为权威（项目定制应放 AGENTS.md，不在机制文件里改）
   const dst = join(target, '.agents');
   if (!existsSync(dst)) {
     log('目标无 .agents/，直接完整安装。');
-    return install(target, false);
+    return install(target, false, verbose);
   }
-  let overwritten = 0;
-  for (const e of readdirSync(SRC)) {
-    const s = join(SRC, e);
-    const d = join(dst, e);
-    rmSync(d, { recursive: true, force: true });
-    cpSync(s, d, { recursive: true });
-    overwritten++;
-  }
+  const r = syncTree(SRC, dst, { mode: 'update', force: true, verbose });
+  log(`升级完成：复制 ${r.copied}，覆盖 ${r.overwritten}，相同跳过 ${r.same}（项目自定义保留）`);
   // 清理已知废弃路径（先备份到 .agents/.nao-obsolete/）
   for (const p of OBSOLETE) {
     const full = join(target, p);
