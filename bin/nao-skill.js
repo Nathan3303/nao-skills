@@ -34,6 +34,11 @@ const PKG = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
 const SRC = fileURLToPath(new URL('../.agents', import.meta.url));
 const TEMPLATE_AGENTS = fileURLToPath(new URL('../.agents/templates/AGENTS.md.example', import.meta.url));
 
+// 已知废弃路径（相对项目根）：旧版遗留，update 时备份后移除
+const OBSOLETE = ['.agents/skills/checklists'];
+// 安装版本标记（install/update 写入，供下次检测升级）
+const VERSION_FILE = '.agents/.nao-version';
+
 const log = (...a) => console.log('[nao-skill]', ...a);
 const warn = (...a) => console.error('[nao-skill]', ...a);
 
@@ -77,6 +82,16 @@ function install(target, force) {
     }
   }
 
+  // 版本标记 + 升级/废弃检测
+  const prev = readInstalledVersion(target);
+  writeFileSync(join(target, VERSION_FILE), PKG.version);
+  if (prev && prev !== PKG.version) {
+    warn(`检测到旧版安装（v${prev} → v${PKG.version}）：建议运行 nao-skill update 升级机制文件。`);
+  }
+  for (const p of detectObsolete(target)) {
+    warn(`发现废弃路径 ${p}（旧版遗留，可能导致 skill 冲突）：建议运行 nao-skill update 清理。`);
+  }
+
   const agentsMd = join(target, 'AGENTS.md');
   if (!existsSync(agentsMd)) {
     let tpl = readFileSync(TEMPLATE_AGENTS, 'utf8');
@@ -95,11 +110,51 @@ function install(target, force) {
   log('  角色卡：.agents/prompts/ · 技能：.agents/skills/ · 交付清单：.agents/checklists/');
 }
 
+function update(target) {
+  // 源优先升级：机制文件以包为权威（项目定制应放 AGENTS.md，不在机制文件里改）
+  const dst = join(target, '.agents');
+  if (!existsSync(dst)) {
+    log('目标无 .agents/，直接完整安装。');
+    return install(target, false);
+  }
+  let overwritten = 0;
+  for (const e of readdirSync(SRC)) {
+    const s = join(SRC, e);
+    const d = join(dst, e);
+    rmSync(d, { recursive: true, force: true });
+    cpSync(s, d, { recursive: true });
+    overwritten++;
+  }
+  // 清理已知废弃路径（先备份到 .agents/.nao-obsolete/）
+  for (const p of OBSOLETE) {
+    const full = join(target, p);
+    if (existsSync(full)) {
+      const bakDir = join(dst, '.nao-obsolete');
+      mkdirSync(bakDir, { recursive: true });
+      cpSync(full, join(bakDir, `${basename(p)}-${Date.now()}`), { recursive: true });
+      rmSync(full, { recursive: true, force: true });
+      log(`废弃路径已备份并移除: ${p}（备份于 .agents/.nao-obsolete/）`);
+    }
+  }
+  // 项目自定义文件保留（源没有的不动）
+  writeFileSync(join(target, VERSION_FILE), PKG.version);
+  log(`✔ 升级完成：机制文件以 v${PKG.version} 为准，项目自定义已保留。`);
+}
+
+function readInstalledVersion(target) {
+  try { return readFileSync(join(target, VERSION_FILE), 'utf8').trim(); } catch { return null; }
+}
+
+function detectObsolete(target) {
+  return OBSOLETE.filter((p) => existsSync(join(target, p)));
+}
+
 function help() {
   console.log(`nao-skill v${PKG.version} — nao 多角色 AI 开发舰队安装器
 
 用法:
   nao-skill install [dir] [--force]   安装/合并 .agents/ 到目标项目（默认当前目录）
+  nao-skill update [dir]              升级已有安装：源优先覆盖 + 清理废弃路径 + 保留项目自定义
   nao-skill --version                 显示版本
   nao-skill --help                    显示本帮助
 
@@ -131,11 +186,24 @@ if (cmd === '--version' || cmd === '-v' || cmd === 'version') {
     else if (!rest[i].startsWith('-')) target = resolve(rest[i]);
     else { warn(`未知参数: ${rest[i]}`); process.exit(2); }
   }
-  if (!existsSync(target) || !statIsDir(target)) {
+  if (!statIsDir(target)) {
     warn(`目标目录无效: ${target}`);
     process.exit(2);
   }
   install(target, force);
+} else if (cmd === 'update' || cmd === 'u') {
+  let target = process.cwd();
+  const rest = args.slice(1);
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === '--target') target = resolve(rest[++i]);
+    else if (!rest[i].startsWith('-')) target = resolve(rest[i]);
+    else { warn(`未知参数: ${rest[i]}`); process.exit(2); }
+  }
+  if (!statIsDir(target)) {
+    warn(`目标目录无效: ${target}`);
+    process.exit(2);
+  }
+  update(target);
 } else {
   warn(`未知命令: ${cmd}（可用: install）`);
   process.exit(2);
