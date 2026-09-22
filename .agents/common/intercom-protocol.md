@@ -24,6 +24,8 @@ description: pi-intercom 多会话协作协议（常驻引用）
 
 拉起：`bash .agents/scripts/nao-fleet.sh ensure <别名>[@<repo>]`
 
+- **任务派生**：`ensure --task <编号> <别名>[@<repo>]` 创建 `<角色>-<编号>` 独立会话（如 `rd-be-T1`），并行隔离、互不排队/打断，避免多任务同名冲突；任务完成即结束。
+
 - **判重**：脚本以 `--name <别名>` 判在线；已运行则跳过并 warn。确需重开加 `--force`。
 - **tmux 宿主**：`$TMUX` 存在时在当前窗口分屏拉起（默认布局 `main-row2`：
   首 pane 全高占左，后续每角色往右开列、每列上下 2 个）；不在 tmux 内则创建

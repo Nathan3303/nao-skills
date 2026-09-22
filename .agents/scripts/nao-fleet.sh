@@ -7,6 +7,7 @@
 #   nao-fleet.sh status                           角色会话在线状态（权威名单见 intercom list）
 #   nao-fleet.sh ensure <别名>[@<repo>] [更多...]  拉起角色窗口（默认工作区=roles.yaml workspace）
 #   nao-fleet.sh ensure -m <model> <别名>...       显式指定模型（须命中白名单）
+#   nao-fleet.sh ensure --task <编号> <别名>[@<repo>]   任务派生会话：--name <别名>-<编号>（并行隔离，避免同名冲突）
 #   nao-fleet.sh ensure --force <别名>...          忽略"已在运行"判重
 #
 # 角色别名 → 角色卡：见 .agents/roles.yaml（单一事实来源）
@@ -520,11 +521,17 @@ cmd_status() {
       printf '  · %-14s 未运行（ensure 拉起）\n' "$a"
     fi
   done
+  echo "== 任务派生会话（--task 拉起，如 rd-be-T1）=="
+  local found=0 line
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && { printf '  · %s\n' "$line"; found=1; }
+  done < <(pgrep -af "pi[[:space:]].*--name (pm|arch-designer|rd-fe|rd-be|qa)-[A-Za-z0-9_-]+" 2>/dev/null | head -10)
+  (( found )) || echo '  （无）'
 }
 
 # ---------------------------------------------------------------------------
 cmd_ensure() {
-  local force="$1" model="$2"; shift 2
+  local force="$1" model="$2" task="$3"; shift 3
   local spec role repo key seen k
   local -a cg_done=()
   [[ $# -eq 0 ]] && die "ensure 需要至少一个角色，如: nao-fleet.sh ensure arch rd-fe"
@@ -536,15 +543,18 @@ cmd_ensure() {
     fi
     resolve_role "$role"
     [[ -n "$repo" ]] || repo="${ROLE_WS[$NAME]:-$PWD}"
+    # 任务派生：会话名 = <角色>-<任务编号>，独立 intercom 身份（并行隔离，避免同名冲突）
+    local disp="$NAME"
+    [[ -n "$task" ]] && disp="${NAME}-${task}"
     # CodeGraph 索引健康（同 repo 只查一次，不阻塞拉起）
     key="$repo"; seen=0
     for k in "${cg_done[@]:-}"; do [[ "$k" == "$key" ]] && seen=1; done
     if (( ! seen )); then check_codegraph "$repo"; cg_done+=("$key"); fi
-    if [[ "$force" != "true" ]] && running "$NAME"; then
-      warn "$NAME 已在运行（--name 识别），跳过；确需重开请加 --force"
+    if [[ "$force" != "true" ]] && running "$disp"; then
+      warn "$disp 已在运行（--name 识别），跳过；确需重开请加 --force"
       continue
     fi
-    spawn_one "$NAME" "$repo" "$model"
+    spawn_one "$disp" "$repo" "$model"
   done
 }
 
@@ -570,6 +580,7 @@ while [[ $# -gt 0 ]]; do
       check_model "$MODEL" || die "模型 '$MODEL' 不在白名单内。允许: $MODEL_WHITELIST（可通过 NAO_MODEL_WHITELIST 覆盖）"
       shift 2 ;;
     --force)  FORCE=true;  shift ;;
+    --task)   TASK="${2:-}"; [[ -n "$TASK" ]] || die "--task 需要任务编号（如 T1）"; [[ "$TASK" =~ ^[A-Za-z0-9_-]+$ ]] || die "--task 非法: $TASK（仅字母/数字/-/_）"; shift 2 ;;
     --strict) STRICT=true; shift ;;
     -h|--help) usage ;;
     *) TARGETS+=("$1"); shift ;;
@@ -583,6 +594,6 @@ esac
 case "$CMD" in
   check)  cmd_check "$STRICT" ;;
   status) cmd_status ;;
-  ensure) cmd_ensure "$FORCE" "$MODEL" "${TARGETS[@]}" ;;
+  ensure) cmd_ensure "$FORCE" "$MODEL" "$TASK" "${TARGETS[@]}" ;;
   *) usage ;;
 esac

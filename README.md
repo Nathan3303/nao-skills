@@ -136,6 +136,7 @@ PM 是任务状态权威，以状态机驱动执行：
 .agents/scripts/nao-fleet.sh status                   # 角色在线状态（权威名单见 intercom list）
 .agents/scripts/nao-fleet.sh ensure arch rd-fe        # 拉起缺失角色
 .agents/scripts/nao-fleet.sh ensure rd-be@/path/repo  # 指定后端 repo（含 CodeGraph 索引提醒）
+.agents/scripts/nao-fleet.sh ensure --task T1 rd-be@/path/repo   # 任务派生会话：--name rd-be-T1（并行隔离，避免同名冲突）
 .agents/scripts/ui-tokens-check.sh <repo>             # 扫 UI 硬编码色值（绕过 Design Tokens）
 ```
 
