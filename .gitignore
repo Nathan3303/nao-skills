@@ -32,3 +32,5 @@ npm-debug.log*
 pnpm-debug.log*
 
 .omo
+# npm pack 产物
+*.tgz
