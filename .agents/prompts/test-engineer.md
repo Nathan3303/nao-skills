@@ -1,7 +1,7 @@
 ---
 description: 测试工程师角色 Prompt（短常驻）——策略/用例/缺陷/质量保障
 role: qa
-version: 4
+version: 7
 updated: 2026-09-21
 ---
 

@@ -287,6 +287,6 @@ if (cmd === '--version' || cmd === '-v' || cmd === 'version') {
   }
   update(target);
 } else {
-  warn(`未知命令: ${cmd}（可用: install）`);
+  warn(`未知命令: ${cmd}（可用: install, update, plugins）`);
   process.exit(2);
 }

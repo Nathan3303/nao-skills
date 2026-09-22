@@ -369,7 +369,7 @@ cmd_check() {
   local wl_problems=0
 
   echo "== 目录 =="
-  for d in "$PROMPTS_DIR" "$COMMON_DIR" "$SKILLS_SUB"; do
+  for d in "$PROMPTS_DIR" "$COMMON_DIR" "$SKILLS_SUB" "$SKILLS_DIR"/.agents/checklists; do
     if [[ -d "$d" ]]; then printf '  ✓ %s\n' "$d"
     else printf '  ✗ 缺失: %s\n' "$d"; rc=1; fi
   done

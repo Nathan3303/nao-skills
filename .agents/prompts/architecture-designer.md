@@ -1,7 +1,7 @@
 ---
 description: 资深系统架构师角色 Prompt（短常驻）——架构设计/技术选型/评审/ADR
 role: arch-designer
-version: 4
+version: 7
 updated: 2026-09-21
 ---
 

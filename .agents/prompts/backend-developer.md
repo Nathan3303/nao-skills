@@ -1,7 +1,7 @@
 ---
 description: 后端开发工程师角色 Prompt（短常驻）——Golang DDD
 role: rd-be
-version: 4
+version: 7
 updated: 2026-09-21
 ---
 

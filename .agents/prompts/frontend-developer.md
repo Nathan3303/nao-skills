@@ -1,7 +1,7 @@
 ---
 description: 前端开发工程师角色 Prompt（短常驻）——Vue 3 / React + TS DDD
 role: rd-fe
-version: 6
+version: 7
 updated: 2026-09-21
 ---
 
