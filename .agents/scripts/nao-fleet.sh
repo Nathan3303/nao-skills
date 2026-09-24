@@ -3,7 +3,8 @@
 # nao-fleet.sh — 按角色一键拉起 pi 会话窗口（nao 团队工具箱）
 #
 # 用法
-#   nao-fleet.sh check [--strict]                 静态体检：roles.yaml/缩进/EOL/角色卡/交叉引用/白名单/布局
+#   nao-fleet.sh check [--strict] [-v]            静态体检：roles.yaml/缩进/EOL/角色卡/交叉引用/白名单/布局
+#                                                 默认单行摘要（含 warn 计数）；-v 展开完整报告；失败始终展开
 #   nao-fleet.sh status                           角色会话在线状态（权威名单见 intercom list）
 #   nao-fleet.sh ensure <别名>[@<repo>] [更多...]  拉起角色窗口（默认工作区=roles.yaml workspace）
 #   nao-fleet.sh ensure -m <model> <别名>...       显式指定模型（须命中白名单）
@@ -45,6 +46,8 @@ TMUX_LAYOUT="${NAO_TMUX_LAYOUT:-main-row2}"
 # main-row2 主 pane 宽度百分比：默认值与非法值回退共用同一常量（防三处漂移）
 TMUX_MAIN_WIDTH_DEFAULT=35
 TMUX_MAIN_WIDTH="${NAO_TMUX_MAIN_WIDTH:-$TMUX_MAIN_WIDTH_DEFAULT}"
+# check 输出契约：默认单行摘要（省 PM 上下文），-v 展开完整报告；失败始终展开
+VERBOSE=false
 
 log()  { printf '\033[1;32m[fleet]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[fleet]\033[0m %s\n' "$*" >&2; }
@@ -559,7 +562,7 @@ cmd_check() {
     rc=1
   fi
 
-  exit $rc
+  return $rc
 }
 
 # ---------------------------------------------------------------------------
@@ -634,6 +637,7 @@ while [[ $# -gt 0 ]]; do
     --force)  FORCE=true;  shift ;;
     --task)   TASK="${2:-}"; [[ -n "$TASK" ]] || die "--task 需要任务编号（如 T1）"; [[ "$TASK" =~ ^[A-Za-z0-9_-]+$ ]] || die "--task 非法: $TASK（仅字母/数字/-/_）"; shift 2 ;;
     --strict) STRICT=true; shift ;;
+    -v|--verbose) VERBOSE=true; shift ;;
     -h|--help) usage ;;
     *) TARGETS+=("$1"); shift ;;
   esac
@@ -645,7 +649,31 @@ case "$CMD" in
 esac
 
 case "$CMD" in
-  check)  cmd_check "$STRICT" ;;
+  check)
+    # 默认单行摘要（派发前自检只需 exit code + 计数；完整报告 30+ 行不进 PM 上下文）；-v 或失败时展开
+    # 子 shell 隔离：cmd_check 内部 die/exit 不得吞掉报告（计数从报告解析，不靠子 shell 内变量）
+    REPFILE="$(mktemp)"
+    set +e
+    ( cmd_check "$STRICT" ) >"$REPFILE" 2>&1
+    CHECK_RC=$?
+    set -e
+    if (( CHECK_RC == 0 )) && ! $VERBOSE; then
+      WARNS="$(grep -c '^  !' "$REPFILE" || true)"
+      ROLES_N="$(grep -oE '解析成功，[0-9]+ 个角色' "$REPFILE" | grep -oE '[0-9]+' | head -1 || true)"
+      FILES_N="$(grep -oE '[0-9]+ 个文本文件全 LF' "$REPFILE" | grep -oE '^[0-9]+' | head -1 || true)"
+      if (( WARNS > 0 )); then
+        printf 'check: OK · roles=%s · files=%s · layout=%s · warn=%d（-v 看详情）\n' \
+          "${ROLES_N:-?}" "${FILES_N:-?}" "$TMUX_LAYOUT" "$WARNS"
+      else
+        printf 'check: OK · roles=%s · files=%s · layout=%s\n' \
+          "${ROLES_N:-?}" "${FILES_N:-?}" "$TMUX_LAYOUT"
+      fi
+    else
+      cat "$REPFILE"
+    fi
+    rm -f "$REPFILE"
+    exit $CHECK_RC
+    ;;
   status) cmd_status ;;
   ensure) cmd_ensure "$FORCE" "$MODEL" "$TASK" "${TARGETS[@]}" ;;
   *) usage ;;
