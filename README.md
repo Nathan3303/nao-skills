@@ -1,229 +1,111 @@
 # nao-skills
 
-多角色 AI 开发舰队的**角色卡 / 技能 / 协作协议 / 工具链**包，基于 [pi](https://pi.dev)（Agent Skills 标准 + pi-intercom 多会话）。Made by [Nathan Lee](https://github.com/nathan)。
+> 给你的 AI 编程助手配一支「开发小队」：你提需求，它自己找人干活、自己验收交付。
 
-核心命题：**用最少的 Token，把多个专业 Agent 会话组织成一个可靠交付的团队**——常驻精简、按需加载、机器强制、终态回执。
+nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，你的项目里会有 5 个分工明确的 AI 会话——产品经理负责拆需求、派活、验收；前端、后端、测试各自干活。你只做两件事：**回答问题**、**点确认**。
 
-**技术定位**：面向多 Agent 团队的**上下文工程**体系——上下文工程（内核）× 会话编排（协作层）× 交付治理（流程层）。它本身不运行 Agent，产出的是注入到各项目 Agent 的上下文制品（角色卡 / 技能 / 协议）。
+基于 [pi](https://pi.dev)。Made by [Nathan Lee](https://github.com/nathan)。
 
-## 快速开始
+## 它解决什么问题
 
-### 1）安装
+一个人对着 AI 写代码，常见三个毛病：
 
-```bash
-npm install -g @nathan33/nao-skill            # 全局安装 CLI
-# 或免安装：npx @nathan33/nao-skill install
+| 毛病 | nao-skills 的做法 |
+| --- | --- |
+| 一个会话什么都干，聊到后面就糊涂了 | 拆成 5 个专业角色，各管一段，互不干扰 |
+| 需求没问清楚就开写，写完发现不对 | PM 先追问、写清 PRD 和目标，你点头才开工 |
+| 干完不知道算不算干完 | 每个任务必须「回执」并按清单自查，PM 逐条验收才归档 |
 
-nao-skill install                             # 安装/合并到当前项目（保守，不覆盖已有同名）
-nao-skill install /path/to/proj --force       # 指定目录；--force 备份后覆盖
-nao-skill install --plugins                   # 安装 .agents/ 同时装 pi 舰队插件（intercom 等）
-```
-
-安装内容：`<项目>/.agents/` 全套（角色卡 / 技能 / 交付清单 / 协作协议 / `roles.yaml` / 工具链 / 模板）+ 生成项目根 `AGENTS.md`（已存在则提示按 PM 卡 §七**合并**，不覆盖原文）；写入 `.agents/.nao-version` 版本标记。
-
-> 前置依赖：[pi](https://pi.dev)。舰队协作依赖 pi-intercom——`nao-skill plugins list` 查状态，`plugins install-all` 装缺失。
-
-### 2）体检 + 拉起舰队
+## 安装（1 分钟）
 
 ```bash
-.agents/scripts/nao-fleet.sh check                         # 体检（默认单行摘要，-v 展开）：roles.yaml/缩进/EOL/卡片/交叉引用/白名单/布局/CodeGraph
-.agents/scripts/nao-fleet.sh ensure arch rd-fe rd-be qa     # 拉起缺失角色会话（退出码非 0 不要派发）
-.agents/scripts/nao-fleet.sh status                         # 角色在线状态（派生会话残留会标 `! 残留`）
-.agents/scripts/nao-fleet.sh close --task T1 rd-be          # 回收派生会话（闸门：在跑 turn / tasks-state 未推进）
-.agents/scripts/nao-fleet.sh ensure rd-be@/path/repo        # 指定工作区（含 CodeGraph 索引提醒）
-.agents/scripts/nao-fleet.sh ensure --task T1 rd-be         # 任务派生会话：--name rd-be-T1（并行隔离）
-.agents/scripts/ui-tokens-check.sh <repo>                   # 扫 UI 硬编码色值（绕过 Design Tokens）
+npm install -g @nathan33/nao-skill
+cd 你的项目
+nao-skill install            # 装 .agents/ 并生成 AGENTS.md（已有则提示按规则追加，不覆盖原文）
+nao-skill plugins install-all   # 装协作插件（intercom 等），多会话派活必需
 ```
 
-### 3）开工（把需求交给 PM 会话）
+升级用 `nao-skill update`（机制文件以包为准，你自己的改动会保留）。
 
-在 **PM 会话**（`ensure pm`）里提需求即可，其余由舰队跑：PM 澄清 → PRD/RICE → **开工确认卡（你只点确认）** → 派发 RD/QA → 终态回执 → 验收 → 归档。完整流程见后文「协作闭环（PM 为 leader）」。
+> 前置依赖：[pi](https://pi.dev)。没装 pi 也能看到这套文件，但跑不起来舰队。
 
-### 4）升级与维护
+## 用起来（3 步）
 
 ```bash
-nao-skill update        # 升级已有安装：机制文件源优先覆盖 + 清理废弃路径 + 保留项目自定义
-nao-skill plugins list  # 舰队插件状态（intercom / ask-me / subagents / web-access / codegraph）
+.agents/scripts/nao-fleet.sh check                          # 体检：一行 OK 就能开工
+.agents/scripts/nao-fleet.sh ensure pm arch rd-fe rd-be qa   # 拉起 5 个角色会话
 ```
 
-- **install（保守合并）**：项目已有同名文件默认保留；`--force` 覆盖；写入版本标记。
-- **update（升级）**：机制文件以包为权威（项目定制请放 `AGENTS.md`）；已知废弃路径（如旧版 `skills/checklists/`，防 skill 冲突）备份到 `.agents/.nao-obsolete/` 后移除；项目自定义文件保留。install 发现版本落后/废弃路径 → 提示运行 `update`。
-- **pi 插件管理**：`plugins list` / `plugins install <名...>` / `plugins install-all`——舰队生态插件（intercom / ask-me / subagents / web-access / codegraph），透传 `pi install npm:<pkg>`，幂等跳过已装。
-- **发布（维护者）**：`npm publish --access public`（scope 包需 `--access public`）。
-
-## 整体架构
+然后**在 PM 会话里说需求**就行，剩下的它自己流转。大概长这样：
 
 ```text
-┌──────────────────────────────────────────────────────────────────┐
-│ 项目级上下文   AGENTS.md（PM 维护 · pi 自动注入所有会话 · 最高优先级）│
-├──────────────────────────────────────────────────────────────────┤
-│ 协作层    pi-intercom：派发 / ask-reply / 终态回执闸门             │
-│          PM=状态权威：忙闲闸门 → 排队/抢占 → 验收 → 归档            │
-├──────────────────────────────────────────────────────────────────┤
-│ 单一事实来源   roles.yaml（aliases→id→card）· 卡片 frontmatter     │
-├──────────────────────────────────────────────────────────────────┤
-│ 常驻层（每轮计费，刻意精简）                                      │
-│          角色卡：身份/职责/2-3 条最硬红线/按需指针                  │
-│          common/：output-format + intercom-protocol              │
-├──────────────────────────────────────────────────────────────────┤
-│ 按需层（渐进式披露，零常驻 token）                                │
-│          skills/   DDD 细节 · codegraph · commit                 │
-│          checklists/（独立于 skills/，避 pi 注册）· frontend-design/│
-│          templates/   frontend-ui · AGENTS.md · tasks-state 骨架 │
-├──────────────────────────────────────────────────────────────────┤
-│ 工具层    nao-fleet.sh（ensure/check/status）+ ui-tokens-check   │
-├──────────────────────────────────────────────────────────────────┤
-│ 外部能力  CodeGraph 索引（代码定位，替代 grep 全文扫描）           │
-└──────────────────────────────────────────────────────────────────┘
+你：想加个「导出 CSV」功能
+PM：问几个问题 → 给出 PRD + 优先级 + 开工确认卡
+你：开工
+PM：拉起缺的角色 → 让 qa 先写用例 → 指派给 rd-be
+rd-be：（做完）[T1] done | 测试：npm test exit=0 128例/0红 | 详情：docs/reports/T1.md
+PM：核对验收标准、看改动、验收 → 归档到 docs/prds/ → 回收后台会话
 ```
 
-### 分层职责
+每个任务完成后都能在 `docs/` 里找到痕迹（PRD、任务状态、回报），不依赖聊天记录——所以会话聊久了可以直接重开，不会丢事。
 
-| 层 | 内容 | Token 特性 |
-| --- | --- | --- |
-| **项目级** | 项目根 `AGENTS.md`（PM 维护 §七）：项目属性/约束，pi 自动注入所有会话 | 常驻（限 <120 行） |
-| **协作层** | pi-intercom：`--name` 注册身份，send/ask/reply 线程化；终态回执闸门（`[编号] done \| <role>` 必回） | 消息短、详情落盘 |
-| **单一事实来源** | `roles.yaml` 管别名→角色；卡片 frontmatter `version` 管版本；两处互相校验（`check`） | 无重复维护 |
-| **常驻层** | 5 张角色卡（60–112 行）+ 2 份 common 规范——每轮每会话计费，**刻意保持最小** | 最贵，最小化 |
-| **按需层** | skills + checklists + templates：只有 description 常驻，完整指令按需读取（Agent Skills 标准渐进式披露） | 常态零成本 |
-| **工具层** | fleet 拉起/体检/状态/回收（残留检测）；ui-tokens-check 硬编码色值扫描（可接 CI） | 一次性执行 |
-| **外部能力** | CodeGraph：`context` 一次返回相关符号+代码块（实测约 1/17 于 grep+全文） | 查找精准化 |
+## 五个角色
 
-### 机制归属（哪些属于上下文工程）
-
-| 层 | 机制 | 学科归属 |
-| --- | --- | --- |
-| **上下文工程（内核）** | 三层分层、常驻最小化、渐进式披露、前缀缓存纪律、上下文生命周期（worker 任务闭环重开 / PM 批次边界重开 + 接续快照）、状态外部化（tasks-state.md 五栏 + 接续快照）、CodeGraph 精准检索、两级回执模板（按需） | 推理期 token 集合最优 |
-| **会话编排** | pi-intercom 派发·ask/reply、忙闲闸门、任务状态机、离线检测重拉、`ensure --task` 派生隔离、`close` 回收（在跑 turn / tasks-state 双闸门） | 多 Agent 协调 |
-| **交付治理** | 开工确认闸门、架构签字、AC 五覆盖验收、终态回执硬闸门、ui-tokens-check | 流程可信性 |
-
-> 上下文工程是**主轴**（「Token 优先」的收益都在这一层）；编排与治理是「让多会话可靠交付」的必要补充。
-
-## 核心设计：Token 优先
-
-1. **常驻最小化**：红线/清单/速查表/派发·回执模板全部按需化到 `checklists/`（独立目录，避开 pi skill 扫描），卡片与 common 只留最硬红线 + 指针。
-2. **按需加载**：Agent Skills 渐进式披露——DDD 细节、官方 frontend-design、checklists 均按需读，不占常驻。
-3. **缓存友好**：system prompt 稳定 = 前缀缓存命中（cacheRead 约 1/10 价）；改卡**批量一次到位**，易变内容放消息体不进卡片；`cacheWarming: "idle"` + `/session` 观察。
-4. **查找精准**：CodeGraph `context`/`node`/`callers`/`impact` 替代 grep+cat 全文；不可用时降级 grep + `sed` 行段读取（禁 cat 全文）。
-5. **上下文生命周期**：worker 任务闭环 → `ensure --force` 重开会话；**PM 是唯一常驻长寿会话，按批次边界重开 + 接续快照落盘**（长上下文丢的是纪律而非事实）。自动压缩只作兜底（摘要不可审计、额外花 token、禁用该次 prompt-cache 写）。
-
-## 上下文三层分层
-
-| 层 | 载体 | 维护者 | 内容 |
-| --- | --- | --- | --- |
-| **项目级（最高）** | 项目根 `AGENTS.md` | PM（§七） | 项目属性/约束/机制衔接；pi 自动注入所有会话，**优先于角色默认习惯** |
-| **团队级** | `roles.yaml` + `common/` | nao-skills 仓库 | 角色清单、协作协议、终态回执、缓存纪律 |
-| **角色级** | `prompts/` + `skills/` + `checklists/` | nao-skills 仓库 | 角色身份/边界、按需技能、交付清单 |
-
-各层各写各的、不互相复制；项目已有非空 AGENTS.md 时**合并追加**（保留原文 + `## nao 舰队接入` 区块，可回退），不覆盖。
-
-## 协作闭环（PM 为 leader）
-
-```
-用户提需求 → PM grill-me 澄清 → 9 模块 PRD + RICE
-  → 开工确认卡（用户确认）→ AGENTS.md 项目上下文就绪（新建/合并）
-  → fleet ensure 拉起缺线角色 → 架构评审闸门（arch 签字 / ADR）
-  → send 派发（忙闲闸门：idle 才派 / 忙则排队 / 紧急抢占）
-  → worker 终态回执 `[编号] done(lite|full)`（未回执 PM 主动追讨）
-  → 验收闭环（AC 五覆盖）→ tasks-state.md 更新 → docs/prds 当日归档 → 接续快照 + PM 批次重开
-```
-
-## 任务调度：状态机 + 忙闲闸门 + 可恢复
-
-PM 是任务状态权威，以状态机驱动执行：
-
-| 状态 | 转移条件 |
+| 角色 | 帮你干什么 |
 | --- | --- |
-| `queued`（待派发） | 目标忙碌（`thinking`/`tool:*`），记入 `docs/tasks-state.md` |
-| `dispatched`（进行中） | `list` 显示目标 `idle` 才派完整任务 |
-| `done`（已回执） | worker 回 `[编号] done(lite\|full)`；PM 校验后进入验收 |
-| `verified`（已验收） | AC 五覆盖核对通过，归档 `docs/prds` |
+| 产品经理 | 澄清需求、写 PRD、定优先级、派活、验收、归档（唯一的调度者，不写代码） |
+| 架构师 | 技术选型与方案评审，出 ADR，评影响面 |
+| 前端 / 后端研发 | 各自实现，写完自己跑测试再回执 |
+| 测试工程师 | 按验收标准出用例、跑门禁、报缺陷 |
 
-- **忙闲闸门**：`list` 的 live status（`idle`/`thinking`/`tool:*`）为判定依据；忙时**不 send 任务内容**（非交互拒收 / 交互 steer 打断），直接排队；紧急才抢占（交互可 steer 注入 + 注明挂起，非交互只能排队）。
-- **状态外部化 + 接续快照**：`docs/tasks-state.md` 五栏（待派发/进行中/待验收/挂起/已归档）+ 顶部「PM 接续快照」（当前阶段/未决决策/待用户回答/下次唤醒条件/会话体检）随每次派发·回执·验收更新；PM 会话重开先读文件重建状态，不依赖历史消息。
-- **PM 会话生命周期（重开纪律）**：PM 是唯一常驻长寿会话，**按批次边界重开**而非任务闭环——归档完成 / 用户切换需求 / `/session` contextTokens 超窗口 40%，任一命中即 `ensure --force pm`；重开后先读接续快照并**向用户回读确认 3 行**再调度；自动压缩只作兜底（LLM 摘要不可审计、额外花 token、禁用该次 prompt-cache 写）。
-- **回执 = 已核对清单（两级）**：默认 `done(lite)` 单行（含门禁精确数字）；有阻塞/风险/需决策用 `done(full)`。回执须声明已读 `checklists/<role>.md`（未过项必列），未核对不回执。
-- **离线检测与恢复**：`list` 发现已派发目标离线 → 标记挂起 → `ensure --force` 重拉 → 按挂起快照重派。
-- **队列唤醒**：回执/汇报/用户输入时顺带检查待派发队列（不单独轮询），避免排队任务悬置。
-- **降级回流**：intercom 不可用的降级交付经用户转交后，PM 补登记 tasks-state + 归档（标注「降级回流」）。
-- **常驻 vs 派生**：串行任务用常驻角色（忙闲排队）；并行/隔离任务用派生会话 `ensure --task <编号>`（`<角色>-<编号>`，如 `rd-be-T1`）。派生会话**验收通过后回收**（`close --task`，内置在跑 turn / tasks-state 闸门）；常驻会话不回收，只 `ensure --force` 重开；`status` 标出残留。
-- **单 PM 纪律**：同一项目同一时刻仅一个 PM 调度会话。
+不想要哪个角色，删掉对应文件即可；只留 PM + 一个研发角色也能跑。
 
-- **终态回执硬闸门**：所有角色（含 arch 评审）必须以回执模板结束任务；`send` 失败降级 `ask` → 再失败才降级交付。
-- **卡片版本同步**：改卡 bump `version` 并广播 `card <role> vN`（不贴全文）；worker 接任务前核对版本，stale 则重读。
-- **降级**：PM 可达必须回执；intercom 不可用才允许"本会话直接产出 + 用户转交"。
+## 为什么它省 token（这是本项目的核心追求）
 
-## 代码定位（CodeGraph）
+和 AI 聊天，钱花在「它每轮要读多少字」。所以：
 
-`@.agents/skills/codegraph.md`（按需）——`query`/`context`/`node`/`callers`/`callees`/`impact`/`affected` 速查 + token 纪律 + 降级 grep 规则。索引项目级维护：`status` → `init`/`sync`；`nao-fleet.sh` 的 `check`/`ensure` 自动探测索引健康并提醒。
+- **常驻的东西尽量小**：每个角色卡只留最硬的红线，细节放到用到时才读的文件里。
+- **按需才读**：设计规范、检查清单、读代码手册，都是在需要那一刻才读进上下文。
+- **不靠聊天记录记事**：任务状态和待办写在 `docs/` 文件里；会话重开先读文件恢复状态。
+- **查代码用索引**：配了 CodeGraph 就一次拿到相关代码块，比全文搜索省一个数量级。
 
-**全角色行为指令**（非可选引用）：rd-be 关键约定「先 codegraph 后 grep」、rd-fe 硬性红线「未先试 codegraph 即违规」、qa `node/affected` 定位被测代码、arch `impact/callers` 影响面评审、PM 验收 `node --file/--limit` 行段读取——**禁 cat 全文**是本机制通用读码纪律。
+一句话概括定位：这是在给 AI 做「上下文工程」——决定每个会话**该看到什么、不该看到什么**；在这之上再叠了多会话协作和交付纪律。它自己不跑 AI，产出的是给 AI 读的 Markdown。
 
-## UI/UX 落地（三层，不绑定组件库）
+## 常见问题
 
-| 层 | 载体 | 职责 |
-| --- | --- | --- |
-| 设计质量层 | 官方 `frontend-design` skill（按需） | 视觉方向、反 AI 味、typography |
-| 约束层 | Design Tokens（`--<prefix>-*`）+ UX Playbook + `ui-tokens-check.sh` | 令牌收敛、四态/反馈一致、机器扫描 |
-| 验收层 | checklist rd-fe / qa | 交付前核对 + QA 视觉验收 |
+**会改我的代码库吗？** 只新增 `.agents/` 和项目根 `AGENTS.md`（已存在则在末尾追加一小段，可手动删掉回退），不碰你原有文件。
 
-模板：`templates/frontend-ui/`（tokens.css + ux-playbook 骨架，任意项目复制裁剪）。
+**只能用 pi 吗？** 角色卡和技能本质就是 Markdown，Claude Code 等也能读；但"派活 / 回执"这种多会话协作依赖 pi + pi-intercom 插件。
 
-## 角色卡（常驻 system prompt）
+**跑完的会话要留着吗？** 后台派生会话验收完可以回收：`nao-fleet.sh close --task T1 rd-be`；常驻角色留着复用。`nao-fleet.sh status` 会提示哪些是残留。
 
-| Prompt | Role | 核心职责 |
-| --- | --- | --- |
-| `product-manager.md` | 产品经理（调度者） | 需求全生命周期、9 模块 PRD、RICE、多会话调度、终态回执闸门、**§七 AGENTS.md 项目上下文治理**、§十二 docs/prds 归档、验收读码（codegraph 行段）、**会话生命周期（批次重开 + 接续快照）** |
-| `architecture-designer.md` | 系统架构师（评审/咨询） | 技术选型四步法、评审签字 + ADR、终态回执 PM、降级规则 |
-| `frontend-developer.md` | 前端研发 | 前端 DDD 五层、UI/UX 三层落地（先读项目既有风格→定方向→tokens/组件库，引用 frontend-design） |
-| `backend-developer.md` | 后端研发 | Go DDD 四层、依赖倒置、事务/事件/错误约定 |
-| `test-engineer.md` | 测试工程师 | 测试金字塔、AC=用例、缺陷闭环、视觉验收 |
-
-所有角色卡头部均声明：**项目根 `AGENTS.md` 已由 pi 注入、最高优先级、优先于本卡默认习惯**（含各自执行点：arch 评审输入、RD 命令纪律、QA 环境运行）。
-
-## 按需技能
-
-| Skill | 用途 |
-| --- | --- |
-| `frontend-ddd-details.md` | 前端 DDD 骨架/场景速决/命名/误区 + UI/UX 落地 |
-| `backend-ddd-details.md` | 后端 DDD 骨架/事务/事件/命名/误区 |
-| `arch-patterns.md` | 架构模式、ADR 模板 |
-| `pm-rice.md` / `pm-grill.md` | RICE 优先级 / 需求澄清 |
-| `test-design.md` | 用例设计、缺陷管理、分层对齐 |
-| `codegraph.md` | 代码定位（替代 grep 全文） |
-| `commit.md` | git commit 规范（仅提交前读） |
-| `frontend-design/` | 官方视觉方向 skill（设计类任务先读） |
-| `checklists/*.md` | 各角色完整红线 + 交付检查清单 + `comm-templates.md`（派发/回执模板）——均按需读 |
-
-## 目录结构
+**装完之后项目里多了什么？**
 
 ```text
-nao-skills/
+你的项目/
+├── AGENTS.md              # 项目级约定（PM 维护，AI 每次都会读）
 └── .agents/
-    ├── common/                    # 常驻规范（全部角色引用）
-    │   ├── output-format.md       # 输出/沟通红线、反模式（模板按需）
-    │   └── intercom-protocol.md   # 多会话协议、终态回执、版本同步、缓存纪律
-    ├── roles.yaml                 # 角色清单（aliases→id→card，单一事实来源）
-    ├── prompts/                   # 角色卡（frontmatter: role/version/updated）
-    │   ├── product-manager.md     └── architecture-designer.md
-    │   ├── frontend-developer.md  └── backend-developer.md
-    │   └── test-engineer.md
-    ├── checklists/                 # 红线+交付清单+派发·回执模板（按需读；独立于 skills/ 避免被 pi 注册）
-    │   ├── pm.md / architecture-designer.md / rd-be.md / rd-fe.md / qa.md
-    │   ├── comm-templates.md       # 派发消息 + 回执两级模板（按需）
-    ├── skills/                    # 按需技能（渐进式披露）
-    │   ├── frontend-design/       # 官方设计方向 skill（按需）
-    │   ├── frontend-ddd-details.md / backend-ddd-details.md
-    │   ├── arch-patterns.md / pm-rice.md / pm-grill.md
-    │   ├── test-design.md / codegraph.md / commit.md
-    ├── templates/                  # 项目接入骨架（供复制裁剪）
-    │   ├── AGENTS.md.example        # 项目级上下文（PM 维护，合并规则见 PM 卡 §七）
-    │   ├── tasks-state.md.example   # 任务状态机落盘（待派发/进行中/待验收/挂起/已归档）
-    │   └── frontend-ui/             # tokens.css + ux-playbook 骨架
-    └── scripts/
-        ├── nao-fleet.sh           # 会话拉起 / 在线状态（含残留检测）/ 静态体检 / 回收 close
-        └── ui-tokens-check.sh     # UI 硬编码色值扫描
+    ├── prompts/           # 5 张角色卡
+    ├── common/            # 协作规矩、输出与回执规范
+    ├── checklists/        # 各角色红线 / 交付清单 / 回执模板（按需读）
+    ├── skills/            # 按需技能（DDD 细节、代码定位、提交规范…）
+    ├── templates/         # 项目接入用的骨架文件
+    └── scripts/           # nao-fleet.sh 等小工具
 ```
+
+## 想深入
+
+README 只讲怎么用。真正的机制都在上面那个 `.agents/` 里，想改就从这几处入手：
+
+| 想看什么 | 去哪看 |
+| --- | --- |
+| 整体架构、分层与设计取舍 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| 派活 / 回执 / 忙闲与回收规矩 | `.agents/common/intercom-protocol.md` |
+| 输出格式与回执红线 | `.agents/common/output-format.md`、`.agents/checklists/comm-templates.md` |
+| 角色怎么定义 | `.agents/prompts/*.md` |
+| 各角色的红线与交付清单 | `.agents/checklists/*.md` |
+| 工具命令 | `bash .agents/scripts/nao-fleet.sh --help` |
+| 项目自己的约定 | 项目根 `AGENTS.md` |
 
 ## License
 
