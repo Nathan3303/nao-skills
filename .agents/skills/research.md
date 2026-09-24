@@ -59,6 +59,7 @@ description: 按需技能——外部调研协议（产品形态可查；技术�
 - PM → PRD「用户场景 / 业务规则 / 范围」；引用来源，**技术前提留空**待 arch。
 - arch → ADR：`参考来源` + `对照过的备选模式（含不采纳理由）`（见 @.agents/skills/arch-patterns.md）。
 - 报告统一落盘 `docs/research/`（归档约定见 @.agents/common/intercom-protocol.md「归档约定」）。
+- 报告正文按 @.agents/checklists/deliverable-docs.md §六 写：结论摘要 ≤5 行、来源带访问日期、适配三栏、抓取正文不进正文（上限 120 行）。
 
 ## 六、反模式
 

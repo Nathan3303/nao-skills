@@ -132,6 +132,7 @@ bash .agents/scripts/nao-fleet.sh check
 - ADR：`docs/adr/YYYY-MM-DD-<主题>.md`，索引 `docs/adr/README.md`。
 - 评审/测试报告：`docs/reports/<编号>-<主题>.md`（按需）。
 - 业界调研：`docs/research/YYYY-MM-DD-<主题>.md`（协议与引用格式见 @.agents/skills/research.md）。
+- 所有 `docs/` 长文（PRD/ADR/报告/调研）的正文规范（长度上限、骨架、必写/可省/禁写）见 @.agents/checklists/deliverable-docs.md。
 
 ## 跨会话反模式
 
