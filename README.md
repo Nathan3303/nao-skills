@@ -92,7 +92,7 @@ nao-skill plugins list  # 舰队插件状态（intercom / ask-me / subagents / w
 
 | 层 | 机制 | 学科归属 |
 | --- | --- | --- |
-| **上下文工程（内核）** | 三层分层、常驻最小化、渐进式披露、前缀缓存纪律、上下文生命周期（worker 任务闭环重开 / PM 批次边界重开 + 接续快照）、状态外部化（tasks-state.md 五栏 + 接续快照）、CodeGraph 精准检索、两级回执模板 | 推理期 token 集合最优 |
+| **上下文工程（内核）** | 三层分层、常驻最小化、渐进式披露、前缀缓存纪律、上下文生命周期（worker 任务闭环重开 / PM 批次边界重开 + 接续快照）、状态外部化（tasks-state.md 五栏 + 接续快照）、CodeGraph 精准检索、两级回执模板（按需） | 推理期 token 集合最优 |
 | **会话编排** | pi-intercom 派发·ask/reply、忙闲闸门、任务状态机、离线检测重拉、`ensure --task` 派生隔离 | 多 Agent 协调 |
 | **交付治理** | 开工确认闸门、架构签字、AC 五覆盖验收、终态回执硬闸门、ui-tokens-check | 流程可信性 |
 
@@ -100,7 +100,7 @@ nao-skill plugins list  # 舰队插件状态（intercom / ask-me / subagents / w
 
 ## 核心设计：Token 优先
 
-1. **常驻最小化**：红线/清单/速查表全部按需化到 `checklists/`（独立目录，避开 pi skill 扫描），卡片只留最硬红线 + 指针。
+1. **常驻最小化**：红线/清单/速查表/派发·回执模板全部按需化到 `checklists/`（独立目录，避开 pi skill 扫描），卡片与 common 只留最硬红线 + 指针。
 2. **按需加载**：Agent Skills 渐进式披露——DDD 细节、官方 frontend-design、checklists 均按需读，不占常驻。
 3. **缓存友好**：system prompt 稳定 = 前缀缓存命中（cacheRead 约 1/10 价）；改卡**批量一次到位**，易变内容放消息体不进卡片；`cacheWarming: "idle"` + `/session` 观察。
 4. **查找精准**：CodeGraph `context`/`node`/`callers`/`impact` 替代 grep+cat 全文；不可用时降级 grep + `sed` 行段读取（禁 cat 全文）。
@@ -192,7 +192,7 @@ PM 是任务状态权威，以状态机驱动执行：
 | `codegraph.md` | 代码定位（替代 grep 全文） |
 | `commit.md` | git commit 规范（仅提交前读） |
 | `frontend-design/` | 官方视觉方向 skill（设计类任务先读） |
-| `checklists/*.md` | 各角色完整红线 + 交付检查清单（交付前读） |
+| `checklists/*.md` | 各角色完整红线 + 交付检查清单 + `comm-templates.md`（派发/回执模板）——均按需读 |
 
 ## 目录结构
 
@@ -200,15 +200,16 @@ PM 是任务状态权威，以状态机驱动执行：
 nao-skills/
 └── .agents/
     ├── common/                    # 常驻规范（全部角色引用）
-    │   ├── output-format.md       # 输出/回执模板、反模式
+    │   ├── output-format.md       # 输出/沟通红线、反模式（模板按需）
     │   └── intercom-protocol.md   # 多会话协议、终态回执、版本同步、缓存纪律
     ├── roles.yaml                 # 角色清单（aliases→id→card，单一事实来源）
     ├── prompts/                   # 角色卡（frontmatter: role/version/updated）
     │   ├── product-manager.md     └── architecture-designer.md
     │   ├── frontend-developer.md  └── backend-developer.md
     │   └── test-engineer.md
-    ├── checklists/                 # 红线+交付清单（交付前读；独立于 skills/ 避免被 pi 注册为同名 skill）
+    ├── checklists/                 # 红线+交付清单+派发·回执模板（按需读；独立于 skills/ 避免被 pi 注册）
     │   ├── pm.md / architecture-designer.md / rd-be.md / rd-fe.md / qa.md
+    │   ├── comm-templates.md       # 派发消息 + 回执两级模板（按需）
     ├── skills/                    # 按需技能（渐进式披露）
     │   ├── frontend-design/       # 官方设计方向 skill（按需）
     │   ├── frontend-ddd-details.md / backend-ddd-details.md
