@@ -52,6 +52,7 @@ bash .agents/scripts/nao-fleet.sh check
 - `ask` 提问 → `reply` 保持线程。
 - 同会话一次只挂一个 `ask`；遇 `Already waiting` 降级 `send`。
 - 长任务：`send` 分派 + worker 定期短汇报。
+- 派发一条到位：`编号 + 范围 + 引用路径（docs/...md#section）+ AC 编号 + 回执级别`；**不贴 PRD/方案全文、不用附件传全文**（接收方自己读文件）。
 - `ask` 默认超时 10 分钟。
 - `list` 确认目标在线后再派发。
 
@@ -71,6 +72,7 @@ bash .agents/scripts/nao-fleet.sh check
 
 ## 终态回执（硬性闸门，所有角色适用）
 
+- **两级回执**（模板见 output-format「回执模板」）：默认 `done(lite)` 单行（含门禁精确数字）；**出现阻塞/风险/需决策或 PM 指定时用 `done(full)`**。前缀 `[编号] done` 不变（PM 追讨/红线均按 `done` 匹配）。
 - 每次派发的任务（含架构评审）**必须以终态回执结束**：按 output-format「回执模板」`[编号] done | <role>`，经 intercom `send` 回 PM。
 - **回执 = 已核对清单**：回执须声明已读 `checklists/<role>.md` 并逐项核对（未过项必须列出）；未核对不回执。
 - **回执「测试」字段 = 全量门禁精确数字（硬性）**：必须给 `命令 + exit code + 文件数/例数/红数（或错误数）`；**只跑子目录、或只写「pass」不算回执** → PM 打回。**跑子目录不算验收**：全范围口径见项目 `AGENTS.md`。
@@ -90,12 +92,21 @@ bash .agents/scripts/nao-fleet.sh check
 
 - **system prompt 稳定 = 前缀缓存命中**（命中按 cacheRead 计费，约全价 1/10）：改卡要**批量一次到位**，避免频繁改导致全部会话缓存失效；易变内容（任务/进度）放消息体，不进卡片。
 - 红线/检查清单/速查表已按需化到 `@.agents/checklists/<role>.md`，**只在交付/评审前读取**，不要日常轮次主动展开。
-- **上下文生命周期**：任务闭环 → 重开会话（`fleet.sh ensure --force <role>`）优于等自动压缩（压缩要花 token 重写且丢细节）；PM 靠 `docs/` 落盘延续上下文，不靠历史消息堆叠。
+- **上下文生命周期**：worker **任务闭环即重开会话**（`fleet.sh ensure --force <role>`）优于等自动压缩（压缩要花 token 重写且丢细节）；**PM 是唯一常驻长寿会话**，改按批次边界重开，见下「会话生命周期」。
+- **会话体检（可回归）**：每次归档后在归档文件「派发记录」记一行 `contextTokens / 压缩次数 / cacheRead 占比`（`/session`）——上下文纪律有数字才能判定何时该重开。
 - 观察：`showCacheMissNotices: true` + `cacheWarming: "idle"`，用 `/session` 看缓存命中/失效与成本。
+
+## 会话生命周期（worker 与 PM 分治）
+
+- **worker**：任务闭环即结束，重开会话优于自动压缩（成本 O(1)、无压缩损失）。
+- **PM（唯一常驻长寿会话）**：按**批次边界**重开（归档完成 / 用户换需求 / `/session` contextTokens 超窗口 40%）+ 落盘接续 + 重开后**回读确认**；细则见 PM 卡 §六，快照骨架见 @.agents/templates/tasks-state.md.example。
+- **自动压缩只作兜底**：LLM 摘要**有损且不可审计**（决策点最易丢）、额外花 token、禁用该次 prompt-cache 写、打断缓存预热——它救的是溢出，不是记忆。
 
 ## 输入信封（凡评审/派发前核对，缺项先索要）
 
 - 主题/编号、范围与非范围
+- 引用路径（PRD/方案给 `docs/...md#section`，禁贴全文）
+- AC 编号 + 回执级别（lite 默认 / full）
 - NFR 基线（缺失必须反问）
 - 约束清单（成本/团队/时间/合规）
 - 目标里程碑

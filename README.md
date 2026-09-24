@@ -26,7 +26,7 @@ nao-skill install --plugins                   # 安装 .agents/ 同时装 pi 舰
 ### 2）体检 + 拉起舰队
 
 ```bash
-.agents/scripts/nao-fleet.sh check                         # 体检：roles.yaml/缩进/EOL/卡片/交叉引用/白名单/布局/CodeGraph
+.agents/scripts/nao-fleet.sh check                         # 体检（默认单行摘要，-v 展开）：roles.yaml/缩进/EOL/卡片/交叉引用/白名单/布局/CodeGraph
 .agents/scripts/nao-fleet.sh ensure arch rd-fe rd-be qa     # 拉起缺失角色会话（退出码非 0 不要派发）
 .agents/scripts/nao-fleet.sh status                         # 角色在线状态（权威名单见 intercom list）
 .agents/scripts/nao-fleet.sh ensure rd-be@/path/repo        # 指定工作区（含 CodeGraph 索引提醒）
@@ -92,7 +92,7 @@ nao-skill plugins list  # 舰队插件状态（intercom / ask-me / subagents / w
 
 | 层 | 机制 | 学科归属 |
 | --- | --- | --- |
-| **上下文工程（内核）** | 三层分层、常驻最小化、渐进式披露、前缀缓存纪律、上下文生命周期（重开会话优于压缩）、状态外部化（tasks-state.md）、CodeGraph 精准检索、输出/回执模板 | 推理期 token 集合最优 |
+| **上下文工程（内核）** | 三层分层、常驻最小化、渐进式披露、前缀缓存纪律、上下文生命周期（worker 任务闭环重开 / PM 批次边界重开 + 接续快照）、状态外部化（tasks-state.md 五栏 + 接续快照）、CodeGraph 精准检索、两级回执模板 | 推理期 token 集合最优 |
 | **会话编排** | pi-intercom 派发·ask/reply、忙闲闸门、任务状态机、离线检测重拉、`ensure --task` 派生隔离 | 多 Agent 协调 |
 | **交付治理** | 开工确认闸门、架构签字、AC 五覆盖验收、终态回执硬闸门、ui-tokens-check | 流程可信性 |
 
@@ -104,7 +104,7 @@ nao-skill plugins list  # 舰队插件状态（intercom / ask-me / subagents / w
 2. **按需加载**：Agent Skills 渐进式披露——DDD 细节、官方 frontend-design、checklists 均按需读，不占常驻。
 3. **缓存友好**：system prompt 稳定 = 前缀缓存命中（cacheRead 约 1/10 价）；改卡**批量一次到位**，易变内容放消息体不进卡片；`cacheWarming: "idle"` + `/session` 观察。
 4. **查找精准**：CodeGraph `context`/`node`/`callers`/`impact` 替代 grep+cat 全文；不可用时降级 grep + `sed` 行段读取（禁 cat 全文）。
-5. **上下文生命周期**：任务闭环 → `ensure --force` 重开会话（优于自动压缩）；PM 靠 `docs/` 落盘延续，不靠历史消息堆叠。
+5. **上下文生命周期**：worker 任务闭环 → `ensure --force` 重开会话；**PM 是唯一常驻长寿会话，按批次边界重开 + 接续快照落盘**（长上下文丢的是纪律而非事实）。自动压缩只作兜底（摘要不可审计、额外花 token、禁用该次 prompt-cache 写）。
 
 ## 上下文三层分层
 
@@ -123,8 +123,8 @@ nao-skill plugins list  # 舰队插件状态（intercom / ask-me / subagents / w
   → 开工确认卡（用户确认）→ AGENTS.md 项目上下文就绪（新建/合并）
   → fleet ensure 拉起缺线角色 → 架构评审闸门（arch 签字 / ADR）
   → send 派发（忙闲闸门：idle 才派 / 忙则排队 / 紧急抢占）
-  → worker 终态回执 `[编号] done`（未回执 PM 主动追讨）
-  → 验收闭环（AC 五覆盖）→ tasks-state.md 更新 → docs/prds 当日归档
+  → worker 终态回执 `[编号] done(lite|full)`（未回执 PM 主动追讨）
+  → 验收闭环（AC 五覆盖）→ tasks-state.md 更新 → docs/prds 当日归档 → 接续快照 + PM 批次重开
 ```
 
 ## 任务调度：状态机 + 忙闲闸门 + 可恢复
@@ -135,12 +135,13 @@ PM 是任务状态权威，以状态机驱动执行：
 | --- | --- |
 | `queued`（待派发） | 目标忙碌（`thinking`/`tool:*`），记入 `docs/tasks-state.md` |
 | `dispatched`（进行中） | `list` 显示目标 `idle` 才派完整任务 |
-| `done`（已回执） | worker 回 `[编号] done`；PM 校验后进入验收 |
+| `done`（已回执） | worker 回 `[编号] done(lite\|full)`；PM 校验后进入验收 |
 | `verified`（已验收） | AC 五覆盖核对通过，归档 `docs/prds` |
 
 - **忙闲闸门**：`list` 的 live status（`idle`/`thinking`/`tool:*`）为判定依据；忙时**不 send 任务内容**（非交互拒收 / 交互 steer 打断），直接排队；紧急才抢占（交互可 steer 注入 + 注明挂起，非交互只能排队）。
-- **状态外部化**：`docs/tasks-state.md` 五栏（待派发/进行中/待验收/挂起/已归档）随每次派发·回执·验收更新；PM 会话重开先读文件重建状态，不依赖历史消息。
-- **回执 = 已核对清单**：回执须声明已读 `checklists/<role>.md`（未过项必列），未核对不回执。
+- **状态外部化 + 接续快照**：`docs/tasks-state.md` 五栏（待派发/进行中/待验收/挂起/已归档）+ 顶部「PM 接续快照」（当前阶段/未决决策/待用户回答/下次唤醒条件/会话体检）随每次派发·回执·验收更新；PM 会话重开先读文件重建状态，不依赖历史消息。
+- **PM 会话生命周期（重开纪律）**：PM 是唯一常驻长寿会话，**按批次边界重开**而非任务闭环——归档完成 / 用户切换需求 / `/session` contextTokens 超窗口 40%，任一命中即 `ensure --force pm`；重开后先读接续快照并**向用户回读确认 3 行**再调度；自动压缩只作兜底（LLM 摘要不可审计、额外花 token、禁用该次 prompt-cache 写）。
+- **回执 = 已核对清单（两级）**：默认 `done(lite)` 单行（含门禁精确数字）；有阻塞/风险/需决策用 `done(full)`。回执须声明已读 `checklists/<role>.md`（未过项必列），未核对不回执。
 - **离线检测与恢复**：`list` 发现已派发目标离线 → 标记挂起 → `ensure --force` 重拉 → 按挂起快照重派。
 - **队列唤醒**：回执/汇报/用户输入时顺带检查待派发队列（不单独轮询），避免排队任务悬置。
 - **降级回流**：intercom 不可用的降级交付经用户转交后，PM 补登记 tasks-state + 归档（标注「降级回流」）。
@@ -171,7 +172,7 @@ PM 是任务状态权威，以状态机驱动执行：
 
 | Prompt | Role | 核心职责 |
 | --- | --- | --- |
-| `product-manager.md` | 产品经理（调度者） | 需求全生命周期、9 模块 PRD、RICE、多会话调度、终态回执闸门、**§七 AGENTS.md 项目上下文治理**、§十二 docs/prds 归档、验收读码（codegraph 行段） |
+| `product-manager.md` | 产品经理（调度者） | 需求全生命周期、9 模块 PRD、RICE、多会话调度、终态回执闸门、**§七 AGENTS.md 项目上下文治理**、§十二 docs/prds 归档、验收读码（codegraph 行段）、**会话生命周期（批次重开 + 接续快照）** |
 | `architecture-designer.md` | 系统架构师（评审/咨询） | 技术选型四步法、评审签字 + ADR、终态回执 PM、降级规则 |
 | `frontend-developer.md` | 前端研发 | 前端 DDD 五层、UI/UX 三层落地（先读项目既有风格→定方向→tokens/组件库，引用 frontend-design） |
 | `backend-developer.md` | 后端研发 | Go DDD 四层、依赖倒置、事务/事件/错误约定 |
