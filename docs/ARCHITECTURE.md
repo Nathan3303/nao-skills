@@ -66,7 +66,7 @@
 | --- | --- | --- |
 | **上下文工程（内核）** | 三层分层、常驻最小化、渐进式披露、前缀缓存纪律、上下文生命周期（worker 任务闭环重开 / PM 批次边界重开 + 接续快照）、状态外部化（tasks-state.md 五栏 + 接续快照）、CodeGraph 精准检索、两级回执模板（按需）、外部调研（按需，research.md：产品形态归 PM / 模式对照归 arch） | 推理期 token 集合最优 |
 | **会话编排** | pi-intercom 派发·ask/reply、忙闲闸门、任务状态机、离线检测重拉、`ensure --task` 派生隔离、`close` 回收（在跑 turn / tasks-state 双闸门） | 多 Agent 协调 |
-| **交付治理** | 开工确认闸门、架构签字、AC 五覆盖验收、终态回执硬闸门、ui-tokens-check | 流程可信性 |
+| **交付治理** | 开工确认闸门、架构签字、AC 五覆盖验收、终态回执硬闸门、GitHub Flow 流水线（Issue / 需求分支 / PR、验收后 RD squash 合并）、发布与仓库治理（Tag Release，gh 优先）、ui-tokens-check | 流程可信性 |
 
 > 上下文工程是**主轴**（「Token 优先」的收益都在这一层）；编排与治理是「让多会话可靠交付」的必要补充。
 
@@ -77,6 +77,8 @@
 | 派发 / 忙闲闸门 / 回执闸门 / 回收 / 会话生命周期 | `.agents/common/intercom-protocol.md`、`.agents/prompts/product-manager.md` §六 |
 | 输出与回执红线、可复制模板 | `.agents/common/output-format.md`、`.agents/checklists/comm-templates.md` |
 | 任务状态与 PM 接续快照 | `.agents/templates/tasks-state.md.example` |
+| Git 提交时机 / 需求分支 / 信息可读性 | `.agents/skills/commit.md` |
+| 新需求落地流水线（Issue / 分支 / PR / squash 合并 / 发布 / 离线降级） | `.agents/skills/github-flow.md`、`.agents/prompts/product-manager.md` §六·§十三 |
 | 角色红线与交付清单 | `.agents/checklists/*.md` |
 | 外部调研（产品形态 / 架构模式对照） | `.agents/skills/research.md`、`.agents/skills/arch-patterns.md` |
 | 工具命令与闸门 | `bash .agents/scripts/nao-fleet.sh --help` |

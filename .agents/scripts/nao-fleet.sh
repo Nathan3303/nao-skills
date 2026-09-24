@@ -3,7 +3,7 @@
 # nao-fleet.sh — 按角色一键拉起 pi 会话窗口（nao 团队工具箱）
 #
 # 用法
-#   nao-fleet.sh check [--strict] [-v]            静态体检：roles.yaml/缩进/EOL/角色卡/交叉引用/白名单/布局
+#   nao-fleet.sh check [--strict] [-v]            静态体检：roles.yaml/缩进/EOL/角色卡/交叉引用/PR 模板/白名单/布局
 #                                                 默认单行摘要（含 warn 计数）；-v 展开完整报告；失败始终展开
 #   nao-fleet.sh status                           角色会话在线状态（权威名单见 intercom list）
 #   nao-fleet.sh ensure <别名>[@<repo>] [更多...]  拉起角色窗口（默认工作区=roles.yaml workspace）
@@ -534,6 +534,33 @@ cmd_check() {
     if [[ -f "$COMMON_DIR/$f" ]]; then printf '  ✓ %s\n' "$f"
     else printf '  ✗ %s 缺失\n' "$f"; rc=1; fi
   done
+
+  echo "== PR 模板（GitHub Flow）=="
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo '  · 非 git 仓库（跳过）'
+  else
+    local remote_url prtpl="" cand
+    remote_url="$(git config --get remote.origin.url 2>/dev/null || true)"
+    if [[ -z "$remote_url" ]]; then
+      echo '  · 无 remote.origin（跳过）'
+    elif [[ "$remote_url" != *github.com* ]]; then
+      echo '  · 远端非 GitHub（跳过；PR 模板不适用）'
+    else
+      shopt -s nullglob
+      for cand in .github/pull_request_template.md .github/PULL_REQUEST_TEMPLATE.md \
+                  .github/PULL_REQUEST_TEMPLATE \
+                  pull_request_template.md PULL_REQUEST_TEMPLATE.md \
+                  docs/pull_request_template.md docs/PULL_REQUEST_TEMPLATE.md; do
+        [[ -e "$cand" ]] && { prtpl="$cand"; break; }
+      done
+      shopt -u nullglob
+      if [[ -n "$prtpl" ]]; then
+        printf '  ✓ PR 模板已就位：%s\n' "$prtpl"
+      else
+        echo '  ! 未找到 PR 模板（GitHub 远端）：PM 立项时从 .agents/templates/github/pull_request_template.md.example 复制为 .github/pull_request_template.md（见 skills/github-flow.md）'
+      fi
+    fi
+  fi
 
   echo "== 按需技能 =="
   if [[ -d "$SKILLS_SUB" ]]; then

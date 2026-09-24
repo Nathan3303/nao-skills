@@ -23,7 +23,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 
 > 写作要求（首屏 TL;DR、每格 ≤3 句、不适用项写法、长度上限 150 行）：@.agents/checklists/deliverable-docs.md §三（写 PRD 前读）。
 
-## 硬性红线（完整 22 项）
+## 硬性红线（完整 32 项）
 
 - [ ] 无目标指标/假设就进开发？
 - [ ] 边界不清晰（未写不做什么）？
@@ -48,8 +48,18 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] **PM 无谓重复跑 worker 已跑的门禁？**（应避免：仅在异常时复跑/抽查；worker 须自跑全范围）
 - [ ] 用户未指定模型却传了 `--model` 或继承 PM 模型？
   （默认不传，走 pi 全局默认；显式指定时由 `nao-fleet.sh` 的 `NAO_MODEL_WHITELIST` 白名单门禁校验，PM 无需自行校验，但**必须**在开工确认卡单独一行如实注明）
+- [ ] 未过 PM 验收就合并 PR，或直推 main？（PM 验收通过 = 授权合并；见 `github-flow.md`）
+- [ ] PM 亲自合并 PR / `push` main？（合并由 RD 执行，PM 只验收授权）
+- [ ] PM 改了**源码/测试/构建配置**，或手改冲突内容？（应转 worker；PM 只做仓库治理与发布）
+- [ ] main 上出现多条本需求提交，或出现 `wip()` 提交（未 squash）？
+- [ ] PR 标题 / 提交信息不可读（纯编号/类名/函数名/文件路径）？
+- [ ] Issue 与 `docs/` 双源（正文抄进 Issue，或状态只留平台）？
+- [ ] 未过验收 / 门禁未绿就打 tag 或 release，或 tag 指向非 main 合并提交？（见 `github-flow.md`）
+- [ ] `git push --force` 到 main/共享分支（未经用户明确授权并指明分支）？
+- [ ] release notes 不可读（纯编号/类名/路径），或未落盘 `docs/releases/`？
+- [ ] 降级（无 `gh` / 无远端）未在 `tasks-state` 与回执中标注？
 
-## 交付检查清单（完整 27 项）
+## 交付检查清单（完整 34 项）
 
 - [ ] 目标/边界/验收三件事齐备
 - [ ] 证据 + 5 Whys 已产出
@@ -77,11 +87,18 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 用户口头约束已**当场落盘**（`AGENTS.md` 项目级 / PRD「变更治理」），未等归档
 - [ ] 归档前已更新接续快照 + 记录会话体检（归档后按 PM 卡 §六 重开会话）
 - [ ] 业界调研（若有）已落盘 `docs/research/`，每条含「适用条件 + 本项目差异（采纳/改造/不采纳）」；引用带访问日期，查不到已写「未检索到」
+- [ ] 派发消息已给出**需求分支** `feat/<issue-id>-<slug>`（或降级 `nao/<批次-slug>`）、PR owner、Reviewer
+- [ ] 工作期无 WIP 提交落在 main；暂存为路径级（无 `git add -A` 卷走他人改动）
+- [ ] Issue 已建（或降级已标注）：body 为摘要 + 指针，正文在 `docs/prds/`；同步仅 5 个节点
+- [ ] 验收在 PR 上完成：AC 逐条评论核对 + QA 门禁数字；**验收通过后才授权合并**
+- [ ] 合并由 RD 执行（`--squash`）；main 上本需求恰好 1 条提交且无 `wip()`；需求分支已删除
+- [ ] 发布（若有）：版本号符合 SemVer/项目约定；tag 指向 main 合并提交；release notes 用户可读且落盘 `docs/releases/`
+- [ ] `gh` 可用则已用 `gh`，降级已注明；发布后 `tasks-state` 版本/Tag 行已更新
 - [ ] 通过上面全部红线
 
 ## 会话回收 / 收窗核对（验收通过后 / 手工关窗前）
 
 - [ ] 派生会话：`tasks-state` 已把任务推进到「已验收 / 已归档」→ `nao-fleet.sh close --task <编号> <别名>`（否则会被状态闸门拦下）
 - [ ] 常驻会话**不回收**（保留复用）；上下文变长时 `ensure --force` 重开
-- [ ] 手工关窗（tmux `kill-pane`）前：该会话已回**终态回执**（**未回执不得关**）+ `tmux capture-pane -p -t <pane>` 末 5 行无 `Working`/spinner + 产物已落盘（`git log` 有提交、工作区干净、dev server/探针已停）
+- [ ] 手工关窗（tmux `kill-pane`）前：该会话已回**终态回执**（**未回执不得关**）+ `tmux capture-pane -p -t <pane>` 末 5 行无 `Working`/spinner + 产物已落盘（`git log` 有提交且**落在需求分支**、工作区干净、无 WIP 提交泄漏到 main、dev server/探针已停）
 - [ ] 残留已核对：`nao-fleet.sh status` 无 `! 残留` 提示（有则 `close --task` 或补登 tasks-state）

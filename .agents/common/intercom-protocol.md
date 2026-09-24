@@ -45,6 +45,7 @@ bash .agents/scripts/nao-fleet.sh check
 - 目录/角色卡/common/skills 齐备、roles.yaml 可解析且与卡片 frontmatter（role/version）一致、卡片交叉引用文件齐备、布局合法 → 继续
 - 白名单脏（重复 / `*` / 空条目）→ 提醒用户清理
 - 常驻卡超阈值 → 记 TODO，不阻塞
+- **PR 模板缺失（仅 GitHub 远端时提示）** → 不阻塞；PM 立项时补建（见 @.agents/skills/github-flow.md）
 - **退出码非 0**（硬错误：目录缺失 / manifest 或 frontmatter 非法 / 交叉引用缺失 / 布局非法）→ **停止派发**
 
 ## 线程纪律
@@ -86,7 +87,7 @@ bash .agents/scripts/nao-fleet.sh check
 - 每张卡 frontmatter 的 `version` / `updated` 是唯一事实；`.agents/roles.yaml` 只维护 aliases→id→card，不重复版本。
 - 修改角色卡：bump `version`、更新 `updated`；PM 经 intercom 广播**短消息** `card <role> v<N+1>（摘要）`——不贴全文。
 - worker 接任务前核对自身注入版本；发现 stale → 重读 `@.agents/prompts/<role>.md`（跨仓库会话用注入的环境锚点绝对路径）。
-- `nao-fleet.sh check` 校验：manifest 可解析、frontmatter 与 manifest 一致、交叉引用文件存在。
+- `nao-fleet.sh check` 校验：manifest 可解析、frontmatter 与 manifest 一致、交叉引用文件存在；GitHub 远端下额外提示 PR 模板缺失（warn，不改退出码）。
 
 ### 缓存与 Token 纪律（省的是大头）
 
@@ -107,6 +108,8 @@ bash .agents/scripts/nao-fleet.sh check
 - 主题/编号、范围与非范围
 - 引用路径（PRD/方案给 `docs/...md#section`，禁贴全文）
 - AC 编号 + 回执级别（lite 默认 / full）
+- **需求分支** `feat/<issue-id>-<slug>`（降级 `nao/<批次-slug>`）+ PR owner + Reviewer + 预览环境（有/无）
+- 提交与合并纪律：工作期只落分支、路径级暂存禁 `-A`；**PM 验收通过后由 RD squash 合并**（见 `@.agents/skills/github-flow.md`）
 - NFR 基线（缺失必须反问）
 - 约束清单（成本/团队/时间/合规）
 - 目标里程碑
@@ -132,6 +135,8 @@ bash .agents/scripts/nao-fleet.sh check
 - ADR：`docs/adr/YYYY-MM-DD-<主题>.md`，索引 `docs/adr/README.md`。
 - 评审/测试报告：`docs/reports/<编号>-<主题>.md`（按需）。
 - 业界调研：`docs/research/YYYY-MM-DD-<主题>.md`（协议与引用格式见 @.agents/skills/research.md）。
+- 发布说明：`docs/releases/<version>.md`（PM 维护，Tag Release 前落盘；gh 不可用时作 Release notes 正文）。
+- PR 模板：`.github/pull_request_template.md`（PM 从 `.agents/templates/github/pull_request_template.md.example` 复制建立）。
 - 所有 `docs/` 长文（PRD/ADR/报告/调研）的正文规范（长度上限、骨架、必写/可省/禁写）见 @.agents/checklists/deliverable-docs.md。
 
 ## 跨会话反模式
@@ -140,6 +145,10 @@ bash .agents/scripts/nao-fleet.sh check
 - 无信封直接派发。
 - 对未标角色的会话猜测前后端/测试身份。
 - PM/RD/QA 越权改代码。
+- 工作期把 WIP 提交落 main，或绕过 PR 合并。
+- 未过 PM 验收就合并 PR；PM 亲自合并 / `push` main；PM 手改源码或冲突内容。
+- Issue 与 `docs/` 双源（正文抄进 Issue / 状态只留平台）。
+- 未过验收就打 tag / release，或 tag 指向非 main 合并提交。
 - `check` 非 0 仍强行派发。
 - 在 tmux 内拉起前未评估宿主窗口被重排的影响。
 - 派发后静默消失（无终态回执）。
