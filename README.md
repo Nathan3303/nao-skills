@@ -4,6 +4,50 @@
 
 核心命题：**用最少的 Token，把多个专业 Agent 会话组织成一个可靠交付的团队**——常驻精简、按需加载、机器强制、终态回执。
 
+## 快速开始
+
+### 1）安装
+
+```bash
+npm install -g @nathan33/nao-skill            # 全局安装 CLI
+# 或免安装：npx @nathan33/nao-skill install
+
+nao-skill install                             # 安装/合并到当前项目（保守，不覆盖已有同名）
+nao-skill install /path/to/proj --force       # 指定目录；--force 备份后覆盖
+nao-skill install --plugins                   # 安装 .agents/ 同时装 pi 舰队插件（intercom 等）
+```
+
+安装内容：`<项目>/.agents/` 全套（角色卡 / 技能 / 交付清单 / 协作协议 / `roles.yaml` / 工具链 / 模板）+ 生成项目根 `AGENTS.md`（已存在则提示按 PM 卡 §七**合并**，不覆盖原文）；写入 `.agents/.nao-version` 版本标记。
+
+> 前置依赖：[pi](https://pi.dev)。舰队协作依赖 pi-intercom——`nao-skill plugins list` 查状态，`plugins install-all` 装缺失。
+
+### 2）体检 + 拉起舰队
+
+```bash
+.agents/scripts/nao-fleet.sh check                         # 体检：roles.yaml/缩进/EOL/卡片/交叉引用/白名单/布局/CodeGraph
+.agents/scripts/nao-fleet.sh ensure arch rd-fe rd-be qa     # 拉起缺失角色会话（退出码非 0 不要派发）
+.agents/scripts/nao-fleet.sh status                         # 角色在线状态（权威名单见 intercom list）
+.agents/scripts/nao-fleet.sh ensure rd-be@/path/repo        # 指定工作区（含 CodeGraph 索引提醒）
+.agents/scripts/nao-fleet.sh ensure --task T1 rd-be         # 任务派生会话：--name rd-be-T1（并行隔离）
+.agents/scripts/ui-tokens-check.sh <repo>                   # 扫 UI 硬编码色值（绕过 Design Tokens）
+```
+
+### 3）开工（把需求交给 PM 会话）
+
+在 **PM 会话**（`ensure pm`）里提需求即可，其余由舰队跑：PM 澄清 → PRD/RICE → **开工确认卡（你只点确认）** → 派发 RD/QA → 终态回执 → 验收 → 归档。完整流程见后文「协作闭环（PM 为 leader）」。
+
+### 4）升级与维护
+
+```bash
+nao-skill update        # 升级已有安装：机制文件源优先覆盖 + 清理废弃路径 + 保留项目自定义
+nao-skill plugins list  # 舰队插件状态（intercom / ask-me / subagents / web-access / codegraph）
+```
+
+- **install（保守合并）**：项目已有同名文件默认保留；`--force` 覆盖；写入版本标记。
+- **update（升级）**：机制文件以包为权威（项目定制请放 `AGENTS.md`）；已知废弃路径（如旧版 `skills/checklists/`，防 skill 冲突）备份到 `.agents/.nao-obsolete/` 后移除；项目自定义文件保留。install 发现版本落后/废弃路径 → 提示运行 `update`。
+- **pi 插件管理**：`plugins list` / `plugins install <名...>` / `plugins install-all`——舰队生态插件（intercom / ask-me / subagents / web-access / codegraph），透传 `pi install npm:<pkg>`，幂等跳过已装。
+- **发布（维护者）**：`npm publish --access public`（scope 包需 `--access public`）。
+
 ## 整体架构
 
 ```text
@@ -136,37 +180,6 @@ PM 是任务状态权威，以状态机驱动执行：
 | `commit.md` | git commit 规范（仅提交前读） |
 | `frontend-design/` | 官方视觉方向 skill（设计类任务先读） |
 | `checklists/*.md` | 各角色完整红线 + 交付检查清单（交付前读） |
-
-## 工具链
-
-```bash
-.agents/scripts/nao-fleet.sh check                    # 体检：roles.yaml/缩进/EOL/卡片/交叉引用/白名单/布局/CodeGraph
-.agents/scripts/nao-fleet.sh status                   # 角色在线状态（权威名单见 intercom list）
-.agents/scripts/nao-fleet.sh ensure arch rd-fe        # 拉起缺失角色
-.agents/scripts/nao-fleet.sh ensure rd-be@/path/repo  # 指定后端 repo（含 CodeGraph 索引提醒）
-.agents/scripts/nao-fleet.sh ensure --task T1 rd-be@/path/repo   # 任务派生会话：--name rd-be-T1（并行隔离，避免同名冲突）
-.agents/scripts/ui-tokens-check.sh <repo>             # 扫 UI 硬编码色值（绕过 Design Tokens）
-```
-
-## 安装与升级（npm 发布）
-
-发布为 **`@nathan33/nao-skill`**，CLI `nao-skill` 一键接入项目：
-
-```bash
-npm install -g @nathan33/nao-skill          # 全局安装 CLI
-# 或在任意项目里直接：npx @nathan33/nao-skill install
-
-nao-skill install                            # 安装/合并到当前目录（保守，不覆盖已有）
-nao-skill install /path/to/proj --force      # 指定目录；--force 备份后覆盖同名
-nao-skill update                             # 升级已有安装（源优先 + 清理废弃 + 留自定义）
-```
-
-- **install（保守合并）**：目标已有同名文件默认保留项目既有；`--force` 覆盖；写入 `.agents/.nao-version` 版本标记。
-- **update（升级）**：机制文件源优先覆盖（项目定制应放 `AGENTS.md`）、备份清理已知废弃路径（如旧版 `skills/checklists/`，防 skill 冲突）到 `.agents/.nao-obsolete/`、保留项目自定义文件。
-- **旧版检测**：install 发现版本落后或废弃路径 → 提示运行 `update`。
-- **安装内容**：`.agents/` 全套（角色卡 / 技能 / 交付清单 / 协议 / roles.yaml / 工具链 / 模板）+ 生成 `AGENTS.md`（已存在则提示按 §七 合并，不覆盖）。
-- **pi 插件管理**：`nao-skill plugins list` / `install <名...>` / `install-all`——舰队生态插件（intercom / ask-me / subagents / web-access / codegraph），透传 `pi install npm:<pkg>`，幂等跳过已装。
-- **发布**：`npm publish --access public`（scope 包需 `--access public`）。
 
 ## 目录结构
 
