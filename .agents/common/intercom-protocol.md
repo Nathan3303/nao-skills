@@ -24,7 +24,7 @@ description: pi-intercom 多会话协作协议（常驻引用）
 
 拉起：`bash .agents/scripts/nao-fleet.sh ensure <别名>[@<repo>]`
 
-- **任务派生**：`ensure --task <编号> <别名>[@<repo>]` 创建 `<角色>-<编号>` 独立会话（如 `rd-be-T1`），并行隔离、互不排队/打断，避免多任务同名冲突；任务完成即结束。
+- **任务派生**：`ensure --task <编号> <别名>[@<repo>]` 创建 `<角色>-<编号>` 独立会话（如 `rd-be-T1`），并行隔离、互不排队/打断，避免多任务同名冲突；任务闭环即**回收**：`nao-fleet.sh close --task <编号> <别名>`（内置在跑 turn / tasks-state 闸门）。
 
 - **判重**：脚本以 `--name <别名>` 判在线；已运行则跳过并 warn。确需重开加 `--force`。
 - **tmux 宿主**：`$TMUX` 存在时在当前窗口分屏拉起（默认布局 `main-row2`：
@@ -98,7 +98,7 @@ bash .agents/scripts/nao-fleet.sh check
 
 ## 会话生命周期（worker 与 PM 分治）
 
-- **worker**：任务闭环即结束，重开会话优于自动压缩（成本 O(1)、无压缩损失）。
+- **worker**：任务闭环即**回收**派生会话（`close --task <编号> <别名>`）或重开常驻会话（`ensure --force`，优于自动压缩）。
 - **PM（唯一常驻长寿会话）**：按**批次边界**重开（归档完成 / 用户换需求 / `/session` contextTokens 超窗口 40%）+ 落盘接续 + 重开后**回读确认**；细则见 PM 卡 §六，快照骨架见 @.agents/templates/tasks-state.md.example。
 - **自动压缩只作兜底**：LLM 摘要**有损且不可审计**（决策点最易丢）、额外花 token、禁用该次 prompt-cache 写、打断缓存预热——它救的是溢出，不是记忆。
 

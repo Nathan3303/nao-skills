@@ -46,7 +46,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 用户未指定模型却传了 `--model` 或继承 PM 模型？
   （默认不传，走 pi 全局默认；显式指定时由 `nao-fleet.sh` 的 `NAO_MODEL_WHITELIST` 白名单门禁校验，PM 无需自行校验，但**必须**在开工确认卡单独一行如实注明）
 
-## 交付检查清单（完整 25 项）
+## 交付检查清单（完整 26 项）
 
 - [ ] 目标/边界/验收三件事齐备
 - [ ] 证据 + 5 Whys 已产出
@@ -64,6 +64,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 派发前已核对目标在线且 `idle`（忙则排队/紧急抢占注明）
 - [ ] `docs/tasks-state.md` 已随派发/回执/验收同步更新（状态外部化，可恢复）
 - [ ] 需新开的会话已 `ensure` 并经 `list` 验证
+- [ ] 派生会话已回收（验收通过后 `close --task <编号> <别名>`；常驻会话**不回收**，需重开时 `ensure --force`）
 - [ ] 全程 PM 未触碰代码
 - [ ] PRD 已归档 `docs/prds/` 并同步 README 索引
 - [ ] 项目 `AGENTS.md` 已建立/同步（项目级属性与约束，见 PM 卡 §七）
@@ -74,8 +75,9 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 归档前已更新接续快照 + 记录会话体检（归档后按 PM 卡 §六 重开会话）
 - [ ] 通过上面全部红线
 
-## 会话收窗核对（关窗 / tmux `kill-pane` 前）
+## 会话回收 / 收窗核对（验收通过后 / 手工关窗前）
 
-- [ ] 该会话已回**终态回执**（`[编号] done`；**未回执不得关**）
-- [ ] `tmux capture-pane -p -t <pane>` 末 5 行无 `Working`/spinner（在跑 turn ⇒ **等它停**）
-- [ ] 产物已落盘（`git log` 有提交、工作区干净、dev server/探针已停）——避免丢失在制工作
+- [ ] 派生会话：`tasks-state` 已把任务推进到「已验收 / 已归档」→ `nao-fleet.sh close --task <编号> <别名>`（否则会被状态闸门拦下）
+- [ ] 常驻会话**不回收**（保留复用）；上下文变长时 `ensure --force` 重开
+- [ ] 手工关窗（tmux `kill-pane`）前：该会话已回**终态回执**（**未回执不得关**）+ `tmux capture-pane -p -t <pane>` 末 5 行无 `Working`/spinner + 产物已落盘（`git log` 有提交、工作区干净、dev server/探针已停）
+- [ ] 残留已核对：`nao-fleet.sh status` 无 `! 残留` 提示（有则 `close --task` 或补登 tasks-state）

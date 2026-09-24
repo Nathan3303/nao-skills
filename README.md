@@ -28,7 +28,8 @@ nao-skill install --plugins                   # 安装 .agents/ 同时装 pi 舰
 ```bash
 .agents/scripts/nao-fleet.sh check                         # 体检（默认单行摘要，-v 展开）：roles.yaml/缩进/EOL/卡片/交叉引用/白名单/布局/CodeGraph
 .agents/scripts/nao-fleet.sh ensure arch rd-fe rd-be qa     # 拉起缺失角色会话（退出码非 0 不要派发）
-.agents/scripts/nao-fleet.sh status                         # 角色在线状态（权威名单见 intercom list）
+.agents/scripts/nao-fleet.sh status                         # 角色在线状态（派生会话残留会标 `! 残留`）
+.agents/scripts/nao-fleet.sh close --task T1 rd-be          # 回收派生会话（闸门：在跑 turn / tasks-state 未推进）
 .agents/scripts/nao-fleet.sh ensure rd-be@/path/repo        # 指定工作区（含 CodeGraph 索引提醒）
 .agents/scripts/nao-fleet.sh ensure --task T1 rd-be         # 任务派生会话：--name rd-be-T1（并行隔离）
 .agents/scripts/ui-tokens-check.sh <repo>                   # 扫 UI 硬编码色值（绕过 Design Tokens）
@@ -85,7 +86,7 @@ nao-skill plugins list  # 舰队插件状态（intercom / ask-me / subagents / w
 | **单一事实来源** | `roles.yaml` 管别名→角色；卡片 frontmatter `version` 管版本；两处互相校验（`check`） | 无重复维护 |
 | **常驻层** | 5 张角色卡（60–112 行）+ 2 份 common 规范——每轮每会话计费，**刻意保持最小** | 最贵，最小化 |
 | **按需层** | skills + checklists + templates：只有 description 常驻，完整指令按需读取（Agent Skills 标准渐进式披露） | 常态零成本 |
-| **工具层** | fleet 拉起/体检/状态；ui-tokens-check 硬编码色值扫描（可接 CI） | 一次性执行 |
+| **工具层** | fleet 拉起/体检/状态/回收（残留检测）；ui-tokens-check 硬编码色值扫描（可接 CI） | 一次性执行 |
 | **外部能力** | CodeGraph：`context` 一次返回相关符号+代码块（实测约 1/17 于 grep+全文） | 查找精准化 |
 
 ### 机制归属（哪些属于上下文工程）
@@ -93,7 +94,7 @@ nao-skill plugins list  # 舰队插件状态（intercom / ask-me / subagents / w
 | 层 | 机制 | 学科归属 |
 | --- | --- | --- |
 | **上下文工程（内核）** | 三层分层、常驻最小化、渐进式披露、前缀缓存纪律、上下文生命周期（worker 任务闭环重开 / PM 批次边界重开 + 接续快照）、状态外部化（tasks-state.md 五栏 + 接续快照）、CodeGraph 精准检索、两级回执模板（按需） | 推理期 token 集合最优 |
-| **会话编排** | pi-intercom 派发·ask/reply、忙闲闸门、任务状态机、离线检测重拉、`ensure --task` 派生隔离 | 多 Agent 协调 |
+| **会话编排** | pi-intercom 派发·ask/reply、忙闲闸门、任务状态机、离线检测重拉、`ensure --task` 派生隔离、`close` 回收（在跑 turn / tasks-state 双闸门） | 多 Agent 协调 |
 | **交付治理** | 开工确认闸门、架构签字、AC 五覆盖验收、终态回执硬闸门、ui-tokens-check | 流程可信性 |
 
 > 上下文工程是**主轴**（「Token 优先」的收益都在这一层）；编排与治理是「让多会话可靠交付」的必要补充。
@@ -145,7 +146,7 @@ PM 是任务状态权威，以状态机驱动执行：
 - **离线检测与恢复**：`list` 发现已派发目标离线 → 标记挂起 → `ensure --force` 重拉 → 按挂起快照重派。
 - **队列唤醒**：回执/汇报/用户输入时顺带检查待派发队列（不单独轮询），避免排队任务悬置。
 - **降级回流**：intercom 不可用的降级交付经用户转交后，PM 补登记 tasks-state + 归档（标注「降级回流」）。
-- **常驻 vs 派生**：串行任务用常驻角色（忙闲排队）；并行/隔离任务用派生会话 `ensure --task <编号>`（`<角色>-<编号>`，如 `rd-be-T1`，任务完成即结束）。
+- **常驻 vs 派生**：串行任务用常驻角色（忙闲排队）；并行/隔离任务用派生会话 `ensure --task <编号>`（`<角色>-<编号>`，如 `rd-be-T1`）。派生会话**验收通过后回收**（`close --task`，内置在跑 turn / tasks-state 闸门）；常驻会话不回收，只 `ensure --force` 重开；`status` 标出残留。
 - **单 PM 纪律**：同一项目同一时刻仅一个 PM 调度会话。
 
 - **终态回执硬闸门**：所有角色（含 arch 评审）必须以回执模板结束任务；`send` 失败降级 `ask` → 再失败才降级交付。
@@ -220,7 +221,7 @@ nao-skills/
     │   ├── tasks-state.md.example   # 任务状态机落盘（待派发/进行中/待验收/挂起/已归档）
     │   └── frontend-ui/             # tokens.css + ux-playbook 骨架
     └── scripts/
-        ├── nao-fleet.sh           # 会话拉起 / 在线状态 / 静态体检
+        ├── nao-fleet.sh           # 会话拉起 / 在线状态（含残留检测）/ 静态体检 / 回收 close
         └── ui-tokens-check.sh     # UI 硬编码色值扫描
 ```
 
