@@ -564,6 +564,18 @@ cmd_check() {
     echo '  · codegraph 未安装（回退 grep 属预期行为）'
   fi
 
+  echo "== pi 插件（业界调研能力）=="
+  local piset="$HOME/.pi/agent/settings.json"
+  if [[ -f "$piset" ]]; then
+    if grep -q 'pi-web-access' "$piset" 2>/dev/null; then
+      echo '  · pi-web-access ✓ 已装（PM/arch 业界调研可用）'
+    else
+      echo '  ! pi-web-access 未装（业界调研不可用；nao-skill plugins install web-access）'
+    fi
+  else
+    echo "  · 未找到 $piset（跳过插件检测）"
+  fi
+
   echo "== 模型白名单 =="
   if [[ -z "$MODEL_WHITELIST" ]]; then
     echo "  （未设置 NAO_MODEL_WHITELIST，-m 不校验）"

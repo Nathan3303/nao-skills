@@ -20,7 +20,7 @@
 │          common/：output-format + intercom-protocol              │
 ├──────────────────────────────────────────────────────────────────┤
 │ 按需层（渐进式披露，零常驻 token）                                │
-│          skills/   DDD 细节 · codegraph · commit                 │
+│          skills/   DDD 细节 · codegraph · commit · research      │
 │          checklists/（独立于 skills/，避 pi 注册；含回执模板）      │
 │          templates/   frontend-ui · AGENTS.md · tasks-state 骨架 │
 ├──────────────────────────────────────────────────────────────────┤
@@ -64,7 +64,7 @@
 
 | 层 | 机制 | 学科归属 |
 | --- | --- | --- |
-| **上下文工程（内核）** | 三层分层、常驻最小化、渐进式披露、前缀缓存纪律、上下文生命周期（worker 任务闭环重开 / PM 批次边界重开 + 接续快照）、状态外部化（tasks-state.md 五栏 + 接续快照）、CodeGraph 精准检索、两级回执模板（按需） | 推理期 token 集合最优 |
+| **上下文工程（内核）** | 三层分层、常驻最小化、渐进式披露、前缀缓存纪律、上下文生命周期（worker 任务闭环重开 / PM 批次边界重开 + 接续快照）、状态外部化（tasks-state.md 五栏 + 接续快照）、CodeGraph 精准检索、两级回执模板（按需）、外部调研（按需，research.md：产品形态归 PM / 模式对照归 arch） | 推理期 token 集合最优 |
 | **会话编排** | pi-intercom 派发·ask/reply、忙闲闸门、任务状态机、离线检测重拉、`ensure --task` 派生隔离、`close` 回收（在跑 turn / tasks-state 双闸门） | 多 Agent 协调 |
 | **交付治理** | 开工确认闸门、架构签字、AC 五覆盖验收、终态回执硬闸门、ui-tokens-check | 流程可信性 |
 
@@ -78,4 +78,5 @@
 | 输出与回执红线、可复制模板 | `.agents/common/output-format.md`、`.agents/checklists/comm-templates.md` |
 | 任务状态与 PM 接续快照 | `.agents/templates/tasks-state.md.example` |
 | 角色红线与交付清单 | `.agents/checklists/*.md` |
+| 外部调研（产品形态 / 架构模式对照） | `.agents/skills/research.md`、`.agents/skills/arch-patterns.md` |
 | 工具命令与闸门 | `bash .agents/scripts/nao-fleet.sh --help` |

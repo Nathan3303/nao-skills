@@ -131,6 +131,7 @@ bash .agents/scripts/nao-fleet.sh check
 - PRD：`docs/prds/YYYY-MM-DD-<主题>.md`，索引 `docs/prds/README.md`。
 - ADR：`docs/adr/YYYY-MM-DD-<主题>.md`，索引 `docs/adr/README.md`。
 - 评审/测试报告：`docs/reports/<编号>-<主题>.md`（按需）。
+- 业界调研：`docs/research/YYYY-MM-DD-<主题>.md`（协议与引用格式见 @.agents/skills/research.md）。
 
 ## 跨会话反模式
 
