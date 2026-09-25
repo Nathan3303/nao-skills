@@ -68,7 +68,7 @@ bash .agents/scripts/nao-fleet.sh check
 - **紧急例外**：交互会话可用 `send` **steer 注入**抢占（注明 `紧急抢占：暂停当前任务，优先本任务，回执须报告挂起任务状态`）；非交互会话忙时只能排队等空闲（抢占消息会被拒收）。
 - **忙时禁 `ask`**：目标忙碌时 `ask` 会空等超时；一律走排队 + 后续 `send`。
 - 不静默等待：不确定时先 `list` 确认形态与状态，避免「派发后无下文」。
-- **状态外部化与恢复**：任务状态落盘 `docs/tasks-state.md`（PM 维护，见 PM 卡 §六）；PM 会话重开/降级恢复时**先读该文件重建状态**再继续调度，不依赖历史消息。
+- **状态外部化与恢复**：任务状态落盘 `docs/tasks-state.md`（PM 维护，见 PM 卡 §六 + @.agents/skills/pm-operations.md §一）；PM 会话重开/降级恢复时**先读该文件重建状态**再继续调度，不依赖历史消息。
 - **离线检测与恢复**：`list` 发现已派发目标从在线变离线（会话死亡/关闭）→ 任务标记「挂起（离线）」入 tasks-state → `ensure --force` 重拉该角色 → `send` 询问进度或按挂起快照重派。
 - **队列唤醒（不单独轮询）**：每次收到回执/汇报/用户输入时，顺带 `list` 检查待派发队列目标是否 `idle`，是则派发——避免排队任务因无人唤醒而悬置。
 - **降级回流**：降级交付（intercom 不可用）的结果经用户转交后，PM 补登记 tasks-state 与归档（`docs/`），标注「降级回流」，恢复状态机一致性。
@@ -103,7 +103,7 @@ bash .agents/scripts/nao-fleet.sh check
 ## 会话生命周期（worker 与 PM 分治）
 
 - **worker**：任务闭环即**回收**派生会话（`close --task <编号> <别名>`）或重开常驻会话（`ensure --force`，优于自动压缩）。
-- **PM（唯一常驻长寿会话）**：按**批次边界**重开（归档完成 / 用户换需求 / `/session` contextTokens 超窗口 40%）+ 落盘接续 + 重开后**回读确认**；细则见 PM 卡 §六，快照骨架见 @.agents/templates/tasks-state.md.example。
+- **PM（唯一常驻长寿会话）**：按**批次边界**重开（归档完成 / 用户换需求 / `/session` contextTokens 超窗口 40%）+ 落盘接续 + 重开后**回读确认**；细则见 @.agents/skills/pm-operations.md §三（PM 卡 §六 为硬纪律摘要），快照骨架见 @.agents/templates/tasks-state.md.example。
 - **自动压缩只作兜底**：LLM 摘要**有损且不可审计**（决策点最易丢）、额外花 token、禁用该次 prompt-cache 写、打断缓存预热——它救的是溢出，不是记忆。
 
 ## 输入信封（凡评审/派发前核对，缺项先索要）

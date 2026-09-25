@@ -39,10 +39,10 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] **未经用户开工确认**就派发？
 - [ ] 对未标注角色的会话臆测身份派发？
 - [ ] **PM 亲自修改/新增代码**？（无 intercom 也不豁免）
-- [ ] **PM 以「亲自探查技术实现」替代转角色**，并据此形成 PRD 前提？（越界调研 = 无效决策轮次；见 PM 卡 §九）
+- [ ] **PM 以「亲自探查技术实现」替代转角色**，并据此形成 PRD 前提？（越界调研 = 无效决策轮次；见 @.agents/skills/pm-routing.md §二）
 - [ ] 派发消息贴了 PRD/方案全文、或用 `attachments` 传全文？（应给引用路径，worker 自己读文件）
-- [ ] 跨批次未重开会话、未更新接续快照？（长上下文丢红线/闸门；见 PM 卡 §六 生命周期）
-- [ ] 用外部调研（文章/竞品/开源实现）替代 arch 技术取舍，或把外部做法写成既定技术前提？（越界；见 PM 卡 §九 + @.agents/skills/research.md）
+- [ ] 跨批次未重开会话、未更新接续快照？（长上下文丢红线/闸门；见 @.agents/skills/pm-operations.md §三）
+- [ ] 用外部调研（文章/竞品/开源实现）替代 arch 技术取舍，或把外部做法写成既定技术前提？（越界；见 @.agents/skills/pm-routing.md §二 + @.agents/skills/research.md）
 - [ ] 非 PI/无 intercom 未按降级处理？
 - [ ] 派发后未收终态回执就默认成功？（应追讨）
 - [ ] **PM 无谓重复跑 worker 已跑的门禁？**（应避免：仅在异常时复跑/抽查；worker 须自跑全范围）
@@ -82,12 +82,12 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 派生会话已回收（验收通过后 `close --task <编号> <别名>`；常驻会话**不回收**，需重开时 `ensure --force`）
 - [ ] 全程 PM 未触碰代码
 - [ ] PRD 已归档 `docs/prds/` 并同步 README 索引
-- [ ] 项目 `AGENTS.md` 已建立/同步（项目级属性与约束，见 PM 卡 §七）
+- [ ] 项目 `AGENTS.md` 已建立/同步（项目级属性与约束，见 @.agents/skills/pm-operations.md §四）
 - [ ] worker 回执含**全量**门禁精确数字（命令 + exit code + 文件数/例数/红数）；PM 仅核对数字 + 读变更文件 + 异常才抽查（未重复跑）
 - [ ] 派发消息只给引用路径（`docs/...md#section`），无 PRD/方案全文或附件传全文
 - [ ] 派发时已声明回执级别（未声明默认 `done(lite)`；有阻塞/风险/需决策已要求 `done(full)`）；模板已按需读取 `@.agents/checklists/comm-templates.md`
 - [ ] 用户口头约束已**当场落盘**（`AGENTS.md` 项目级 / PRD「变更治理」），未等归档
-- [ ] 归档前已更新接续快照 + 记录会话体检（归档后按 PM 卡 §六 重开会话）
+- [ ] 归档前已更新接续快照 + 记录会话体检（归档后按 @.agents/skills/pm-operations.md §三 重开会话）
 - [ ] 业界调研（若有）已落盘 `docs/research/`，每条含「适用条件 + 本项目差异（采纳/改造/不采纳）」；引用带访问日期，查不到已写「未检索到」
 - [ ] 派发消息已给出**需求分支** `feat/<issue-id>-<slug>`（或降级 `nao/<批次-slug>`）、PR owner、Reviewer
 - [ ] 工作期无 WIP 提交落在 main；暂存为路径级（无 `git add -A` 卷走他人改动）
