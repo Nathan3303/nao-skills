@@ -74,11 +74,11 @@
 
 | 主题 | 出处（单一事实来源） |
 | --- | --- |
-| 派发 / 忙闲闸门 / 回执闸门 / 回收 / 会话生命周期 | `.agents/common/intercom-protocol.md`、`.agents/prompts/product-manager.md` §六 |
+| 派发 / 忙闲闸门 / 回执闸门 / 回收 / 会话生命周期 | `.agents/common/intercom-protocol.md`、`.agents/skills/pm-operations.md` §一·§三（PM 卡 §六 为硬纪律摘要） |
 | 输出与回执红线、可复制模板 | `.agents/common/output-format.md`、`.agents/checklists/comm-templates.md` |
 | 任务状态与 PM 接续快照 | `.agents/templates/tasks-state.md.example` |
 | Git 提交时机 / 需求分支 / 信息可读性 | `.agents/skills/commit.md` |
-| 新需求落地流水线（Issue / 分支 / PR / squash 合并 / 发布 / 离线降级） | `.agents/skills/github-flow.md`、`.agents/prompts/product-manager.md` §六·§十三 |
+| 新需求落地流水线（Issue / 分支 / PR / squash 合并 / 发布 / 离线降级） | `.agents/skills/github-flow.md`、`.agents/skills/pm-operations.md` §一、PM 卡 §十三 |
 | 角色红线与交付清单 | `.agents/checklists/*.md` |
 | 外部调研（产品形态 / 架构模式对照） | `.agents/skills/research.md`、`.agents/skills/arch-patterns.md` |
 | 工具命令与闸门 | `bash .agents/scripts/nao-fleet.sh --help` |

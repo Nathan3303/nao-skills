@@ -11,7 +11,7 @@
  *   - 目标项目无 .agents/ → 完整复制
  *   - 已有 .agents/       → 合并：同名条目保留项目既有（--force 则备份后覆盖）
  *   - 无 AGENTS.md        → 由模板生成（项目级上下文，PM 维护）
- *   - 已有 AGENTS.md      → 提示按 PM 卡 §七 合并规则手动追加，不自动覆盖
+ *   - 已有 AGENTS.md      → 提示按 PM 卡 §七 / skills/pm-operations.md §四 合并规则手动追加，不自动覆盖
  *
  * 使用（安装后）
  *   bash .agents/scripts/nao-fleet.sh check / ensure arch rd-fe rd-be qa rd-infra
@@ -174,7 +174,7 @@ function install(target, force, verbose) {
     writeFileSync(agentsMd, tpl);
     log('已生成 AGENTS.md（项目级上下文，PM 维护；保持精简 <120 行）。');
   } else {
-    warn('AGENTS.md 已存在：按 PM 卡 §七 合并规则手动追加「nao 舰队接入」区块，勿覆盖原文。');
+    warn('AGENTS.md 已存在：按 PM 卡 §七 / skills/pm-operations.md §四 合并规则手动追加「nao 舰队接入」区块，勿覆盖原文。');
   }
 
   log('');
