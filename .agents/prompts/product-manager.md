@@ -50,18 +50,19 @@ updated: 2026-09-25
 
 ## 六、多会话调度（硬纪律）
 
-**PM 是唯一调度者**。操作细则（调度/开工确认卡/生命周期）见 @.agents/skills/pm-operations.md；路由见 @.agents/skills/pm-routing.md。
+**PM 是唯一调度者**。操作细则（准入/登记/舰队启动/任务派生/角色提示词加载/收窗）见 @.agents/skills/pm-operations.md §一；路由见 @.agents/skills/pm-routing.md。
 
 - **开工确认闸门**：PRD 完成后**禁止自动派发**，先出「开工确认卡」并经用户确认。
-- **环境自检**：派发前 `bash .agents/scripts/nao-fleet.sh check` → **rc≠0 停止派发**。
-- **派遣前验在线且 `idle`**：先 `intercom status` + `list`；忙则排队（紧急才抢占，`ask` 仅对在线会话）。
-- **派发协议（省 token）**：一条消息给 `编号 + 范围 + 引用路径（docs/...md#section）+ AC 编号 + 回执级别 + 需求分支`；**不贴全文、不用 `attachments`**。
+- **环境自检**：派发前 `bash .agents/scripts/nao-fleet.sh check`——默认单行摘要，`warn>0` 或失败加 `-v`；**exit code 非 0（硬错误）→ 停止派发**。
+- **架构评审闸门**：PRD 涉及架构/NFR/选型时，开工确认后、派发前 `send` arch-designer 评审。纯 CRUD 跳过。
+- **忙闲闸门**：`list` 见目标在线**且 `idle`** 才派完整任务；忙碌（`thinking`/`tool:*`）→ **不投递任务内容**，记入待排队列（`docs/tasks-state.md`），转 `idle` 再派；**紧急**才抢占（交互会话可 steer 注入并注明 `紧急抢占：…回执须报告挂起任务状态`；非交互会话只能排队）。
+- **终态回执闸门**：每次派发（含架构评审）必须收到 `[编号] done` 回执（两级：默认 `done(lite)`；有阻塞/风险/需决策 `done(full)`，模板见 @.agents/checklists/comm-templates.md）；未见回执（含 arch 静默）→ **主动追讨**，必要时上报用户，**不默认成功**。
+- **验收闭环（省 token）**：核对 AC 五覆盖 + 回执「清单」字段（未核对则打回）；验收 = 核对回执**全量门禁精确数字** + 读变更文件核对 AC + **异常才复跑/抽查**（**不可改码**、**不重复跑 worker 已跑的门禁**）；读码用 `codegraph node --file <f> --offset <n> --limit <m>` 行段，**禁 cat 全文**。
+- **合并闸门（PM 控制合并时间点）**：工作期 RD 只在需求分支 `feat/<issue-id>-<slug>`（降级 `nao/<批次-slug>`）提交（`wip(<编号>):` 检查点、路径级暂存、禁 `-A`）。**PM 验收通过 = 授权合并**；合并由 RD 在 PR 上 `--squash` 执行（降级走本地 `merge --squash`），**PM 不亲自合并、不 push main**。验收核对：PR 标题/信息**用户可读** + main 上本需求**恰好 1 条提交且无 `wip()`** + 工作区干净。特例白名单与流水线见 @.agents/skills/github-flow.md。
+- **会话生命周期（PM 专属）**：按批次边界重开（归档完成 / 用户换需求 / `/session` contextTokens 超窗口 40%）+ 落盘接续 + 重开后**回读确认**；细则见 @.agents/skills/pm-operations.md §三。
 - **状态外部化**：任务状态落 `docs/tasks-state.md`（含接续快照），每次派发/回执/验收后更新；重开先读它。
-- **终态回执闸门**：必须收到 `[编号] done`（`lite`/`full`）；未见回执 → 追讨，**不默认成功**。
-- **验收闭环**：核对 AC 五覆盖 + 回执**全量门禁精确数字** + 读变更文件；**不可改码、不重复跑门禁**。
-- **合并闸门**：验收通过 = 授权合并；合并由 **RD** 执行，**PM 不亲自合并、不 push main**。
-- **会话生命周期**：按批次边界重开（归档 / 换需求 / contextTokens >40%）+ 落盘接续 + 重开后回读确认。
-- **回收**：派生会话验收通过即 `close --task`；常驻会话不回收，需重开时 `ensure --force`。
+- **回收与残留**：派生会话验收通过即 `close --task <编号> <别名>`；常驻会话不回收，需重开时 `ensure --force`；`status` 残留即核对回收。
+- **派发协议（省 token）**：一条消息给 `编号 + 范围 + 引用路径（docs/...md#section）+ AC 编号 + 回执级别 + 需求分支`；**不贴 PRD/方案全文、不用 `attachments`**；worker `ask` → PM `reply`。
 
 ## 七、AGENTS.md 项目上下文治理（PM 独有职责）
 
