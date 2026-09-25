@@ -225,6 +225,15 @@ check_qq_notify() {
   else
     printf '  ✓ 无 Tab\n'
   fi
+  # shell 转交守卫：禁止 `bash/sh <本脚本>` 逐行解释注释（防误执行示例/误发）
+  local l1 l2
+  l1="$(head -n 1 "$f")"
+  l2="$(sed -n '2p' "$f")"
+  if [[ "$l1" == '#!/bin/sh' ]] && [[ "$l2" == *'exec node "$0" "$@"'* ]]; then
+    printf '  ✓ shell 转交守卫（#!/bin/sh + exec node）\n'
+  else
+    printf '  ✗ 缺少 shell 转交守卫（第 1 行须 #!/bin/sh、第 2 行须含 exec node "$0" "$@"）\n'; rc=1
+  fi
   if command -v node >/dev/null 2>&1; then
     if node --check "$f" >/dev/null 2>&1; then
       printf '  ✓ node --check 语法通过\n'
