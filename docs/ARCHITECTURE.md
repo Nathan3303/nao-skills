@@ -37,7 +37,7 @@
 | **项目级** | 项目根 `AGENTS.md`（PM 维护 §七）：项目属性/约束，pi 自动注入所有会话 | 常驻（限 <120 行） |
 | **协作层** | pi-intercom：`--name` 注册身份，send/ask/reply 线程化；终态回执闸门（`[编号] done(lite\|full)` 必回）；`close` 回收派生会话 | 消息短、详情落盘 |
 | **单一事实来源** | `roles.yaml` 管别名→角色；卡片 frontmatter `version` 管版本；两处互相校验（`check`） | 无重复维护 |
-| **常驻层** | 5 张角色卡（74–160 行）+ 2 份 common 规范——每轮每会话计费，**刻意保持最小** | 最贵，最小化 |
+| **常驻层** | 6 张角色卡（65–198 行）+ 2 份 common 规范——每轮每会话计费，**刻意保持最小** | 最贵，最小化 |
 | **按需层** | skills + checklists + templates：只有 description 常驻，完整指令按需读取（Agent Skills 标准渐进式披露） | 常态零成本 |
 | **工具层** | fleet 拉起/体检/状态（含残留检测）/回收；ui-tokens-check 硬编码色值扫描（可接 CI） | 一次性执行 |
 | **外部能力** | CodeGraph：`context` 一次返回相关符号+代码块（实测约 1/17 于 grep+全文） | 查找精准化 |

@@ -14,7 +14,7 @@
  *   - 已有 AGENTS.md      → 提示按 PM 卡 §七 合并规则手动追加，不自动覆盖
  *
  * 使用（安装后）
- *   bash .agents/scripts/nao-fleet.sh check / ensure arch rd-fe ...
+ *   bash .agents/scripts/nao-fleet.sh check / ensure arch rd-fe rd-be qa rd-infra
  *   角色卡经 fleet 拉起时 --append-system-prompt 注入；checklists 按需读取
  */
 import { execFileSync } from 'node:child_process';
@@ -181,7 +181,7 @@ function install(target, force, verbose) {
   log('✔ 安装完成。下一步：');
   log('  bash .agents/scripts/nao-fleet.sh check                       # 体检');
   log('  bash .agents/scripts/nao-fleet.sh status                      # 在线状态');
-  log('  bash .agents/scripts/nao-fleet.sh ensure arch rd-fe rd-be qa  # 拉起舰队');
+  log('  bash .agents/scripts/nao-fleet.sh ensure arch rd-fe rd-be qa rd-infra  # 拉起舰队');
   log('  角色卡：.agents/prompts/ · 技能：.agents/skills/ · 交付清单：.agents/checklists/');
 }
 
