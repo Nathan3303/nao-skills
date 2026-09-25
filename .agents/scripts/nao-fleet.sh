@@ -922,7 +922,7 @@ cmd_status() {
       printf '  · %-14s 未运行（ensure 拉起）\n' "$a"
     fi
   done
-  echo "== 任务派生会话（--task 拉起，如 rd-be-T1）=="
+  echo "== 任务派生会话（--task 拉起，如 rd-be-T1 / rd-infra-T1）=="
   local found=0 dname role id cls tag
   while IFS= read -r dname; do
     [[ -n "$dname" ]] || continue
@@ -948,7 +948,7 @@ cmd_status() {
 # 回收已完成会话：闸门（tasks-state 已推进 + 无在跑 turn）+ 落地（pane/会话/screen/进程）
 cmd_close() {
   local force="$1" task="$2" target="$3"
-  [[ -n "$target" ]] || die "close 需要目标：角色别名或派生会话名（如 rd-be / rd-be-T1）"
+  [[ -n "$target" ]] || die "close 需要目标：角色别名或派生会话名（如 rd-be / rd-be-T1 或 rd-infra / rd-infra-T1）"
   local name repo cls bus pane pids r ok
   intercom_list_json >/dev/null 2>&1 || true   # 预热名册缓存
   if [[ -n "$task" ]]; then
@@ -974,7 +974,7 @@ cmd_close() {
     # 非别名的目标必须是 <已知角色>-<编号>，否则视为拼错（防静默 no-op）
     ok=0
     for r in "${ROLE_ORDER[@]}"; do [[ "$name" == "$r-"* ]] && ok=1; done
-    (( ok )) || die "未知角色或派生会话名: $name（可用: ${ROLE_ORDER[*]}；派生名形如 rd-be-T1）"
+    (( ok )) || die "未知角色或派生会话名: $name（可用: ${ROLE_ORDER[*]}；派生名形如 rd-be-T1 / rd-infra-T1）"
     repo="$PWD"
   fi
 
@@ -1022,7 +1022,7 @@ cmd_ensure() {
   local force="$1" model="$2" task="$3"; shift 3
   local spec role repo key seen k
   local -a cg_done=()
-  [[ $# -eq 0 ]] && die "ensure 需要至少一个角色，如: nao-fleet.sh ensure arch rd-fe"
+  [[ $# -eq 0 ]] && die "ensure 需要至少一个角色，如: nao-fleet.sh ensure arch rd-fe rd-infra"
   for spec in "$@"; do
     if [[ "$spec" == *"@"* ]]; then
       role="${spec%%@*}"; repo="${spec#*@}"
