@@ -20,6 +20,7 @@ description: pi-intercom 多会话协作协议（常驻引用）
 | `arch` / `arch-designer`（同义） | architecture-designer | 当前项目目录 |
 | `rd-fe` | frontend-developer | 当前项目目录 |
 | `rd-be` | backend-developer | 前后端分离时显式 `rd-be@<repo>` |
+| `infra` / `rd-infra`（同义） | infra-engineer | 当前项目目录 |
 | `qa` | test-engineer | 当前项目目录 |
 
 拉起：`bash .agents/scripts/nao-fleet.sh ensure <别名>[@<repo>]`
@@ -27,8 +28,10 @@ description: pi-intercom 多会话协作协议（常驻引用）
 - **任务派生**：`ensure --task <编号> <别名>[@<repo>]` 创建 `<角色>-<编号>` 独立会话（如 `rd-be-T1`），并行隔离、互不排队/打断，避免多任务同名冲突；任务闭环即**回收**：`nao-fleet.sh close --task <编号> <别名>`（内置在跑 turn / tasks-state 闸门）。
 
 - **判重 / 在线判定**：脚本按 pi 自设的**终端标题**（`π - <会话名> - <仓库名>`）+ `pi-intercom` 名册判在线（**不用 `pgrep --name`**：pi 启动后 argv 被改写为 `pi`，会恒失配）；已运行则跳过并 warn。确需重开加 `--force`。
-- **tmux 宿主**：`$TMUX` 存在时在当前窗口分屏拉起（默认布局 `main-row2`：
-  首 pane 全高占左，后续每角色往右开列、每列上下 2 个）；不在 tmux 内则创建
+- **tmux 宿主**：`$TMUX` 存在时在当前窗口分屏拉起。布局三选一（`NAO_TMUX_LAYOUT`）：默认 `main-row2`
+  （首 pane 全高占左，后续每角色往右开列、每列上下 2 个）；`main-col`（其余在右列竖排）；`grid`
+  （等大网格）。**窄列守卫**：`main-row2` 最窄非主 pane < `NAO_TMUX_MIN_PANE_WIDTH`（默认 30）时
+  自动回退 `main-col`，仍不足再退 `grid`（打印带数字的 warn，**不中断拉起**）。不在 tmux 内则创建
   detached 会话，需 `tmux attach -t nao-<别名>`。
 - **模型规则**：用户未指定则**禁止传 `--model`**，也禁止继承 PM 自身模型。
   显式指定时由 `NAO_MODEL_WHITELIST` 在**命令行入口解析阶段**即校验，
