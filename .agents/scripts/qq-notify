@@ -57,6 +57,14 @@
     const s = String(v ?? '')
     return s.length > n ? s.slice(0, n) + '…(截断)' : s
   }
+  // 从任何即将打印的文本中抹去已知凭证值（客户端密钥 / access_token）
+  const redact = (v, secrets = [], n = BODY_LIMIT) => {
+    let s = String(v ?? '')
+    for (const sec of secrets) {
+      if (sec && String(sec).length >= 6) s = s.split(String(sec)).join('***')
+    }
+    return trunc(s, n)
+  }
   const maskId = (v) => (v ? String(v).slice(0, 6) + '…' : '<无>')
   const fail = (code, msg, hint) => {
     process.stderr.write('FAIL: ' + msg + '\n')
@@ -148,7 +156,7 @@
   let tokenJson = {}
   try { tokenJson = await tokenRes.json() } catch { /* 非 JSON 响应 */ }
   if (!tokenRes.ok || !tokenJson.access_token) {
-    fail(EXIT.TOKEN, '取 token 失败：status=' + tokenRes.status + ' body=' + trunc(JSON.stringify(tokenJson)),
+    fail(EXIT.TOKEN, '取 token 失败：status=' + tokenRes.status + ' body=' + redact(JSON.stringify(tokenJson), [cfg.clientSecret]),
       '核对 appId/clientSecret，并确认 QQ 开放平台应用已开通机器人能力')
   }
 
@@ -173,10 +181,10 @@
   }
   const body = await res.text().catch(() => '')
   if (res.ok) {
-    process.stdout.write('OK env=' + env + ' to=' + maskId(target) + ' ' + trunc(body, 120) + '\n')
+    process.stdout.write('OK env=' + env + ' to=' + maskId(target) + ' ' + redact(body, [cfg.clientSecret, tokenJson.access_token], 120) + '\n')
     process.exit(EXIT.OK)
   }
-  fail(EXIT.SEND, '发送失败：status=' + res.status + ' body=' + trunc(body),
+  fail(EXIT.SEND, '发送失败：status=' + res.status + ' body=' + redact(body, [cfg.clientSecret, tokenJson.access_token]),
     '核对收件人 openid、主动消息权限与月度配额；sandbox 与 prod 权限不通用')
 })().catch((e) => {
   // 兜底：任何未预期错误都不抛栈（此处不依赖 IIFE 内作用域）
