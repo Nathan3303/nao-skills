@@ -60,6 +60,17 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 
 不想要哪个角色，删掉对应文件即可；只留 PM + 一个研发角色也能跑。
 
+## 可选：关键节点 QQ 主动推送
+
+装上 [`pi-agent-qqbot`](https://github.com/Nathan3303) 并配好 `~/.pi/agent/pi-agent-qqbot.json`（`appId` / `clientSecret` / `ownerOpenId` / `sandbox`）后，PM 可把**关键节点**主动推到你 QQ——批次进度汇总、验收结论、发版或合并完成、异常阻塞：
+
+```bash
+.agents/scripts/qq-notify "[T301] 验收通过 · PR #4 已合并 · v0.8.0"
+.agents/scripts/qq-notify --dry-run "连通性自检"      # 只取 token、不发送
+```
+
+**为什么默认不主动打扰**：这是**可选能力**——没配 `pi-agent-qqbot` 就自动视为未启用；四类节点之外不发，一个节点最多一条（禁刷屏）；推送失败只记回执行风险项，**不阻断交付**。默认走 sandbox（测试环境），正式发布通知才考虑 prod。能力边界、退出码与纪律见 `.agents/skills/qq-notify.md`。
+
 ## 为什么它省 token（这是本项目的核心追求）
 
 和 AI 聊天，钱花在「它每轮要读多少字」。所以：
