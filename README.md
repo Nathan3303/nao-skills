@@ -112,6 +112,16 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
     └── scripts/           # nao-fleet.sh 等小工具
 ```
 
+**同步后在 fmt 校验里看到 `.agents/` 的格式差异？** 这是已知的**发布形态**，不是缺陷——`.agents/**` 以上游原始存储形态发布，**不要就地格式化**（会破坏下游同步的 sha 一致性校验）。完整约定见下一节。
+
+## `.agents/` 的发布形态（fmt 边界）
+
+**`.agents/**` 的发布形态 = 本仓库里的原始存储形态**：其中部分 YAML / Markdown / MTS 未按 oxfmt / prettier 归一（实测命中如 `.agents/roles.yaml`、`.agents/scripts/intercom-probe.mts`）。因此下游把 `.agents/**` 纳入完整格式化校验（`vp check`、`prettier --check`、`oxfmt --check`…）时会看到几处格式差异——**属已知形态，不是缺陷**。
+
+- **⛔ 不要为了通过 fmt 而格式化 `.agents/**`。** 下游同步的**唯一完整性判据**是「**脚本与上游逐字节 sha 一致**」（跨仓同步正是靠它证明机制文件没漏没改）；一旦就地格式化，sha 不再相等，同步完整性就无法再证明。规避方式二选一：把 `.agents/**` 排除出 fmt 校验范围，或接受这几处差异。
+- **类型安全另有保障**：`.agents/scripts/**/*.mts|ts` 由本仓 `npm run check:agents`（strict `tsc`，配置 `tsconfig.agents.json`）把关，并已串入 `test` 与 `prepack` ⇒ **每次发布前必过**。这来自 `0.9.4` 的教训（`DEF-66`）：探针 2 处 `TS7006` 曾让下游 TS 仓（nao-todo / nue-ui）required `check` 变红，`0.9.5` 修复并把该自检固化在上游。
+- **变更纪律**：将来若要「上游统一格式化」，必须作为**一次明确的基线变更**执行——改形态 + 通知**全部下游**重同步 + 说明 sha 基线变化；**不得顺手格式化**。
+
 ## 想深入
 
 README 只讲怎么用。真正的机制都在上面那个 `.agents/` 里，想改就从这几处入手：
