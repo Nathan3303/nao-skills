@@ -62,7 +62,8 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| — | — | — | — | — | — |
+| T507-QA | qa-T507（`--task T507` @nao-todo-server） | 用例先行：AC1–AC8 可复跑断言脚本 + 迁移前基线采集（V1/V2）· 本地产出、暂不提交 | 2026-10-08（开工确认后） | AC1–AC8 | 待分支 |
+| T507-RD | rd-infra-T507（`--task T507` @nao-todo-server） | 已拉起待派：建分支 `feat/48-nao-fleet-migration` + 提交 PRD + `pi install -l` + `migrate` + `.gitignore` 两处 + PR | 待 QA 回执后派（避免同分支双写） | AC1/AC2/AC4/AC6/AC7/AC8 | — |
 
 ## 已回执待验收
 
