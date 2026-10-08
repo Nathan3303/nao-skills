@@ -114,4 +114,17 @@
 
 | 项 | 结果 |
 | :--- | :--- |
-| — | 验收后由 PM 填写 |
+| AC1–AC8 | **全部通过** |
+| AC1 别名 | `ALIAS_ROLE["$w"]="$v"` 修正（写入点唯一）· **真机实拉**：pane `%34`/`%35`（RD）与 `%42`/`%43`（QA，`arch-designer-T509Q` / `rd-infra-T509Q`），角色卡注入证据 `/tmp/nao-fleet-*.md`（`role:` + `NAO_SKILLS=` 锚点）· 6 canonical id 8/8 不回归 |
+| AC2 守卫 | 五点夹具均非 0 且指名（键值反写 / canonical 未登记 / 跨角色重名 / `aliases: []` / 字段缺失）；正常态 `check` rc=0 且 `roles=6` |
+| AC3 跨仓回收 | **真回收实测 2 次**（RD pane `%36` @`/tmp/t509otherrepo`；QA pane `%40`）· 名册在线但无句柄 → **rc=1 + 诊断**（不再假阴性）· `close <派生名>` 不再静默 no-op（README/help 已写明支持） |
+| AC4 文档 | README 补「别名与规范名等价」+「`close` 支持派生会话名 / 跨项目定位 / 定位失败非 0」；help 别名表与实际一致 |
+| AC5 门禁 | `check` rc=0（roles=6/files=43，连跑一致）· `npm test` rc=0 · `tests/t4` **9 用例 / 136 断言 / 0 红**（基线 109，只增不减） |
+| AC6 负向/零影响 | 三批已迁移仓（nao-todo / nao-todo-server / nue-ui）`check` rc=0 · `package.json` 0.12.1 与 `docs/releases/v0.12.1.md` 一致（notes 用户可读） |
+| AC7 治理 | PR #23 `--squash` → `main` **`bcac6f0`**：本需求**恰好 1 条** · **无 `wip()`** · 主题可读 · 分支已删 · 工作区干净 |
+| AC8 非范围 | diff **9 文件**；禁碰路径 7 项全 0 命中；既有历史归档零改动（新建 v0.12.1.md 不计） |
+| QA 独立验证 | verify **34P/0F/3S/1W**（WARN=预合并 AC7）· `--with-tmux` **35P/0F/2S/1W** · 与 RD 自报**逐项一致、零分歧** |
+| PM 独立复核 | 亲自读码：`ALIAS_ROLE` 方向与两处消费方一致 · `check_alias_resolution` **独立重解析** roles.yaml（不依赖被写反的映射）· `find_pane_for_any_repo` 去 repo 约束 + 无句柄非静默 · README/notes 文本逐字读过 |
+| 缺陷 | **0**（2 处脚本口径修正属 PM 裁定，非实现缺陷） |
+| 发布 | tag **`v0.12.1`** → `bcac6f0`（main 合并提交）· GitHub Release 已发（notes = `docs/releases/v0.12.1.md`）· **npm publish 由用户执行** |
+| 遗留（转 T510） | ① 跨仓回收仅在夹具 pane 上验证（本机无真实跨仓存活会话）——建议 T510 做一次真实闭环 ② README「别名表见 `.agents/roles.yaml`」在下游迁移后应指向 `$NAO_SKILLS/.agents/roles.yaml` |
