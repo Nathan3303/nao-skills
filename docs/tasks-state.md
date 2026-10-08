@@ -65,7 +65,11 @@
 | — | — | — | — | — | — |
 
 > **会话回收（已完成）**：T507 派生会话 `qa-T507` / `rd-infra-T507` 已回收（验收通过即回收）。
-> ⚠️ **机制缺陷发现（2026-10-08）**：`nao-fleet.sh close` **无法回收跨仓派生会话** —— `close --task T507 qa` → 「未运行（无需回收）」但 `tmux list-panes` 实际存活（标题格式正常）；`close --task T507 qa-T507` → 「未知角色」。本次以 `tmux kill-pane` 手工兜底完成回收（`status` 的残留识别正确）。**尚未开单**，待用户裁量是否并入 #19 或新开（PM 未自做修复：零代码边界）。
+> ⚠️ **机制缺陷发现（2026-10-08，T507/T508 各复现一次）**：`nao-fleet.sh close` 的**跨仓派生会话回收**存在两层问题：
+> ① **宿主定位假阴性**：`close --task <批次> <别名>`（在 nao-skills 仓内执行、目标会话在另一仓）→ 报「未运行（无需回收）」，但 `tmux list-panes` 实际存活且标题格式正常（`π - qa-T508 - nue-ui`）⇒ **回收失败且不报错**，需 `tmux kill-pane` 手工兜底。
+> ② **派生名不可作目标**：`close --task T508 qa-T508` → 「未知角色」（只接受 roles.yaml 里的角色名）。
+> 正常的部分：**tasks-state 闸门工作正常**（未归档时拒收并提示「先把 T 移入已验收/已归档」）；`status` 的残留识别也正确。
+> **尚未开单**，待用户裁量是否并入 #19 或新开（PM 未自做修复：零代码边界）。
 > 📌 **台账写法约定（实测）**：`nao-fleet.sh status` 的残留识别按**表格单元格全等**匹配任务编号（`task_state_class()`）⇒ 进行中行必须出现一个**裸批次号**单元格（如 `T508`）；仅写 `T508-QA` / `T508-RD` 会被归为「仅散文提及」并误报残留。
 
 ## 已回执待验收
@@ -172,3 +176,4 @@
 | :--- | :--- | :--- |
 | [#19](https://github.com/Nathan3303/nao-skills/issues/19) | 修角色别名解析（`ensure arch`/`ensure infra` 报未知角色）+ `check` 加「别名可解析」回归守卫 | 已实测：`ensure` 必须用 canonical id（`arch-designer`/`rd-infra`） |
 | [#21](https://github.com/Nathan3303/nao-skills/issues/21) | migrate 收尾：`.nao-migrated` 只写不读（F3）· `migrate` 无条件装 shim 与 minimal 零 shim 特例冲突（F4）· 单行压缩 lock 静默跳过去重（F7） | 由 T506/PR #20 的 arch 评审引出 |
+| （未开单·候选） | `nao-fleet.sh close` 跨仓派生会话回收：宿主定位假阴性（报「未运行」但 pane 存活）→ 需手工 `tmux kill-pane` | T507 / T508 各复现一次；另附：`ensure <role>` 会真拉 tmux pane（AC6 演练后需收尾）—— 是否并入 #19 待用户定 |
