@@ -5,11 +5,11 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：**T507 已完全闭环（记账闭合）**：PR #49 `abc7a22` + 记账 PR #50 `da70a75` · **T508（nue-ui）PRD 已定稿 + Issue #72 已转实施单 → 待用户「开工确认」**
+- 当前阶段：T507 已完全闭环（PR #49 `abc7a22` + 记账 PR #50 `da70a75`）；**T508（nue-ui）开工确认已过，T508-QA 已派（用例先行）**，rd-infra@nue-ui 已拉起待派
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付）；此前 T506 权威 PRD 在另一仓：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（已归档）
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付且已归档）；**T506 权威 PRD 在另一仓**：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（Issue nao-todo#188）
 - 未决决策点：无（D1–D8 已拍板；F1/F2 已修；npm 发布已由用户完成）
-- 待用户回答：**T507 是否开工**（开工确认卡已出，见下方 §待启动批次）；#19 / #21 是否另行开工（独立批次）
+- 待用户回答：**无**（T508 已开工；PM 重开已定「本会话继续」）；⚠️ 待用户裁量：`close` 无法回收跨仓派生会话的机制缺陷如何处置（并入 #19 / 新开单 / 暂记）
 - 既定口径：迁移命令从**仓外**执行（`cd /tmp && npx --yes @nathan33/nao-skill@0.12.0 migrate <绝对路径> -v`）；`.pi/settings.json` pin 入库；`.agents/.nao-obsolete/` 加 gitignore；判据 = 机制类归零 + 自有资产保留；历史归档文档不改；不碰源码/测试/构建配置
 - 未派发队列：见下方「待派发队列」+ 「待启动批次」两节（另两仓迁移 · #19 · #21 · #22）
 - 下次唤醒条件：用户对 **T508 开工确认卡**给出答复 → 派 rd-infra@nue-ui + qa@nue-ui（`--task T508`，base **`master`**）；T508 闭环后处理上游 #19 / #21
@@ -62,7 +62,11 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| — | — | （T508 待用户开工确认后派） | — | — | — |
+| T508-QA | qa-T508（`--task T508` @nue-ui） | 用例先行：AC1–AC8 断言脚本（双模式）+ 迁移前基线（V2 `vp check` 差异文件数/rc · V3 `nue-ui-dev` 清单 · V4 仓内 `npx` EBADDEVENGINES 佐证 · 门禁基线）· 本地产出、暂不提交 | 2026-10-08（开工确认后） | AC1–AC8 | 待分支 |
+| T508-RD | rd-infra-T508（`--task T508` @nue-ui） | 已拉起待派：建分支 `feat/72-nao-fleet-migration`（**base `master`**）+ PRD 入库 + `pi install -l` + 仓外 `migrate` + **`AGENTS.md` 机制段改写** + `.gitignore` 两处 + 门禁 + Draft PR | 待 T508-QA 回执后派（避免同分支双写） | AC1–AC8 | — |
+
+> **会话回收（已完成）**：T507 派生会话 `qa-T507` / `rd-infra-T507` 已回收（验收通过即回收）。
+> ⚠️ **机制缺陷发现（2026-10-08）**：`nao-fleet.sh close` **无法回收跨仓派生会话** —— `close --task T507 qa` → 「未运行（无需回收）」但 `tmux list-panes` 实际存活（标题格式正常）；`close --task T507 qa-T507` → 「未知角色」。本次以 `tmux kill-pane` 手工兜底完成回收（`status` 的残留识别正确）。**尚未开单**，待用户裁量是否并入 #19 或新开（PM 未自做修复：零代码边界）。
 
 ## 已回执待验收
 
