@@ -292,11 +292,16 @@ function detectLegacyAssets(target) {
 // ---------------------------------------------------------------------------
 function init(target, force, verbose) {
   const legacy = detectLegacyAssets(target);
-  if (legacy.length && !force) {
-    warn('检测到旧版全套 .agents/ 安装（机制副本）：');
-    for (const p of legacy) warn(`  - ${p}`);
-    warn('请先运行 `nao-skill migrate`（备份到 .agents/.nao-obsolete/ + 就位 shim），勿直接 init。');
-    process.exit(1);
+  if (legacy.length) {
+    if (!force) {
+      warn('检测到旧版全套 .agents/ 安装（机制副本）：');
+      for (const p of legacy) warn(`  - ${p}`);
+      warn('请先运行 `nao-skill migrate`（备份到 .agents/.nao-obsolete/ + 就位 shim），勿直接 init。');
+      process.exit(1);
+    }
+    // F2：--force 不得绕过迁移守卫（否则 shim 覆盖 + 旧副本残留 = 混装，违 BR5/AC1 双注册）
+    log('init --force 检测到旧版 .agents/：改走 migrate（备份 + 精准移除 + shim），避免混装。');
+    return migrate(target, true, verbose);
   }
   installShim(target, verbose);
   writeVersion(target);
@@ -352,19 +357,92 @@ function migrateLegacy(target, stamp, verbose) {
   return removed;
 }
 
+// 文本级移除 JSON 对象的某个属性：仅删该属性所占字节，其余字节（含缩进/空白）不变
+function findJsonValueEnd(s, i) {
+  const ch = s[i];
+  if (ch === '{' || ch === '[') {
+    const close = ch === '{' ? '}' : ']';
+    let depth = 0, inStr = false, esc = false;
+    for (let k = i; k < s.length; k++) {
+      const c = s[k];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (c === '\\') esc = true;
+        else if (c === '"') inStr = false;
+        continue;
+      }
+      if (c === '"') { inStr = true; continue; }
+      if (c === ch) depth++;
+      else if (c === close) { depth--; if (depth === 0) return k + 1; }
+    }
+    return -1;
+  }
+  if (ch === '"') {
+    let esc = false;
+    for (let k = i + 1; k < s.length; k++) {
+      const c = s[k];
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') return k + 1;
+    }
+    return -1;
+  }
+  const m = /^[^,\s}\]\n]+/.exec(s.slice(i));
+  return m ? i + m[0].length : -1;
+}
+
+function removeJsonProperty(raw, key) {
+  const re = new RegExp(`"${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"\\s*:`);
+  const m = re.exec(raw);
+  if (!m) return null;
+  let vs = m.index + m[0].length;
+  while (vs < raw.length && /\s/.test(raw[vs])) vs++;
+  const ve = findJsonValueEnd(raw, vs);
+  if (ve < 0) return null;
+  // 本属性所在行的起始位置（仅当该行确以 "key" 开头时才做行级删除，防异形格式误伤）
+  let lineStart = m.index;
+  while (lineStart > 0 && raw[lineStart - 1] !== '\n') lineStart--;
+  let nl = raw.indexOf('\n', lineStart);
+  if (nl === -1) nl = raw.length;
+  if (!raw.slice(lineStart, nl).trim().startsWith(`"${key}"`)) return null;
+  // 本属性值闭合所在行之后（含换行）
+  let lineEnd = ve;
+  while (lineEnd < raw.length && raw[lineEnd] !== '\n') lineEnd++;
+  if (lineEnd < raw.length) lineEnd++;
+  // 是否还有后续属性（值后跟逗号）
+  let after = ve;
+  while (after < raw.length && (raw[after] === ' ' || raw[after] === '\t')) after++;
+  if (raw[after] === ',') {
+    return raw.slice(0, lineStart) + raw.slice(lineEnd);
+  }
+  // 末位属性：删本行，并去掉前一属性末尾的逗号
+  let out = raw.slice(0, lineStart) + raw.slice(lineEnd);
+  let p = lineStart;
+  while (p > 0 && /[ \t\r\n]/.test(out[p - 1])) p--;
+  if (out[p - 1] === ',') out = out.slice(0, p - 1) + out.slice(p);
+  return out;
+}
+
 // §12-C：nao 包为唯一来源 —— 移除 skills-lock.json 里重复的 frontend-design 条目（原文件先备份）
+// F1：文本级删除单条，保留原缩进与其余字节（4 空格 / 2 空格均不重排）
 function stripLockDuplicate(target, stamp, verbose) {
   const lock = join(target, 'skills-lock.json');
   if (!existsSync(lock)) return false;
+  const raw = readFileSync(lock, 'utf8');
   let data;
-  try { data = JSON.parse(readFileSync(lock, 'utf8')); } catch { return false; }
+  try { data = JSON.parse(raw); } catch { return false; }
   if (!data.skills || !data.skills['frontend-design']) return false;
+  const next = removeJsonProperty(raw, 'frontend-design');
+  if (next == null) return false;
+  try {
+    const parsed = JSON.parse(next);
+    if (!parsed.skills || 'frontend-design' in parsed.skills) return false;
+  } catch { return false; }
   const bak = join(target, '.agents', '.nao-obsolete', stamp, 'skills-lock.json');
   mkdirSync(join(bak, '..'), { recursive: true });
   cpSync(lock, bak);
-  delete data.skills['frontend-design'];
-  writeFileSync(lock, `${JSON.stringify(data, null, 2)}\n`);
-  if (verbose) log('  strip  skills-lock.json → 移除 frontend-design（nao 包为唯一来源）');
+  writeFileSync(lock, next);
+  if (verbose) log('  strip  skills-lock.json → 文本级移除 frontend-design（其余字节不变）');
   return true;
 }
 

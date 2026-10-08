@@ -132,6 +132,7 @@ $NAO_SKILLS/.agents/scripts/qq-notify --dry-run "连通性自检"      # 只取 
 
 - **旧的完整性判据已失效**：以前下游靠「项目内 `.agents/**` 与上游逐字节 sha 一致」证明机制没漏没改；现在项目内不再有机制副本，这条判据不再适用。
 - **新的完整性判据：以 pin 的包版本为准**。`.pi/settings.json` 记录版本，`pi install/update` 从包物化；包里是什么就是什么，不存在「项目内被就地改动」的问题。转发入口是生成的固定文本，可用 `npx @nathan33/nao-skill init` 幂等重写核对。
+- **版本权威口径**：`.pi/settings.json` 里的 pin 是**唯一权威**（`pi install/update` 据此物化到 `.pi/npm`）；`.agents/.nao-version` 只是本机安装标记（供升级检测与迁移提示），**不作为版本依据**；两者不一致时**以 pin 为准**。
 - **fmt 边界**：包内 `.agents/**` 仍以上游原始存储形态发布（部分 YAML / Markdown / MTS 未按 oxfmt / prettier 归一）。迁移期仍持有旧版全套 `.agents/**` 的仓库，继续把 `.agents/**` 排除出 fmt 校验即可，⛔ **不要为过 fmt 就地格式化**；新形态项目内只有转发入口，无需再处理。
 
 ### 物化与离线（CI / 无 pi 环境必读）
