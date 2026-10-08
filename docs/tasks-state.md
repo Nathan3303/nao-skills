@@ -68,11 +68,13 @@
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | T511 | qa-T511（`--task T511` @本仓） | 统一复核三仓（AC1–AC6）：pin=0.13.0 · 物化 · `.nao-migrated` 已删 · `check` rc0/roles=6 · `ensure arch` 可用 · 非范围命中 0 | 待三仓 RD 回执后派 | AC1–AC6 | — |
-| T511a | rd-infra-T511a（`@nao-todo`） | 仓 a：pin→0.13.0 + 物化 + 删 `.agents/.nao-migrated` + `check` rc0 + PR（base `main`） | 2026-10-08 | AC1–AC6 | — |
-| T511b | rd-infra-T511b（`@nao-todo-server`） | 仓 b：同上（base `main`） | 2026-10-08 | AC1–AC6 | — |
-| T511c | rd-infra-T511c（`@nue-ui`） | 仓 c：同上（base **`master`**；注意 `devEngines` pnpm 11.21.0 ⇒ 仓内 `npx` 被拦） | 2026-10-08 | AC1–AC6 | — |
+| T511a | rd-infra-T511a（`@nao-todo`） | **done(full)**：PR [#190](https://github.com/Nathan3303/nao-todo/pull/190)（Draft · base `main` · 1 提交 `814a5cd8`）· pin→0.13.0（V1：`pi install` **未被 devEngines 拦**，rc=0）· `.agents/` 入库 8→7 · `check` rc0 roles=6 · `vp check` rc0 · AC4 实拉 pane %61 + `close` 回收成功 · AC5 diff **仅 2 项** | 2026-10-08 | AC1–AC5 | 待授权 |
+| T511b | rd-infra-T511b（`@nao-todo-server`） | 实施中（已纠正 AC4 验证任务号 → `T511Vb`） | 2026-10-08 | AC1–AC6 | — |
+| T511c | rd-infra-T511c（`@nue-ui`） | 实施中（已纠正 AC4 验证任务号 → `T511Vc`；其 pane 曾被误杀，已手工收尾） | 2026-10-08 | AC1–AC6 | — |
 
 > **会话回收（已完成）**：T507 派生会话 `qa-T507` / `rd-infra-T507` 已回收（验收通过即回收）。
+> ⚠️ **机制缺陷发现（2026-10-08，T511 三仓并行时暴露）· B8**：`close` 的跨仓定位（T509 修复：`find_pane_for_any_repo` **不限 repo、取首个标题命中**）在**同名会话**场景下**不可定向** —— 三仓用同一 `--task T511V` 时，nao-todo 的 `close` 误杀了 nue-ui 的 pane（%60）。**PM 派单失误**（三仓复用了同一验证任务号）已即时纠正（b/c 改用 `T511Vb`/`T511Vc`）。
+> **待议（不开单，仅记录）**：`close` 可在多候选时叠加「名册 cwd / `pane_current_path`」约束以避免误杀；**使用纪律**：跨仓并行验证必须用**仓级唯一**任务号。
 > ⚠️ **机制缺陷发现（2026-10-08，T507/T508 各复现一次）**：`nao-fleet.sh close` 的**跨仓派生会话回收**存在两层问题：
 > ① **宿主定位假阴性**：`close --task <批次> <别名>`（在 nao-skills 仓内执行、目标会话在另一仓）→ 报「未运行（无需回收）」，但 `tmux list-panes` 实际存活且标题格式正常（`π - qa-T508 - nue-ui`）⇒ **回收失败且不报错**，需 `tmux kill-pane` 手工兜底。
 > ② **派生名不可作目标**：`close --task T508 qa-T508` → 「未知角色」（只接受 roles.yaml 里的角色名）。
