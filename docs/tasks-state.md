@@ -5,12 +5,12 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：**T2 已回执待验收**（PM 已核 AC；待 QA 跑批）
+- 当前阶段：**T2 待验收（QA 跑批中）+ T3 迁移治理并行**
 - 当前 PRD：`docs/prds/2026-10-08-nao-skills-pi-package.md`（状态：已开工 · §11 决策台账 + §12 实施闸门已定稿）
 - 未决决策点：无（D1–D8 全部拍板）
 - 待用户回答：无
-- 未派发队列：见下方「待派发队列」（T3 + T4-跑批 + 独立批次 #19）
-- 下次唤醒条件：worker 回执 **T4**（qa）→ 立即转 T4-跑批；然后定 T2 验收结论
+- 未派发队列：见下方「待派发队列」（仅独立批次 #19）
+- 下次唤醒条件：worker 回执 **T4-跑批**（qa）→ 定 T2 验收结论；或 **T3**（rd-infra）→ 关 AC5/AC6/AC7
 - ⚠️ 环境注意：`nao-fleet.sh` 别名解析有缺陷（#19）——`ensure` **必须用 canonical id**；`arch` / `infra` 会报未知角色
 - 口头约束已落盘：PRD §5（BR1/BR2 角色模型与常驻注入不变）· §§11–13（决策台账 + 闸门 + 特例）
 - 会话体检：contextTokens≈150k（窗口 1000k · 15%）· 压缩次数=0 · cacheRead=待观测
@@ -50,8 +50,6 @@
 
 | 任务编号 | 目标会话 | 概要 | 排队原因 |
 | :--- | :--- | :--- | :--- |
-| T3 | rd-infra | 迁移治理：4 仓只读验证 + 连带同步清单（README/ARCHITECTURE/adr 索引/release notes）+ `nao-todo-minimal` 零 shim 处理 | 依赖 T2 完成 |
-| T4-跑批 | qa | 跑批独立验证（T2 已落地 `6f21e54`）：五类用例 + 全量门禁 | qa 忙碌（thinking），转 idle 再派 |
 | #19 | rd-infra | 修角色别名解析（`ALIAS_ROLE` 键值写反）+ `check` 增加「别名可解析」回归守卫 | **独立批次**：需用户另行确认开工 |
 
 ## 进行中
@@ -59,7 +57,8 @@
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | T2 | rd-infra | pi package 化：manifest（按文件声明 2 skill）+ `SKILL.md` + A′ 布局 + 薄 CLI（init/exec/migrate）+ shim（D6/D7）+ 迁移精准删除（§12-C/D）+ 清 `/tmp/t1` | 2026-10-08 | AC1/AC2/AC3/AC4/AC6/AC8 | `wip(T2): …` |
-| T4 | qa | 用例与独立验证：仅新增 `tests/` + `docs/reports/2026-10-08-T4-*.md`（不碰 `package.json`/`bin/`/`.agents/`） | 2026-10-08 | AC1/AC3/AC4/AC5 + NFR2/NFR3 | — |
+| T3 | rd-infra | 迁移治理：README（sha 判据失效 + 闸门 A/B）· ARCHITECTURE 分层表 · `docs/releases/v0.12.0.md` · version bump 0.12.0 · AC5 4 仓只读验证 · minimal 零 shim · 数字口径统一 | 2026-10-08 | AC5/AC6/AC7 | `wip(T3): …` |
+| T4-跑批 | qa | 严格全量 `T4_ALLOW_MISSING=0 tests/t4/run.sh` + 真实 `pi install -l` 对照 + 补 AC2/AC6/AC8 partial + 提交产物 | 2026-10-08 | AC1/AC2/AC3/AC4/AC6/AC8 + NFR2/NFR3 | — |
 
 ## 已回执待验收
 
