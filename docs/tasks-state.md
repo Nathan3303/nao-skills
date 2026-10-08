@@ -5,7 +5,7 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：T507 已完全闭环（PR #49 `abc7a22` + 记账 PR #50 `da70a75`）；**T508（nue-ui）开工确认已过，T508-QA 已派（用例先行）**，rd-infra@nue-ui 已拉起待派
+- 当前阶段：T507 已完全闭环（PR #49 `abc7a22` + 记账 PR #50 `da70a75`）；**T508（nue-ui）实施中**：开工确认已过 → T508-QA 已回执（用例先行基线）→ **T508-RD 已派**
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付）；此前 T506 权威 PRD 在另一仓：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（已归档）
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付且已归档）；**T506 权威 PRD 在另一仓**：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（Issue nao-todo#188）
 - 未决决策点：无（D1–D8 已拍板；F1/F2 已修；npm 发布已由用户完成）
@@ -62,8 +62,8 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T508 | qa-T508（`--task T508` @nue-ui） | 用例先行：AC1–AC8 断言脚本（双模式）+ 迁移前基线（V2 `vp check` 差异文件数/rc · V3 `nue-ui-dev` 清单 · V4 仓内 `npx` EBADDEVENGINES 佐证 · 门禁基线）· 本地产出、暂不提交 | 2026-10-08（开工确认后） | AC1–AC8 | 待分支 |
-| T508-RD | rd-infra-T508（`--task T508` @nue-ui） | 已拉起待派：建分支 `feat/72-nao-fleet-migration`（**base `master`**）+ PRD 入库 + `pi install -l` + 仓外 `migrate` + **`AGENTS.md` 机制段改写** + `.gitignore` 两处 + 门禁 + Draft PR | 待 T508-QA 回执后派（避免同分支双写） | AC1–AC8 | — |
+| T508 | qa-T508（`--task T508` @nue-ui） | **已回执**（用例先行）：AC1–AC8 双模式断言脚本 + QA 报告 · 基线 GREEN 64P/0F/4W · 迁移后模式现树 RED 35P/53F（预期）· 本地产出待随分支入库 | 2026-10-08（开工确认后） | AC1–AC8 | 待分支 |
+| T508-RD | rd-infra-T508（`--task T508` @nue-ui） | 已派：建分支 `feat/72-nao-fleet-migration`（**base `master`**）+ PRD（fmt 后）入库 + `pi install -l` + 仓外 `migrate` + **`AGENTS.md` 机制段改写** + `.gitignore` 三行 + 九项门禁 + 负向闭环 + Draft PR | 2026-10-08（QA 回执后） | AC1–AC8 | — |
 
 > **会话回收（已完成）**：T507 派生会话 `qa-T507` / `rd-infra-T507` 已回收（验收通过即回收）。
 > ⚠️ **机制缺陷发现（2026-10-08）**：`nao-fleet.sh close` **无法回收跨仓派生会话** —— `close --task T507 qa` → 「未运行（无需回收）」但 `tmux list-panes` 实际存活（标题格式正常）；`close --task T507 qa-T507` → 「未知角色」。本次以 `tmux kill-pane` 手工兜底完成回收（`status` 的残留识别正确）。**尚未开单**，待用户裁量是否并入 #19 或新开（PM 未自做修复：零代码边界）。
@@ -73,6 +73,7 @@
 
 | 任务编号 | 回执摘要（≤150字） | 详情路径 | 待办 |
 | :--- | :--- | :--- | :--- |
+| T508-QA | **done(full)**（用例先行）：脚本 `docs/reports/2026-10-08-T508-nao-fleet-migration-verify.sh` + 报告 · 基线 **64P/0F/4W**（58s）· 迁移后模式现树 **35P/53F**（预期 RED）· 门禁基线：`test:run` **33 文件/358 例/0 红/21s** · `check:lf` 9s · `vp check --no-fmt` **469 文件/0 错** · **V2 实测**：全树 fmt 差异 **1 文件 = 本批 PRD 自身**（入库口径 0）；`.agents/roles.yaml`/`intercom-probe.mts` 被 `fmt.ignorePatterns` 的 `.agents/**` **排除** · `nue-ui-skill.mjs` 已 fmt 干净 ⇒ AGENTS.md「稳定报 3 个文件」**确属过期** · **V4**：仓内 `npx` 全拦（`EBADDEVENGINES`）· **V5**：pre-push 358 例≈20s，无需 `--no-verify` | `docs/reports/2026-10-08-T508-*.{sh,md}`（**untracked**，待随分支入库） | PM 已裁定 4 项：① AC3 判据 = **裸机制引用 5 行 → 0 行**（非 0→0）② §3 引用面改**逐行口径 22 行/8 文件** ③ nao `*.md` = **13 个**（非 14）④ **AC5 把本批 `docs/**` 纳入 fmt 判据（= 0 文件）**，已全部落 PRD |
 | T507-RD4 | **done(lite)**：记账 PR [#50](https://github.com/Nathan3303/nao-todo-server/pull/50)「文档：PRD 索引状态更新为已交付」→ main **`da70a75`** · 恰 **1 文件 1 行** · 本 PR 恰好 1 条 · 无 `wip()` · 分支已删 · CI 双 job 绿（38s / 1m12s，未用 `--admin/--auto`） | PR [#50](https://github.com/Nathan3303/nao-todo-server/pull/50) | T507 **记账闭合** |
 | T507-QA | **done(lite)**（用例先行）：脚本 363 行（AC1–AC8 映射；迁移后模式现树=预期 RED 22P/35F/2W；`--baseline`=**GREEN 27P/0F**）+ 基线：顶层 **8 项**/43 文件 · `.agents/` 外引用 **0** · `.gitignore` L68 裸 `.pi` · `git ls-files .pi`=0 · lock 3 键（无 frontend-design）· V1 `golangci-lint 2.14.0` ✓ · V2 `go test ./...` exit 0（不依赖 MySQL/Redis） | `docs/reports/2026-10-08-T507-nao-fleet-migration-verify.sh` | 已随 QA2 入库（`76035ec`） |
 | T507-QA2 | **done(full)**：独立复跑 **PASS=84 / FAIL=0 / WARN=1**（WARN=squash 前提交数>1，预期）**exit 0**（默认 + `T507_ROLLBACK=1 T507_REAL_DEGRADED=1` 全跑）· 口径修正已落（`76035ec` 脚本 + PM PRD 订正 · `16a401f` 报告）· **PR #49 已评论**（QA of record）。自测：顶层 **5 项**/入库 **3 文件** · pin JSON 等价 · 六门禁全 0 · 幂等 · 回滚实测 · AC8 命中 0 · 无 FAIL | `docs/reports/2026-10-08-T507-qa-report.md` · PR [#49 comment](https://github.com/Nathan3303/nao-todo-server/pull/49#issuecomment-6061112837) | 3 处分歧已裁定：① RD 的「顶层 4/入库 5」有误，**以 QA 为准**（磁盘 5 / 入库 3）② AC4 pin 改语义断言（JSON 等价）③ §1/§2「7 项」早已订正为 8 —— 均非实现缺陷，不阻断 |
