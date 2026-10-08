@@ -10,8 +10,9 @@
 #   nao-fleet.sh ensure -m <model> <别名>...       显式指定模型（须命中白名单）
 #   nao-fleet.sh ensure --task <编号> <别名>[@<repo>]   任务派生会话：--name <别名>-<编号>（并行隔离，避免同名冲突）
 #   nao-fleet.sh ensure --force <别名>...          忽略"已在运行"判重
-#   nao-fleet.sh close <别名|会话名> [--task <编号>] [--force]
-#                                                 回收已完成会话（闸门：在跑 turn / tasks-state 未推进 → 拒绝，--force 跳过）
+#   nao-fleet.sh close <别名|派生会话名> [--task <编号>] [--force]
+#                                                 回收已完成会话（派生名如 rd-be-T1；跨仓定位；定位失败/名册报在线但无句柄 ⇒ 非 0 + 诊断）
+#                                                 （闸门：在跑 turn / tasks-state 未推进 → 拒绝，--force 跳过）
 #
 # 角色别名 → 角色卡：见 .agents/roles.yaml（单一事实来源）
 #   当前：pm / arch-designer(arch) / rd-fe / rd-be / qa / rd-infra(infra)
@@ -132,7 +133,7 @@ load_manifest() {
   while IFS=$'\t' read -r k v w rest; do
     case "$k" in
       ROLE)  ROLE_ORDER+=("$v"); ROLE_CARDS["$v"]="$w"; ROLE_WS["$v"]="$rest" ;;
-      ALIAS) ALIAS_ROLE["$v"]="$w" ;;
+      ALIAS) ALIAS_ROLE["$w"]="$v" ;;   # 别名 → 角色 id（消费方 resolve_role/close 按此方向取值）
     esac
   done <<< "$out"
 }
@@ -204,6 +205,39 @@ check_roles_indent() {
     { printf "  ✗ 行 %d: 缩进/位置非法（角色 id 须 2 空格、字段须 4 空格且挂在角色下）: %s\n", FNR, $0; bad=1 }
     END { exit (bad ? 1 : 0) }
   ' "$MANIFEST"
+}
+
+# 别名解析守卫（#19）：独立重解析 roles.yaml（不依赖可能被写反的 ALIAS_ROLE），校验
+#   ① 每个声明的别名可解析为「声明它的角色」（对 ALIAS_ROLE 键值方向敏感）
+#   ② 每个角色 canonical id 已登记于 aliases（BR2：canonical 须可解析为自身）
+#   ③ 别名不跨角色重名
+check_alias_resolution() {
+  local rc=0 ga gr
+  local -A owner=()
+  while IFS=$'\t' read -r ga gr; do
+    [[ -n "$ga" && -n "$gr" ]] || continue
+    if [[ -n "${owner[$ga]:-}" && "${owner[$ga]}" != "$gr" ]]; then
+      printf '  ✗ 别名 %s 跨角色重名：%s 与 %s\n' "$ga" "${owner[$ga]}" "$gr"; rc=1
+    fi
+    owner["$ga"]="$gr"
+    if [[ "${ALIAS_ROLE[$ga]:-}" != "$gr" ]]; then
+      printf '  ✗ 别名 %s 解析异常：roles.yaml 声明属 %s，实际解析为 %s（ALIAS_ROLE 键值方向可能反写）\n' \
+        "$ga" "$gr" "${ALIAS_ROLE[$ga]:-<未登记>}"; rc=1
+    fi
+  done < <(awk -F'\t' '
+      /^  [^ ][^:]*:[[:space:]]*$/ { c=$0; sub(/^  /,"",c); sub(/:[[:space:]]*$/,"",c); next }
+      c!="" && /^    aliases:[[:space:]]*\[/ {
+        v=$0; sub(/^    aliases:[[:space:]]*\[/,"",v); sub(/\].*/,"",v)
+        n=split(v, a, /,/)
+        for (i=1;i<=n;i++){ gsub(/^[[:space:]]+|[[:space:]]+$/, "", a[i]); if(a[i]!="") print a[i] "\t" c }
+      }' "$MANIFEST")
+  for gr in "${ROLE_ORDER[@]}"; do
+    if [[ "${owner[$gr]:-}" != "$gr" ]]; then
+      printf '  ✗ 角色 %s 的 canonical id 未登记于 aliases（BR2：canonical 须可解析为自身）\n' "$gr"; rc=1
+    fi
+  done
+  (( rc == 0 )) && printf '  ✓ 别名解析守卫：全部别名可解析且无跨角色重名\n'
+  return $rc
 }
 
 # qq-notify 主动推送器契约：存在 + 可执行 + EOL 全 LF + 无 Tab + node --check 语法
@@ -372,6 +406,15 @@ intercom_online() {
   return 1
 }
 
+# 名册中该会话的 cwd（跨仓 close 需按目标仓定位；无记录则空）
+intercom_cwd_for() {
+  local n c
+  while IFS=$'\t' read -r n c; do
+    [[ "$n" == "$1" ]] && { printf '%s\n' "$c"; return 0; }
+  done < <(intercom_roster)
+  return 0
+}
+
 # 会话所在的 tmux pane。三层后备（标题可被外部改写，如 "pi:c"）：
 #   ① 终端标题契约 "π - <会话名> - <repo basename>"（pi 自设；最快）
 #   ② pi-intercom 名册 tmuxPane（注册时读 $TMUX_PANE；与标题改名无关，权威）
@@ -481,6 +524,17 @@ find_pane_for() {
   # ③ 本仓未认领 pi pane 唯一兜底
   pane="$(fallback_pane_for "$name" "$repo")"
   [[ -n "$pane" ]] && { printf '%s\n' "$pane"; return 0; }
+  return 0
+}
+
+# 跨仓 pane 定位：不限定 repo（标题任意仓 basename / 名册 tmuxPane 不限 cwd）
+# close 的目标可能在别的仓（roles.yaml workspace 恒为本仓）⇒ 不能用 find_pane_for 的 repo 约束。
+find_pane_for_any_repo() {
+  local name="$1" pane=""
+  pane="$(find_pane_by_title "$name" "")"
+  [[ -n "$pane" ]] && { printf '%s\n' "$pane"; return 0; }
+  pane="$(intercom_pane_for "$name" "")"
+  if [[ -n "$pane" ]] && tmux_pane_live "$pane"; then printf '%s\n' "$pane"; return 0; fi
   return 0
 }
 
@@ -882,6 +936,7 @@ cmd_check() {
   echo "== 角色清单 roles.yaml =="
   load_manifest
   printf '  ✓ 解析成功，%d 个角色: %s\n' "${#ROLE_ORDER[@]}" "${ROLE_ORDER[*]}"
+  check_alias_resolution || rc=1
 
   echo "== 常驻角色卡（阈值 ${CARD_MAX_LINES} 行，frontmatter 校验）=="
   local a role version updated
@@ -1106,14 +1161,39 @@ cmd_status() {
 # ---------------------------------------------------------------------------
 # 回收已完成会话：闸门（tasks-state 已推进 + 无在跑 turn）+ 落地（pane/会话/screen/进程）
 cmd_close() {
-  local force="$1" task="$2" target="$3"
-  [[ -n "$target" ]] || die "close 需要目标：角色别名或派生会话名（如 rd-be / rd-be-T1 或 rd-infra / rd-infra-T1）"
-  local name repo cls bus pane pids r ok st
+  local force="$1" task="$2" target="${3:-}"
+  [[ -n "$target" ]] || die "close 需要目标：角色别名或派生会话名（如 rd-be / rd-be-T1 / qa-T1）"
+  local name repo cls bus pane pids st tgt a best=""
   intercom_list_json >/dev/null 2>&1 || true   # 预热名册缓存
-  if [[ -n "$task" ]]; then
-    resolve_role "$target"
-    name="${NAME}-${task}"
-    repo="${ROLE_WS[$NAME]:-$PWD}"
+
+  # ---- 目标解析：别名/canonical id | 派生会话名 <角色>-<编号> ----
+  # 派生名（如 qa-T508）可直接作目标；也兼容 close --task T508 qa 与 close --task T508 qa-T508。
+  tgt=""
+  if [[ -n "${ALIAS_ROLE[$target]:-}" ]]; then
+    tgt="$target"
+  elif [[ -n "$task" && "$target" == *-"$task" && -n "${ALIAS_ROLE[${target%-"$task"}]:-}" ]]; then
+    tgt="${target%-"$task"}"
+  else
+    # 未带 --task 的派生名：取最长可解析前缀为角色，余下为任务编号
+    for a in "${!ALIAS_ROLE[@]}"; do
+      [[ "$target" == "$a"-* ]] || continue
+      if [[ -z "$best" || ${#a} -gt ${#best} ]]; then best="$a"; fi
+    done
+    if [[ -n "$best" ]]; then tgt="$best"; task="${target#"$best"-}"; fi
+  fi
+  if [[ -z "$tgt" ]]; then
+    die "未知角色或派生会话名: $target（可用角色: ${ROLE_ORDER[*]}；派生名形如 rd-be-T1 / qa-T1，亦可用 close --task <编号> <角色>）"
+  fi
+  resolve_role "$tgt"
+  name="$NAME"
+  [[ -n "$task" ]] && name="${NAME}-${task}"
+  # 目标仓：名册 cwd 优先（跨仓会话真实仓），否则回退 roles.yaml workspace / 当前目录
+  repo="$(intercom_cwd_for "$name")"
+  [[ -n "$repo" ]] || repo="${ROLE_WS[$NAME]:-$PWD}"
+
+  if [[ -z "$task" ]]; then
+    warn "常驻会话 $name：任务闭环后应 ensure --force 重开，而非回收（仅在本批不再需要该角色时回收）"
+  else
     # 闸门①：tasks-state 未推进 → 拒绝（验收未过需原会话返工，回收会丢上下文）
     cls="$(task_state_class "$task")"
     if [[ "$cls" == "active" && "$force" != true ]]; then
@@ -1124,20 +1204,25 @@ cmd_close() {
     [[ "$cls" == "absent" ]] && warn "tasks-state 全文无 $task 记录（仅按会话名回收）"
     [[ "$cls" == "mentioned" ]] && log "tasks-state 仅散文提及 $task（非表内记录，不阻塞回收）"
     [[ "$cls" == "nofile" ]] && log "未启用 $TASKS_STATE（跳过状态闸门）"
-  elif [[ -n "${ALIAS_ROLE[$target]:-}" ]]; then
-    name="${ALIAS_ROLE[$target]}"; repo="${ROLE_WS[$name]:-$PWD}"
-    warn "常驻会话 $name：任务闭环后应 ensure --force 重开，而非回收（仅在本批不再需要该角色时回收）"
-  else
-    name="$target"
-    [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || die "非法会话名: $name"
-    # 非别名的目标必须是 <已知角色>-<编号>，否则视为拼错（防静默 no-op）
-    ok=0
-    for r in "${ROLE_ORDER[@]}"; do [[ "$name" == "$r-"* ]] && ok=1; done
-    (( ok )) || die "未知角色或派生会话名: $name（可用: ${ROLE_ORDER[*]}；派生名形如 rd-be-T1 / rd-infra-T1）"
-    repo="$PWD"
   fi
 
-  if ! running "$name" "$repo"; then
+  # ---- 宿主句柄定位（跨仓）：pane 按标题任意仓 basename / 名册 tmuxPane 不限定 cwd ----
+  pane="$(find_pane_for_any_repo "$name")"
+  if [[ -z "$pane" ]]; then
+    # nao-<会话名> detached tmux / screen 会话（不依赖 repo）
+    if command -v tmux >/dev/null 2>&1 && tmux has-session -t "nao-$name" 2>/dev/null; then
+      if tmux kill-session -t "nao-$name" 2>/dev/null; then log "已回收 $name（tmux 会话 nao-$name）@ $repo"; return 0; fi
+    fi
+    if command -v screen >/dev/null 2>&1 && screen -ls 2>/dev/null | grep -q "nao-$name"; then
+      if screen -S "nao-$name" -X quit 2>/dev/null; then log "已回收 $name（screen 会话 nao-$name）@ $repo"; return 0; fi
+    fi
+    # 无任何可杀句柄：名册若报在线 ⇒ 定位失败，必须非静默（禁止「未运行」而 pane 仍在）
+    if intercom_online "$name"; then
+      warn "无法回收 $name：pi-intercom 名册报在线（cwd=${repo}）但未定位到存活 pane/会话"
+      warn "  标题契约 / 名册 tmuxPane 均未命中；tmuxPane 可能滞后或未注册"
+      warn "  请用 intercom({action:'list'}) 人工核对；确认已退出后忽略，或按 pane_id 手工处理"
+      return 1
+    fi
     if offline_verifiable; then
       log "$name 未运行（无需回收）"; return 0
     fi
@@ -1148,27 +1233,18 @@ cmd_close() {
   fi
 
   # 闸门②：在跑 turn（pane 标记 + roster 状态双重信号）
-  pane="$(find_pane_for "$name" "$repo")"
   bus=""
   # 显式双分支赋值：pane 空闲时 bus 必须落为 ""。
   # 曾用 `pane_busy "$pane" && bus=…`：pane_busy 为假时 && 短路，bus 在 set -u 下未绑定 → 行 1007 崩溃。
-  if [[ -n "$pane" ]] && pane_busy "$pane"; then
+  if pane_busy "$pane"; then
     bus="tmux pane $pane 显示在跑 turn"
   fi
-  st="$(intercom_status_for "$name" "$repo")"
+  st="$(intercom_status_for "$name")"
   if [[ -z "$bus" ]]; then
     case "$st" in
       ""|idle|\?) ;;   # 无状态或空闲 → 不阻塞
       *) bus="pi-intercom 名册状态=$st（在跑 turn）" ;;
     esac
-  fi
-  # 既无 pane 也无名册状态 ⇒ 确实无法判定 → 拒绝（不静默 no-op）
-  if [[ -z "$bus" && -z "$pane" && -z "$st" ]]; then
-    if command -v tmux >/dev/null 2>&1; then
-      bus="tmux 宿主但未定位到该会话的 pane（标题契约 / 名册 tmuxPane / 仓库兜底均未命中）"
-    else
-      bus="非 tmux 宿主，无法确认是否在跑 turn"
-    fi
   fi
   if [[ -n "$bus" && "$force" != true ]]; then
     warn "拒绝回收 $name：$bus"
@@ -1176,20 +1252,18 @@ cmd_close() {
     return 1
   fi
 
-  if [[ -n "$pane" ]] && tmux kill-pane -t "$pane" 2>/dev/null; then
+  # 回收前以 pane 真实 cwd 校正日志中的仓（名册可能缺记录）
+  local pcwd
+  pcwd="$(tmux display-message -p -t "$pane" '#{pane_current_path}' 2>/dev/null || true)"
+  [[ -n "$pcwd" ]] && repo="$pcwd"
+  if tmux kill-pane -t "$pane" 2>/dev/null; then
     log "已回收 $name（tmux pane $pane）@ $repo"; return 0
-  fi
-  if command -v tmux >/dev/null 2>&1 && tmux has-session -t "nao-$name" 2>/dev/null && tmux kill-session -t "nao-$name" 2>/dev/null; then
-    log "已回收 $name（tmux 会话 nao-$name）@ $repo"; return 0
-  fi
-  if command -v screen >/dev/null 2>&1 && screen -ls 2>/dev/null | grep -q "nao-$name" && screen -S "nao-$name" -X quit 2>/dev/null; then
-    log "已回收 $name（screen 会话 nao-$name）@ $repo"; return 0
   fi
   pids="$(pi_pids_for "$name" "$repo" | tr '\n' ' ')"
   if [[ -n "$pids" ]] && kill $pids 2>/dev/null; then
     log "已回收 $name（结束进程: $pids）@ $repo"; return 0
   fi
-  warn "未找到 $name 的 pane/会话/进程（可能刚好退出）"; return 1
+  warn "已定位到 $name 的 pane $pane 但回收失败（pane 可能刚好退出；核对 pane 已消失后可忽略）"; return 1
 }
 
 # ---------------------------------------------------------------------------
