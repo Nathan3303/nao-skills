@@ -5,12 +5,12 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：**T2 实施中**（T4 用例并行；ADR 落盘中）
-- 当前 PRD：`docs/prds/2026-10-08-nao-skills-pi-package.md`（状态：已开工 · **§11 决策台账 + §12 实施闸门已定稿**）
-- 未决决策点：无（D1–D8 全部拍板；arch 终签已放行 T2）
+- 当前阶段：**T2 已回执待验收**（PM 已核 AC；待 QA 跑批）
+- 当前 PRD：`docs/prds/2026-10-08-nao-skills-pi-package.md`（状态：已开工 · §11 决策台账 + §12 实施闸门已定稿）
+- 未决决策点：无（D1–D8 全部拍板）
 - 待用户回答：无
-- 未派发队列：见下方「待派发队列」（T3 + 独立批次 #19）
-- 下次唤醒条件：worker 回执 **T2**（rd-infra）/ **T4**（qa）
+- 未派发队列：见下方「待派发队列」（T3 + T4-跑批 + 独立批次 #19）
+- 下次唤醒条件：worker 回执 **T4**（qa）→ 立即转 T4-跑批；然后定 T2 验收结论
 - ⚠️ 环境注意：`nao-fleet.sh` 别名解析有缺陷（#19）——`ensure` **必须用 canonical id**；`arch` / `infra` 会报未知角色
 - 口头约束已落盘：PRD §5（BR1/BR2 角色模型与常驻注入不变）· §§11–13（决策台账 + 闸门 + 特例）
 - 会话体检：contextTokens≈150k（窗口 1000k · 15%）· 压缩次数=0 · cacheRead=待观测
@@ -50,7 +50,8 @@
 
 | 任务编号 | 目标会话 | 概要 | 排队原因 |
 | :--- | :--- | :--- | :--- |
-| T3 | rd-infra | 迁移治理：4 仓只读验证 + 连带同步清单（ADR/README/ARCHITECTURE/索引）+ release notes + `nao-todo-minimal` 零 shim 处理 | 依赖 T2 完成 |
+| T3 | rd-infra | 迁移治理：4 仓只读验证 + 连带同步清单（README/ARCHITECTURE/adr 索引/release notes）+ `nao-todo-minimal` 零 shim 处理 | 依赖 T2 完成 |
+| T4-跑批 | qa | 跑批独立验证（T2 已落地 `6f21e54`）：五类用例 + 全量门禁 | qa 忙碌（thinking），转 idle 再派 |
 | #19 | rd-infra | 修角色别名解析（`ALIAS_ROLE` 键值写反）+ `check` 增加「别名可解析」回归守卫 | **独立批次**：需用户另行确认开工 |
 
 ## 进行中
@@ -64,7 +65,9 @@
 
 | 任务编号 | 回执摘要（≤150字） | 详情路径 | 待办 |
 | :--- | :--- | :--- | :--- |
-| — | — | — | — |
+| T2 | pi package 化全门禁绿：`check` exit=0 files=43 · `npm test` exit=0（tsc 0）· 注册 skill=2 collision=0 · 无网 `check` exit=0 · 删 `.pi/npm` → exit 2 + `DEGRADED:` · D7 双防护 exit 2 · init 幂等 · migrate 精准删 24 项保留共享 | `bin/nao-skill.js` · `bin/shim/nao-fleet.sh` · `.agents/skills/nao-fleet/SKILL.md` 等（commit `6f21e54`） | **PM 已核对 AC1/AC2/AC3/AC4/AC6/AC8 + D8 两处 diff**；待 QA 跑批（T4-跑批）后定验收结论 |
+
+> T2 验收注意事项（PM 已核）：① 零网络断言为「代理阻断 + npm offline」，非内核级隔离（已披露，接受）；② `.pi/npm/.gitignore` 由 pi 自生成（`*` + `!.gitignore`）→ D2 无需本仓额外配置。
 
 ## 挂起（被抢占 / 降级）
 
