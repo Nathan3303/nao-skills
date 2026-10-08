@@ -5,7 +5,7 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：**T509 已闭环**（`main` `bcac6f0` · tag `v0.12.1` + Release 已发）；**npm publish 待用户执行**；**T510（#21）已启动：arch 评审 F3/F4/F7 已派**；用户已批：**三仓 pin 升 0.12.1（3 个小 PR）**
+- 当前阶段：T509 已闭环（`v0.12.1` tag+Release 已发，npm 待用户）；**T510 PRD 已定稿 + Issue #21 已转实施单 → 待用户开工确认**（用户已拍：范围 F3/F4/F7+B2 · 版本 0.13.0 · 下游 pin 等本批一次升）
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付）；此前 T506 权威 PRD 在另一仓：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（已归档）
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付且已归档）；**T506 权威 PRD 在另一仓**：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（Issue nao-todo#188）
 - 未决决策点：无（D1–D8 已拍板；F1/F2 已修；npm 发布已由用户完成）
@@ -65,7 +65,7 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T510 | arch-designer-T510（`--task T510` @本仓） | **arch 评审已回执（full）** —— 报告落 `docs/reports/2026-10-08-T510-arch-review.md`；推荐：F3→移除标记 · F4→自动判定+`--shim/--no-shim` 覆盖（含判定式）· F7→属性级回退+告警 · **新发现 B2（migrate 早退 init 时跳过去重，已复现）/ B1（legacy 按目录名判定过宽）** · 待 PM 拍 P1–P6 后写 PRD | 2026-10-08 | — | 不适用（只读） |
+| T510 | arch-designer-T510 / qa-T510 / rd-infra-T510（@本仓） | **PRD 定稿 + Issue #21 转实施单 → 待用户「开工确认」**：arch 补 ADR + 终签 · QA 用例先行（minimal 夹具/开关/单行 lock/B2/告警）· RD 实施 F3/F4/F7+B2 + 0.13.0 + notes | 2026-10-08 | AC-F3/F4/F7 系列 + AC-DOC/REL/GOV/SCOPE | — |
 
 > **会话回收（已完成）**：T507 派生会话 `qa-T507` / `rd-infra-T507` 已回收（验收通过即回收）。
 > ⚠️ **机制缺陷发现（2026-10-08，T507/T508 各复现一次）**：`nao-fleet.sh close` 的**跨仓派生会话回收**存在两层问题：
