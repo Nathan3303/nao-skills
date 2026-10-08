@@ -62,13 +62,14 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T507-RD | rd-infra-T507（`--task T507` @nao-todo-server） | 建分支 `feat/48-nao-fleet-migration` + PRD 入库 + `pi install -l` + `migrate` + `.gitignore` 两处 + AC2/AC3 复核 + 门禁 + Draft PR | 2026-10-08（QA 回执后） | AC1/AC2/AC4/AC6/AC7/AC8 | 待 |
+| T507-QA2 | qa-T507（`--task T507` @nao-todo-server） | 独立复核 AC1–AC8 + 修正 `ref_hits()` 口径 + 落库（PRD 口径订正 + 脚本 + qa 报告）+ PR #49 评论 | 2026-10-08（RD full 回执后） | AC1–AC8 | 待 |
 
 ## 已回执待验收
 
 | 任务编号 | 回执摘要（≤150字） | 详情路径 | 待办 |
 | :--- | :--- | :--- | :--- |
 | T507-QA | **done(lite)**：可复跑断言脚本 363 行（AC1–AC8 逐条映射；迁移后模式现树=**预期 RED 22P/35F/2W**；`--baseline`=**GREEN 27P/0F**）+ 迁移前基线：顶层 **8 项**/43 文件、`.agents/` 外引用 **0 命中**、`.gitignore` L68 裸 `.pi`、`git ls-files .pi`=0、lock 3 键（无 frontend-design）、无自有 skill、无 CHANGELOG；V1 `golangci-lint 2.14.0` ✓ · V2 `go test ./... -count=1` exit 0（21 ok/44 无测试文件/0 fail，**不依赖 MySQL/Redis**）· V3 ✓ | `docs/reports/2026-10-08-T507-nao-fleet-migration-verify.sh`（**untracked**，待随分支入库） | PM 已裁定：① AC3 引用面口径**排除本批迁移文档自身**（已落 PRD §8 V5）② PRD「顶层 7 项」**订正为 8 项**（已改） |
+| T507-RD | **done(full)**：10 步全完成 · `migrate` rc=0（移除 23 项 / 备份 42 文件）· 顶层 **8→4 项**、入库 **43→5 文件**、`git ls-files .pi` **0→1** · 六门禁全 rc=0（`golangci-lint` 0 issues）· md5 不变三项（AGENTS `587f47ce` / CLAUDE `1bab8f84` / APPEND_SYSTEM `8a7082f6`，仍忽略）· 幂等（二次 migrate rc=0 · shim same · 0 effect · 未新增 stamp）· AC6 负向全过（缺包 rc=2 + 恰 1 行 `DEGRADED:`；worktree 回滚后 `check` rc=0 roles=6）· AC8 命中 0 · 未纳入 QA 脚本（`git log --all` 0） | PR [#49](https://github.com/Nathan3303/nao-todo-server/pull/49)（Draft）· 分支 `feat/48-nao-fleet-migration`（2 条 `wip(T507)` 待 squash） | 待裁决 1 项已闭环：**AC3 口径 = 入库文件 0→0**（排除 `.pi/npm/**` + 迁移文档 + `.gitignore` 忽略行）已落 PRD §7/§8 V5 并派 QA2 修脚本；QA2 复跑无分歧后即可 PM 验收 |
 
 > T2 验收注意事项（已归档，见下）：① 零网络断言为「代理阻断 + npm offline」，非内核级隔离（已披露，接受）；② `.pi/npm/.gitignore` 由 pi 自生成 → D2 无需本仓额外配置。
 
