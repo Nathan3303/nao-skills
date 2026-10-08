@@ -5,12 +5,12 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：**T2 待验收（QA 跑批中）+ T3 迁移治理并行**
+- 当前阶段：**T2/T4 验收通过（附条件）· T3 迁移治理进行中**
 - 当前 PRD：`docs/prds/2026-10-08-nao-skills-pi-package.md`（状态：已开工 · §11 决策台账 + §12 实施闸门已定稿）
 - 未决决策点：无（D1–D8 全部拍板）
 - 待用户回答：无
 - 未派发队列：见下方「待派发队列」（仅独立批次 #19）
-- 下次唤醒条件：worker 回执 **T4-跑批**（qa）→ 定 T2 验收结论；或 **T3**（rd-infra）→ 关 AC5/AC6/AC7
+- 下次唤醒条件：worker 回执 **T3**（rd-infra）→ 随即派 **qa 复跑**（版本 bump 后）→ 定稿 PR 标题 → 授权合并
 - ⚠️ 环境注意：`nao-fleet.sh` 别名解析有缺陷（#19）——`ensure` **必须用 canonical id**；`arch` / `infra` 会报未知角色
 - 口头约束已落盘：PRD §5（BR1/BR2 角色模型与常驻注入不变）· §§11–13（决策台账 + 闸门 + 特例）
 - 会话体检：contextTokens≈150k（窗口 1000k · 15%）· 压缩次数=0 · cacheRead=待观测
@@ -58,15 +58,14 @@
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | T2 | rd-infra | pi package 化：manifest（按文件声明 2 skill）+ `SKILL.md` + A′ 布局 + 薄 CLI（init/exec/migrate）+ shim（D6/D7）+ 迁移精准删除（§12-C/D）+ 清 `/tmp/t1` | 2026-10-08 | AC1/AC2/AC3/AC4/AC6/AC8 | `wip(T2): …` |
 | T3 | rd-infra | 迁移治理：README（sha 判据失效 + 闸门 A/B）· ARCHITECTURE 分层表 · `docs/releases/v0.12.0.md` · version bump 0.12.0 · AC5 4 仓只读验证 · minimal 零 shim · 数字口径统一 | 2026-10-08 | AC5/AC6/AC7 | `wip(T3): …` |
-| T4-跑批 | qa | 严格全量 `T4_ALLOW_MISSING=0 tests/t4/run.sh` + 真实 `pi install -l` 对照 + 补 AC2/AC6/AC8 partial + 提交产物 | 2026-10-08 | AC1/AC2/AC3/AC4/AC6/AC8 + NFR2/NFR3 | — |
 
 ## 已回执待验收
 
 | 任务编号 | 回执摘要（≤150字） | 详情路径 | 待办 |
 | :--- | :--- | :--- | :--- |
-| T2 | pi package 化全门禁绿：`check` exit=0 files=43 · `npm test` exit=0（tsc 0）· 注册 skill=2 collision=0 · 无网 `check` exit=0 · 删 `.pi/npm` → exit 2 + `DEGRADED:` · D7 双防护 exit 2 · init 幂等 · migrate 精准删 24 项保留共享 | `bin/nao-skill.js` · `bin/shim/nao-fleet.sh` · `.agents/skills/nao-fleet/SKILL.md` 等（commit `6f21e54`） | **PM 已核对 AC1/AC2/AC3/AC4/AC6/AC8 + D8 两处 diff**；待 QA 跑批（T4-跑批）后定验收结论 |
+| — | — | — | — |
 
-> T2 验收注意事项（PM 已核）：① 零网络断言为「代理阻断 + npm offline」，非内核级隔离（已披露，接受）；② `.pi/npm/.gitignore` 由 pi 自生成（`*` + `!.gitignore`）→ D2 无需本仓额外配置。
+> T2 验收注意事项（已归档，见下）：① 零网络断言为「代理阻断 + npm offline」，非内核级隔离（已披露，接受）；② `.pi/npm/.gitignore` 由 pi 自生成 → D2 无需本仓额外配置。
 
 ## 挂起（被抢占 / 降级）
 
@@ -81,3 +80,5 @@
 | T0 | 架构评审：**有条件可行** → 终签**放行 T2**（附 4 条实施闸门 A–D + 3 条 PM 待办，已全部处理）；NFR2/NFR3 口径已定稿 | 回执内容 | 纠正 T1 的 exit 70 与 AC1 足迹 |
 | T0-ADR | **验收通过**（done(lite) 已核）：ADR 正文 59 行 + `docs/adr/README.md` 索引 +1；`check` exit=0；commit `7512da2` 已 push；仅动两路径，未影响 T2 | `docs/adr/2026-10-08-nao-skills-single-skill-pi-package.md` | T3 收尾：统一引用数口径（ADR「290 处/45 文件」 vs PRD「334 处/34 文件」，统计模式不同） |
 | T1 | **验收通过**：V1 包落盘路径确定 + `PI_PACKAGE_DIR` 不可用；V2 含 `SKILL.md` 即停递归 ⇒ `references/*.md` 不注册；V3 推荐 `.pi/npm` + 显式 `npm ci`；下游 CI 0 调用 | `docs/reports/2026-10-08-T1-pi-package-verify.md` | 本仓仅 +1 文件、下游 4 仓 0 条（已独立复核）；`/tmp/t1` 已在 T2 收尾项 |
+| T2 | **验收通过（附 2 条条件）**：全门禁绿（`check` exit=0 files=43 · `npm test` exit=0 · 注册 skill=2 collision=0 · 无网 exit=0 · 删包 exit 2+`DEGRADED:` · D7 双防护 · init 幂等 · migrate 精准删） | `6f21e54` | 条件①：T3 bump 0.12.0 后 **qa 复跑**（目前证据为 0.11.0）；条件②：AC5 / AC6 文档侧 / AC7 由 T3 关闭 |
+| T4-跑批 | **验收通过**：`T4_ALLOW_MISSING=0 tests/t4/run.sh` → exit 0 · **7/7 PASS · 94 断言 0 红 · SKIP 0 · BLOCKED 0**；真实 `pi install -l` 与 tarball 布局逐文件一致；无产品缺陷 | `tests/t4/` · `docs/reports/2026-10-08-T4-qa-report.md`（`eee6e06`） | 首跑 3 处 FAIL 均为**测试自身缺陷**（已修复复跑全绿）；越界检查 ✓（12 文件仅 `tests/` + `docs/reports/`） |
