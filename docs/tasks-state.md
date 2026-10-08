@@ -5,14 +5,15 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：**T509 已闭环**（本仓工具修复批 #19：别名 + `check` 守卫 + 跨仓 `close` 回收）—— `main` `bcac6f0` · **tag `v0.12.1` + GitHub Release 已发** · **npm publish 待用户执行**；**待启动：T510（#21 F3/F4/F7，F4 需 arch 拍板）**
+- 当前阶段：**T509 已闭环**（`main` `bcac6f0` · tag `v0.12.1` + Release 已发）；**npm publish 待用户执行**；**T510（#21）已启动：arch 评审 F3/F4/F7 已派**；用户已批：**三仓 pin 升 0.12.1（3 个小 PR）**
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付）；此前 T506 权威 PRD 在另一仓：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（已归档）
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付且已归档）；**T506 权威 PRD 在另一仓**：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（Issue nao-todo#188）
 - 未决决策点：无（D1–D8 已拍板；F1/F2 已修；npm 发布已由用户完成）
 - 待用户回答：**无**（T508 已开工；PM 重开已定「本会话继续」）；⚠️ 待用户裁量：`close` 无法回收跨仓派生会话的机制缺陷如何处置（并入 #19 / 新开单 / 暂记）
 - 既定口径：迁移命令从**仓外**执行（`cd /tmp && npx --yes @nathan33/nao-skill@0.12.0 migrate <绝对路径> -v`）；`.pi/settings.json` pin 入库；`.agents/.nao-obsolete/` 加 gitignore；判据 = 机制类归零 + 自有资产保留；历史归档文档不改；不碰源码/测试/构建配置
 - 未派发队列：见下方「待派发队列」+ 「待启动批次」两节（另两仓迁移 · #19 · #21 · #22）
-- 下次唤醒条件：① 用户完成 `npm publish` → PM 发布后核验（真实安装 + `pi.skills`/shim/`check`）② 用户定：三个已迁移仓是否把 pin 0.12.0 → 0.12.1（否则仍跑带缺陷旧版；升的话是 3 个小 docs-only PR）③ T510 开工确认卡（需先 arch 拍 F4 语义）
+- 待用户回答：**npm publish 0.12.1 待执行**（发布后 PM 做真实安装核验）→ 然后启动 3 个 pin 升级小 PR；T510 的 **F4 语义拍板**待 arch 回执后带回给用户
+- ✅ **`close` 修复已真实复用**：T509 派生会话 `qa-T509`/`rd-infra-T509` 经修复后的 `close --task T509 …` **正常回收**（pane %28/%29）—— 不再需要 `tmux kill-pane` 兜底
 - ⚠️ **同仓协作纪律（T509 起）**：T509/T510 工作于**本仓**（`/home/nathan/Project/nao-skills`）——RD 建分支后到合并前，**PM 不在本仓做任何 git 写操作**（同一工作区，避免提交落到 RD 分支）；PM 台账提交只在「派发前」与「合并后」两个时点进行
 - 会话体检：contextTokens≈236k（窗口 1000k · **~24%**）· 压缩次数=0 · 记于 2026-10-08T14:59Z（T508 闭环时；三批共用本会话）· 批次终态按纪律默认 `ensure --force pm`；用户已定「本会话继续」（ctx 仍远低 40% 且未压缩）⇒ 三批归档完成后再评估是否重开
 - ⚠️ 环境注意：`nao-fleet.sh` 别名解析有缺陷（#19）——`ensure` **必须用 canonical id**；`arch` / `infra` 会报未知角色
@@ -63,7 +64,7 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| — | — | （T509 已闭环，见下方归档表） | — | — | — |
+| T510 | arch-designer-T510（`--task T510` @本仓） | **arch 评审已派（只读）**：#21 的 F3（`.nao-migrated` 只写不读）/ **F4（`migrate` 无条件装 shim vs minimal 零 shim）**/ F7（单行压缩 lock 静默跳过去重）—— 出「选项对比 + 推荐 + 判定式 + 影响面 + AC 草稿 + SemVer 建议」，PM 带回用户拍板后写 PRD | 2026-10-08 | — | 不适用（只读） |
 
 > **会话回收（已完成）**：T507 派生会话 `qa-T507` / `rd-infra-T507` 已回收（验收通过即回收）。
 > ⚠️ **机制缺陷发现（2026-10-08，T507/T508 各复现一次）**：`nao-fleet.sh close` 的**跨仓派生会话回收**存在两层问题：
