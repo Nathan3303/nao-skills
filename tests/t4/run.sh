@@ -14,7 +14,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 
-CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09")
+CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10")
 CASE_TITLES=(
   "主路径足迹 + check exit=0（AC1）"
   "设计一致性：注册 skill 数==2 且无 collision（AC1/AC6）"
@@ -25,6 +25,7 @@ CASE_TITLES=(
   "真实 pi install -l --approve 与 tarball 布局对照"
   "评审修复回归：F1 lock 保缩进 + F2 init --force 走 migrate 防混装"
   "T509 别名解析 / check 守卫 / close 跨仓回收（#19）"
+  "T510 migrate 收尾：shim 判定式 / 开关 / 单行 lock 去重 / B2（#21）"
 )
 
 mode="run"; only=""
