@@ -5,12 +5,12 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：**批次收尾**（已合并 / 已 tag / 已 release；**待 npm 发布**）
-- 当前 PRD：`docs/prds/2026-10-08-nao-skills-pi-package.md`（状态：已交付，待 npm 发布后归档重开）
-- 未决决策点：**npm 发布方式**（本机 `npm whoami` 失败、PM 无凭据）→ 待用户
-- 待用户回答：Q1 `@nathan33/nao-skill@0.12.0` 怎么发到 npm
+- 当前阶段：**批次终态**（已合并 / 已 tag+Release / **npm 已发布** / 下游通知已发；待发布后核验报告）
+- 当前 PRD：`docs/prds/2026-10-08-nao-skills-pi-package.md`（状态：已交付）
+- 未决决策点：无（D1–D8 已拍板；F1/F2 已修；npm 发布已由用户完成）
+- 待用户回答：无
 - 未派发队列：见下方「待派发队列」（仅独立批次 #19 · #21）
-- 下次唤醒条件：用户答复 Q1 → npm 发布 → 下游通知 → 发布后补跑 T4-07 真实安装对照 → 归档重开
+- 下次唤醒条件：worker 回执 **T4-发布后核验**（qa）→ 落盘报告 → 归档并重开 PM 会话
 - ⚠️ 环境注意：`nao-fleet.sh` 别名解析有缺陷（#19）——`ensure` **必须用 canonical id**；`arch` / `infra` 会报未知角色
 - 口头约束已落盘：PRD §5（BR1/BR2 角色模型与常驻注入不变）· §§11–13（决策台账 + 闸门 + 特例）
 - 会话体检：contextTokens≈150k（窗口 1000k · 15%）· 压缩次数=0 · cacheRead=待观测
@@ -43,7 +43,8 @@
 - PR：[#20](https://github.com/Nathan3303/nao-skills/pull/20)（**已 MERGED** · Issue #18 已随合并关闭）· 预览环境：无
 - 合并：**已 squash 合并**（main `197dd6e`，本需求恰好 1 条、无 `wip()`）· 分支已删：是
 - 版本 / Tag：v0.12.0 · **tag + GitHub Release 已发布**（notes 落 `docs/releases/v0.12.0.md`）
-- **npm 发布**：❌ **未发布**（registry latest = 0.11.0；本机 `npm whoami` 失败）→ README/迁移指引里的 `@0.12.0` 暂 404
+- **npm 发布**：✅ **已发布**（`@nathan33/nao-skill@0.12.0` · 用户执行 · `published 2026-10-08T11:37:27Z` · `dist-tags.latest = 0.12.0` · registry `pi.skills` = 2 条按文件声明）；发布后短暂 404 属 npmjs **异步处理窗口**（日志：`PUT 202` + 「being processed」）
+- **下游通知**：✅ 已发 3 个通知 Issue（迁移可选）— [nao-todo#188](https://github.com/Nathan3303/nao-todo/issues/188) · [nao-todo-server#48](https://github.com/Nathan3303/nao-todo-server/issues/48) · [nue-ui#72](https://github.com/Nathan3303/nue-ui/issues/72)（`nao-todo-minimal` 无远端，不通知）
 - 降级标注：无（`gh` 可用，exit 0）
 - 特例提交（白名单）：无
 
@@ -58,7 +59,7 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| — | — | — | — | — | — |
+| T4-发布后核验 | qa | 对**已发布** `0.12.0` 做真实安装对照 + 发布物 tarball 内容核验（仅写 `docs/reports/2026-10-08-T4-postpublish-verify.md`） | 2026-10-08 | 发布后闸门 | — |
 
 ## 已回执待验收
 
