@@ -5,12 +5,12 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：**批次完全闭环**（已合并 / 已发布 / 已通知 / 发布后核验通过）——可归档并重开 PM 会话
-- 当前 PRD：`docs/prds/2026-10-08-nao-skills-pi-package.md`（状态：**已交付且已归档**）
+- 当前阶段：**上游 #18 已完全闭环**；当前活跃批次 = **T506（下游 nao-todo 迁移到 0.12.0，上游 PM 代管）**
+- 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付且已归档）；**T506 权威 PRD 在另一仓**：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（Issue nao-todo#188）
 - 未决决策点：无（D1–D8 已拍板；F1/F2 已修；npm 发布已由用户完成）
 - 待用户回答：无
 - 未派发队列：见下方「待派发队列」（仅独立批次 #19 · #21）
-- 下次唤醒条件：无（本批已闭环）；重开后先读本文件 + `docs/prds/README.md` 并回读确认；待启动项见「待派发队列」（#19 · #21）
+- 下次唤醒条件：worker 回执 **T506-1**（rd-infra-T506）/ **T506-2**（qa-T506）；重开后先读本文件 + `~/Project/nao-todo/docs/tasks-state.md`「外部批次：T506」小节并回读确认
 - ⚠️ 环境注意：`nao-fleet.sh` 别名解析有缺陷（#19）——`ensure` **必须用 canonical id**；`arch` / `infra` 会报未知角色
 - 口头约束已落盘：PRD §5（BR1/BR2 角色模型与常驻注入不变）· §§11–13（决策台账 + 闸门 + 特例）
 - 会话体检：contextTokens=311k（窗口 1000k · **31%**）· 压缩次数=0 · cacheRead=待观测 · 记于 2026-10-08T11:55Z（批次归档时）
@@ -59,7 +59,8 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| — | — | — | — |
+| T506-1 | rd-infra-T506 | （仓：nao-todo）起分支 + 提交 PM 文档 → V1–V3 验证 → 执行迁移 → AGENTS.md/tasks-state 引用修正 → .gitignore → CHANGELOG → Draft PR | 2026-10-08 | T506 AC1–AC6/AC8 | `feat/188-nao-fleet-migration` |
+| T506-2 | qa-T506 | （仓：nao-todo）用例先行 + 独立验证 AC1–AC6 + 批末全仓门禁一次 + PR 评论数字 | 2026-10-08 | T506 AC1–AC6 | — |
 
 ## 已回执待验收
 
