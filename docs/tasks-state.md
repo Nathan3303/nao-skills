@@ -5,15 +5,15 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：**T507 PM 验收通过**（QA2 独立复跑 GREEN 84P/0F/1W）· 已派 T507-RD2 收尾提交（§11 验收结论 + PRD 索引）→ 待其推完即发**合并授权**
+- 当前阶段：**T507（nao-todo-server 迁移）已闭环**（main `abc7a22`，恰好 1 条 · 无 `wip()` · 分支已删 · CI `build/vet/unit` + `integration` 双绿）· 仅剩 T507-RD4（1 行索引状态订正）在飞；**下一批次 = T508（nue-ui，未开工）**
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付）；此前 T506 权威 PRD 在另一仓：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（已归档）
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付且已归档）；**T506 权威 PRD 在另一仓**：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（Issue nao-todo#188）
 - 未决决策点：无（D1–D8 已拍板；F1/F2 已修；npm 发布已由用户完成）
 - 待用户回答：**T507 是否开工**（开工确认卡已出，见下方 §待启动批次）；#19 / #21 是否另行开工（独立批次）
 - 既定口径：迁移命令从**仓外**执行（`cd /tmp && npx --yes @nathan33/nao-skill@0.12.0 migrate <绝对路径> -v`）；`.pi/settings.json` pin 入库；`.agents/.nao-obsolete/` 加 gitignore；判据 = 机制类归零 + 自有资产保留；历史归档文档不改；不碰源码/测试/构建配置
 - 未派发队列：见下方「待派发队列」+ 「待启动批次」两节（另两仓迁移 · #19 · #21 · #22）
-- 下次唤醒条件：用户对 **T507 开工确认卡**给出答复 → 派发 rd-infra@nao-todo-server + qa@nao-todo-server（`--task T507`）；T507 闭环后出 nue-ui（T508）开工确认卡
-- 会话体检：contextTokens≈370k（窗口 1000k · **~37%**）· 压缩次数=0 · 记于 2026-10-08T13:06Z（重开前）
+- 下次唤醒条件：T507-RD4 回执（或用户答复）→ 出 **T508（nue-ui）开工确认卡**（需先侦察：`AGENTS.md` L81/L84 引用面 + `packages/nue-ui-skill/README.md` / `apps/document/skill/*.md` 是否真讲 nao 机制 + `devEngines` pnpm 11.21.0 阻断 + lock `frontend-design` 去重）；T508 闭环后按用户选择处理上游 #19 / #21
+- 会话体检：contextTokens≈135k（窗口 1000k · **~13%**）· 压缩次数=0 · 记于 2026-10-08T13:45Z（T507 闭环时）· 批次终态按纪律默认 `ensure --force pm`（ctx 远低 40% 且未压缩 ⇒ 已征询用户是否本会话直接做 T508）
 - ⚠️ 环境注意：`nao-fleet.sh` 别名解析有缺陷（#19）——`ensure` **必须用 canonical id**；`arch` / `infra` 会报未知角色
 - 口头约束已落盘：PRD §5（BR1/BR2 角色模型与常驻注入不变）· §§11–13（决策台账 + 闸门 + 特例）
 - 会话体检：contextTokens=311k（窗口 1000k · **31%**）· 压缩次数=0 · cacheRead=待观测 · 记于 2026-10-08T11:55Z（批次归档时）
@@ -62,7 +62,7 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T507-RD3 | rd-infra-T507（`--task T507` @nao-todo-server） | **合并授权已发**：`gh pr ready 49` → `gh pr merge 49 --squash --delete-branch` + 合并后自检 | 2026-10-08（PM 验收通过后） | AC7 | 待 |
+| T507-RD4 | rd-infra-T507（`--task T507` @nao-todo-server） | 归档收尾：`docs/prds/README.md` 状态行「待合并」→「已交付（PR #49 合并 abc7a22）」· 1 行 1 文件 + PR + 等 CI + squash | 2026-10-08（T507 合并后） | AC7 | 待 |
 
 ## 已回执待验收
 
@@ -71,7 +71,8 @@
 | T507-QA | **done(lite)**（用例先行）：脚本 363 行（AC1–AC8 映射；迁移后模式现树=预期 RED 22P/35F/2W；`--baseline`=**GREEN 27P/0F**）+ 基线：顶层 **8 项**/43 文件 · `.agents/` 外引用 **0** · `.gitignore` L68 裸 `.pi` · `git ls-files .pi`=0 · lock 3 键（无 frontend-design）· V1 `golangci-lint 2.14.0` ✓ · V2 `go test ./...` exit 0（不依赖 MySQL/Redis） | `docs/reports/2026-10-08-T507-nao-fleet-migration-verify.sh` | 已随 QA2 入库（`76035ec`） |
 | T507-QA2 | **done(full)**：独立复跑 **PASS=84 / FAIL=0 / WARN=1**（WARN=squash 前提交数>1，预期）**exit 0**（默认 + `T507_ROLLBACK=1 T507_REAL_DEGRADED=1` 全跑）· 口径修正已落（`76035ec` 脚本 + PM PRD 订正 · `16a401f` 报告）· **PR #49 已评论**（QA of record）。自测：顶层 **5 项**/入库 **3 文件** · pin JSON 等价 · 六门禁全 0 · 幂等 · 回滚实测 · AC8 命中 0 · 无 FAIL | `docs/reports/2026-10-08-T507-qa-report.md` · PR [#49 comment](https://github.com/Nathan3303/nao-todo-server/pull/49#issuecomment-6061112837) | 3 处分歧已裁定：① RD 的「顶层 4/入库 5」有误，**以 QA 为准**（磁盘 5 / 入库 3）② AC4 pin 改语义断言（JSON 等价）③ §1/§2「7 项」早已订正为 8 —— 均非实现缺陷，不阻断 |
 | T507-RD | **done(full)**：10 步全完成 · `migrate` rc=0（移除 23 项 / 备份 42 文件）· 六门禁全 rc=0（`golangci-lint` v2.14.0 / 0 issues）· md5 不变三项（AGENTS `587f47ce` / CLAUDE `1bab8f84` / APPEND_SYSTEM `8a7082f6`，仍忽略）· 幂等（二次 migrate rc=0 · shim same · 0 effect · 未新增 stamp）· AC6 负向全过（缺包 rc=2 + 恰 1 行 `DEGRADED:`；worktree 回滚后 `check` rc=0 roles=6）· AC8 命中 0 · QA 脚本未被误提交 | 分支 `feat/48-nao-fleet-migration` · PR [#49](https://github.com/Nathan3303/nao-todo-server/pull/49) | 数字订正：其「顶层 8→4 项 / 入库 43→5」不准 → 以 QA 实测为准（磁盘 5 / 入库 3）；AC3 口径已裁定为「入库文件 0→0」 |
-| T507-RD2 | **done(lite)**：`4570cd9` `wip(T507): PM 验收结论 + PRD 索引` —— 自检 `git diff --name-only HEAD~1..HEAD` = **恰 2 文件**（PRD M + `docs/prds/README.md` A）· 已推送（`16a401f..4570cd9`，与远端 0/0）· 工作区 clean · **未合并**（`origin/main` 仍 `7c13f0a`）· 全量 diff 50 文件（`.agents/**` 44 + `.gitignore` + `.pi/settings.json` + docs 4），AC8 命中 0 | 分支 `feat/48-nao-fleet-migration` · PR [#49](https://github.com/Nathan3303/nao-todo-server/pull/49) | PM 已独立复核（恰 2 文件 + §11 内容与写定一致）→ **已发合并授权**（RD3） |
+| T507-RD3 | **done(lite) · 已合并**：main `abc7a22` =「迁移 nao 舰队机制到 0.12.0 pi 包形态（shim 入口 + 版本 pin 入库） (#49)」· 本需求**恰好 1 条**· **无 `wip()`**· 工作区 clean · 远端+本地分支均已删 · PR state=**MERGED**。过程偏差：首试被 main 保护拒（`integration` pending）→ 未用 `--admin/--auto`，`gh pr checks --watch` 等 CI 绿后重试成功（`build/vet/unit` 45s · `integration` 1m11s pass）· 合并后复验 `check` rc=0/roles=6 · 三处 md5 不变 · `git ls-files .pi` = 恰 1 | PR [#49](https://github.com/Nathan3303/nao-todo-server/pull/49) | 又：磁盘 `.agents/` 由 5 项→**4 项**（空 `skills/` 被 git 清理，符合 AC1/AC2）· **CI 侧门禁已获真实验证**（原「CI 未触发」遗留项关闭） |
+| T507-RD2 | **done(lite)**：`4570cd9` `wip(T507): PM 验收结论 + PRD 索引` —— 自检 `git diff --name-only HEAD~1..HEAD` = **恰 2 文件**（PRD M + `docs/prds/README.md` A）· 已推送（`16a401f..4570cd9`，与远端 0/0）· 工作区 clean · **未合并**（`origin/main` 仍 `7c13f0a`）· 全量 diff 50 文件（`.agents/**` 44 + `.gitignore` + `.pi/settings.json` + docs 4），AC8 命中 0 | 分支 `feat/48-nao-fleet-migration` · PR [#49](https://github.com/Nathan3303/nao-todo-server/pull/49) | PM 已独立复核（恰 2 文件 + §11 与写定一致）→ 已发合并授权 |
 
 > T2 验收注意事项（已归档，见下）：① 零网络断言为「代理阻断 + npm offline」，非内核级隔离（已披露，接受）；② `.pi/npm/.gitignore` 由 pi 自生成 → D2 无需本仓额外配置。
 
@@ -97,11 +98,16 @@
 | T0-评审2 | **验收通过 · GO**：D1–D8 与闸门 A–D 逐条符合；D7 绕过推演（`env -u` 清标记后有守卫②兜底、shim→shim 最多 2 跳被拦）**未发现无限递归路径**；BR1/BR2 守住；独立复跑 7/7 · 94 断言 | PR #20 [review](https://github.com/Nathan3303/nao-skills/pull/20#pullrequestreview-5455520693) | 处置：F1/F2 → 合并前修（T3-修）· F5 → 顺手修 · **F3/F4 → #21** · F6 已在 ADR 备案 |
 | T4-复跑 | **验收通过**：冻结产物 `5537270`/0.12.0 上 `T4_ALLOW_MISSING=0` → exit 0 · **8/8 PASS · 109/109 断言 0 红 · SKIP 0 · BLOCKED 0**；新增 T4-08 覆盖 F1（`git diff --numstat` = `0 4` 纯删、逐字节一致、keep-me 行不变、仍合法 JSON）与 F2（`init` rc=1 无部分动作 / `--force` 走 migrate 无混装无双注册） | PR #20 [comment](https://github.com/Nathan3303/nao-skills/pull/20#issuecomment-6058635005)（`34094ce`） | 越界检查 ✓（仅 `tests/` + `docs/reports/`）；首现 1 处 FAIL 为测试自身硬编码缩进，改逐字节判据后全绿 |
 | T-合并 | **验收通过**：PR #20 `--squash` → main `197dd6e`；本需求**恰好 1 条**、无 `wip()`、标题可读；远端+本地分支已删；发布物与已测产物 `34094ce` **零差异**（故未重跑门禁） | `197dd6e` · tag `v0.12.0` | `--delete-branch` 因当时工作区有 PM 未提交文件而在本地 checkout 阶段中止；远端合并成功，分支由 `git push --delete` 删除（未强切、未碰他人文件） |
+| **T507** | **验收通过 · 已合并归档**（仓：nao-todo-server 迁移到 0.12.0）：AC1–AC8 全过 · `migrate` rc=0（移除 23 项 / 备份 42 文件）· 六门禁全 rc=0（`go test` 21 ok / 44 无测试文件 / 0 fail）· 幂等（0 effect）· 负向闭环（缺包 rc=2 + 恰 1 行 `DEGRADED:`）· worktree 回滚实测 · QA2 独立复跑 **84P/0F/1W** · squash **`abc7a22`**（main 恰好 1 条、无 `wip()`）· CI 双 job 绿 · 非范围命中 0 | `~/Project/nao-todo-server` · PR [#49](https://github.com/Nathan3303/nao-todo-server/pull/49) · Issue [#48](https://github.com/Nathan3303/nao-todo-server/issues/48) | 3 处数字分歧均属文档口径（RD 报「入库 5 文件」不准 → 实测 **3**）· 曾需 `gh pr ready` 先转 ready + 等 `integration` 检查（未用 `--admin`）· 本仓无 CHANGELOG（未新增） |
 | T506 | **验收通过 · 已合并归档**（仓：nao-todo 迁移到 0.12.0）：AC1–AC8 全过 · qa 用例 72 PASS/0 FAIL · 全仓门禁（`vp check` 0 · `vp test` 231 文件/1824 例/0 红 · 5 guard 0 · 双端 build 0）· 缺包 exit 2 + `DEGRADED:` · 回滚实测 · squash `3f3da45f`（main 恰好 1 条、无 `wip()`）· main ≡ 已测 head `99b39e8a` 零差异 | `~/Project/nao-todo` · PR #189 · Issue #188（已关） | 我的 2 处 PRD 口径错误由 rd-infra 与 qa 独立发现并订正；另发现该仓 main 历史遗留 `wip(T505b)` 提交（**非本批**，已报备） |
 | T4-发布后核验 | **验收通过**：真实安装 `@nathan33/nao-skill@0.12.0` exit 0 · 落盘/pin 正确 · 项目足迹仅 2 文件 · 注册 skill **恰 2** collision **0**（stdout/stderr 双查）· shim `check` exit 0；发布 tarball **48 文件 / 109 211 B / sha256 `8c6b530a…`** 与 tag `v0.12.0` 本地 pack **逐字节一致** · `tests/`+`docs/` 零泄漏 · 包内 `pi.skills`=2 无 `pi.prompts` | `docs/reports/2026-10-08-T4-postpublish-verify.md` | **PM 已独立复核**（自算 sha256=一致、文件数=48、白名单无泄漏、包内 manifest） |
 | T0-复核 | **验收通过 · GO**：F1/F2/F5 按建议落实、无新回归；AC1「注册数==2」不变式与 BR5 守住；独立复跑 7/7 · 94 断言 + 定向夹具（F1 末位属性/单行压缩两边界；F2 双路径 + 共享 `nue-ui-dev` 保留）；与 rd-infra 证据交叉核**无分歧** | PR #20 [comment](https://github.com/Nathan3303/nao-skills/pull/20#issuecomment-6058492163) | 新发现（低）：单行压缩 lock 下文本级删条**静默跳过去重** → 已追记 **#21 F7**；另（非阻塞）建议固化 F1/F2 回归断言 → 已在 T4-复跑 要求中 |
 
-## 待启动批次 · T507：nao-todo-server 迁移（**PRD 已定稿 · 待开工确认**）
+## 已闭环批次 · T507：nao-todo-server 迁移（**已验收并合并**）
+
+> 结果：PR [#49](https://github.com/Nathan3303/nao-todo-server/pull/49) `--squash` → main **`abc7a22`**（恰好 1 条 · 无 `wip()` · 分支已删 · CI `build/vet/unit`+`integration` 双绿）
+> 验收：AC1–AC8 全过 · 缺陷 0 · QA2 独立复跑 **84 PASS / 0 FAIL / 1 WARN**（WARN=squash 前提交数）· PM 独立复核变更 50 文件未越界
+> 口径订正：AC3「入库文件 0→0」（排除 `.pi/npm` 物化产物 / 迁移文档 / `.gitignore` 忽略行）· AC4 pin 改语义断言 · 顶层项数 7→**8**（基线实测）· AC1 补「入库 43→3」
 
 | 项 | 内容 |
 | :--- | :--- |
@@ -114,6 +120,10 @@
 
 > 路线 A（迁到 0.12.0 pi 包形态），**每仓一个批次**（Issue → 分支 → PR → 验收 → squash 合并），**每批开工前须出开工确认卡**。
 > 可复用 T506 的 PRD 作模板：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（含订正后的判据与 §11 验收结论）。
+
+## 下一批次 · T508：nue-ui 迁移（**未开工** · 待侦察 + 开工确认卡）
+
+> 风险点（开工前必须逐项实测）：① `AGENTS.md` L81/L84 引用 + `packages/nue-ui-skill/README.md` / `apps/document/skill/*.md` 需判断**是否真讲 nao 机制**（可能是其自有 skill 的安装示例）；② 既有 `devEngines.packageManager=pnpm@11.21.0` ⇒ `npx` 直跑报 `EBADDEVENGINES`，**须从仓外执行**；③ `skills-lock.json` 含 `frontend-design` ⇒ **会被 `stripLockDuplicate` 去重**（原文件先备份）；④ 自有 skill（`nue-ui-dev` 等）**必须保留**（共享目录精准删除）。
 
 ### 侦察结论（2026-10-08，排除 `.agents/` 内部后）
 
