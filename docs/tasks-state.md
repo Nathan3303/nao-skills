@@ -5,7 +5,7 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：**T509/T510 均已发布并完成发布后核验**（latest = **0.13.0** · 两版产物与 tag 逐字节一致 · 真实安装可用 · 两处修复行为实测通过）；**下一批 T511（三仓 pin 一次升 0.13.0 + 删 `.nao-migrated`）待开工确认**
+- 当前阶段：**T509/T510 已发布并核验通过**（latest = 0.13.0）；**T511 已开工（三仓并行）**：PRD 定稿 + Issue #25 立项；任务号拆为 **T511a/b/c**（fleet 会话名唯一）+ T511（qa 统一复核）
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付）；此前 T506 权威 PRD 在另一仓：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（已归档）
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付且已归档）；**T506 权威 PRD 在另一仓**：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（Issue nao-todo#188）
 - 未决决策点：无（D1–D8 已拍板；F1/F2 已修；npm 发布已由用户完成）
@@ -66,7 +66,10 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| — | — | （T510 已闭环，见下方归档表；下一批次 T511 = 三仓 pin 一次升 0.13.0） | — | — | — |
+| T511 | qa-T511（`--task T511` @本仓） | 统一复核三仓（AC1–AC6）：pin=0.13.0 · 物化 · `.nao-migrated` 已删 · `check` rc0/roles=6 · `ensure arch` 可用 · 非范围命中 0 | 待三仓 RD 回执后派 | AC1–AC6 | — |
+| T511a | rd-infra-T511a（`@nao-todo`） | 仓 a：pin→0.13.0 + 物化 + 删 `.agents/.nao-migrated` + `check` rc0 + PR（base `main`） | 2026-10-08 | AC1–AC6 | — |
+| T511b | rd-infra-T511b（`@nao-todo-server`） | 仓 b：同上（base `main`） | 2026-10-08 | AC1–AC6 | — |
+| T511c | rd-infra-T511c（`@nue-ui`） | 仓 c：同上（base **`master`**；注意 `devEngines` pnpm 11.21.0 ⇒ 仓内 `npx` 被拦） | 2026-10-08 | AC1–AC6 | — |
 
 > **会话回收（已完成）**：T507 派生会话 `qa-T507` / `rd-infra-T507` 已回收（验收通过即回收）。
 > ⚠️ **机制缺陷发现（2026-10-08，T507/T508 各复现一次）**：`nao-fleet.sh close` 的**跨仓派生会话回收**存在两层问题：
