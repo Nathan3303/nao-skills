@@ -10,7 +10,7 @@
 - 未决决策点：无（D1–D8 全部拍板；arch 终签已放行 T2）
 - 待用户回答：无
 - 未派发队列：见下方「待派发队列」（T3 + 独立批次 #19）
-- 下次唤醒条件：worker 回执 T2（rd-infra）/ T4（qa）/ ADR（arch）
+- 下次唤醒条件：worker 回执 **T2**（rd-infra）/ **T4**（qa）
 - ⚠️ 环境注意：`nao-fleet.sh` 别名解析有缺陷（#19）——`ensure` **必须用 canonical id**；`arch` / `infra` 会报未知角色
 - 口头约束已落盘：PRD §5（BR1/BR2 角色模型与常驻注入不变）· §§11–13（决策台账 + 闸门 + 特例）
 - 会话体检：contextTokens≈150k（窗口 1000k · 15%）· 压缩次数=0 · cacheRead=待观测
@@ -59,7 +59,6 @@
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | T2 | rd-infra | pi package 化：manifest（按文件声明 2 skill）+ `SKILL.md` + A′ 布局 + 薄 CLI（init/exec/migrate）+ shim（D6/D7）+ 迁移精准删除（§12-C/D）+ 清 `/tmp/t1` | 2026-10-08 | AC1/AC2/AC3/AC4/AC6/AC8 | `wip(T2): …` |
 | T4 | qa | 用例与独立验证：仅新增 `tests/` + `docs/reports/2026-10-08-T4-*.md`（不碰 `package.json`/`bin/`/`.agents/`） | 2026-10-08 | AC1/AC3/AC4/AC5 + NFR2/NFR3 | — |
-| T0-ADR | arch-designer | 落盘 ADR 正文 + 更新 `docs/adr/README.md` 索引（路径级暂存） | 2026-10-08 | AC7（治理） | — |
 
 ## 已回执待验收
 
@@ -77,5 +76,6 @@
 
 | 任务编号 | 结论 | 详情路径 | 备注 |
 | :--- | :--- | :--- | :--- |
-| T0 | 架构评审：**有条件可行** → 终签**放行 T2**（附 4 条实施闸门 A–D + 3 条 PM 待办，已全部处理）；NFR2/NFR3 口径已定稿 | 回执内容 → 转 ADR | 纠正 T1 的 exit 70 与 AC1 足迹 |
+| T0 | 架构评审：**有条件可行** → 终签**放行 T2**（附 4 条实施闸门 A–D + 3 条 PM 待办，已全部处理）；NFR2/NFR3 口径已定稿 | 回执内容 | 纠正 T1 的 exit 70 与 AC1 足迹 |
+| T0-ADR | **验收通过**（done(lite) 已核）：ADR 正文 59 行 + `docs/adr/README.md` 索引 +1；`check` exit=0；commit `7512da2` 已 push；仅动两路径，未影响 T2 | `docs/adr/2026-10-08-nao-skills-single-skill-pi-package.md` | T3 收尾：统一引用数口径（ADR「290 处/45 文件」 vs PRD「334 处/34 文件」，统计模式不同） |
 | T1 | **验收通过**：V1 包落盘路径确定 + `PI_PACKAGE_DIR` 不可用；V2 含 `SKILL.md` 即停递归 ⇒ `references/*.md` 不注册；V3 推荐 `.pi/npm` + 显式 `npm ci`；下游 CI 0 调用 | `docs/reports/2026-10-08-T1-pi-package-verify.md` | 本仓仅 +1 文件、下游 4 仓 0 条（已独立复核）；`/tmp/t1` 已在 T2 收尾项 |
