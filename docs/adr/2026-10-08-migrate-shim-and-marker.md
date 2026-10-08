@@ -15,7 +15,7 @@
 
 ## 决策
 
-1. **F3 = 移除 `.nao-migrated`**：删除其写入点（`bin/nao-skill.js` 的 `MIGRATED_FILE` 常量与 `migrate()` 内 1 行写入），不新增读取逻辑。BR4 的达成方式改由「迁移即移除已知 nao 资产 ⇒ `detectLegacyAssets()` 为空 ⇒ 不再产生迁移提示」保证，并在 README/本 ADR 写明。存量文件（三仓 tracked）由 T511 三仓 pin PR **手动删除**；代码不自动删。
+1. **F3 = 移除 `.nao-migrated`**：删除其写入点（`bin/nao-skill.js` 的 `MIGRATED_FILE` 常量与 `migrate()` 内 1 行写入），不新增读取逻辑。BR4 的达成方式改由「迁移即移除已知 nao 资产 ⇒ `detectLegacyAssets()` 为空 ⇒ 不再产生迁移提示」保证，并在 README/本 ADR 写明。存量文件（三仓 tracked）由 T511 三仓 pin PR **手动删除**；代码不自动删（该文件**已废弃**，可安全删除）。
 2. **F4 = 自动判定 + 显式开关覆盖**：新增 `needsShim = A ∨ A′ ∨ B` 判定式（全文见下）；`migrate` 默认按判定式，`--shim` / `--no-shim` 覆盖（同时给出即 `exit 2`）；`init` 默认装 shim，`init --force` 转 `migrate()` 时传 `forceShim=true`（显式接入意图不被自动判定改写）。跳过 shim 时必须**显式告知**（不静默）。
 3. **F7 = 属性级（token 级）删除回退 + 强制校验 + 失败告警**：行级删除失败时，删除「该属性最高层键值 + **一个**分隔逗号」，其余字节/缩进不动；随后强制 `JSON.parse(next)` 成功 ∧ 目标 key 不存在，否则**不改写**并打印一行 `warn`。`stripLockDuplicate` 返回三态（`ok` / `absent` / `failed`）。
 4. **B2 并入本批**：把 `stripLockDuplicate` 置于 `migrate()` 的早退判断**之前**（或等价地让 `init` 路径也执行去重），使「无 legacy 资产但 lock 有重复项」的仓库也能完成去重。

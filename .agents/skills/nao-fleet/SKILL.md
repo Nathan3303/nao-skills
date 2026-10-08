@@ -31,7 +31,7 @@ nao 是一套「多角色 AI 开发舰队」：6 个分工明确的常驻会话�
 2. **拉起舰队**：`bash .agents/scripts/nao-fleet.sh ensure pm arch-designer rd-fe rd-be qa rd-infra`
    - 任务派生（并行隔离）：`ensure --task <编号> <别名>`
    - 状态 / 回收：`status` / `close --task <编号> <别名>`
-3. **迁移旧版安装**：`npx @nathan33/nao-skill migrate`（旧文件备份到 `.agents/.nao-obsolete/`，shim 就位）。
+3. **迁移旧版安装**：`npx @nathan33/nao-skill migrate`（旧文件备份到 `.agents/.nao-obsolete/`）。是否写 shim 由**判定式**决定（旧脚本 / 已有 shim / 全仓 `nao-fleet|nao-skill|NAO_SKILLS` 引用 ⇒ 写）；纯文档仓判定为跳过并显式告知，可用 `--shim` / `--no-shim` 覆盖。
 
 ## 硬约束（勿违反）
 

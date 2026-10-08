@@ -36,7 +36,7 @@
 
 ## 指针（勿复制内容）
 
-> 项目内 `.agents/` **只有 shim**（`.agents/scripts/nao-fleet.sh`）；机制单一事实来源在 **nao 机制包**内，包根由 `NAO_SKILLS` 给出（fleet 注入到会话系统提示）。所有机制引用一律以 `$NAO_SKILLS/.agents/` 为根解析。
+> 项目内 `.agents/` **只有 shim**（`.agents/scripts/nao-fleet.sh`）；机制单一事实来源在 **nao 机制包**内，包根由 `NAO_SKILLS` 给出（fleet 注入到会话系统提示）。所有机制引用一律以 `$NAO_SKILLS/.agents/` 为根解析。**例外：无脚本、无引用的纯文档仓不建 shim**（迁移判定式自动跳过，可用 `--shim` 覆盖）。
 
 - 团队级协议/角色清单：`$NAO_SKILLS/.agents/common/` + `$NAO_SKILLS/.agents/roles.yaml`
 - 角色卡：`$NAO_SKILLS/.agents/prompts/`
