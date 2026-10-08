@@ -52,6 +52,8 @@
 | :--- | :--- | :--- | :--- |
 | qa 复跑 | qa | F1/F2 修完后的冻结产物上跑一次全量 + 贴 PR 数字 | 等 T3-修 完成 |
 | arch 复核 | arch-designer | 只读复核 F1/F2 diff + go/no-go | 等 T3-修 完成 |
+| qa 复跑 | qa | F1/F2 修完后的冻结产物上跑一次全量 + 贴 PR 数字 | 等 T3-修 完成 |
+| arch 复核 | arch-designer | 只读复核 F1/F2 diff + go/no-go | 等 T3-修 完成 |
 | #19 | rd-infra | 修角色别名解析（`ALIAS_ROLE` 键值写反）+ `check` 增加「别名可解析」回归守卫 | **独立批次**：需用户另行确认开工 |
 | #21 | rd-infra | migrate 收尾：`.nao-migrated` 只写不读（F3）+ `migrate` 无条件装 shim 与 minimal 零 shim 特例冲突（F4） | **独立批次**（arch 评审引出） |
 
@@ -60,7 +62,8 @@
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | T2 | rd-infra | pi package 化：manifest（按文件声明 2 skill）+ `SKILL.md` + A′ 布局 + 薄 CLI（init/exec/migrate）+ shim（D6/D7）+ 迁移精准删除（§12-C/D）+ 清 `/tmp/t1` | 2026-10-08 | AC1/AC2/AC3/AC4/AC6/AC8 | `wip(T2): …` |
-| T3-修 | rd-infra | F1（`stripLockDuplicate` 保留原缩进/文本级删单条）· F2（`init --force` 走 migrate 或拒绝）· F5（README 版本权威口径） | 2026-10-08 | 合并前闸门 | — |
+| T4-复跑 | qa | 冻结产物 `5537270`/0.12.0 全量 + 新增 **F1/F2 回归断言** + 更新 PR #20 评论 | 2026-10-08 | 合并前闸门 | — |
+| T0-复核 | arch-designer | 只读复核 F1/F2/F5 diff + go/no-go（结论追加 PR） | 2026-10-08 | 合并前闸门 | — |
 
 ## 已回执待验收
 
@@ -89,3 +92,4 @@
 | T3-收尾 | **验收通过**：`2f953c3` 仅改 `package-lock.json` 2 行；`package.json`/`package-lock.json` 均 0.12.0、`0.11.0` 残留计数 **0**；`npm test` exit=0 | `2f953c3` | 产物曾冻结；因 F1/F2 修复重新解冻 |
 | T4-最终跑批 | **验收通过**：冻结产物 `2f953c3`/0.12.0 上 `T4_ALLOW_MISSING=0` → exit 0 · **7/7 PASS · 94/94 断言 0 红**；已贴 PR 评论（QA of record） | PR #20 [comment](https://github.com/Nathan3303/nao-skills/pull/20#issuecomment-6058379378) | 额外严谨性：在 `2f953c3` 独立复跑，证明 tip 差异仅 `tasks-state.md`、被测路径逐字节一致 |
 | T0-评审2 | **验收通过 · GO**：D1–D8 与闸门 A–D 逐条符合；D7 绕过推演（`env -u` 清标记后有守卫②兜底、shim→shim 最多 2 跳被拦）**未发现无限递归路径**；BR1/BR2 守住；独立复跑 7/7 · 94 断言 | PR #20 [review](https://github.com/Nathan3303/nao-skills/pull/20#pullrequestreview-5455520693) | 处置：F1/F2 → 合并前修（T3-修）· F5 → 顺手修 · **F3/F4 → #21** · F6 已在 ADR 备案 |
+| T3-修 | **验收通过**：`5537270` 仅 `README.md` + `bin/nao-skill.js`（未越界）；版本仍冻结 0.12.0 · 工作区干净；F1 → **文本级删单条**（实测 `git diff` 仅删 6 行、缩进保 4 空格）· F2 → `init` rc=1 拒绝 / `init --force` 走 migrate（prompts 与 frontend-design 残留 = 0，无混装无双注册）· F5 → README 写死 pin 为准；`npm test` exit=0 · 全套 7/7 · 94 断言 | `5537270` | 发布产物重新冻结（后续 `tests/` 新增不计入发布产物） |
