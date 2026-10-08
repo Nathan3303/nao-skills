@@ -5,13 +5,14 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：**上游 #18 与下游 T506 均已完全闭环**；**待启动：下游另两仓迁移（用户已批准「两个都迁」）**
+- 当前阶段：**上游 #18 与下游 T506 均已完全闭环**；**T507（nao-todo-server）PRD 已定稿 + Issue #48 已转实施单 → 待用户「开工确认」**
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付）；此前 T506 权威 PRD 在另一仓：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（已归档）
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付且已归档）；**T506 权威 PRD 在另一仓**：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（Issue nao-todo#188）
 - 未决决策点：无（D1–D8 已拍板；F1/F2 已修；npm 发布已由用户完成）
-- 待用户回答：无（两仓迁移已批准；`wip(T505b)` 历史遗留仅报备，用户未要求处理 → **不改历史、不另开单**）
+- 待用户回答：**T507 是否开工**（开工确认卡已出，见下方 §待启动批次）；#19 / #21 是否另行开工（独立批次）
+- 既定口径：迁移命令从**仓外**执行（`cd /tmp && npx --yes @nathan33/nao-skill@0.12.0 migrate <绝对路径> -v`）；`.pi/settings.json` pin 入库；`.agents/.nao-obsolete/` 加 gitignore；判据 = 机制类归零 + 自有资产保留；历史归档文档不改；不碰源码/测试/构建配置
 - 未派发队列：见下方「待派发队列」+ 「待启动批次」两节（另两仓迁移 · #19 · #21 · #22）
-- 下次唤醒条件：**本会话由 `ensure --force pm` 重开** → 新会话读本文件 + `docs/prds/README.md` → 回读确认 3 行 → 出 **nao-todo-server** 开工确认卡（用户已批「两个都迁」）；完事后 nue-ui
+- 下次唤醒条件：用户对 **T507 开工确认卡**给出答复 → 派发 rd-infra@nao-todo-server + qa@nao-todo-server（`--task T507`）；T507 闭环后出 nue-ui（T508）开工确认卡
 - 会话体检：contextTokens≈370k（窗口 1000k · **~37%**）· 压缩次数=0 · 记于 2026-10-08T13:06Z（重开前）
 - ⚠️ 环境注意：`nao-fleet.sh` 别名解析有缺陷（#19）——`ensure` **必须用 canonical id**；`arch` / `infra` 会报未知角色
 - 口头约束已落盘：PRD §5（BR1/BR2 角色模型与常驻注入不变）· §§11–13（决策台账 + 闸门 + 特例）
@@ -97,7 +98,16 @@
 | T4-发布后核验 | **验收通过**：真实安装 `@nathan33/nao-skill@0.12.0` exit 0 · 落盘/pin 正确 · 项目足迹仅 2 文件 · 注册 skill **恰 2** collision **0**（stdout/stderr 双查）· shim `check` exit 0；发布 tarball **48 文件 / 109 211 B / sha256 `8c6b530a…`** 与 tag `v0.12.0` 本地 pack **逐字节一致** · `tests/`+`docs/` 零泄漏 · 包内 `pi.skills`=2 无 `pi.prompts` | `docs/reports/2026-10-08-T4-postpublish-verify.md` | **PM 已独立复核**（自算 sha256=一致、文件数=48、白名单无泄漏、包内 manifest） |
 | T0-复核 | **验收通过 · GO**：F1/F2/F5 按建议落实、无新回归；AC1「注册数==2」不变式与 BR5 守住；独立复跑 7/7 · 94 断言 + 定向夹具（F1 末位属性/单行压缩两边界；F2 双路径 + 共享 `nue-ui-dev` 保留）；与 rd-infra 证据交叉核**无分歧** | PR #20 [comment](https://github.com/Nathan3303/nao-skills/pull/20#issuecomment-6058492163) | 新发现（低）：单行压缩 lock 下文本级删条**静默跳过去重** → 已追记 **#21 F7**；另（非阻塞）建议固化 F1/F2 回归断言 → 已在 T4-复跑 要求中 |
 
-## 待启动批次：下游另两仓迁移（用户已批准 2026-10-08「两个都迁」）
+## 待启动批次 · T507：nao-todo-server 迁移（**PRD 已定稿 · 待开工确认**）
+
+| 项 | 内容 |
+| :--- | :--- |
+| 权威 PRD | `~/Project/nao-todo-server/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（PM 已写入工作区，**未提交**；由 RD 在需求分支随首提交入库） |
+| Issue | [nao-todo-server#48](https://github.com/Nathan3303/nao-todo-server/issues/48)（2026-10-08 由通知单**转实施单**：补 TL;DR / AC1–AC8 / 优先级 / PRD 指针；并订正原「agent-browser 等为本地资产」表述 —— 实测本地无对应目录） |
+| 分支 | `feat/48-nao-fleet-migration` |
+| 角色 | rd-infra@nao-todo-server（PR owner）· qa@nao-todo-server · Reviewer：无 |
+| 本仓实测 | `.agents/` 43 文件入库 · `.nao-version`=0.11.0 · **`.agents/` 外引用 0 命中**（AGENTS/CLAUDE/README/docs/ci.yml）· 无 `package.json`/`devEngines` ⇒ 无 `EBADDEVENGINES` 阻断 · `.gitignore` L68 裸 `.pi` 需改 `.pi/*`+`!.pi/settings.json` · `.pi/APPEND_SYSTEM.md` 现被忽略且不入库（保持） · lock 三项无本地目录、不含 `frontend-design` ⇒ **无去重动作** |
+| 待验证项 | V1 本机 `golangci-lint` v2.14.0 是否可用 · V2 `go test ./...` 本机可跑性（MySQL/Redis 依赖）· V3 `.pi/APPEND_SYSTEM.md` 仍被忽略 · V4 无 `package.json` 形态下 migrate 实测行为 |
 
 > 路线 A（迁到 0.12.0 pi 包形态），**每仓一个批次**（Issue → 分支 → PR → 验收 → squash 合并），**每批开工前须出开工确认卡**。
 > 可复用 T506 的 PRD 作模板：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（含订正后的判据与 §11 验收结论）。
@@ -106,10 +116,10 @@
 
 | 仓 | AGENTS.md 机制引用 | 自有 skill | skills-lock.json | devEngines | tasks-state/prds/adr | 迁移成本 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **nao-todo-server** | **0 处** | `.agents/skills/frontend-design`（nao 资产，会移除） | 有：`agent-browser`/`find-skills`/`skill-creator`（**不含** frontend-design ⇒ 无需去重） | 无 | 无 / 0 / 0（闲置） | **最低**：`migrate` 即可，几乎无文档改动 |
-| **nue-ui** | L81/L84 有引用；另 5 文件含 `packages/nue-ui-skill/README.md`、`apps/document/skill/*.md`（**需判断是否真讲 nao 机制**——可能是其自有 skill 的安装示例） | `nue-ui-dev`/`agent-browser`/`find-skills`/`skill-creator`/`frontend-design` | 有：`agent-browser`/`find-skills`/**`frontend-design`**/`skill-creator` ⇒ **会被 stripLockDuplicate 去重** | **pnpm 11.21.0**（⇒ `npx` 直跑会被 `EBADDEVENGINES` 拦，**须从仓外执行**） | 无 / 0 / 0（闲置） | 中：需判断自有 skill 文档引用 |
+| **nao-todo-server** | **0 处** | `.agents/skills/frontend-design`（nao 资产，会移除）；**lock 三项无本地目录** | 有：`agent-browser`/`find-skills`/`skill-creator`（**不含** frontend-design ⇒ 无需去重） | 无（无 `package.json`） | 无 / `docs/prds` 本批新建 / 0 | **最低**：`migrate` 即可，零文档改动 |
+| **nue-ui**（T508 · 未启动） | L81/L84 有引用；另 5 文件含 `packages/nue-ui-skill/README.md`、`apps/document/skill/*.md`（**需判断是否真讲 nao 机制**——可能是其自有 skill 的安装示例） | `nue-ui-dev`/`agent-browser`/`find-skills`/`skill-creator`/`frontend-design` | 有：`agent-browser`/`find-skills`/**`frontend-design`**/`skill-creator` ⇒ **会被 stripLockDuplicate 去重** | **pnpm 11.21.0**（⇒ `npx` 直跑会被 `EBADDEVENGINES` 拦，**须从仓外执行**） | 无 / 0 / 0（闲置） | 中：需判断自有 skill 文档引用 |
 
-### 两仓通用的既定口径（沿用 T506，勿再重新讨论）
+### 通用既定口径（沿用 T506，勿再重新讨论）
 
 - `.pi/settings.json`（pin）**入库**；`.pi/*` + `!.pi/settings.json`
 - `.agents/.nao-obsolete/` **加 gitignore**（BR4）
@@ -117,4 +127,9 @@
 - 判据 = **机制类归零 + 自有资产保留**（不硬记项数）
 - 历史归档文档不改（BR3）；不碰源码/测试/构建配置（BR5）
 - 旧脚本调用（如 qq-notify）改 `$NAO_SKILLS/.agents/scripts/…`
-- 建议会话：`ensure --task <编号> rd-infra@<repo>` + `qa@<repo>`（任务派生名避免与上游重名）
+### 上游遗留单（独立批次 · 待用户确认开工）
+
+| 编号 | 概要 | 备注 |
+| :--- | :--- | :--- |
+| [#19](https://github.com/Nathan3303/nao-skills/issues/19) | 修角色别名解析（`ensure arch`/`ensure infra` 报未知角色）+ `check` 加「别名可解析」回归守卫 | 已实测：`ensure` 必须用 canonical id（`arch-designer`/`rd-infra`） |
+| [#21](https://github.com/Nathan3303/nao-skills/issues/21) | migrate 收尾：`.nao-migrated` 只写不读（F3）· `migrate` 无条件装 shim 与 minimal 零 shim 特例冲突（F4）· 单行压缩 lock 静默跳过去重（F7） | 由 T506/PR #20 的 arch 评审引出 |
