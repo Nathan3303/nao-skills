@@ -5,15 +5,14 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：**T510 已闭环**（`migrate` 收尾 F3/F4/F7+B2 → 0.13.0）—— `main` **`6eb9b74`** · **tag `v0.13.0` + Release 已发** · **npm 发布待用户（先 0.12.1 后 0.13.0，否则 latest 回退）**；**下一批：T511（三仓 pin 一次升 0.13.0 + 删 `.nao-migrated`）**
+- 当前阶段：**T509/T510 均已发布并完成发布后核验**（latest = **0.13.0** · 两版产物与 tag 逐字节一致 · 真实安装可用 · 两处修复行为实测通过）；**下一批 T511（三仓 pin 一次升 0.13.0 + 删 `.nao-migrated`）待开工确认**
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付）；此前 T506 权威 PRD 在另一仓：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（已归档）
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付且已归档）；**T506 权威 PRD 在另一仓**：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（Issue nao-todo#188）
 - 未决决策点：无（D1–D8 已拍板；F1/F2 已修；npm 发布已由用户完成）
 - 待用户回答：**无**（T508 已开工；PM 重开已定「本会话继续」）；⚠️ 待用户裁量：`close` 无法回收跨仓派生会话的机制缺陷如何处置（并入 #19 / 新开单 / 暂记）
 - 既定口径：迁移命令从**仓外**执行（`cd /tmp && npx --yes @nathan33/nao-skill@0.12.0 migrate <绝对路径> -v`）；`.pi/settings.json` pin 入库；`.agents/.nao-obsolete/` 加 gitignore；判据 = 机制类归零 + 自有资产保留；历史归档文档不改；不碰源码/测试/构建配置
 - 未派发队列：见下方「待派发队列」+ 「待启动批次」两节（另两仓迁移 · #19 · #21 · #22）
-- 待用户回答：**npm publish 顺序：先 `0.12.1` 再 `0.13.0`**（若反序，`latest` 会回退到 0.12.1）；发布后 PM 做发布后核验 → 然后启动 **T511**
-- ⚠️ 发布后核验要点（T511 前）：`pi install -l --approve npm:@nathan33/nao-skill@0.13.0` 真实安装 · `check` rc0 · `ensure arch` 可用（0.12.1 修复）· `migrate` 对 minimal 型不写 shim（0.13.0 修复）
+- 待用户回答：**T511 是否开工**（开工确认卡已出）；`close` 的 D7 边界是否另开单（本会话已记报告，非缺陷）
 - PM 已自拍（低风险、采 arch 推荐）：P1 存量 `.nao-migrated` → **手动删（并入三仓 pin PR）** · P2 开关 → **init+migrate 都支持** · P3 F7 → **属性级回退+失败告警** · P6 → **授权 arch 拍板后补 ADR** ✅（ADR 已交）
 - 📝 小纰漏（已登记，转 T510-ARCH3 顺手修）：ADR 头部写「落地：rd-infra（T511）」，应为 **T510**（T511 = 下游 pin 批）
 - ✅ **`close` 修复已真实复用**：T509 派生会话 `qa-T509`/`rd-infra-T509` 经修复后的 `close --task T509 …` **正常回收**（pane %28/%29）—— 不再需要 `tmux kill-pane` 兜底
