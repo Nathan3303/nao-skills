@@ -5,14 +5,14 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：**T507（nao-todo-server 迁移）已闭环**（main `abc7a22`，恰好 1 条 · 无 `wip()` · 分支已删 · CI `build/vet/unit` + `integration` 双绿）· 仅剩 T507-RD4（1 行索引状态订正）在飞；**下一批次 = T508（nue-ui，未开工）**
+- 当前阶段：**T507 已完全闭环（记账闭合）**：PR #49 `abc7a22` + 记账 PR #50 `da70a75` · **T508（nue-ui）PRD 已定稿 + Issue #72 已转实施单 → 待用户「开工确认」**
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付）；此前 T506 权威 PRD 在另一仓：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（已归档）
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付且已归档）；**T506 权威 PRD 在另一仓**：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（Issue nao-todo#188）
 - 未决决策点：无（D1–D8 已拍板；F1/F2 已修；npm 发布已由用户完成）
 - 待用户回答：**T507 是否开工**（开工确认卡已出，见下方 §待启动批次）；#19 / #21 是否另行开工（独立批次）
 - 既定口径：迁移命令从**仓外**执行（`cd /tmp && npx --yes @nathan33/nao-skill@0.12.0 migrate <绝对路径> -v`）；`.pi/settings.json` pin 入库；`.agents/.nao-obsolete/` 加 gitignore；判据 = 机制类归零 + 自有资产保留；历史归档文档不改；不碰源码/测试/构建配置
 - 未派发队列：见下方「待派发队列」+ 「待启动批次」两节（另两仓迁移 · #19 · #21 · #22）
-- 下次唤醒条件：T507-RD4 回执（或用户答复）→ 出 **T508（nue-ui）开工确认卡**（需先侦察：`AGENTS.md` L81/L84 引用面 + `packages/nue-ui-skill/README.md` / `apps/document/skill/*.md` 是否真讲 nao 机制 + `devEngines` pnpm 11.21.0 阻断 + lock `frontend-design` 去重）；T508 闭环后按用户选择处理上游 #19 / #21
+- 下次唤醒条件：用户对 **T508 开工确认卡**给出答复 → 派 rd-infra@nue-ui + qa@nue-ui（`--task T508`，base **`master`**）；T508 闭环后处理上游 #19 / #21
 - 会话体检：contextTokens≈135k（窗口 1000k · **~13%**）· 压缩次数=0 · 记于 2026-10-08T13:45Z（T507 闭环时）· 批次终态按纪律默认 `ensure --force pm`（ctx 远低 40% 且未压缩 ⇒ 已征询用户是否本会话直接做 T508）
 - ⚠️ 环境注意：`nao-fleet.sh` 别名解析有缺陷（#19）——`ensure` **必须用 canonical id**；`arch` / `infra` 会报未知角色
 - 口头约束已落盘：PRD §5（BR1/BR2 角色模型与常驻注入不变）· §§11–13（决策台账 + 闸门 + 特例）
@@ -62,12 +62,13 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T507-RD4 | rd-infra-T507（`--task T507` @nao-todo-server） | 归档收尾：`docs/prds/README.md` 状态行「待合并」→「已交付（PR #49 合并 abc7a22）」· 1 行 1 文件 + PR + 等 CI + squash | 2026-10-08（T507 合并后） | AC7 | 待 |
+| — | — | （T508 待用户开工确认后派） | — | — | — |
 
 ## 已回执待验收
 
 | 任务编号 | 回执摘要（≤150字） | 详情路径 | 待办 |
 | :--- | :--- | :--- | :--- |
+| T507-RD4 | **done(lite)**：记账 PR [#50](https://github.com/Nathan3303/nao-todo-server/pull/50)「文档：PRD 索引状态更新为已交付」→ main **`da70a75`** · 恰 **1 文件 1 行** · 本 PR 恰好 1 条 · 无 `wip()` · 分支已删 · CI 双 job 绿（38s / 1m12s，未用 `--admin/--auto`） | PR [#50](https://github.com/Nathan3303/nao-todo-server/pull/50) | T507 **记账闭合** |
 | T507-QA | **done(lite)**（用例先行）：脚本 363 行（AC1–AC8 映射；迁移后模式现树=预期 RED 22P/35F/2W；`--baseline`=**GREEN 27P/0F**）+ 基线：顶层 **8 项**/43 文件 · `.agents/` 外引用 **0** · `.gitignore` L68 裸 `.pi` · `git ls-files .pi`=0 · lock 3 键（无 frontend-design）· V1 `golangci-lint 2.14.0` ✓ · V2 `go test ./...` exit 0（不依赖 MySQL/Redis） | `docs/reports/2026-10-08-T507-nao-fleet-migration-verify.sh` | 已随 QA2 入库（`76035ec`） |
 | T507-QA2 | **done(full)**：独立复跑 **PASS=84 / FAIL=0 / WARN=1**（WARN=squash 前提交数>1，预期）**exit 0**（默认 + `T507_ROLLBACK=1 T507_REAL_DEGRADED=1` 全跑）· 口径修正已落（`76035ec` 脚本 + PM PRD 订正 · `16a401f` 报告）· **PR #49 已评论**（QA of record）。自测：顶层 **5 项**/入库 **3 文件** · pin JSON 等价 · 六门禁全 0 · 幂等 · 回滚实测 · AC8 命中 0 · 无 FAIL | `docs/reports/2026-10-08-T507-qa-report.md` · PR [#49 comment](https://github.com/Nathan3303/nao-todo-server/pull/49#issuecomment-6061112837) | 3 处分歧已裁定：① RD 的「顶层 4/入库 5」有误，**以 QA 为准**（磁盘 5 / 入库 3）② AC4 pin 改语义断言（JSON 等价）③ §1/§2「7 项」早已订正为 8 —— 均非实现缺陷，不阻断 |
 | T507-RD | **done(full)**：10 步全完成 · `migrate` rc=0（移除 23 项 / 备份 42 文件）· 六门禁全 rc=0（`golangci-lint` v2.14.0 / 0 issues）· md5 不变三项（AGENTS `587f47ce` / CLAUDE `1bab8f84` / APPEND_SYSTEM `8a7082f6`，仍忽略）· 幂等（二次 migrate rc=0 · shim same · 0 effect · 未新增 stamp）· AC6 负向全过（缺包 rc=2 + 恰 1 行 `DEGRADED:`；worktree 回滚后 `check` rc=0 roles=6）· AC8 命中 0 · QA 脚本未被误提交 | 分支 `feat/48-nao-fleet-migration` · PR [#49](https://github.com/Nathan3303/nao-todo-server/pull/49) | 数字订正：其「顶层 8→4 项 / 入库 43→5」不准 → 以 QA 实测为准（磁盘 5 / 入库 3）；AC3 口径已裁定为「入库文件 0→0」 |
@@ -123,7 +124,15 @@
 
 ## 下一批次 · T508：nue-ui 迁移（**未开工** · 待侦察 + 开工确认卡）
 
-> 风险点（开工前必须逐项实测）：① `AGENTS.md` L81/L84 引用 + `packages/nue-ui-skill/README.md` / `apps/document/skill/*.md` 需判断**是否真讲 nao 机制**（可能是其自有 skill 的安装示例）；② 既有 `devEngines.packageManager=pnpm@11.21.0` ⇒ `npx` 直跑报 `EBADDEVENGINES`，**须从仓外执行**；③ `skills-lock.json` 含 `frontend-design` ⇒ **会被 `stripLockDuplicate` 去重**（原文件先备份）；④ 自有 skill（`nue-ui-dev` 等）**必须保留**（共享目录精准删除）。
+| 项 | 内容 |
+| :--- | :--- |
+| 权威 PRD | `~/Project/nue-ui/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（PM 已写入工作区，**未提交**；由 RD 在需求分支随首提交入库；本仓**原本无 `docs/`**，本批新建） |
+| Issue | [nue-ui#72](https://github.com/Nathan3303/nue-ui/issues/72)（2026-10-08 由通知单**转实施单**：TL;DR / AC1–AC8 / 优先级 / PRD 指针 / 4 个本仓特有风险） |
+| 分支 / base | `feat/72-nao-fleet-migration` · **base = `master`**（本仓默认分支） |
+| 角色 | rd-infra@nue-ui（PR owner）· qa@nue-ui · Reviewer：无（PM 另行复核 `AGENTS.md` 改写文本） |
+| 本仓实测 | `.agents/` 顶层 **9 项** · `.nao-version`=0.11.0 · `.agents/` 外引用 **15 处**（三类：A 机制仅 `AGENTS.md` L76–88 / B 自有 skill 包安装目标语义 9 处**不改** / C `vite.config.ts` `fmt.ignorePatterns` 含 `.agents/**`+`.pi/**` **不改**）· `.agents/skills/` 混装自有 `nue-ui-dev` + lock 3 目录 + nao 资产 · lock **含 `frontend-design`**（会被文本级去重）· `devEngines` pnpm 11.21.0 ⇒ **仓外执行** · **无 `.pi/`** · **无 `docs/`** · CI `test-and-deploy.yml` 0 命中 · 钩子 `.vite-hooks/pre-push` 跑全量测试 |
+| 关键发现 | `.agents/commands/commit.md` 经查为本仓**自有**（`2986b24c` 从 `.claude/commands` 迁入；nao 包不含 `commands/` ⇒ `migrate` 天然保留）= 正确行为，**非上游缺口**，不收盘 |
+| 待验证项 | V1 `migrate` 对自有资产的误删风险 · V2 `vp check` 迁移前差异文件数基线（`AGENTS.md` 称「稳定 3 文件」vs `fmt.ignorePatterns` 含 `.agents/**` **可能不一致**）· V3 `nue-ui-dev/**` 触碰数=0 · V4 仓内 `npx` 应报 `EBADDEVENGINES` · V5 pre-push 耗时 / 是否允许 `--no-verify`（默认不允许）· V6 `pnpm-lock.yaml` 不应被改（仅 +`.pi/settings.json`） |
 
 ### 侦察结论（2026-10-08，排除 `.agents/` 内部后）
 
