@@ -34,6 +34,7 @@ PM 在**立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 PR / 合�
 - **禁止** `git push` 到 main、**禁止绕过 PR 合并**；feature 分支允许 `--force-with-lease`（改基 / 压缩历史时）。
 - 提交规范、`wip()` 前缀、路径级暂存、可读性：见 @.agents/skills/commit.md。
 - **squash 后 main 上的提交信息 = PR 标题 + PR 正文** → **可读性硬性落在 PR 标题**（用户可见行为，禁纯编号/类名/路径）。
+- ⚠️ **单提交 PR 的 squash 陷阱（T511 实测 3/3 仓中招）**：`gh pr merge --squash` 在 PR **只有 1 条提交**时，取的是**该提交的 subject**（**不是** PR 标题）⇒ 分支纪律的 `wip(<编号>):` 前缀会直接进主干。**合并命令必须显式指定**：`gh pr merge <n> --squash --delete-branch --subject "<用户可读主题>" --body "<摘要>"`；或合并前把分支压成一条用户可读提交。主干受保护（禁 force-push / `enforce_admins=true`）时该偏差**不可回溯**，只能记录。
 
 ## Issue 与状态（避免双源）
 

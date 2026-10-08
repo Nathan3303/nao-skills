@@ -105,4 +105,11 @@
 
 | 项 | 结果 |
 | :--- | :--- |
-| — | 验收后由 PM 填写 |
+| AC1–AC5 | **全部通过**（三仓） |
+| AC6 | **部分偏差（已接受）**：三仓主干提交主题保留了 `wip(T511x):` 前缀（其余治理项全过）——根因：**PR 只有 1 条提交时 `gh pr merge --squash` 取该提交 subject 而非 PR 标题**；nao-todo / nao-todo-server 主干受保护（`allow_force_pushes=false` + `enforce_admins=true`）**不可回溯**，nue-ui 技术可改但按统一口径**不改写历史** ⇒ **流程修正已落 `.agents/skills/github-flow.md`**（合并必须显式 `--subject`） |
+| 合并（PM 独立复核） | nao-todo PR [#190](https://github.com/Nathan3303/nao-todo/pull/190) → `main` **`ffc9c4f0`** · nao-todo-server PR [#51](https://github.com/Nathan3303/nao-todo-server/pull/51) → `main` **`1f729cb`** · nue-ui PR [#74](https://github.com/Nathan3303/nue-ui/pull/74) → `master` **`bb5c3901`**；各**恰好 1 条** · 各 **2 文件**（`D .agents/.nao-migrated` + `M .pi/settings.json`）· pin = `0.13.0` · `.agents` 入库 **7 / 2 / 31** 且不含废弃标记 · 分支已删 · 工作区干净 |
+| 门禁（RD 自报 + QA 独立复跑） | nao-todo：`check` 0 · `vp check` 0（1544 格式 / 1297 lint+type 0 错）· **`vp test --run` 231 文件 / 1824 例 / 0 红** · 5 个 guard 0 · `webapp build` + `desktop:build` 0 · 移动端红线 0 ｜ nao-todo-server：`check` 0 · go build/vet/test 0（65 包 21 ok/44 no-test/0 FAIL）· `gofmt -l` 空 · `golangci-lint` **0 issues** ｜ nue-ui：`check` 0 · `vp fmt --list-different .` **0 文件** · `test:run` **33 文件/358 例/0 红**（pre-push 亦跑，未 `--no-verify`） |
+| AC4 实拉（修复前不可用） | 三仓 `ensure arch` 均 **rc=0**（修复前报「未知角色」）：RD pane `%61`/`%64`/`%65` + QA pane `%66`/`%67`/`%68`，全部经 `close` 回收，**残留 0** |
+| AC1 物化一致性 | 三仓 `.pi/npm/.../package.json` version = **0.13.0**，物化 `.agents/` 与 `package.json` 与 tag `v0.13.0` **逐字节一致**（QA 核） |
+| 缺陷 | **0**（1 项治理偏差已接受 + 已修流程） |
+| 遗留（后续项，均不阻塞） | ① **O1** nao-todo `AGENTS.md:131` 仍把 `.nao-migrated` 列为「0.12.0 起入库面」（本批机制段 OUT）→ 后续收敛 ② **B8** `close` 同名跨仓不可定向（纪律 = 仓级唯一任务号；工具侧可叠加名册 cwd 约束，未开单）③ `.nao-version` 仍 `0.12.0`（0.13.0 无读取方，版本权威 = pin） |
