@@ -5,12 +5,12 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：**批次终态**（已合并 / 已 tag+Release / **npm 已发布** / 下游通知已发；待发布后核验报告）
-- 当前 PRD：`docs/prds/2026-10-08-nao-skills-pi-package.md`（状态：已交付）
+- 当前阶段：**批次完全闭环**（已合并 / 已发布 / 已通知 / 发布后核验通过）——可归档并重开 PM 会话
+- 当前 PRD：`docs/prds/2026-10-08-nao-skills-pi-package.md`（状态：**已交付且已归档**）
 - 未决决策点：无（D1–D8 已拍板；F1/F2 已修；npm 发布已由用户完成）
 - 待用户回答：无
 - 未派发队列：见下方「待派发队列」（仅独立批次 #19 · #21）
-- 下次唤醒条件：worker 回执 **T4-发布后核验**（qa）→ 落盘报告 → 归档并重开 PM 会话
+- 下次唤醒条件：无（本批已闭环）；重开后先读本文件 + `docs/prds/README.md` 并回读确认；待启动项见「待派发队列」（#19 · #21）
 - ⚠️ 环境注意：`nao-fleet.sh` 别名解析有缺陷（#19）——`ensure` **必须用 canonical id**；`arch` / `infra` 会报未知角色
 - 口头约束已落盘：PRD §5（BR1/BR2 角色模型与常驻注入不变）· §§11–13（决策台账 + 闸门 + 特例）
 - 会话体检：contextTokens≈150k（窗口 1000k · 15%）· 压缩次数=0 · cacheRead=待观测
@@ -59,7 +59,7 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T4-发布后核验 | qa | 对**已发布** `0.12.0` 做真实安装对照 + 发布物 tarball 内容核验（仅写 `docs/reports/2026-10-08-T4-postpublish-verify.md`） | 2026-10-08 | 发布后闸门 | — |
+| — | — | — | — |
 
 ## 已回执待验收
 
@@ -91,4 +91,5 @@
 | T0-评审2 | **验收通过 · GO**：D1–D8 与闸门 A–D 逐条符合；D7 绕过推演（`env -u` 清标记后有守卫②兜底、shim→shim 最多 2 跳被拦）**未发现无限递归路径**；BR1/BR2 守住；独立复跑 7/7 · 94 断言 | PR #20 [review](https://github.com/Nathan3303/nao-skills/pull/20#pullrequestreview-5455520693) | 处置：F1/F2 → 合并前修（T3-修）· F5 → 顺手修 · **F3/F4 → #21** · F6 已在 ADR 备案 |
 | T4-复跑 | **验收通过**：冻结产物 `5537270`/0.12.0 上 `T4_ALLOW_MISSING=0` → exit 0 · **8/8 PASS · 109/109 断言 0 红 · SKIP 0 · BLOCKED 0**；新增 T4-08 覆盖 F1（`git diff --numstat` = `0 4` 纯删、逐字节一致、keep-me 行不变、仍合法 JSON）与 F2（`init` rc=1 无部分动作 / `--force` 走 migrate 无混装无双注册） | PR #20 [comment](https://github.com/Nathan3303/nao-skills/pull/20#issuecomment-6058635005)（`34094ce`） | 越界检查 ✓（仅 `tests/` + `docs/reports/`）；首现 1 处 FAIL 为测试自身硬编码缩进，改逐字节判据后全绿 |
 | T-合并 | **验收通过**：PR #20 `--squash` → main `197dd6e`；本需求**恰好 1 条**、无 `wip()`、标题可读；远端+本地分支已删；发布物与已测产物 `34094ce` **零差异**（故未重跑门禁） | `197dd6e` · tag `v0.12.0` | `--delete-branch` 因当时工作区有 PM 未提交文件而在本地 checkout 阶段中止；远端合并成功，分支由 `git push --delete` 删除（未强切、未碰他人文件） |
+| T4-发布后核验 | **验收通过**：真实安装 `@nathan33/nao-skill@0.12.0` exit 0 · 落盘/pin 正确 · 项目足迹仅 2 文件 · 注册 skill **恰 2** collision **0**（stdout/stderr 双查）· shim `check` exit 0；发布 tarball **48 文件 / 109 211 B / sha256 `8c6b530a…`** 与 tag `v0.12.0` 本地 pack **逐字节一致** · `tests/`+`docs/` 零泄漏 · 包内 `pi.skills`=2 无 `pi.prompts` | `docs/reports/2026-10-08-T4-postpublish-verify.md` | **PM 已独立复核**（自算 sha256=一致、文件数=48、白名单无泄漏、包内 manifest） |
 | T0-复核 | **验收通过 · GO**：F1/F2/F5 按建议落实、无新回归；AC1「注册数==2」不变式与 BR5 守住；独立复跑 7/7 · 94 断言 + 定向夹具（F1 末位属性/单行压缩两边界；F2 双路径 + 共享 `nue-ui-dev` 保留）；与 rd-infra 证据交叉核**无分歧** | PR #20 [comment](https://github.com/Nathan3303/nao-skills/pull/20#issuecomment-6058492163) | 新发现（低）：单行压缩 lock 下文本级删条**静默跳过去重** → 已追记 **#21 F7**；另（非阻塞）建议固化 F1/F2 回归断言 → 已在 T4-复跑 要求中 |

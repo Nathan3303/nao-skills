@@ -168,7 +168,9 @@
 | tag / Release | `v0.12.0`（指向 main 合并提交）· GitHub Release 已发布（notes = `docs/releases/v0.12.0.md`） |
 | 验证 | qa 在冻结产物 `5537270`/`0.12.0`：**8/8 用例 · 109/109 断言 0 红**（含新增 F1/F2 回归）；arch 两轮评审 **GO**；发布物与已测产物 `34094ce` **零差异** |
 | 任务 | **13 项全部验收通过，0 打回**（T0 / T0-ADR / T1 / T2 / T3 / T3-收尾 / T3-修 / T4-跑批 / T4-最终跑批 / T4-复跑 / T0-评审2 / T0-复核 / T-合并） |
-| **遗留** | ⚠️ **npm 未发布**（registry latest = 0.11.0；本机 `npm whoami` 失败 ⇒ PM 无凭据）→ 由用户执行 `npm publish`；在此之前 README / 迁移指引里的 `@0.12.0` 会 **404**，**下游通知一并挂起** |
+| **npm 发布** | ✅ **已发布** `@nathan33/nao-skill@0.12.0`（用户执行 · `published 2026-10-08T11:37:27Z` · `latest = 0.12.0`）；发布后短暂 404 属 npmjs **异步处理窗口**（非失败） |
+| **发布后核验** | ✅ **通过**：真实安装 exit 0 · 注册 skill 恰 **2** 且 collision 0 · shim `check` exit 0；发布 tarball **48 文件 / 109 211 B / sha256 `8c6b530a…`** 与 tag `v0.12.0` 本地 pack **逐字节一致**（PM 已独立复核 sha256 + 文件清单 + 白名单无泄漏）· 报告 `docs/reports/2026-10-08-T4-postpublish-verify.md` |
 | 后续单 | [#19](https://github.com/Nathan3303/nao-skills/issues/19)（`ensure arch`/`infra` 别名失效）· [#21](https://github.com/Nathan3303/nao-skills/issues/21)（migrate 收尾 F3/F4/F7） |
 | 过程留痕 | 两处判断作废（「下游 CI 依赖 check」、「下游 AGENTS.md 记录 NAO_SKILLS」）· 两处记账丢失（合并后推送的 tasks-state 收尾提交随分支删除不可达，已就地补正，见 §11） |
-| 发布后待办 | 补跑 T4-07 **真实安装对照**（对已发布的 0.12.0）· 下游通知（nao-todo / nao-todo-server / nue-ui；minimal 零 shim） |
+| 发布后待办 | ✅ **已全部完成**：真实安装对照（见上）· 下游通知 3 单（[nao-todo#188](https://github.com/Nathan3303/nao-todo/issues/188) / [nao-todo-server#48](https://github.com/Nathan3303/nao-todo-server/issues/48) / [nue-ui#72](https://github.com/Nathan3303/nue-ui/issues/72)；minimal 无远端不通知） |
+| 非缺陷观察 | ① registry `gitHead = f971bc8`（发布检出点）≠ tag 提交 `197dd6e`，但 tarball **逐字节一致** ⇒ 等价；② 用户级 `~/.agents/skills` 会随环境带入额外 skill 注册（与 nao 无关） |
