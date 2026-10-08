@@ -13,7 +13,8 @@
 - 既定口径：迁移命令从**仓外**执行（`cd /tmp && npx --yes @nathan33/nao-skill@0.12.0 migrate <绝对路径> -v`）；`.pi/settings.json` pin 入库；`.agents/.nao-obsolete/` 加 gitignore；判据 = 机制类归零 + 自有资产保留；历史归档文档不改；不碰源码/测试/构建配置
 - 未派发队列：见下方「待派发队列」+ 「待启动批次」两节（另两仓迁移 · #19 · #21 · #22）
 - 待用户回答：**npm publish 0.12.1 待执行**；**T510 的 P4（版本 0.13.0/0.12.2）与 P5（范围是否并入 B2/B1）待拍板**；**三仓 pin 升级时机**（等 0.13.0 一次升 vs 先升 0.12.1）待定 —— 已出确认卡
-- PM 已自拍（低风险、采 arch 推荐）：P1 存量 `.nao-migrated` → **手动删（并入三仓 pin PR）** · P2 开关 → **init+migrate 都支持** · P3 F7 → **属性级回退+失败告警** · P6 → **授权 arch 拍板后补 ADR**
+- PM 已自拍（低风险、采 arch 推荐）：P1 存量 `.nao-migrated` → **手动删（并入三仓 pin PR）** · P2 开关 → **init+migrate 都支持** · P3 F7 → **属性级回退+失败告警** · P6 → **授权 arch 拍板后补 ADR** ✅（ADR 已交）
+- 📝 小纰漏（已登记，转 T510-ARCH3 顺手修）：ADR 头部写「落地：rd-infra（T511）」，应为 **T510**（T511 = 下游 pin 批）
 - ✅ **`close` 修复已真实复用**：T509 派生会话 `qa-T509`/`rd-infra-T509` 经修复后的 `close --task T509 …` **正常回收**（pane %28/%29）—— 不再需要 `tmux kill-pane` 兜底
 - ⚠️ **同仓协作纪律（T509 起）**：T509/T510 工作于**本仓**（`/home/nathan/Project/nao-skills`）——RD 建分支后到合并前，**PM 不在本仓做任何 git 写操作**（同一工作区，避免提交落到 RD 分支）；PM 台账提交只在「派发前」与「合并后」两个时点进行
 - 会话体检：contextTokens≈236k（窗口 1000k · **~24%**）· 压缩次数=0 · 记于 2026-10-08T14:59Z（T508 闭环时；三批共用本会话）· 批次终态按纪律默认 `ensure --force pm`；用户已定「本会话继续」（ctx 仍远低 40% 且未压缩）⇒ 三批归档完成后再评估是否重开
@@ -65,7 +66,7 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T510 | arch-designer-T510 / qa-T510 / rd-infra-T510（@本仓） | **已开工**：arch 补 ADR（`docs/adr/2026-10-08-migrate-shim-and-marker.md`，已派）∥ **T510-QA 用例先行已派**（夹具：minimal 型 / 单行 lock / 4+2 空格 lock / B2 / 告警）；RD 待 QA 回执后派 | 2026-10-08 | AC-F3/F4/F7 系列 + AC-DOC/REL/GOV/SCOPE | — |
+| T510 | arch-designer-T510 / qa-T510 / rd-infra-T510（@本仓） | **已开工**：**arch ADR 已交付**（`docs/adr/2026-10-08-migrate-shim-and-marker.md` 148 行 + 索引 +1；untracked，待 RD 随分支入库）∥ T510-QA 用例先行已派；RD 待 QA 回执后派 | 2026-10-08 | AC-F3/F4/F7 系列 + AC-DOC/REL/GOV/SCOPE | — |
 
 > **会话回收（已完成）**：T507 派生会话 `qa-T507` / `rd-infra-T507` 已回收（验收通过即回收）。
 > ⚠️ **机制缺陷发现（2026-10-08，T507/T508 各复现一次）**：`nao-fleet.sh close` 的**跨仓派生会话回收**存在两层问题：
