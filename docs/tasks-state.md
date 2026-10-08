@@ -62,11 +62,12 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T508-QA | qa-T508（`--task T508` @nue-ui） | 用例先行：AC1–AC8 断言脚本（双模式）+ 迁移前基线（V2 `vp check` 差异文件数/rc · V3 `nue-ui-dev` 清单 · V4 仓内 `npx` EBADDEVENGINES 佐证 · 门禁基线）· 本地产出、暂不提交 | 2026-10-08（开工确认后） | AC1–AC8 | 待分支 |
+| T508 | qa-T508（`--task T508` @nue-ui） | 用例先行：AC1–AC8 断言脚本（双模式）+ 迁移前基线（V2 `vp check` 差异文件数/rc · V3 `nue-ui-dev` 清单 · V4 仓内 `npx` EBADDEVENGINES 佐证 · 门禁基线）· 本地产出、暂不提交 | 2026-10-08（开工确认后） | AC1–AC8 | 待分支 |
 | T508-RD | rd-infra-T508（`--task T508` @nue-ui） | 已拉起待派：建分支 `feat/72-nao-fleet-migration`（**base `master`**）+ PRD 入库 + `pi install -l` + 仓外 `migrate` + **`AGENTS.md` 机制段改写** + `.gitignore` 两处 + 门禁 + Draft PR | 待 T508-QA 回执后派（避免同分支双写） | AC1–AC8 | — |
 
 > **会话回收（已完成）**：T507 派生会话 `qa-T507` / `rd-infra-T507` 已回收（验收通过即回收）。
 > ⚠️ **机制缺陷发现（2026-10-08）**：`nao-fleet.sh close` **无法回收跨仓派生会话** —— `close --task T507 qa` → 「未运行（无需回收）」但 `tmux list-panes` 实际存活（标题格式正常）；`close --task T507 qa-T507` → 「未知角色」。本次以 `tmux kill-pane` 手工兜底完成回收（`status` 的残留识别正确）。**尚未开单**，待用户裁量是否并入 #19 或新开（PM 未自做修复：零代码边界）。
+> 📌 **台账写法约定（实测）**：`nao-fleet.sh status` 的残留识别按**表格单元格全等**匹配任务编号（`task_state_class()`）⇒ 进行中行必须出现一个**裸批次号**单元格（如 `T508`）；仅写 `T508-QA` / `T508-RD` 会被归为「仅散文提及」并误报残留。
 
 ## 已回执待验收
 
