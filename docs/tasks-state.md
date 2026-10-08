@@ -69,7 +69,7 @@
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | T511 | qa-T511（`--task T511` @本仓） | 统一复核三仓（AC1–AC6）：pin=0.13.0 · 物化 · `.nao-migrated` 已删 · `check` rc0/roles=6 · `ensure arch` 可用 · 非范围命中 0 | 待三仓 RD 回执后派 | AC1–AC6 | — |
 | T511a | rd-infra-T511a（`@nao-todo`） | **done(full)**：PR [#190](https://github.com/Nathan3303/nao-todo/pull/190)（Draft · base `main` · 1 提交 `814a5cd8`）· pin→0.13.0（V1：`pi install` **未被 devEngines 拦**，rc=0）· `.agents/` 入库 8→7 · `check` rc0 roles=6 · `vp check` rc0 · AC4 实拉 pane %61 + `close` 回收成功 · AC5 diff **仅 2 项** | 2026-10-08 | AC1–AC5 | 待授权 |
-| T511b | rd-infra-T511b（`@nao-todo-server`） | 实施中（已纠正 AC4 验证任务号 → `T511Vb`） | 2026-10-08 | AC1–AC6 | — |
+| T511b | rd-infra-T511b（`@nao-todo-server`） | **done(full)**：PR [#51](https://github.com/Nathan3303/nao-todo-server/pull/51)（Draft · base `main` · 1 提交）· pin 0.13.0 + 物化（无 devEngines，rc=0）· `.nao-migrated` 已删（`git ls-files .agents` 仅余 `.nao-version` + shim）· 门禁：`check` rc0 roles=6 · go build/vet/test rc0（21 ok/44 no-test/0 fail）· `gofmt -l` 空 · `golangci-lint` 0 issues · AC4 复跑 `T511Vb` pane %64 + 回收 rc0 · AC5 diff 2 文件 · V3：活引用 0 | 2026-10-08 | AC1–AC5 | 待授权 |
 | T511c | rd-infra-T511c（`@nue-ui`） | 实施中（已纠正 AC4 验证任务号 → `T511Vc`；其 pane 曾被误杀，已手工收尾） | 2026-10-08 | AC1–AC6 | — |
 
 > **会话回收（已完成）**：T507 派生会话 `qa-T507` / `rd-infra-T507` 已回收（验收通过即回收）。
