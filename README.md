@@ -18,16 +18,29 @@ nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，�
 
 ## 安装（1 分钟）
 
-```bash
-npm install -g @nathan33/nao-skill
-cd 你的项目
-nao-skill install            # 装 .agents/ 并生成 AGENTS.md（已有则提示按规则追加，不覆盖原文）
-nao-skill plugins install-all   # 装协作插件（intercom 等），多会话派活必需
-```
-
-升级用 `nao-skill update`（机制文件以包为准，你自己的改动会保留）。
-
 > 前置依赖：[pi](https://pi.dev)。没装 pi 也能看到这套文件，但跑不起来舰队。
+
+1. **把机制装进项目**（项目级，版本 pin 在仓库里，团队 clone 即得同款）：
+
+   ```bash
+   cd 你的项目
+   pi install --local npm:@nathan33/nao-skill@0.12.0   # 声明 pin + 把机制包物化到项目内 .pi/npm
+   npx @nathan33/nao-skill init                        # 写入转发 shim + 生成 AGENTS.md
+   ```
+
+2. **装协作插件**（多会话派活必需）：
+
+   ```bash
+   npx @nathan33/nao-skill plugins install-all
+   ```
+
+升级：改 `.pi/settings.json` 里的 pin 版本，再 `pi update --extensions`（机制以包为准，项目里只有 shim）。
+
+**老项目迁移**（曾在项目里铺开整套 `.agents/` 的）：
+
+```bash
+npx @nathan33/nao-skill migrate   # 旧文件备份到 .agents/.nao-obsolete/，shim 就位，旧命令照跑
+```
 
 ## 用起来（3 步）
 
@@ -66,11 +79,11 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 装上 [`pi-agent-qqbot`](https://github.com/Nathan3303) 并配好 `~/.pi/agent/pi-agent-qqbot.json`（`appId` / `clientSecret` / `ownerOpenId` / `sandbox`）后，PM 可把**关键节点**主动推到你 QQ——批次进度汇总、验收结论、发版或合并完成、异常阻塞：
 
 ```bash
-.agents/scripts/qq-notify "[T301] 验收通过 · PR #4 已合并 · v0.8.0"
-.agents/scripts/qq-notify --dry-run "连通性自检"      # 只取 token、不发送
+$NAO_SKILLS/.agents/scripts/qq-notify "[T301] 验收通过 · PR #4 已合并 · v0.8.0"
+$NAO_SKILLS/.agents/scripts/qq-notify --dry-run "连通性自检"      # 只取 token、不发送
 ```
 
-**为什么默认不主动打扰**：这是**可选能力**——没配 `pi-agent-qqbot` 就自动视为未启用；四类节点之外不发，一个节点最多一条（禁刷屏）；推送失败只记回执行风险项，**不阻断交付**。默认走 sandbox（测试环境），正式发布通知才考虑 prod。能力边界、退出码与纪律见 `.agents/skills/qq-notify.md`。
+**为什么默认不主动打扰**：这是**可选能力**——没配 `pi-agent-qqbot` 就自动视为未启用；四类节点之外不发，一个节点最多一条（禁刷屏）；推送失败只记回执行风险项，**不阻断交付**。默认走 sandbox（测试环境），正式发布通知才考虑 prod。能力边界、退出码与纪律见 `$NAO_SKILLS/.agents/skills/qq-notify.md`。
 
 ## 为什么它省 token（这是本项目的核心追求）
 
@@ -85,7 +98,7 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 
 ## 常见问题
 
-**会改我的代码库吗？** 只新增 `.agents/` 和项目根 `AGENTS.md`（已存在则在末尾追加一小段，可手动删掉回退），不碰你原有文件。
+**会改我的代码库吗？** 只会新增项目根 `AGENTS.md`、`.pi/settings.json`，以及一个转发入口 `.agents/scripts/nao-fleet.sh`；角色卡、清单、技能这些机制文件都在依赖包内，**不再铺进你的仓库**，也不碰你原有文件。
 
 **只能用 pi 吗？** 角色卡和技能本质就是 Markdown，Claude Code 等也能读；但"派活 / 回执"这种多会话协作依赖 pi + pi-intercom 插件。
 
@@ -103,37 +116,50 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 你的项目/
 ├── AGENTS.md              # 项目级约定（PM 维护，AI 每次都会读）
 ├── .github/               # PR 模板（PM 建，GitHub Flow 用）
+├── .pi/
+│   ├── settings.json      # 记录机制包的 pin 版本（进仓库）
+│   └── npm/               # pi 把机制包物化在这里（pi 自建 gitignore，不提交）
 └── .agents/
-    ├── prompts/           # 6 张角色卡
-    ├── common/            # 协作规矩、输出与回执规范
-    ├── checklists/        # 各角色红线 / 交付清单 / 回执模板（按需读）
-    ├── skills/            # 按需技能（DDD 细节、代码定位、提交规范…）
-    ├── templates/         # 项目接入用的骨架文件
-    └── scripts/           # nao-fleet.sh 等小工具
+    └── scripts/
+        └── nao-fleet.sh    # 转发入口（shim）：自动定位包内机制并转发
 ```
 
-**同步后在 fmt 校验里看到 `.agents/` 的格式差异？** 这是已知的**发布形态**，不是缺陷——`.agents/**` 以上游原始存储形态发布，**不要就地格式化**（会破坏下游同步的 sha 一致性校验）。完整约定见下一节。
+机制本体（6 张角色卡、协作规矩、清单、按需技能、小工具）都在 npm 包 `@nathan33/nao-skill` 的 `.agents/` 里——**包里是什么就是什么**，项目里不留副本。
 
-## `.agents/` 的发布形态（fmt 边界）
+## 发布形态与完整性判据（0.12 起有变化）
 
-**`.agents/**` 的发布形态 = 本仓库里的原始存储形态**：其中部分 YAML / Markdown / MTS 未按 oxfmt / prettier 归一（实测命中如 `.agents/roles.yaml`、`.agents/scripts/intercom-probe.mts`）。因此下游把 `.agents/**` 纳入完整格式化校验（`vp check`、`prettier --check`、`oxfmt --check`…）时会看到几处格式差异——**属已知形态，不是缺陷**。
+**从 0.12 起，机制不再铺进项目**：项目里只留一个转发入口，机制的**单一事实来源**是 npm 包 `@nathan33/nao-skill` 内的 `.agents/`。
 
-- **⛔ 不要为了通过 fmt 而格式化 `.agents/**`。** 下游同步的**唯一完整性判据**是「**脚本与上游逐字节 sha 一致**」（跨仓同步正是靠它证明机制文件没漏没改）；一旦就地格式化，sha 不再相等，同步完整性就无法再证明。规避方式二选一：把 `.agents/**` 排除出 fmt 校验范围，或接受这几处差异。
-- **类型安全另有保障**：`.agents/scripts/**/*.mts|ts` 由本仓 `npm run check:agents`（strict `tsc`，配置 `tsconfig.agents.json`）把关，并已串入 `test` 与 `prepack` ⇒ **每次发布前必过**。这来自 `0.9.4` 的教训（`DEF-66`）：探针 2 处 `TS7006` 曾让下游 TS 仓（nao-todo / nue-ui）required `check` 变红，`0.9.5` 修复并把该自检固化在上游。
-- **变更纪律**：将来若要「上游统一格式化」，必须作为**一次明确的基线变更**执行——改形态 + 通知**全部下游**重同步 + 说明 sha 基线变化；**不得顺手格式化**。
+- **旧的完整性判据已失效**：以前下游靠「项目内 `.agents/**` 与上游逐字节 sha 一致」证明机制没漏没改；现在项目内不再有机制副本，这条判据不再适用。
+- **新的完整性判据：以 pin 的包版本为准**。`.pi/settings.json` 记录版本，`pi install/update` 从包物化；包里是什么就是什么，不存在「项目内被就地改动」的问题。转发入口是生成的固定文本，可用 `npx @nathan33/nao-skill init` 幂等重写核对。
+- **fmt 边界**：包内 `.agents/**` 仍以上游原始存储形态发布（部分 YAML / Markdown / MTS 未按 oxfmt / prettier 归一）。迁移期仍持有旧版全套 `.agents/**` 的仓库，继续把 `.agents/**` 排除出 fmt 校验即可，⛔ **不要为过 fmt 就地格式化**；新形态项目内只有转发入口，无需再处理。
+
+### 物化与离线（CI / 无 pi 环境必读）
+
+- `.pi/npm/` 由 pi 管理并 **gitignore**。因此 **fresh clone 上没有 `.pi/npm/package.json` 与 lockfile**，`npm ci --prefix .pi/npm` 当前**不可用**。
+- 物化只有一条路：**显式执行** `pi install -l --approve npm:@nathan33/nao-skill@<pin>`（需要 pi 与网络，是有意为之的一步）。
+- **联动条款**：若某个仓库想把机制体检 `check` 放进 CI（即改变「下游 CI 零改动」的约定），**必须同时**用 `git add -f` 把 `.pi/npm/package.json`、`.pi/npm/package-lock.json` 纳入版本控制，`npm ci` 才有输入。
+- **pi 启动的隐式安装**：当 `.pi/npm/node_modules` 缺失时，pi 启动会隐式执行 `npm install --prefix .pi/npm --legacy-peer-deps`；离线且缓存为空会得到可读的 npm 报错，并让 pi 以非 0 退出（不会静默假装成功）。
+- **运行纪律**：**先显式物化，再 `PI_OFFLINE=1` 运行**。nao 机制自身（转发入口 / fleet / CLI / check）**零网络调用**；入口找不到机制包时不静默成功，而是 `exit 2` 并打印一行 `DEGRADED:` + 恢复命令。
+
+## 下游仓库迁移（nao-todo / nao-todo-server / nue-ui）
+
+- **迁移期零改动**：旧的全套 `.agents/scripts/nao-fleet.sh` 照常可用，这些仓库的 CI 目前不调用 `check`，不受影响。
+- 想切到新形态时，在各仓执行 `npx @nathan33/nao-skill migrate`：只删**已知 nao 资产**（共享的 `.agents/skills/` 里项目自有的技能会保留），并把 `skills-lock.json` 里重复的 `frontend-design` 来源收敛为「机制包唯一来源」。
+- **`nao-todo-minimal` 特例**：无脚本、无 nao-fleet 引用 ⇒ **不建转发入口**，按纯文档/指针迁移；它的 `.agents/commands/`、`.agents/prompts/` 不在 pi 的 skill 扫描面（pi 只扫 `.agents/skills/**`）。
 
 ## 想深入
 
-README 只讲怎么用。真正的机制都在上面那个 `.agents/` 里，想改就从这几处入手：
+README 只讲怎么用。真正的机制都在依赖包 `@nathan33/nao-skill` 的 `.agents/` 里（会话里以 `$NAO_SKILLS/.agents/` 指向），想改就从这几处入手：
 
 | 想看什么 | 去哪看 |
 | --- | --- |
 | 整体架构、分层与设计取舍 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| 派活 / 回执 / 忙闲与回收规矩 | `.agents/common/intercom-protocol.md` |
-| 输出格式与回执红线 | `.agents/common/output-format.md`、`.agents/checklists/comm-templates.md` |
-| 角色怎么定义 | `.agents/prompts/*.md` |
-| 各角色的红线与交付清单 | `.agents/checklists/*.md` |
-| 工具命令 | `bash .agents/scripts/nao-fleet.sh --help` |
+| 派活 / 回执 / 忙闲与回收规矩 | `$NAO_SKILLS/.agents/common/intercom-protocol.md` |
+| 输出格式与回执红线 | `$NAO_SKILLS/.agents/common/output-format.md`、`$NAO_SKILLS/.agents/checklists/comm-templates.md` |
+| 角色怎么定义 | `$NAO_SKILLS/.agents/prompts/*.md` |
+| 各角色的红线与交付清单 | `$NAO_SKILLS/.agents/checklists/*.md` |
+| 工具命令 | `bash .agents/scripts/nao-fleet.sh --help`（转发入口） |
 | 项目自己的约定 | 项目根 `AGENTS.md` |
 
 ## License
