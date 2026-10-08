@@ -21,7 +21,7 @@
 #   NAO_TMUX_LAYOUT=main-row2|main-col|grid   tmux 布局（默认 main-row2）
 #   NAO_TMUX_MAIN_WIDTH=<10..90>             主 pane 宽度百分比（默认 35；main-row2/main-col 共用）
 #   NAO_TMUX_MIN_PANE_WIDTH=<10..80>         最小非主 pane 列宽守卫（默认 30；低于则回退）
-#   NAO_SKILLS=<dir>                          角色卡根目录（默认 <脚本>/../..）
+#   NAO_SKILLS=<dir>                          nao 机制包根目录（默认 <脚本>/../..；项目内 shim 会显式指向包根）
 #   NAO_MODEL_WHITELIST=<glob,...>            -m 白名单（默认空=不校验，支持 glob）
 #   NAO_CLOSE_BUSY_PATTERN=<ERE>             close 的在跑 turn 判定正则（默认内置 pi 状态行标记）
 #   NAO_TASKS_STATE=<path>                   任务状态文件（默认 docs/tasks-state.md，供残留检测/回收闸门）
@@ -824,7 +824,7 @@ build_system_prompt() {
   f="$(mktemp "/tmp/nao-fleet-$(basename "$card" .md)-XXXXXX.md")"
   {
     cat "$card"
-    printf '\n## 环境锚点\n- NAO_SKILLS=%s（@.agents/... 引用以会话 cwd 解析；cwd 无 .agents 时以 NAO_SKILLS 为根拼接绝对路径）\n' "$SKILLS_DIR"
+    printf '\n## 环境锚点\n- NAO_SKILLS=%s（nao 机制**包根**；@.agents/... 引用一律以 `$NAO_SKILLS/.agents/` 为根解析。注意：项目内 `.agents/` 只有 shim，不存机制副本）\n' "$SKILLS_DIR"
   } > "$f"
   echo "$f"
 }

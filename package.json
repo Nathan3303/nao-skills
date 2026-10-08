@@ -18,10 +18,17 @@
     "skills",
     "multi-agent",
     "pi",
+    "pi-package",
     "claude",
     "design-system",
     "codegraph"
   ],
+  "pi": {
+    "skills": [
+      "./.agents/skills/nao-fleet/SKILL.md",
+      "./.agents/skills/frontend-design/SKILL.md"
+    ]
+  },
   "author": "Nathan Lee",
   "license": "MIT",
   "publishConfig": {
