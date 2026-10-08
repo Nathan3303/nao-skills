@@ -5,12 +5,12 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：**合并前闸门**（lockfile 一致性 · PR 实现评审 · 最终跑批）
+- 当前阶段：**F1/F2 合并前修复中**（arch 已 GO，附 2 项必修）
 - 当前 PRD：`docs/prds/2026-10-08-nao-skills-pi-package.md`（状态：已开工 · §11 决策台账 + §12 实施闸门已定稿）
-- 未决决策点：无（D1–D8 全部拍板）
+- 未决决策点：无（D1–D8 全部拍板；F1/F2 已裁定合并前修）
 - 待用户回答：无
-- 未派发队列：见下方「待派发队列」（T4-最终跑批 · #19）
-- 下次唤醒条件：worker 回执 **T3-收尾**（rd-infra，lockfile）→ 随即派 **T4-最终跑批**（qa）；或 **T0-评审2**（arch）→ go/no-go
+- 未派发队列：见下方「待派发队列」（F1/F2 修完后的 qa 复跑 + arch 只读复核 · #19 · #21）
+- 下次唤醒条件：worker 回执 **T3-修**（rd-infra）→ 随即派 qa 复跑 + arch 只读复核 → 两者绿后授权合并
 - ⚠️ 环境注意：`nao-fleet.sh` 别名解析有缺陷（#19）——`ensure` **必须用 canonical id**；`arch` / `infra` 会报未知角色
 - 口头约束已落盘：PRD §5（BR1/BR2 角色模型与常驻注入不变）· §§11–13（决策台账 + 闸门 + 特例）
 - 会话体检：contextTokens≈150k（窗口 1000k · 15%）· 压缩次数=0 · cacheRead=待观测
@@ -50,15 +50,17 @@
 
 | 任务编号 | 目标会话 | 概要 | 排队原因 |
 | :--- | :--- | :--- | :--- |
+| qa 复跑 | qa | F1/F2 修完后的冻结产物上跑一次全量 + 贴 PR 数字 | 等 T3-修 完成 |
+| arch 复核 | arch-designer | 只读复核 F1/F2 diff + go/no-go | 等 T3-修 完成 |
 | #19 | rd-infra | 修角色别名解析（`ALIAS_ROLE` 键值写反）+ `check` 增加「别名可解析」回归守卫 | **独立批次**：需用户另行确认开工 |
+| #21 | rd-infra | migrate 收尾：`.nao-migrated` 只写不读（F3）+ `migrate` 无条件装 shim 与 minimal 零 shim 特例冲突（F4） | **独立批次**（arch 评审引出） |
 
 ## 进行中
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | T2 | rd-infra | pi package 化：manifest（按文件声明 2 skill）+ `SKILL.md` + A′ 布局 + 薄 CLI（init/exec/migrate）+ shim（D6/D7）+ 迁移精准删除（§12-C/D）+ 清 `/tmp/t1` | 2026-10-08 | AC1/AC2/AC3/AC4/AC6/AC8 | `wip(T2): …` |
-| T4-最终跑批 | qa | 在**冻结产物**（`2f953c3` / 0.12.0）跑一次全量 + **在 PR #20 贴门禁精确数字**（QA of record） | 2026-10-08 | 合并前闸门 | — |
-| T0-评审2 | arch-designer | PR #20 实现评审（D1–D8 / 闸门 A–D 符合性 + 绕过路径 + go/no-go；结论发 PR 评论） | 2026-10-08 | 合并前闸门 | — |
+| T3-修 | rd-infra | F1（`stripLockDuplicate` 保留原缩进/文本级删单条）· F2（`init --force` 走 migrate 或拒绝）· F5（README 版本权威口径） | 2026-10-08 | 合并前闸门 | — |
 
 ## 已回执待验收
 
@@ -84,4 +86,6 @@
 | T2 | **验收通过（附 2 条条件）**：全门禁绿（`check` exit=0 files=43 · `npm test` exit=0 · 注册 skill=2 collision=0 · 无网 exit=0 · 删包 exit 2+`DEGRADED:` · D7 双防护 · init 幂等 · migrate 精准删） | `6f21e54` | 条件①：T3 bump 0.12.0 后 **qa 复跑**（目前证据为 0.11.0）；条件②：AC5 / AC6 文档侧 / AC7 由 T3 关闭 |
 | T4-跑批 | **验收通过**：`T4_ALLOW_MISSING=0 tests/t4/run.sh` → exit 0 · **7/7 PASS · 94 断言 0 红 · SKIP 0 · BLOCKED 0**；真实 `pi install -l` 与 tarball 布局逐文件一致；无产品缺陷 | `tests/t4/` · `docs/reports/2026-10-08-T4-qa-report.md`（`eee6e06`） | 首跑 3 处 FAIL 均为**测试自身缺陷**（已修复复跑全绿）；越界检查 ✓（12 文件仅 `tests/` + `docs/reports/`） |
 | T3 | **验收通过**：README（新 pin 完整性判据 + 闸门 A/B + 下游迁移）· ARCHITECTURE 分层放宽 · `docs/releases/v0.12.0.md`（规范达标）· version bump 0.12.0 · **AC5 四仓只读验证**（check rc=0，`status` 0→0 ×4）· minimal 零 shim 佐证（`.agents/{commands,prompts}` 非 skill 扫描面） | `37bde60` | 残留① lockfile 版本 → 已由 T3-收尾 关闭；残留② 数字口径已统一到 PRD 口径（334/34） |
-| T3-收尾 | **验收通过**：`2f953c3` 仅改 `package-lock.json` 2 行；`package.json`/`package-lock.json` 均 0.12.0、`0.11.0` 残留计数 **0**；`npm test` exit=0 | `2f953c3` | **产物自此冻结**（合并前最后一改） |
+| T3-收尾 | **验收通过**：`2f953c3` 仅改 `package-lock.json` 2 行；`package.json`/`package-lock.json` 均 0.12.0、`0.11.0` 残留计数 **0**；`npm test` exit=0 | `2f953c3` | 产物曾冻结；因 F1/F2 修复重新解冻 |
+| T4-最终跑批 | **验收通过**：冻结产物 `2f953c3`/0.12.0 上 `T4_ALLOW_MISSING=0` → exit 0 · **7/7 PASS · 94/94 断言 0 红**；已贴 PR 评论（QA of record） | PR #20 [comment](https://github.com/Nathan3303/nao-skills/pull/20#issuecomment-6058379378) | 额外严谨性：在 `2f953c3` 独立复跑，证明 tip 差异仅 `tasks-state.md`、被测路径逐字节一致 |
+| T0-评审2 | **验收通过 · GO**：D1–D8 与闸门 A–D 逐条符合；D7 绕过推演（`env -u` 清标记后有守卫②兜底、shim→shim 最多 2 跳被拦）**未发现无限递归路径**；BR1/BR2 守住；独立复跑 7/7 · 94 断言 | PR #20 [review](https://github.com/Nathan3303/nao-skills/pull/20#pullrequestreview-5455520693) | 处置：F1/F2 → 合并前修（T3-修）· F5 → 顺手修 · **F3/F4 → #21** · F6 已在 ADR 备案 |
