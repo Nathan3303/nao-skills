@@ -27,6 +27,10 @@ bash tests/t4/run.sh --case 03              # 单跑
 | 05 | 迁移精准删除 + `.nao-obsolete` 备份 + 共享目录保留 | AC4 · §12-C/D | `migrate`（或 `init` 自动迁移） |
 | 06 | 契约守护：AC6 机制侧 + AC8 manifest/注入 + AC2 静态 | AC2/AC6/AC8 | 无（读 manifest + 机制脚本） |
 | 07 | 真实 `pi install` 与 tarball 布局对照 | AC1/NFR2 | `pi` + npm registry |
+| 08 | 评审修复回归：F1 lock 保缩进 + F2 init --force 走 migrate 防混装 | AC4 · BR5 | `migrate` / `init` |
+
+最近一次跑批：`T4_ALLOW_MISSING=0 bash tests/t4/run.sh` → exit 0 · 8/8 PASS · 109 断言 / 0 红
+（复跑基线 `5537270` v0.12.0；详见 `docs/reports/2026-10-08-T4-qa-report.md`）。
 
 最近一次跑批：`T4_ALLOW_MISSING=0 bash tests/t4/run.sh` → exit 0 · 7/7 PASS · 94 断言 / 0 红
 （详见 `docs/reports/2026-10-08-T4-qa-report.md`）。
