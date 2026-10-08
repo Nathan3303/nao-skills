@@ -49,6 +49,8 @@ npx @nathan33/nao-skill migrate   # 旧文件备份到 .agents/.nao-obsolete/，
 .agents/scripts/nao-fleet.sh ensure pm arch rd-fe rd-be qa rd-infra   # 拉起 6 个角色会话
 ```
 
+角色名可以写**别名**或**规范名**（两者等价）：`arch` = `arch-designer`、`infra` = `rd-infra`；上例里两者混用也照常拉起。完整别名表见 `.agents/roles.yaml` 或 `nao-fleet.sh --help`。
+
 然后**在 PM 会话里说需求**就行，剩下的它自己流转。大概长这样：
 
 ```text
@@ -104,7 +106,7 @@ $NAO_SKILLS/.agents/scripts/qq-notify --dry-run "连通性自检"      # 只取 
 
 **它会在 GitHub 上开 PR 吗？** 会——每个需求一条分支、一个 PR（Draft 早开、CI 早跑），你确认验收后由研发角色 squash 合并，main 上只留 1 条可读提交。没有远端或 `gh` 时降级为本地分支，流程不变。
 
-**跑完的会话要留着吗？** 后台派生会话验收完可以回收：`nao-fleet.sh close --task T1 rd-be`；常驻角色留着复用。`nao-fleet.sh status` 会提示哪些是残留。
+**跑完的会话要留着吗？** 后台派生会话验收完可以回收：`nao-fleet.sh close --task T1 rd-be`（等价写法 `nao-fleet.sh close rd-be-T1`，直接用派生会话名即可）；常驻角色留着复用。`nao-fleet.sh status` 会提示哪些是残留。目标在别的项目里也能回收——`close` 会按名册/窗口标题跨项目定位；定位不到时会**非 0 退出并打印诊断**，不会假装已回收。
 
 **终端窗口太挤怎么办？** tmux 宿主支持三种布局：默认 `main-row2`（主会话占左，其余往右分列）、`main-col`（其余在右列竖排）、`grid`（等大网格）。窗口太窄时 `main-row2` 会**自动回退** `main-col`、仍不够再退 `grid`，并打印带数字的提示（不中断拉起）；用 `NAO_TMUX_LAYOUT` / `NAO_TMUX_MAIN_WIDTH` / `NAO_TMUX_MIN_PANE_WIDTH` 调整，详见 `bash .agents/scripts/nao-fleet.sh --help`。
 
