@@ -1,7 +1,7 @@
 # PRD：nao-skills 单 SKILL 化 + pi 原生分发
 
 > Issue：[#18](https://github.com/Nathan3303/nao-skills/issues/18) · 分支：`feat/18-pi-package` · 目标版本：**0.12.0**（MINOR，含兼容层）
-> 状态：已开工（T1 前置验证中）· PM 维护 · 正文为权威（Issue 只放摘要与指针）
+> 状态：**已交付**（main `197dd6e` · tag `v0.12.0` · GitHub Release 已发布；**npm 发布待用户执行**）· PM 维护 · 正文为权威（Issue 只放摘要与指针）
 
 ## 0. 背景与决策留痕
 
@@ -159,3 +159,16 @@
 - **`nao-todo-minimal` 特例裁定**（已确认）：无脚本、nao-fleet 引用 0 命中、仅 `.agents/{commands,prompts}` ⇒ **不建 shim、不进 CI 范围**；迁移为纯文档/指针处理，纳入 T3 但零 shim。T3 需确认 `.agents/commands/` 非 pi skill 扫描面。
 - **T2 收尾**：清理 `/tmp/t1` 临时目录。
 - **D4→D2 联动条款**：已认可，作为变更治理条款长期有效（见 §12-A）。
+
+## 14. 交付记录（2026-10-08）
+
+| 项 | 结果 |
+| :--- | :--- |
+| 合并 | PR #20 `--squash` → main `197dd6e`（本需求**恰好 1 条**提交、无 `wip()`；Issue #18 随合并关闭） |
+| tag / Release | `v0.12.0`（指向 main 合并提交）· GitHub Release 已发布（notes = `docs/releases/v0.12.0.md`） |
+| 验证 | qa 在冻结产物 `5537270`/`0.12.0`：**8/8 用例 · 109/109 断言 0 红**（含新增 F1/F2 回归）；arch 两轮评审 **GO**；发布物与已测产物 `34094ce` **零差异** |
+| 任务 | **13 项全部验收通过，0 打回**（T0 / T0-ADR / T1 / T2 / T3 / T3-收尾 / T3-修 / T4-跑批 / T4-最终跑批 / T4-复跑 / T0-评审2 / T0-复核 / T-合并） |
+| **遗留** | ⚠️ **npm 未发布**（registry latest = 0.11.0；本机 `npm whoami` 失败 ⇒ PM 无凭据）→ 由用户执行 `npm publish`；在此之前 README / 迁移指引里的 `@0.12.0` 会 **404**，**下游通知一并挂起** |
+| 后续单 | [#19](https://github.com/Nathan3303/nao-skills/issues/19)（`ensure arch`/`infra` 别名失效）· [#21](https://github.com/Nathan3303/nao-skills/issues/21)（migrate 收尾 F3/F4/F7） |
+| 过程留痕 | 两处判断作废（「下游 CI 依赖 check」、「下游 AGENTS.md 记录 NAO_SKILLS」）· 两处记账丢失（合并后推送的 tasks-state 收尾提交随分支删除不可达，已就地补正，见 §11） |
+| 发布后待办 | 补跑 T4-07 **真实安装对照**（对已发布的 0.12.0）· 下游通知（nao-todo / nao-todo-server / nue-ui；minimal 零 shim） |
