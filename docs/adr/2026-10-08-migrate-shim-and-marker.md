@@ -1,6 +1,6 @@
 # ADR：migrate 收尾 —— 迁移标记、shim 判定式与 lock 去重
 
-- 状态：**已接受（待 RD 落地）** · 日期：2026-10-08 · 出具：arch-designer（T510-ARCH / T510-ARCH2，用户已拍板）· 落地：rd-infra（T511）
+- 状态：**已接受（已落地 v0.13.0 · T510）** · 日期：2026-10-08 · 出具：arch-designer（T510-ARCH / T510-ARCH2，用户已拍板）· 落地：rd-infra（T510）
 - 指针：Issue [#21](https://github.com/Nathan3303/nao-skills/issues/21) · 上游 ADR `docs/adr/2026-10-08-nao-skills-single-skill-pi-package.md`（D1–D8）· PRD `docs/prds/2026-10-08-nao-skills-pi-package.md`（§11 决策台账 / §12 闸门 A–D / §13 特例与待办）· 评审报告见 T510-ARCH 回执
 
 ## 背景
@@ -15,7 +15,7 @@
 
 ## 决策
 
-1. **F3 = 移除 `.nao-migrated`**：删除其写入点（`bin/nao-skill.js` 的 `MIGRATED_FILE` 常量与 `migrate()` 内 1 行写入），不新增读取逻辑。BR4 的达成方式改由「迁移即移除已知 nao 资产 ⇒ `detectLegacyAssets()` 为空 ⇒ 不再产生迁移提示」保证，并在 README/本 ADR 写明。存量文件（三仓 tracked）由 T511 三仓 pin PR **手动删除**；代码不自动删（该文件**已废弃**，可安全删除）。
+1. **F3 = 移除 `.nao-migrated`**：删除其写入点（`bin/nao-skill.js` 的 `MIGRATED_FILE` 常量与 `migrate()` 内 1 行写入），**不再读写该标记**。BR4 的达成方式改由「迁移即移除已知 nao 资产 ⇒ `detectLegacyAssets()` 为空 ⇒ 不再产生迁移提示」保证，并在 README/本 ADR 写明。存量文件（三仓 tracked）由 T511 三仓 pin PR **手动删除**；代码不自动删。
 2. **F4 = 自动判定 + 显式开关覆盖**：新增 `needsShim = A ∨ A′ ∨ B` 判定式（全文见下）；`migrate` 默认按判定式，`--shim` / `--no-shim` 覆盖（同时给出即 `exit 2`）；`init` 默认装 shim，`init --force` 转 `migrate()` 时传 `forceShim=true`（显式接入意图不被自动判定改写）。跳过 shim 时必须**显式告知**（不静默）。
 3. **F7 = 属性级（token 级）删除回退 + 强制校验 + 失败告警**：行级删除失败时，删除「该属性最高层键值 + **一个**分隔逗号」，其余字节/缩进不动；随后强制 `JSON.parse(next)` 成功 ∧ 目标 key 不存在，否则**不改写**并打印一行 `warn`。`stripLockDuplicate` 返回三态（`ok` / `absent` / `failed`）。
 4. **B2 并入本批**：把 `stripLockDuplicate` 置于 `migrate()` 的早退判断**之前**（或等价地让 `init` 路径也执行去重），使「无 legacy 资产但 lock 有重复项」的仓库也能完成去重。
@@ -119,12 +119,14 @@ isShimFile(p)     = readText(p) 含 'NAO_SHIM_ENTERED'
 | :--- | :--- |
 | `bin/nao-skill.js` | 删 `MIGRATED_FILE` 常量与写入（F3）；新增 `detectShimNeed()` + `migrate()` / `init()` 分支 + `--shim`/`--no-shim` 解析与互斥校验（F4）；`removeJsonProperty` 属性级回退 + `stripLockDuplicate` 三态返回与告警（F7）；`stripLockDuplicate` 调用位置上移（B2）；`help()` 文本 |
 | 文档 | `README.md`（「老项目迁移」+「下游仓库迁移」两段，含 minimal 表述与判定式）· `.agents/skills/nao-fleet/SKILL.md` §3 · `.agents/templates/AGENTS.md.example` §指针（「项目内 `.agents/` 只有 shim」需补「无脚本/无引用的纯文档仓除外」） |
-| 测试 | `tests/t4/cases/05-migration.sh`（F3/F4 扩展）· `08-fix-regressions.sh`（F7 扩：单行夹具 + 失败告警 + 2 空格缩进）· 新增 minimal 型夹具与开关用例 |
+| 测试 | 新增 `tests/t4/cases/10-migrate-shim-lock.sh` + `run.sh` 注册（断言 136→179） |
+| 发布件 | `package.json` → `0.13.0` · `docs/releases/v0.13.0.md` · PR [#24](https://github.com/Nathan3303/nao-skills/pull/24) |
 | 下游三仓 | pin 升级 PR（T511）顺手删除 tracked `.agents/.nao-migrated`；`.gitignore` 无需改（该文件为 tracked，不在忽略面） |
 
 ## 后果与风险
 
 - **正面**：状态收敛为单一版本标记；zero-shim 特例由自动判定兜底（不再依赖人工记忆）；lock 去重不再受 JSON 排版形态限制；B2 消除「无 legacy 资产 ⇒ 永不去重」的空洞。
+- **F3 存量标记**：`.agents/.nao-migrated` **已废弃**——代码不再读写；存量文件可安全删除（三仓 tracked 的由 T511 三仓 pin PR 删除，代码不自动删）。
 - **残余风险 / 已知边界**：
   - **B1（本批不修，写入 PRD「已知边界」）**：`LEGACY_TOP_DIRS` 按**目录名**判定 nao 资产 ⇒ 项目自有的 `.agents/prompts` / `.agents/common` / `.agents/checklists` / `.agents/templates` 会被备份+移除（有 `.nao-obsolete/` 备份兜底，但 live 消失）。缓解选项（后续单）：`--dry-run`、内容特征白名单（如 `prompts/` 下须存在 nao 角色卡文件名）。
   - **假阴性**：仓库计划将来接入但当前零引用 ⇒ 跳过 shim；已由显式提示 + `--shim` 缓解。
