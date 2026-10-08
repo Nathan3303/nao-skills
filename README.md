@@ -24,7 +24,7 @@ nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，�
 
    ```bash
    cd 你的项目
-   pi install --local npm:@nathan33/nao-skill@0.12.0   # 声明 pin + 把机制包物化到项目内 .pi/npm
+   pi install --local npm:@nathan33/nao-skill@0.13.0   # 声明 pin + 把机制包物化到项目内 .pi/npm
    npx @nathan33/nao-skill init                        # 写入转发 shim + 生成 AGENTS.md
    ```
 
@@ -39,8 +39,10 @@ nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，�
 **老项目迁移**（曾在项目里铺开整套 `.agents/` 的）：
 
 ```bash
-npx @nathan33/nao-skill migrate   # 旧文件备份到 .agents/.nao-obsolete/，shim 就位，旧命令照跑
+npx @nathan33/nao-skill migrate   # 旧文件备份到 .agents/.nao-obsolete/，再按需写入转发入口
 ```
+
+迁移默认按**判定式**决定是否写转发入口（shim）：仓里还有旧的 `nao-fleet.sh`、或已存在 shim、或全仓有 `nao-fleet` / `nao-skill` / `NAO_SKILLS` 引用，就写；**无脚本、无引用的纯文档仓会被判定跳过**，并打印一行告知。要改变判定结果，显式加 `--shim`（强制写）或 `--no-shim`（强制不写），两者不能同时给（`exit 2`）。旧版的 `.agents/.nao-migrated` 标记**已废弃**：迁移不再读写它，可安全删除。`.agents/.nao-version` 的语义是「本机已安装机制包版本」（供升级检测），**不表达迁移状态**——迁移状态由「是否还有旧资产」推断。
 
 ## 用起来（3 步）
 
@@ -134,7 +136,7 @@ $NAO_SKILLS/.agents/scripts/qq-notify --dry-run "连通性自检"      # 只取 
 
 - **旧的完整性判据已失效**：以前下游靠「项目内 `.agents/**` 与上游逐字节 sha 一致」证明机制没漏没改；现在项目内不再有机制副本，这条判据不再适用。
 - **新的完整性判据：以 pin 的包版本为准**。`.pi/settings.json` 记录版本，`pi install/update` 从包物化；包里是什么就是什么，不存在「项目内被就地改动」的问题。转发入口是生成的固定文本，可用 `npx @nathan33/nao-skill init` 幂等重写核对。
-- **版本权威口径**：`.pi/settings.json` 里的 pin 是**唯一权威**（`pi install/update` 据此物化到 `.pi/npm`）；`.agents/.nao-version` 只是本机安装标记（供升级检测与迁移提示），**不作为版本依据**；两者不一致时**以 pin 为准**。
+- **版本权威口径**：`.pi/settings.json` 里的 pin 是**唯一权威**（`pi install/update` 据此物化到 `.pi/npm`）；`.agents/.nao-version` 的语义是**本机已安装机制包版本**（供升级检测），**不表达迁移状态**、**不作为版本依据**；两者不一致时**以 pin 为准**。
 - **fmt 边界**：包内 `.agents/**` 仍以上游原始存储形态发布（部分 YAML / Markdown / MTS 未按 oxfmt / prettier 归一）。迁移期仍持有旧版全套 `.agents/**` 的仓库，继续把 `.agents/**` 排除出 fmt 校验即可，⛔ **不要为过 fmt 就地格式化**；新形态项目内只有转发入口，无需再处理。
 
 ### 物化与离线（CI / 无 pi 环境必读）
@@ -149,7 +151,7 @@ $NAO_SKILLS/.agents/scripts/qq-notify --dry-run "连通性自检"      # 只取 
 
 - **迁移期零改动**：旧的全套 `.agents/scripts/nao-fleet.sh` 照常可用，这些仓库的 CI 目前不调用 `check`，不受影响。
 - 想切到新形态时，在各仓执行 `npx @nathan33/nao-skill migrate`：只删**已知 nao 资产**（共享的 `.agents/skills/` 里项目自有的技能会保留），并把 `skills-lock.json` 里重复的 `frontend-design` 来源收敛为「机制包唯一来源」。
-- **`nao-todo-minimal` 特例**：无脚本、无 nao-fleet 引用 ⇒ **不建转发入口**，按纯文档/指针迁移；它的 `.agents/commands/`、`.agents/prompts/` 不在 pi 的 skill 扫描面（pi 只扫 `.agents/skills/**`）。
+- **纯文档仓（如 `nao-todo-minimal`）特例**：无脚本、无 `nao-fleet`/`nao-skill` 引用 ⇒ 迁移判定为**纯文档迁移，不建转发入口**（可显式 `--shim` 强制；也可 `--no-shim` 强制不建）；它的 `.agents/commands/`、`.agents/prompts/` 不在 pi 的 skill 扫描面（pi 只扫 `.agents/skills/**`）。
 
 ## 想深入
 
