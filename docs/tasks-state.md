@@ -5,7 +5,7 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：**上游 #18 与下游 T506 均已完全闭环**；**T507（nao-todo-server）PRD 已定稿 + Issue #48 已转实施单 → 待用户「开工确认」**
+- 当前阶段：**T507（nao-todo-server 迁移）实施中**：开工确认已过 → T507-QA 已回执（用例先行）→ T507-RD 已派发
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付）；此前 T506 权威 PRD 在另一仓：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（已归档）
 - 当前 PRD：上游 `docs/prds/2026-10-08-nao-skills-pi-package.md`（已交付且已归档）；**T506 权威 PRD 在另一仓**：`~/Project/nao-todo/docs/prds/2026-10-08-nao-fleet-0.12.0-migration.md`（Issue nao-todo#188）
 - 未决决策点：无（D1–D8 已拍板；F1/F2 已修；npm 发布已由用户完成）
@@ -62,14 +62,13 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T507-QA | qa-T507（`--task T507` @nao-todo-server） | 用例先行：AC1–AC8 可复跑断言脚本 + 迁移前基线采集（V1/V2）· 本地产出、暂不提交 | 2026-10-08（开工确认后） | AC1–AC8 | 待分支 |
-| T507-RD | rd-infra-T507（`--task T507` @nao-todo-server） | 已拉起待派：建分支 `feat/48-nao-fleet-migration` + 提交 PRD + `pi install -l` + `migrate` + `.gitignore` 两处 + PR | 待 QA 回执后派（避免同分支双写） | AC1/AC2/AC4/AC6/AC7/AC8 | — |
+| T507-RD | rd-infra-T507（`--task T507` @nao-todo-server） | 建分支 `feat/48-nao-fleet-migration` + PRD 入库 + `pi install -l` + `migrate` + `.gitignore` 两处 + AC2/AC3 复核 + 门禁 + Draft PR | 2026-10-08（QA 回执后） | AC1/AC2/AC4/AC6/AC7/AC8 | 待 |
 
 ## 已回执待验收
 
 | 任务编号 | 回执摘要（≤150字） | 详情路径 | 待办 |
 | :--- | :--- | :--- | :--- |
-| — | — | — | — |
+| T507-QA | **done(lite)**：可复跑断言脚本 363 行（AC1–AC8 逐条映射；迁移后模式现树=**预期 RED 22P/35F/2W**；`--baseline`=**GREEN 27P/0F**）+ 迁移前基线：顶层 **8 项**/43 文件、`.agents/` 外引用 **0 命中**、`.gitignore` L68 裸 `.pi`、`git ls-files .pi`=0、lock 3 键（无 frontend-design）、无自有 skill、无 CHANGELOG；V1 `golangci-lint 2.14.0` ✓ · V2 `go test ./... -count=1` exit 0（21 ok/44 无测试文件/0 fail，**不依赖 MySQL/Redis**）· V3 ✓ | `docs/reports/2026-10-08-T507-nao-fleet-migration-verify.sh`（**untracked**，待随分支入库） | PM 已裁定：① AC3 引用面口径**排除本批迁移文档自身**（已落 PRD §8 V5）② PRD「顶层 7 项」**订正为 8 项**（已改） |
 
 > T2 验收注意事项（已归档，见下）：① 零网络断言为「代理阻断 + npm offline」，非内核级隔离（已披露，接受）；② `.pi/npm/.gitignore` 由 pi 自生成 → D2 无需本仓额外配置。
 
