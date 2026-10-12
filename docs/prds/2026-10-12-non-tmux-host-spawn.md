@@ -3,7 +3,7 @@
 > Issue：[#26](https://github.com/Nathan3303/nao-skills/issues/26) · 批次：T513 · 分支：`feat/26-non-tmux-host-spawn`（base `main`）
 > 版本影响：**MINOR `0.13.0 → 0.14.0`**（新增非 tmux 宿主阶梯与 `--background` 能力 = additive；npm 发布由用户执行，tag/Release 由 PM 出）
 > 执行：rd-infra · 验证：qa · 架构：arch-designer（ADR + 终签）
-> 状态：**已开工**（用户 2026-10-12 拍板：范围与版本 = 本 PRD 全文 + `0.14.0` MINOR；决策 D1–D5 见 §9）· 正文为权威（Issue 只放摘要与指针）
+> 状态：**已交付**（PR [#27](https://github.com/Nathan3303/nao-skills/pull/27) squash 合并 → main `cda59b0`；tag `v0.14.0` + Release 已发；**npm 发布待用户**）· 用户 2026-10-12 拍板范围与版本；决策 D1–D7 见 §9 · 正文为权威（Issue 只放摘要与指针）
 > 设计依据：`docs/reports/2026-10-12-pi-subagents-compat-review.md`（§4.6 宿主面）+ 本 PRD §1 实测（PM 2026-10-12 在 tmux 内外各跑一次）
 
 ## 0. TL;DR
@@ -69,7 +69,7 @@
 
 ## 6. NFRs
 
-- **NFR1 门禁**：`npm test` exit 0；`tests/t4/run.sh` 全绿且断言数**只增不减**（基线 ≥179 · 10 用例）。
+- **NFR1 门禁**：`npm test` exit 0；`tests/t4/run.sh` 全绿且断言数**只增不减** ⇒ **口径订正（2026-10-13）**：基线实测 **178 PASS + 3 NOTE**（原记 ≥179 **不可复现**，`tests/t4/**` 自 T510 后未改动）；交付终态 **11 用例 / 263 PASS / 4 NOTE / 0 FAIL**（第 4 条 NOTE = case 07 的 pin 未发布，发布后回 3）。
 - **NFR2 零网络**：宿主探测只用「命令存在性 + 环境变量 + 进程句柄」，无网络、无时间依赖（`PI_OFFLINE=1` 下可跑）。
 - **NFR3 零回归**：tmux 内路径逐值一致（AC6）+ 复用 T509 断言集（`docs/reports/2026-10-08-T509-alias-close-verify.sh`，507 行/34 断言/`--with-tmux` 真拉模式）做 `close`/`status` 回归。
 - **NFR4 可移植性**：主路径用 freedesktop 标准 `xdg-terminal-exec`；合成器命令仅后备且必须先探测存在性，探测失败不得影响主路径。
@@ -87,6 +87,11 @@
 - **AC7（设计一致性 · D3）** Given 在 tmux 内 When `ensure qa rd-be qa` Then 分屏几何、判重跳过、三布局与窄列守卫行为与本批次前**逐值一致**。
 - **AC8（句柄降级 · D2）** Given 非 tmux 窗口宿主 When `close <角色>` Then 按 app-id/pid 回收成功 rc=0；`status` 输出含「turn 判定来源 = 名册」的降级标注。
 - **AC9（文档一致性）** Given 实现完成 Then usage 头 / `intercom-protocol.md` / `README.md` / `docs/ARCHITECTURE.md` 与 BR1 阶梯逐条一致，且 `check` 有对应断言。
+- **AC10（层③收紧 · 批内追加）** Given 名册登记目标会话、本仓存在未认领 pi pane When 判重 Then 仅当**跨全部角色唯一**且**名册 cwd 匹配**才认领；歧义 ⇒ 不认领 + warn（原缺陷：新 pane 未被认领时被误配 ⇒ `ensure` 漏拉）。
+- **AC11（M1 / D6 / L6）** Given ④ 有探针但 class 未现 When 拉起失败 Then 尽力回收 pi 且**如实**报告回收结果（禁「已清理本轮残留」）；Given 无任何 class 探针 Then 接受启动 + 一行 warn（D6）；Given 非 tmux 宿主 When `status` Then 输出「turn 判定来源 = 名册」（判据 = 无 tmux pane 句柄，非「tmux 命令缺失」）。
+- **AC12（自伤不变量 · 事故驱动）** Given `close` 解析出的 pane == 调用者自身 `$TMUX_PANE` When 执行 Then **拒绝 + 诊断 + rc≠0** 且**不发出任何 `kill-pane`**（含 `pi_pids_for` 兜底）；Given 派生可见窗口 / 分离宿主 When 启动 Then 子进程**不得继承调用者的 pane 句柄**（源宿主无 `TMUX`/`TMUX_PANE`；`tmux-bg` 由 server 注入正确值）。
+- **AC13（D7）** Given `tmux display-message` 返回空 When tmux-in `ensure` Then **不得硬中断**（rc=0，布局步跳过或继续）。
+- **AC14（M2 · 零残留）** Given 任一宿主派生路径（④ 成功 / D6 接受 / foot / ghostty / screen-bg）When 返回 Then `/tmp/nao-fleet-*-pid-*` **新增数为 0**（实现：pid 走父进程持有的管道 ⇒ 无文件系统对象可残留）。
 
 ## 8. 上线闭环
 
@@ -101,6 +106,12 @@
 - **D5 的架构后果（关键）**：阶梯③把 tmux 会话放进**可见窗口** ⇒ 会话仍是真 tmux 会话（`$TMUX_PANE` / 标题契约 / `pane_busy` 全部可用）⇒ **句柄模型完整保留**（P5/P6/P7 在该路径零改动）；D2 的降级面**只在阶梯④**（无 tmux 但有图形会话）成立。故本批次的回归风险显著小于初判。
 - **实测纠正**：P3 = rc 127 裸中断（原为推断，本轮实测）；P4 = rc 0 假成功且 `status` 显示未运行（本轮实测）。
 - **待办（不在本批）**：T512-① `subagent-*` 会话的 `status`/`close` 排除（独立课题）；T512-②/③（pi-subagents 桥与 agent 薄壳）；`.nao-version` 收敛等既有后续项。
+- **交付后记录（2026-10-13）**：**D6**（④ 无探针 ⇒ 接受 + 一行 warn；有探针未现 ⇒ 清理/尽力回收 + `exit 1`；`offline_verifiable` 仅落地「名册 limb」，枚举器 limb 为已知边界）· **D7**（`apply_tmux_layout` 空 `display-message` 不硬崩）· **F2 口径澄清**：不变量是「派生进程**不得继承调用者的 pane 句柄**」，而非「不得携带 `TMUX_PANE`」（tmux 为自身 pane 注入正确句柄是应有行为）。
+- **事故 H1（`close` 自伤 · 用户实测整窗消失）**：`close` 层②名册 `tmuxPane` 命中**调用者自己的 pane** ⇒ `kill-pane` 自杀；同窗口最后一个 pane 时**整个 tmux 窗口消失**。三版对照（`main`/`a28b11d`/`04baea2`）均复现 ⇒ **非本批引入**，本批新增 ④/⑤ 入口**放大触发面**。修复 = **F1** 不变量 + **F2** 源头清句柄；永久资产 `docs/reports/2026-10-12-T513-incident-close-selfpane.md` + 自包含复现脚本（含修复前/后对照）。
+- **M2 两轮迭代（教训）**：首修（`wait_for_pidfile` + `|| true`）仅**缩小竞态窗口**、未建立不变量 —— PM 重载下连跑 3 次出现「有时绿」⇒ 判为**代码竞态**（非断言错）；终修改**父进程持有管道**（`mkfifo` → `exec {fd}<>` → 立即删目录，仅 fd 存活）⇒ 残留**结构上不可能**。
+- **本批最重要的一条教训**：**轻载通过 ≠ 验证通过**——门禁与新增断言都必须在负载下**连跑验证**（否则给出的是「有时绿」，比红灯更危险）。
+- **PM 自身失误（4 次，全部被 worker/验证方以数据纠正）**：台账声称已清理实际未落盘 · PRD 基线 179 不可复现 · AC 期望值放错版本（AC11 的 RED 在 `a28b11d` 而非 `04baea2`）· F2 把「手段」当「目标」。
+- **覆盖限制（不得写成通过）**：本机仅 **foot + Hyprland**；`ghostty`/`ptyxis`/`sway`/X11 后备路径为桩覆盖、**未经真机验证**；真机**非自身 pane** 的 `close` 未单独真测（自伤面由 F1 不变量覆盖）。
 - **变更流程**：本 PRD 定稿 → 建 Issue → 开工确认卡 → arch ADR（备选四方对照）→ QA 用例先行 → rd-infra 实施 → PM 验收 → RD squash 合并 → PM 发版。Hotfix 若发生 24h 内补单。
 
 ## 10. 优先级
