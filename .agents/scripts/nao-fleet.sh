@@ -1075,9 +1075,15 @@ spawn_xdg_window() {  # <name> <repo> <cmd...>
     rm -f -- "$pidf"; return 1
   fi
   wait_for_app_class "$name" || vrc=$?
-  if (( vrc == 0 )); then rm -f -- "$pidf"; return 0; fi
+  if (( vrc == 0 )); then
+    # M2（T513-S4）：等子进程写完 pid 再删，否则 rm 早于 setsid -f 子进程写 pidfile ⇒ /tmp 残留
+    wait_for_pidfile "$pidf" >/dev/null 2>&1 || true
+    rm -f -- "$pidf"; return 0
+  fi
   if (( vrc == 2 )); then
     warn "无 class 探针（hyprctl/swaymsg/xdotool/wmctrl 均缺）：未能校验 $name 窗口可见性（D6）"
+    # M2（T513-S4）：同成功分支——先等 pidfile 落盘再删（D6 接受启动，保留 M1 回收句柄语义不变）
+    wait_for_pidfile "$pidf" >/dev/null 2>&1 || true
     rm -f -- "$pidf"; return 0
   fi
   # 有探针但限时未出现 class ⇒ 尽力回收 pi，如实报告回收结果（M1）

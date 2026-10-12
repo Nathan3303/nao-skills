@@ -31,6 +31,7 @@
 #   AC12 事故不变量（F1 close 不得回收调用者自身 pane 4+2 · F2 派生宿主不得继承 TMUX/TMUX_PANE 6 ·
 #        F2 边界 tmux-in ② / tmux-attach ③ argv 零回归 2+2；桩 argv+env 自证）
 #   AC13 D7 空 display-message 守卫（apply_tmux_layout 不得硬崩；桩驱动）
+#   AC14 M2 残留不变量（任何派生成功/接受路径返回后 nao-fleet-<名>-pid-* 新增=0；桩驱动）
 #
 # 覆盖限制（NFR5，必须随报告一同披露）:
 #   本机仅 foot + Hyprland ⇒ ghostty/ptyxis/其它合成器路径**无法真测**。AC1/AC2/AC5/AC8 采用
@@ -80,7 +81,7 @@ REAL_AGENT_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
 PASS_N=0 FAIL_N=0 SKIP_N=0 WARN_N=0
 declare -A AC_P AC_F AC_S AC_W
 declare -a FAILED=()
-AC_ORDER=(AC1 AC2 AC3 AC4 AC5 AC6 AC7 AC8 AC9 AC10 AC11 AC12 AC13)
+AC_ORDER=(AC1 AC2 AC3 AC4 AC5 AC6 AC7 AC8 AC9 AC10 AC11 AC12 AC13 AC14)
 only_match(){ [[ -z "$ONLY" ]] && return 0; [[ ",$ONLY," == *",$1,"* ]]; }
 pass(){ local ac="$1"; shift; PASS_N=$((PASS_N+1)); AC_P[$ac]=$(( ${AC_P[$ac]:-0}+1 )); printf '  [PASS] %-4s %s\n' "$ac" "$*"; }
 bad(){  local ac="$1"; shift; FAIL_N=$((FAIL_N+1)); AC_F[$ac]=$(( ${AC_F[$ac]:-0}+1 )); FAILED+=("$ac $*"); printf '  [FAIL] %-4s %s\n' "$ac" "$*"; }
@@ -862,6 +863,65 @@ o="$(out_s)"
 if (( RUN_RC == 0 )) && ! grep -qE 'command not found|行 [0-9]+:|第 [0-9]+ 行' <<< "$o"; then
   pass AC13 "D7 空 display-message ⇒ ensure rc=0 未硬中断（布局步跳过/继续；$(oneline "$o" | cut -c1-100)）"
 else bad AC13 "D7 空 display-message ⇒ ensure 硬中断 rc=$RUN_RC（$(oneline "$o" | cut -c1-160)）"; fi
+fi
+
+# =============================================================================
+if only_match AC14; then
+sec "AC14 M2 残留不变量：任何宿主派生成功/接受路径返回后 /tmp/nao-fleet-qa-pid-* 新增必须为 0（被测代码自清，非测试侧收尾）"
+FIX="$(mk_fixture ac14)"
+HOME14="$FXROOT/home14"; mkdir -p "$HOME14"
+ac14_before(){ AC14_BEFORE="$(ls -1 /tmp/nao-fleet-qa-pid-* 2>/dev/null | sort)"; }
+ac14_assert(){ # $1=label：轮询至多 2.5s；只要出现新增即 FAIL（M2 = rm 早于子进程写 pidfile）
+  local label="$1" new="" tries=25
+  while (( tries-- > 0 )); do
+    new="$(comm -13 <(printf '%s\n' "$AC14_BEFORE") <(ls -1 /tmp/nao-fleet-qa-pid-* 2>/dev/null | sort) | grep . || true)"
+    [[ -n "$new" ]] && break
+    sleep 0.1
+  done
+  if [[ -z "$new" ]]; then pass AC14 "$label：返回后 0 个新增 nao-fleet-qa-pid-* 残留"
+  else bad AC14 "$label：残留 $(oneline "$new")"; while IFS= read -r f; do [[ -n "$f" ]] && CLEAN_FILES+=("$f"); done <<< "$new"; fi
+}
+ac14_pi_pid(){ local f="$1" tries=50; while (( tries-- > 0 )); do [[ -s "$f" ]] && break; sleep 0.1; done; awk '{for(i=1;i<=NF;i++) if($i ~ /^PID=/){sub("PID=","",$i); print $i}}' "$f" 2>/dev/null | head -1; }
+# ① ④ xdg-window（有 class 探针 ⇒ 成功路径）
+ST="$FXROOT/stub-ac14xdgok"; mkdir -p "$ST"; x_xdg_stub "$ST"; x_hypr_stub "$ST"; x_pi_stub "$ST"
+printf 'export PATH=%q\n' "$ST:$MINBIN" > "$HOME14/.bash_profile"
+: > "$FXROOT/ac14-xdgok.env"
+set_env -u TMUX -u NAO_TERMINAL NAO_SKILLS="$FIX" NAO_TASKS_STATE="$FIX/.no-tasks-state.md" \
+  PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" NAO_QA_FAKE_ROSTER='[]' PATH="$ST:$MINBIN" HOME="$HOME14" \
+  T513X_HYPR_MATCH=1 T513X_WIN_PID=0 T513X_PI_ENV_LOG="$FXROOT/ac14-xdgok.env" T513X_LABEL=xdg-ok T513X_REPO="$FIX"
+graphical
+ac14_before; run_fleet "$FIX" ensure --force qa; ac14_assert "④ xdg-window（有探针成功）"
+p="$(ac14_pi_pid "$FXROOT/ac14-xdgok.env")"; [[ -n "$p" ]] && CLEAN_PIDS+=("$p")
+# ② D6 无 class 探针（接受启动）
+ST="$FXROOT/stub-ac14d6"; mkdir -p "$ST"; x_xdg_stub "$ST"; x_pi_stub "$ST"
+printf 'export PATH=%q\n' "$ST:$MINBIN" > "$HOME14/.bash_profile"
+: > "$FXROOT/ac14-d6.env"
+set_env -u TMUX -u NAO_TERMINAL NAO_SKILLS="$FIX" NAO_TASKS_STATE="$FIX/.no-tasks-state.md" \
+  PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" NAO_QA_FAKE_ROSTER='[]' PATH="$ST:$MINBIN" HOME="$HOME14" \
+  T513X_PI_ENV_LOG="$FXROOT/ac14-d6.env" T513X_LABEL=d6 T513X_REPO="$FIX"
+graphical
+ac14_before; run_fleet "$FIX" ensure --force qa; ac14_assert "D6 无探针接受启动"
+p="$(ac14_pi_pid "$FXROOT/ac14-d6.env")"; [[ -n "$p" ]] && CLEAN_PIDS+=("$p")
+# ③ foot ④ ghostty（spawn_fork_window）
+for h in foot ghostty; do
+  ST="$FXROOT/stub-ac14$h"; mkdir -p "$ST"; x_host_stub "$ST" "$h"; x_pi_stub "$ST"
+  printf 'export PATH=%q\n' "$ST:$MINBIN" > "$HOME14/.bash_profile"
+  : > "$FXROOT/ac14-$h.env"
+  set_env -u TMUX -u NAO_TERMINAL NAO_SKILLS="$FIX" NAO_TASKS_STATE="$FIX/.no-tasks-state.md" \
+    PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" NAO_QA_FAKE_ROSTER='[]' PATH="$ST:$MINBIN" HOME="$HOME14" \
+    T513X_PI_ENV_LOG="$FXROOT/ac14-$h.env" T513X_LABEL="$h" T513X_REPO="$FIX" NAO_TERMINAL="$h"
+  ac14_before; run_fleet "$FIX" ensure --force qa; ac14_assert "nao:$h（spawn_fork_window）"
+  p="$(ac14_pi_pid "$FXROOT/ac14-$h.env")"; [[ -n "$p" ]] && CLEAN_PIDS+=("$p")
+done
+# ⑤ screen-bg（--background + screen）
+ST="$FXROOT/stub-ac14sb"; mkdir -p "$ST"; x_screen_stub "$ST"; x_pi_stub "$ST"
+printf 'export PATH=%q\n' "$ST:$MINBIN" > "$HOME14/.bash_profile"
+: > "$FXROOT/ac14-sb.env"; : > "$FXROOT/ac14-sb.state"
+set_env -u TMUX -u NAO_TERMINAL NAO_SKILLS="$FIX" NAO_TASKS_STATE="$FIX/.no-tasks-state.md" \
+  PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" NAO_QA_FAKE_ROSTER='[]' PATH="$ST:$MINBIN" HOME="$HOME14" \
+  T513X_SCREEN_STATE="$FXROOT/ac14-sb.state" T513X_PI_ENV_LOG="$FXROOT/ac14-sb.env" T513X_LABEL=screen-bg T513X_REPO="$FIX"
+ac14_before; run_fleet "$FIX" ensure --background qa; ac14_assert "screen-bg（--background）"
+p="$(ac14_pi_pid "$FXROOT/ac14-sb.env")"; [[ -n "$p" ]] && CLEAN_PIDS+=("$p")
 fi
 
 # =============================================================================

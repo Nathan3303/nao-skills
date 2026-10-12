@@ -27,8 +27,8 @@ CALLER_PANE='%99'          # 模拟调用者（pm）自己的 tmux pane
 
 if [[ $# -gt 0 ]]; then REVS=("$@"); else REVS=(main a28b11d 04baea2 HEAD); fi
 is_fix() { [[ "$1" == HEAD || "$1" == fix ]]; }
-# 收尾用：记录脚本启动前已有的 /tmp prompt 临时件，结束时只清本夹具新产生的
-ls -1 /tmp/nao-fleet-*.md 2>/dev/null | sort -u > /tmp/.t513-premd.$$ || :
+# 收尾用：记录脚本启动前已有的 /tmp nao-fleet 临时件（prompt .md + pidfile），结束时只清本夹具新产生的
+ls -1 /tmp/nao-fleet-*.md /tmp/nao-fleet-*-pid-* 2>/dev/null | sort -u > /tmp/.t513-pre.$$ || :
 
 rm -rf "$SBX"
 mkdir -p "$SBX"/{bin,minbin,agent/npm/node_modules/tsx/dist,versions,home,repo,fakebin} "$SBX/fixture"
@@ -226,8 +226,8 @@ echo "==================== 原始证据（修复前 vs 修复后 argv 日志）=
 for rev in "${REVS[@]}"; do echo "--- $rev ---"; cat "$SBX/argv-$rev.log"; done
 echo "夹具目录: $SBX"
 echo "总判定: $([[ $A_RC -eq 0 ]] && echo PASS || echo 'FAIL（见上 ✗）')"
-# 收尾：只删本夹具新产生的 /tmp prompt 临时件（避免污染 verify.sh AC6 的 /tmp 快照断言）
-ls -1 /tmp/nao-fleet-*.md 2>/dev/null | sort -u > /tmp/.t513-postmd.$$ || :
-comm -13 /tmp/.t513-premd.$$ /tmp/.t513-postmd.$$ 2>/dev/null | while IFS= read -r f; do [[ -n "$f" ]] && rm -f -- "$f"; done
-rm -f /tmp/.t513-premd.$$ /tmp/.t513-postmd.$$
+# 收尾：只删本夹具新产生的 /tmp nao-fleet 临时件（prompt .md + pidfile；避免污染 verify.sh AC6/AC14 的快照断言）
+ls -1 /tmp/nao-fleet-*.md /tmp/nao-fleet-*-pid-* 2>/dev/null | sort -u > /tmp/.t513-post.$$ || :
+comm -13 /tmp/.t513-pre.$$ /tmp/.t513-post.$$ 2>/dev/null | while IFS= read -r f; do [[ -n "$f" ]] && rm -f -- "$f"; done
+rm -f /tmp/.t513-pre.$$ /tmp/.t513-post.$$
 exit "$A_RC"
