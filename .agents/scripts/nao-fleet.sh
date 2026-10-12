@@ -84,6 +84,12 @@ VERBOSE=false
 CLOSE_BUSY_PATTERN="${NAO_CLOSE_BUSY_PATTERN:-Working \(|Thinking\.\.\.|to interrupt|to cancel|Retrying \(|Compacting|Summarizing branch}"
 # 任务状态文件（相对当前目录；供残留检测与回收闸门）
 TASKS_STATE="${NAO_TASKS_STATE:-docs/tasks-state.md}"
+# T513-S2 F2：窗口/分离宿主派生前清 TMUX/TMUX_PANE —— 防子进程继承调用者的 pane 句柄，
+#   导致 pi-intercom 按调用者 pane 错注册名册、close 反噬调用者（见 ADR 不变量）。
+#   ⚠️ 只用于「非 tmux 窗口/screen」宿主：tmux 自身的 split-window/new-session/attach
+#   会为新 pane 注入正确的 TMUX_PANE（实测 -L 隔离 server：外层 TMUX_PANE=%FAKE 被覆盖为 %0），
+#   对这些路径前缀剥离反而会抹掉正确句柄。
+TMUX_ENV_SCRUB="env -u TMUX -u TMUX_PANE"
 
 log()  { printf '\033[1;32m[fleet]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[fleet]\033[0m %s\n' "$*" >&2; }
@@ -567,6 +573,8 @@ pi_pids_for() {
   local pane root pid
   pane="$(find_pane_for "$1" "${2:-}")"
   [[ -n "$pane" ]] || return 0
+  # F1 纵深（T513-S2）：绝不据「调用者自己的 pane」反查 pid，否则会 kill 到自身进程。
+  [[ -n "${TMUX_PANE:-}" && "$pane" == "$TMUX_PANE" ]] && return 0
   root="$(tmux display-message -p -t "$pane" '#{pane_pid}' 2>/dev/null)"
   [[ -n "$root" ]] || return 0
   { printf '%s\n' "$root"; pgrep -P "$root" 2>/dev/null || true; } | while IFS= read -r pid; do
@@ -987,7 +995,7 @@ spawn_fork_window() {  # <name> <cmd...>
 # screen 宿主派生：以「会话存在」为「已拉起」前置；未出现即回收会话（AC6）。
 spawn_screen() {  # <name> <inner>
   local name="$1" inner="$2" tries=30
-  screen -dmS "nao-$name" bash -lc "$inner" >/dev/null 2>&1 || return 1
+  screen -dmS "nao-$name" $TMUX_ENV_SCRUB bash -lc "$inner" >/dev/null 2>&1 || return 1
   while (( tries-- > 0 )); do
     if screen -ls 2>/dev/null | grep -q "[0-9]\.nao-$name\b"; then return 0; fi
     sleep 0.1
@@ -1161,13 +1169,13 @@ spawn_one() {
     tmux-attach)
       if ! spawn_tmux_attach "$name" "$repo" "$inner"; then
         warn "tmux 会话 attach 限时内无客户端 → 降级为 xdg-terminal-exec 直开窗（阶梯④；用户裁量①）"
-        spawn_xdg_window "$name" "$repo" bash -lc "$inner" || spawn_rc=1
+        spawn_xdg_window "$name" "$repo" $TMUX_ENV_SCRUB bash -lc "$inner" || spawn_rc=1
       fi ;;
-    xdg-window)  spawn_xdg_window "$name" "$repo" bash -lc "$inner" || spawn_rc=1 ;;
+    xdg-window)  spawn_xdg_window "$name" "$repo" $TMUX_ENV_SCRUB bash -lc "$inner" || spawn_rc=1 ;;
     screen-bg|nao:screen) spawn_screen "$name" "$inner" || spawn_rc=1 ;;
-    nao:foot)    spawn_fork_window "$name" foot --app-id="org.nao.$name" --working-directory="$repo" -e bash -lc "$inner" || spawn_rc=1 ;;
-    nao:ghostty) spawn_fork_window "$name" ghostty -e bash -lc "$inner" || spawn_rc=1 ;;
-    nao:ptyxis)  spawn_fork_window "$name" ptyxis  -- bash -lc "$inner" || spawn_rc=1 ;;
+    nao:foot)    spawn_fork_window "$name" $TMUX_ENV_SCRUB foot --app-id="org.nao.$name" --working-directory="$repo" -e bash -lc "$inner" || spawn_rc=1 ;;
+    nao:ghostty) spawn_fork_window "$name" $TMUX_ENV_SCRUB ghostty -e bash -lc "$inner" || spawn_rc=1 ;;
+    nao:ptyxis)  spawn_fork_window "$name" $TMUX_ENV_SCRUB ptyxis  -- bash -lc "$inner" || spawn_rc=1 ;;
     *)           spawn_rc=1   # 理论上不可达（resolve_action 标签全覆盖）；防御性不假成功
   esac
   if (( spawn_rc != 0 )); then
@@ -1518,6 +1526,14 @@ cmd_close() {
 
   # ---- 宿主句柄定位（跨仓）：pane 按标题任意仓 basename / 名册 tmuxPane 不限定 cwd ----
   pane="$(find_pane_for_any_repo "$name")"
+  # F1 不变量（T513-S2）：close 任何路径不得回收调用者自己的 pane/窗口。
+  #   根因：派生窗口若继承 $TMUX_PANE，子进程按该 pane 注册名册 ⇒ 层② 命中调用者自身；
+  #   本闸门是纵深防御——无论上游解析为何，命中即拒绝（不 kill-pane、不进入 pi_pids_for 兜底）。
+  if [[ -n "$pane" && -n "${TMUX_PANE:-}" && "$pane" == "$TMUX_PANE" ]]; then
+    warn "拒绝回收 $name：解析出的 pane $pane 与调用者自己的 pane（\$TMUX_PANE=$TMUX_PANE）相同"
+    warn "  名册 tmuxPane 可能因派生时继承 TMUX_PANE 而错注册；请用 intercom({action:'list'}) 核对目标会话后再处理"
+    return 1
+  fi
   if [[ -z "$pane" ]]; then
     # nao-<会话名> detached tmux / screen 会话（不依赖 repo）
     if command -v tmux >/dev/null 2>&1 && tmux has-session -t "nao-$name" 2>/dev/null; then

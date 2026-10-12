@@ -43,6 +43,21 @@
 - **D6（④ 无 class 探针）**：接受启动并打印一行 warn「未能校验可见性」；`status` 同时给降级标注。理由：「无法校验 ≠ 校验失败」——`exit 1` 会让 X11/无探针环境完全不可用；诚实性由 warn + 文档守住。`status` 降级标注条件为「④ 路径（无 tmux pane 句柄）」，非「tmux 命令缺失」（含 `NAO_TERMINAL=foot` 等显式窗口宿主）。
 - **L1（`$TMUX` 已设但 tmux 命令缺失）**：**warn + 继续**按环境选择宿主，不因升级中途残留变量直接 `exit 2`；该情形不构成 tmux 句柄。
 - **已知边界（本批不修）**：L2/L3/L4 以及「宿主枚举器 limb 的 `offline_verifiable()`」均接受为已知边界，仅记录。
+## 不变量：`close` 不得回收调用者自己的 pane/窗口（T513-S2 补）
+
+- **不变量**：`nao-fleet.sh close <目标>` 在**任何**路径下都不得对「调用者进程自身的 pane」执行 `kill-pane`/`kill`。
+  判定式：`pane == $TMUX_PANE`（非 tmux 内 `$TMUX_PANE` 为空 ⇒ 不触发）⇒ **拒绝 + 一行诊断 + 退出非 0**。
+  覆盖点：层②名册 `tmuxPane` 命中，以及末尾 `pi_pids_for` 兜底（其内部会再次经 `find_pane_for` 解析）。
+  根因：派生窗口若继承 `$TMUX_PANE`，子进程（pi-intercom 注册读 `TMUX_PANE`）会按**调用者的 pane** 注册名册 ⇒
+  `close` 层②命中调用者自身 ⇒ `kill-pane`；若该 pane 是同窗口最后一个，则整个 tmux 窗口消失（`exit-empty on`）。
+- **F2（源头治理）**：派生可见窗口 / 分离宿主（④ `xdg-window`、`nao:foot|ghostty|ptyxis`、`screen-bg`）的 pi 命令
+  前缀 `env -u TMUX -u TMUX_PANE`，杜绝子进程继承调用者 pane 句柄并据此错注册。
+  **不适用于 tmux 自身的 split-window / new-session / attach**：tmux 会为新 pane 注入正确的 `TMUX_PANE`
+  （实测隔离 `-L` server：外层 `TMUX_PANE=%FAKE` 被覆盖为 `%0`/`%1`），对其剥离反而抹掉正确句柄。
+- **F1（纵深防御）**：即使上游句柄解析（名册滞后 / 跨仓串名 / 继承）出错，`close` 也绝不反噬调用者。
+- 依据与可复现：`docs/reports/2026-10-12-T513-incident-close-selfpane.md` 与
+  `docs/reports/2026-10-12-T513-close-selfpane-repro.sh`（修复前 `main`/`a28b11d`/`04baea2` 三版复现；修复后 `HEAD` 不再自伤）。
+
 ## 实施闸门（给 RD 的判定式）
 
 ```text
@@ -62,3 +77,4 @@ elif --background ∧ tmux → new-session -d ｜ else exit 2 + 一行诊断 + �
 - 本机实测 2026-10-12：`--print-cmd` = `foot --app-id=org.nao.qa --working-directory=/tmp -e …`；`~/.local/share/applications/foot.desktop` 声明 `X-TerminalArgAppId/Dir`
 
 - 修订：2026-10-12 首版（T513-A 终签）
+- 修订：2026-10-12 T513-S2（新增不变量「`close` 不得回收调用者自己的 pane」：F1 纵深防御 + F2 源头清 TMUX/TMUX_PANE）
