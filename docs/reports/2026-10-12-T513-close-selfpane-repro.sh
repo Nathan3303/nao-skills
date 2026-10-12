@@ -36,7 +36,7 @@ FIX="$SBX/fixture"; AGENT="$SBX/agent"; BIN="$SBX/bin"
 NODEDIR="$(dirname "$(command -v node)")"
 
 # 最小 PATH（无 tmux，用于强制 ④ xdg-window）
-for c in awk sed grep mktemp setsid sleep cat rm wc head tail ps pgrep pkill tr \
+for c in awk sed grep mktemp mkfifo setsid sleep cat rm wc head tail ps pgrep pkill tr \
          dirname basename env timeout screen nohup date id uname sh bash readlink \
          realpath stat find xargs sort uniq cut tee mkdir chmod mv ln; do
   p="$(command -v "$c" 2>/dev/null)" && ln -sf "$p" "$SBX/minbin/$c" || true

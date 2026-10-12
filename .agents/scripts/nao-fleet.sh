@@ -962,35 +962,56 @@ build_system_prompt() {
   echo "$f"
 }
 
-# 等待子进程把 pid 写入 pidfile（setsid -f 的 fork 已完成才会写）；echo pid，超时 rc=1
-wait_for_pidfile() {
-  local f="$1" tries="${2:-30}" pid=""
+# ---- 派生 pid 传递（T513-S5 · M2 设计修复）--------------------------------
+# 父进程建「匿名管道」（在 mktemp -d 内 mkfifo，打开 fd 后立即 rm -rf 该目录 ⇒ 仅 fd 存活）
+# → 子进程经**继承 fd** 写自身 pid → 父进程读。子进程**不打开任何路径**，因此
+# 「父先清理、子后写重建」的竞态与 /tmp 残留从设计上不可能（无文件系统对象可残留）；
+# 失败时父仍能拿到 pid ⇒ M1 回收能力保留。
+#   ⚠ 管道以 O_RDWR 打开（exec {fd}<>）：父读端提前关闭时，子进程写不会 SIGPIPE（实测）。
+#   ⚠ 实测 foot 等终端保留继承 fd，故 ④ 路径的 M1 仍可拿到 pid。
+PID_PIPE_FD=""
+open_pid_pipe() {
+  local d
+  d="$(mktemp -d "/tmp/nao-fleet-pidpipe-XXXXXX")" || return 1
+  mkfifo "$d/p" 2>/dev/null || { rm -rf -- "$d"; return 1; }
+  # 不得在 exec 的 fd 分配上加 `2>/dev/null`：exec 重定向会**持久**作用于当前 shell（会静默后续所有 warn/xtrace）。
+  if ! exec {PID_PIPE_FD}<>"$d/p"; then rm -rf -- "$d"; return 1; fi
+  rm -rf -- "$d"          # 立即 unlink：路径消失，仅 fd 存活
+  return 0
+}
+close_pid_pipe() {
+  if [[ -n "${PID_PIPE_FD:-}" ]]; then exec {PID_PIPE_FD}>&- || true; fi
+  PID_PIPE_FD=""
+  return 0
+}
+# 读子进程 pid（有界轮询；echo pid / 超时 rc=1）
+wait_for_pid_pipe() {  # [tries]
+  local tries="${1:-30}" pid=""
+  [[ -n "${PID_PIPE_FD:-}" ]] || return 1
   while (( tries-- > 0 )); do
-    pid="$(cat "$f" 2>/dev/null || true)"
-    [[ -n "$pid" ]] && { printf '%s' "$pid"; return 0; }
-    sleep 0.1
+    if IFS= read -r -t 0.1 -u "$PID_PIPE_FD" pid 2>/dev/null && [[ -n "$pid" ]]; then
+      printf '%s' "$pid"; return 0
+    fi
   done
   return 1
 }
+# 子进程包装命令：把自身 $$ 写入继承 fd（写成后 exec 目标 ⇒ pid 不变，即最终 pi/宿主 pid）
+pid_pipe_wrapper() { printf 'echo $$ >&%s; exec "$@"' "$PID_PIPE_FD"; }
 
-# 非 tmux 窗口宿主（ghostty/ptyxis）派生：P4 根因 = `setsid -f <缺失命令>` 仍 rc=0，
+# 非 tmux 窗口宿主（ghostty/ptyxis/foot）派生：P4 根因 = `setsid -f <缺失命令>` 仍 rc=0，
 # 故不能以 setsid 的 rc 当成功 —— 必须验证子进程 pid 存活（BR2）。
-# 失败即回收 pid（不产生孤儿窗口，AC6）。
+# pid 经继承管道回传（M2：无 pidfile ⇒ 无残留）；失败即回收 pid（不产生孤儿窗口，AC6）。
 spawn_fork_window() {  # <name> <cmd...>
   local name="$1"; shift
-  local pidf pid
-  pidf="$(mktemp "/tmp/nao-fleet-$name-pid-XXXXXX")" || return 1
-  if ! setsid -f bash -c 'echo $$ >"$1"; shift; exec "$@"' _ "$pidf" "$@" >/dev/null 2>&1; then
-    rm -f -- "$pidf"; return 1
+  local pid=""
+  open_pid_pipe || return 1
+  if ! setsid -f bash -c "$(pid_pipe_wrapper)" _ "$@" >/dev/null 2>&1; then
+    close_pid_pipe; return 1
   fi
-  if ! pid="$(wait_for_pidfile "$pidf")"; then
-    rm -f -- "$pidf"; return 1
-  fi
-  if kill -0 "$pid" 2>/dev/null; then
-    rm -f -- "$pidf"; return 0
-  fi
-  kill "$pid" 2>/dev/null || true
-  rm -f -- "$pidf"
+  pid="$(wait_for_pid_pipe)" || pid=""
+  close_pid_pipe
+  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then return 0; fi
+  [[ -n "$pid" ]] && kill "$pid" 2>/dev/null || true
   return 1
 }
 
@@ -1065,36 +1086,31 @@ wait_for_app_class() {  # <name> [tries] → 0 可见 / 1 未出现 / 2 无查�
 }
 
 # ④ 直开窗：启动 + 限时 class 出现校验；失败尽力回收（M1：不假称已清理）
-#   pidfile 记录 inner 自身 pid（wrapper exec 后即 pi）⇒ 终端单实例/daemon 化形态下
-#   仍能可靠定位 pi，不依赖窗口生命周期。
+#   pid 经继承管道回传（wrapper exec 后即 pi）⇒ 终端单实例/daemon 化形态下仍能可靠定位 pi，
+#   不依赖窗口生命周期；无 pidfile ⇒ 父先返回也不会被「子进程晚写」残留（M2 设计修复）。
 spawn_xdg_window() {  # <name> <repo> <cmd...>
   local name="$1" repo="$2"; shift 2
-  local pidf pid="" vrc=0
-  pidf="$(mktemp "/tmp/nao-fleet-$name-pid-XXXXXX")" || return 1
-  if ! open_xdg_window "$name" "$repo" bash -c 'echo $$ >"$1"; shift; exec "$@"' _ "$pidf" "$@"; then
-    rm -f -- "$pidf"; return 1
+  local pid="" vrc=0
+  open_pid_pipe || return 1
+  if ! open_xdg_window "$name" "$repo" bash -c "$(pid_pipe_wrapper)" _ "$@"; then
+    close_pid_pipe; return 1
   fi
   wait_for_app_class "$name" || vrc=$?
-  if (( vrc == 0 )); then
-    # M2（T513-S4）：等子进程写完 pid 再删，否则 rm 早于 setsid -f 子进程写 pidfile ⇒ /tmp 残留
-    wait_for_pidfile "$pidf" >/dev/null 2>&1 || true
-    rm -f -- "$pidf"; return 0
-  fi
+  # 成功 / D6 接受：无需 pid，直接关管道（子进程 O_RDWR 写不会 SIGPIPE；无路径 ⇒ 无残留）
+  if (( vrc == 0 )); then close_pid_pipe; return 0; fi
   if (( vrc == 2 )); then
     warn "无 class 探针（hyprctl/swaymsg/xdotool/wmctrl 均缺）：未能校验 $name 窗口可见性（D6）"
-    # M2（T513-S4）：同成功分支——先等 pidfile 落盘再删（D6 接受启动，保留 M1 回收句柄语义不变）
-    wait_for_pidfile "$pidf" >/dev/null 2>&1 || true
-    rm -f -- "$pidf"; return 0
+    close_pid_pipe; return 0
   fi
   # 有探针但限时未出现 class ⇒ 尽力回收 pi，如实报告回收结果（M1）
-  pid="$(wait_for_pidfile "$pidf" 10)" || pid=""
+  pid="$(wait_for_pid_pipe 10)" || pid=""
+  close_pid_pipe
   if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
     kill "$pid" 2>/dev/null || true
     warn "④ 校验失败：已尽力回收 $name 的 pi 进程（pid=$pid）；若窗口仍在请手动关闭"
   else
     warn "④ 校验失败：未捕获 $name 的 pi 进程 pid，已开窗口可能仍在，请手动关闭"
   fi
-  rm -f -- "$pidf"
   return 1
 }
 

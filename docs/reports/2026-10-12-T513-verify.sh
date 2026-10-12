@@ -674,11 +674,15 @@ o="$(out_s)"
 m1_tries=50; while (( m1_tries-- > 0 )); do [[ -s "$FXROOT/ac11-m1.env" ]] && break; sleep 0.1; done
 m1_pid="$(awk '{for(i=1;i<=NF;i++) if($i ~ /^PID=/){sub("PID=","",$i); print $i}}' "$FXROOT/ac11-m1.env" | head -1)"
 [[ -n "$m1_pid" ]] && CLEAN_PIDS+=("$m1_pid")
+m1_dead=0
 if (( RUN_RC == 1 )); then pass AC11 "M1.① ensure --force（class 恒空）→ rc=1"; else bad AC11 "M1.① rc=$RUN_RC（期望 1）"; fi
 if grep -q '④ 校验失败' <<< "$o" && ! grep -q '已清理本轮残留' <<< "$o"; then
   pass AC11 "M1.② 含「④ 校验失败」且不含「已清理本轮残留」（不过度声明）"
 else bad AC11 "M1.② 措辞不符（$(oneline "$o")）"; fi
-if [[ -n "$m1_pid" ]] && ! kill -0 "$m1_pid" 2>/dev/null; then pass AC11 "M1.③ 失败后 pi（pid=$m1_pid）已回收"; else bad AC11 "M1.③ pi 未回收（pid=${m1_pid:-<未捕获>} 仍存活）"; fi
+if [[ -n "$m1_pid" ]]; then
+  for ((m1k=0; m1k<50; m1k++)); do kill -0 "$m1_pid" 2>/dev/null || { m1_dead=1; break; }; sleep 0.1; done
+fi
+if (( m1_dead )); then pass AC11 "M1.③ 失败后 pi（pid=$m1_pid）已在有界轮询（≤5s）内回收"; else bad AC11 "M1.③ pi 未回收（pid=${m1_pid:-<未捕获>} 5s 内仍存活）"; fi
 after_pid="$(ls -1 /tmp/nao-fleet-qa-pid-* 2>/dev/null | sort)"
 new_pid="$(comm -13 <(printf '%s\n' "$before_pid") <(printf '%s\n' "$after_pid") | grep . || true)"
 n="$(occur "$o" '已拉起')"
