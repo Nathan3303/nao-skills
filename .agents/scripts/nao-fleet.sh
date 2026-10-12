@@ -879,7 +879,9 @@ apply_tmux_layout() {
   fi
   # main-row2
   local win_w win_h
-  read -r win_w win_h < <(tmux display-message -p '#{window_width} #{window_height}' 2>/dev/null)
+  # D7（T513-S3）：display-message 无输出时 `read` 返回 1，set -e 会硬中断整轮 ensure
+  #   ⇒ 守卫为 true（读不到尺寸即跳过布局，不硬崩）。
+  read -r win_w win_h < <(tmux display-message -p '#{window_width} #{window_height}' 2>/dev/null) || true
   [[ -n "$win_w" && -n "$win_h" ]] || return 0
 
   local -a pane_ids=()

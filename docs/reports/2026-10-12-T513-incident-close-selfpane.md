@@ -167,4 +167,4 @@ QA 的 AC12 用独立桩重跑同一批不变量，修复前/后逐项对照（�
 
 1. **screen-bg**：QA 的 `screen -ls` 桩**无条件回放** `nao-qa` 会话 ⇒ `running` 短路、ensure 跳过、env 文件为空（夹具 bug）。本报告 §7.2 的 B 段改用 stateful screen 桩（`-dmS` 建态后才回放 `-ls`）⇒ HEAD 的 screen-bg **已清除 `TMUX_PANE` ✓**。
 2. **tmux-bg**：QA 的 `tmux new-session` 桩**未模拟 server 注入**（实机 tmux 会覆盖外层 `TMUX_PANE`，见 §7.1）⇒ 断言按「被剥离」判红。属 PM 指令与实测的偏差，待 QA 桩修正或 PM 改口径。
-3. **F2 边界② rc=1**：`apply_tmux_layout` 的 `read -r win_w win_h < <(tmux display-message …)` 在**空输出**下 `read` 返回 1，`set -e` 使 ensure 中断（**修复前同现**，与 F1/F2 无关；QA 桩 display-message 回空暴露之）。属独立既有边界项，待 PM 定是否随收尾提交加 `|| true` 守卫。
+3. **F2 边界② rc=1（D7 · 已修）**：`apply_tmux_layout` 的 `read -r win_w win_h < <(tmux display-message …)` 在**空输出**下 `read` 返回 1，`set -e` 使 ensure 中断（修复前同现，与 F1/F2 无关；QA 桩 display-message 回空暴露之）。**T513-S3 已修**：`read … || true`，读不到窗口尺寸即跳过布局、不硬崩；QA AC13 覆盖（`--only AC13` GREEN 1/1）。

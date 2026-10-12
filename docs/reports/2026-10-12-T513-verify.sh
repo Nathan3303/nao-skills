@@ -27,6 +27,10 @@
 #   AC7 tmux 内逐值零回归（真 tmux 隔离服务器）      AC8 非 tmux 句柄降级（app-id/pid + status 标注）
 #   AC9 文档一致性（usage/intercom-protocol/README/ARCHITECTURE + check）
 #   AC10 T513f 层③ 收紧（未认领 pi pane 跨全部角色唯一 + 名册 cwd 匹配；隔离 tmux + 桩 pi · comm=pi）
+#   AC11 §3.2 永久化（M1 ④失败回收 4 · D6 无探针接受 2 · L6 status 降级判据 3；桩驱动）
+#   AC12 事故不变量（F1 close 不得回收调用者自身 pane 4+2 · F2 派生宿主不得继承 TMUX/TMUX_PANE 6 ·
+#        F2 边界 tmux-in ② / tmux-attach ③ argv 零回归 2+2；桩 argv+env 自证）
+#   AC13 D7 空 display-message 守卫（apply_tmux_layout 不得硬崩；桩驱动）
 #
 # 覆盖限制（NFR5，必须随报告一同披露）:
 #   本机仅 foot + Hyprland ⇒ ghostty/ptyxis/其它合成器路径**无法真测**。AC1/AC2/AC5/AC8 采用
@@ -76,7 +80,7 @@ REAL_AGENT_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
 PASS_N=0 FAIL_N=0 SKIP_N=0 WARN_N=0
 declare -A AC_P AC_F AC_S AC_W
 declare -a FAILED=()
-AC_ORDER=(AC1 AC2 AC3 AC4 AC5 AC6 AC7 AC8 AC9 AC10)
+AC_ORDER=(AC1 AC2 AC3 AC4 AC5 AC6 AC7 AC8 AC9 AC10 AC11 AC12 AC13)
 only_match(){ [[ -z "$ONLY" ]] && return 0; [[ ",$ONLY," == *",$1,"* ]]; }
 pass(){ local ac="$1"; shift; PASS_N=$((PASS_N+1)); AC_P[$ac]=$(( ${AC_P[$ac]:-0}+1 )); printf '  [PASS] %-4s %s\n' "$ac" "$*"; }
 bad(){  local ac="$1"; shift; FAIL_N=$((FAIL_N+1)); AC_F[$ac]=$(( ${AC_F[$ac]:-0}+1 )); FAILED+=("$ac $*"); printf '  [FAIL] %-4s %s\n' "$ac" "$*"; }
@@ -200,6 +204,117 @@ dummy_pi(){ # $1 = 目录 → 打印 pid（可执行名 = pi ⇒ /proc/<pid>/com
 }
 mk_stubs(){ # $1 = 名字 → 打印 stub 目录
   local d="$FXROOT/stub-$1"; mkdir -p "$d"; printf '%s' "$d"
+}
+
+# ---- AC11/AC12 专用桩（argv/env 自证；不与 AC1–AC10 的桩混用）------------------------------------------------
+x_pi_stub(){ # $1=目录：把「被派生 pi 所见 env」落盘（含 PID），随后长眠（供 kill -0 回收断言）
+  cat > "$1/pi" <<'SH'
+#!/usr/bin/env bash
+if [[ -n "${T513X_PI_ENV_LOG:-}" ]]; then
+  printf '%s PID=%s TMUX=%s TMUX_PANE=%s\n' "${T513X_LABEL:-x}" "$$" "${TMUX-<unset>}" "${TMUX_PANE-<unset>}" >>"$T513X_PI_ENV_LOG"
+fi
+exec sleep 600
+SH
+  chmod +x "$1/pi"
+}
+x_host_stub(){ # $1=目录 $2=宿主名（foot/ghostty/ptyxis）：记录 argv 后 exec 包装命令（→ 桩 pi）
+  cat > "$1/$2" <<SH
+#!/usr/bin/env bash
+printf '%s %s\n' "$2" "\$*" >>"\${T513X_HOST_LOG:-/dev/null}"
+args=("\$@"); n=\${#args[@]}; i=-1
+for ((k=0;k<n;k++)); do
+  case "\${args[k]}" in env|bash) i=\$k; break;; esac
+done
+if (( i >= 0 && i < n )); then exec "\${args[@]:i}"; fi
+exec sleep 600
+SH
+  chmod +x "$1/$2"
+}
+x_screen_stub(){ # $1=目录：-dmS 真派生（记录 pi env）；-ls 按状态回放会话名（修复前不得误报在线）
+  cat > "$1/screen" <<'SH'
+#!/usr/bin/env bash
+printf 'screen %s\n' "$*" >>"${T513X_TMUX_LOG:-/dev/null}"
+st="${T513X_SCREEN_STATE:-/dev/null}"
+case "${1:-}" in
+  -ls) if [ -s "$st" ]; then while IFS= read -r n; do printf '    12345.%s   (Detached)\n' "$n"; done <"$st"; fi; exit 0 ;;
+  -dmS) shift; sn="${1:-}"; shift || true; [ -n "$sn" ] && printf '%s\n' "$sn" >>"$st"; setsid -f "$@" >/dev/null 2>&1; exit 0 ;;
+  *) exit 0 ;;
+esac
+SH
+  chmod +x "$1/screen"
+}
+x_xdg_stub(){ # $1=目录：--print-* 应答；其余真 exec `--` 之后的包装命令（→ 桩 pi）
+  cat > "$1/xdg-terminal-exec" <<'SH'
+#!/usr/bin/env bash
+printf 'xdg %s\n' "$*" >>"${T513X_HOST_LOG:-/dev/null}"
+case " $* " in
+  *" --print-id "*)   printf 'foot.desktop\n'; exit 0 ;;
+  *" --print-path "*) printf '/usr/share/applications/foot.desktop\n'; exit 0 ;;
+  *" --print-cmd"*)   printf 'foot\n--app-id=org.nao.qa\n'; exit 0 ;;
+esac
+args=("$@"); n=${#args[@]}; i=-1
+for ((k=0;k<n;k++)); do [[ "${args[k]}" == "--" ]] && { i=$((k+1)); break; }; done
+if (( i >= 0 && i < n )); then exec "${args[@]:i}"; fi
+exit 0
+SH
+  chmod +x "$1/xdg-terminal-exec"
+}
+x_hypr_stub(){ # $1=目录：T513X_HYPR_MATCH=1 回 class（可见）；=0 回空数组（M1 恒不可见）
+  cat > "$1/hyprctl" <<'SH'
+#!/usr/bin/env bash
+printf 'hyprctl %s\n' "$*" >>"${T513X_HYPR_LOG:-/dev/null}"
+case " $* " in
+  *" clients "*)
+    if [[ "${T513X_HYPR_MATCH:-1}" == 1 ]]; then
+      printf '[{"address":"0x1","class":"org.nao.qa","initialClass":"org.nao.qa","title":"π - qa - repo","pid":%s}]\n' "${T513X_WIN_PID:-0}"
+    else
+      printf '[]\n'
+    fi ;;
+esac
+exit 0
+SH
+  chmod +x "$1/hyprctl"
+}
+x_tmux_stub(){ # $1=目录：记录 argv + 调用时 env（TMUX/TMUX_PANE）；kill-pane 目标自证；可配置存活 pane
+  cat > "$1/tmux" <<'SH'
+#!/usr/bin/env bash
+log="${T513X_TMUX_LOG:-/dev/null}"; elog="${T513X_TMUXENV_LOG:-/dev/null}"
+printf 'tmux %s\n' "$*" >>"$log"
+printf '%s TMUX=%s TMUX_PANE=%s\n' "${T513X_LABEL:-x}" "${TMUX-<unset>}" "${TMUX_PANE-<unset>}" >>"$elog"
+cmd="${1:-}"; [ $# -gt 0 ] && shift
+opt(){ local o="$1"; shift; local v=""; while [ $# -gt 0 ]; do case "$1" in "$o") v="${2:-}"; shift 2;; *) shift;; esac; done; printf '%s' "$v"; }
+fmt=""; for a in "$@"; do case "$a" in '#{'*) fmt="$a";; esac; done
+case "$cmd" in
+  list-panes)
+    if [[ "$fmt" == *pane_title* || "$fmt" == *pane_current_command* ]]; then exit 0; fi
+    if [[ -n "${T513X_LIVE_PANES:-}" ]]; then printf '%s\n' ${T513X_LIVE_PANES}; fi
+    exit 0 ;;
+  display-message)
+    [[ "${T513X_EMPTY_DISPLAY:-0}" == 1 ]] && exit 0    # D7/AC13：模拟 display-message 返回空
+    for a in "$@"; do case "$a" in
+      *pane_current_path*) printf '%s\n' "${T513X_REPO:-/tmp}"; exit 0 ;;
+      *pane_pid*) printf '%s\n' "${T513X_PANE_PID:-}"; exit 0 ;;
+      *window_width*) printf '152 34\n'; exit 0 ;;
+    esac; done
+    exit 0 ;;
+  capture-pane) exit 1 ;;
+  kill-pane) printf 'KILL-PANE-TARGET: %s\n' "$(opt -t "$@")" >>"$log"; exit "${T513X_KILLPANE_RC:-0}" ;;
+  has-session) exit "${T513X_HAS_SESSION_RC:-1}" ;;
+  new-session)
+    printf '%s\n' "${T513X_SESS:-nao-qa}" >>"${T513X_STATE:-/dev/null}"
+    if [[ "${T513X_SERVER_EMU:-0}" == 1 ]]; then
+      last=""; for a in "$@"; do last="$a"; done
+      if [[ -n "$last" ]]; then
+        setsid -f env TMUX="${T513X_INJECT_TMUX:-srv-injected,1,0}" TMUX_PANE="${T513X_INJECT_PANE:-%S1}" bash -c "$last" >/dev/null 2>&1
+      fi
+    fi
+    exit 0 ;;
+  list-clients) printf '%s\n' "/dev/pts/0: 1 (attached)"; exit 0 ;;
+  list-sessions) cat "${T513X_STATE:-/dev/null}" 2>/dev/null; exit 0 ;;
+  *) exit 0 ;;
+esac
+SH
+  chmod +x "$1/tmux"
 }
 
 # 常用 env 片段
@@ -535,6 +650,218 @@ if grep -q '已在运行' <<< "$o"; then pass AC10 "④ 名册 tmuxPane 命中 �
 if [[ "$n1" == "$n0" ]]; then pass AC10 "④ pane 数不变（$n0）"; else bad AC10 "④ pane 数 $n0→$n1（不应新增）"; fi
 if tmux -S "$AC10_SOCK/sock" list-panes -t fx -F '#{pane_id}' 2>/dev/null | grep -qxF "$c1"; then pass AC10 "④ 被认领 pane $c1 仍存活（未误杀）"; else bad AC10 "④ 被认领 pane $c1 消失"; fi
 [[ -n "$AC10_SOCK" ]] && tmux -S "$AC10_SOCK/sock" kill-server 2>/dev/null || true
+fi
+
+# =============================================================================
+if only_match AC11; then
+sec "AC11 永久化（§3.2 · 9 条）：M1 ④失败回收 4 · D6 无探针接受 2 · L6 status 降级判据 3"
+FIX="$(mk_fixture ac11)"
+HOME11="$FXROOT/home11"; mkdir -p "$HOME11"
+# ---- M1：④ 有 class 探针但恒不可见 ⇒ 校验失败、尽力回收、rc=1、不假称已清理 ----
+ST="$FXROOT/stub-ac11m1"; mkdir -p "$ST"
+x_xdg_stub "$ST"; x_hypr_stub "$ST"; x_pi_stub "$ST"
+printf 'export PATH=%q\n' "$ST:$MINBIN" > "$HOME11/.bash_profile"
+: > "$FXROOT/ac11-m1.env"
+before_pid="$(ls -1 /tmp/nao-fleet-qa-pid-* 2>/dev/null | sort)"
+set_env -u TMUX -u NAO_TERMINAL \
+  NAO_SKILLS="$FIX" NAO_TASKS_STATE="$FIX/.no-tasks-state.md" PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" \
+  NAO_QA_FAKE_ROSTER='[]' PATH="$ST:$MINBIN" HOME="$HOME11" T513X_HYPR_MATCH=0 T513X_WIN_PID=0 \
+  T513X_PI_ENV_LOG="$FXROOT/ac11-m1.env" T513X_LABEL=m1 T513X_REPO="$FIX"
+graphical
+run_fleet "$FIX" ensure --force qa
+o="$(out_s)"
+m1_tries=50; while (( m1_tries-- > 0 )); do [[ -s "$FXROOT/ac11-m1.env" ]] && break; sleep 0.1; done
+m1_pid="$(awk '{for(i=1;i<=NF;i++) if($i ~ /^PID=/){sub("PID=","",$i); print $i}}' "$FXROOT/ac11-m1.env" | head -1)"
+[[ -n "$m1_pid" ]] && CLEAN_PIDS+=("$m1_pid")
+if (( RUN_RC == 1 )); then pass AC11 "M1.① ensure --force（class 恒空）→ rc=1"; else bad AC11 "M1.① rc=$RUN_RC（期望 1）"; fi
+if grep -q '④ 校验失败' <<< "$o" && ! grep -q '已清理本轮残留' <<< "$o"; then
+  pass AC11 "M1.② 含「④ 校验失败」且不含「已清理本轮残留」（不过度声明）"
+else bad AC11 "M1.② 措辞不符（$(oneline "$o")）"; fi
+if [[ -n "$m1_pid" ]] && ! kill -0 "$m1_pid" 2>/dev/null; then pass AC11 "M1.③ 失败后 pi（pid=$m1_pid）已回收"; else bad AC11 "M1.③ pi 未回收（pid=${m1_pid:-<未捕获>} 仍存活）"; fi
+after_pid="$(ls -1 /tmp/nao-fleet-qa-pid-* 2>/dev/null | sort)"
+new_pid="$(comm -13 <(printf '%s\n' "$before_pid") <(printf '%s\n' "$after_pid") | grep . || true)"
+n="$(occur "$o" '已拉起')"
+if [[ "$n" == 0 && -z "$new_pid" ]]; then pass AC11 "M1.④ 0 处「已拉起」且无新增 /tmp/nao-fleet-qa-pid-* 残留"; else bad AC11 "M1.④ 已拉起=$n 处 · pid 残留=$(oneline "$new_pid")"; fi
+# ---- D6：无任何 class 探针 ⇒ 接受启动（rc=0 + warn 未能校验 + 1 处「已拉起」）----
+ST="$FXROOT/stub-ac11d6"; mkdir -p "$ST"; x_xdg_stub "$ST"; x_pi_stub "$ST"
+printf 'export PATH=%q\n' "$ST:$MINBIN" > "$HOME11/.bash_profile"
+: > "$FXROOT/ac11-d6.env"
+before_pid="$(ls -1 /tmp/nao-fleet-qa-pid-* 2>/dev/null | sort)"
+set_env -u TMUX -u NAO_TERMINAL \
+  NAO_SKILLS="$FIX" NAO_TASKS_STATE="$FIX/.no-tasks-state.md" PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" \
+  NAO_QA_FAKE_ROSTER='[]' PATH="$ST:$MINBIN" HOME="$HOME11" \
+  T513X_PI_ENV_LOG="$FXROOT/ac11-d6.env" T513X_LABEL=d6 T513X_REPO="$FIX"
+graphical
+run_fleet "$FIX" ensure --force qa
+o="$(out_s)"
+d6_tries=50; while (( d6_tries-- > 0 )); do [[ -s "$FXROOT/ac11-d6.env" ]] && break; sleep 0.1; done
+d6_pid="$(awk '{for(i=1;i<=NF;i++) if($i ~ /^PID=/){sub("PID=","",$i); print $i}}' "$FXROOT/ac11-d6.env" | head -1)"
+[[ -n "$d6_pid" ]] && CLEAN_PIDS+=("$d6_pid")
+if (( RUN_RC == 0 )) && grep -qE '无 class 探针|未能校验' <<< "$o"; then
+  pass AC11 "D6.⑤ 无 class 探针 → rc=0 + warn「未能校验…可见性」"
+else bad AC11 "D6.⑤ rc=$RUN_RC · warn 缺失（$(oneline "$o")）"; fi
+n="$(occur "$o" '已拉起')"
+if [[ "$n" == 1 ]]; then pass AC11 "D6.⑥ 无探针仍接受启动：恰 1 处「已拉起」"; else bad AC11 "D6.⑥「已拉起」=$n 处（期望 1）"; fi
+# D6 已知临时件泄漏（M2）：收尾清理（不属断言）
+after_pid="$(ls -1 /tmp/nao-fleet-qa-pid-* 2>/dev/null | sort)"
+while IFS= read -r f; do [[ -n "$f" ]] && CLEAN_FILES+=("$f"); done < <(comm -13 <(printf '%s\n' "$before_pid") <(printf '%s\n' "$after_pid") | grep . || true)
+# ---- L6：status 降级标注（foot 1 行 · auto/in-tmux 0 行）----
+STL="$FXROOT/stub-ac11l6"; mkdir -p "$STL"; write_tmux_stub "$STL"
+l6_notes(){ occur "$(out_s)" 'turn 判定来源 = 名册'; }
+set_env -u TMUX NAO_SKILLS="$FIX" NAO_TASKS_STATE="$FIX/.no-tasks-state.md" \
+  PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" NAO_QA_FAKE_ROSTER='[]' PATH="$STL:$MINBIN" HOME="$HOME11" NAO_TERMINAL=foot
+run_fleet "$FIX" status; n="$(l6_notes)"
+if [[ "$n" == 1 ]]; then pass AC11 "L6.⑦ NAO_TERMINAL=foot status 恰 1 行「turn 判定来源 = 名册」"; else bad AC11 "L6.⑦ foot note=$n（期望 1）"; fi
+set_env -u TMUX -u NAO_TERMINAL NAO_SKILLS="$FIX" NAO_TASKS_STATE="$FIX/.no-tasks-state.md" \
+  PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" NAO_QA_FAKE_ROSTER='[]' PATH="$STL:$MINBIN" HOME="$HOME11"
+run_fleet "$FIX" status; n="$(l6_notes)"
+if [[ "$n" == 0 ]]; then pass AC11 "L6.⑧ auto（tmux 可用 ⇒ ②/③）status 0 行 note"; else bad AC11 "L6.⑧ auto note=$n（期望 0）"; fi
+set_env TMUX="sock12,4242,0" NAO_SKILLS="$FIX" NAO_TASKS_STATE="$FIX/.no-tasks-state.md" \
+  PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" NAO_QA_FAKE_ROSTER='[]' PATH="$STL:$MINBIN" HOME="$HOME11"
+run_fleet "$FIX" status; n="$(l6_notes)"
+if [[ "$n" == 0 ]]; then pass AC11 "L6.⑨ in-tmux（②）status 0 行 note"; else bad AC11 "L6.⑨ in-tmux note=$n（期望 0）"; fi
+fi
+
+# =============================================================================
+if only_match AC12; then
+sec "AC12 事故不变量：F1 close 不得回收调用者自身 pane · F2 派生宿主不得继承 TMUX/TMUX_PANE（桩 argv+env 自证）"
+CALLER='%99'
+# ---- F1 正向：名册 tmuxPane == 调用者 $TMUX_PANE ⇒ 拒绝 + 诊断 + rc≠0 + 0 次 kill-pane ----
+FIX="$(mk_fixture ac12f1p)"; ST="$FXROOT/stub-ac12f1p"; mkdir -p "$ST"; x_tmux_stub "$ST"
+: > "$FXROOT/ac12-f1p.log"; : > "$FXROOT/ac12-f1p.env"; mkdir -p "$FXROOT/home12"
+ROSTER='[{"name":"qa","id":"qa","status":"idle","cwd":"'"$FIX"'","tmuxPane":"'"$CALLER"'"}]'
+set_env -u NAO_TERMINAL TMUX="sock12,4242,0" TMUX_PANE="$CALLER" \
+  NAO_SKILLS="$FIX" NAO_TASKS_STATE="$FIX/.no-tasks-state.md" PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" \
+  NAO_QA_FAKE_ROSTER="$ROSTER" PATH="$ST:$MINBIN" HOME="$FXROOT/home12" \
+  T513X_TMUX_LOG="$FXROOT/ac12-f1p.log" T513X_TMUXENV_LOG="$FXROOT/ac12-f1p.env" \
+  T513X_LIVE_PANES="$CALLER" T513X_REPO="$FIX"
+run_fleet "$FIX" close qa --force
+o="$(out_s)"; tl="$(cat "$FXROOT/ac12-f1p.log" 2>/dev/null)"
+if (( RUN_RC != 0 )); then pass AC12 "F1+ close 自身 pane（%99）→ rc=$RUN_RC（≠0，拒绝）"; else bad AC12 "F1+ close 自身 pane → rc=0（未拒绝，继续回收）"; fi
+if grep -qE '自身|自己|当前 pane|调用者|self' <<< "$o"; then pass AC12 "F1+ 输出含自伤拒绝诊断"; else bad AC12 "F1+ 输出无自伤拒绝诊断（$(oneline "$o")）"; fi
+if grep -q 'kill-pane' <<< "$tl"; then bad AC12 "F1+ 仍发出 kill-pane（$(oneline "$tl")）⇒ 自伤"; else pass AC12 "F1+ 桩 tmux argv 0 次 kill-pane（未向自身 pane 发 kill）"; fi
+# ---- F1 负向（防回归）：名册 tmuxPane=非自身 pane ⇒ 正常回收 rc=0 且命中正确目标 ----
+OTHER='%42'
+FIXN="$(mk_fixture ac12f1n)"
+: > "$FXROOT/ac12-f1n.log"; : > "$FXROOT/ac12-f1n.env"
+ROSTER='[{"name":"qa","id":"qa","status":"idle","cwd":"'"$FIXN"'","tmuxPane":"'"$OTHER"'"}]'
+set_env -u NAO_TERMINAL TMUX="sock12,4242,0" TMUX_PANE="$CALLER" \
+  NAO_SKILLS="$FIXN" NAO_TASKS_STATE="$FIXN/.no-tasks-state.md" PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" \
+  NAO_QA_FAKE_ROSTER="$ROSTER" PATH="$ST:$MINBIN" HOME="$FXROOT/home12" \
+  T513X_TMUX_LOG="$FXROOT/ac12-f1n.log" T513X_TMUXENV_LOG="$FXROOT/ac12-f1n.env" \
+  T513X_LIVE_PANES="$OTHER $CALLER" T513X_REPO="$FIXN"
+run_fleet "$FIXN" close qa --force
+o="$(out_s)"; tl="$(cat "$FXROOT/ac12-f1n.log" 2>/dev/null)"
+if (( RUN_RC == 0 )); then pass AC12 "F1- 非自身 pane 正常回收 → rc=0"; else bad AC12 "F1- rc=$RUN_RC（期望 0；正常路径被 F1 闸门误伤）"; fi
+if grep -q 'KILL-PANE-TARGET: %42' <<< "$tl"; then pass AC12 "F1- kill-pane 命中正确目标 %42"; else bad AC12 "F1- 未命中 %42（$(oneline "$tl")）"; fi
+if grep -q 'KILL-PANE-TARGET: %99' <<< "$tl"; then bad AC12 "F1- 误杀调用者 pane %99"; else pass AC12 "F1- 未触碰调用者 pane %99"; fi
+# ---- F2 源头：④ xdg-window / nao:foot|ghostty|ptyxis / screen-bg / tmux-bg 派生 pi 不得继承 TMUX+TMUX_PANE ----
+FIX2="$(mk_fixture ac12f2)"; ST2="$FXROOT/stub-ac12f2"; mkdir -p "$ST2"
+x_pi_stub "$ST2"; x_hypr_stub "$ST2"; x_host_stub "$ST2" foot; x_host_stub "$ST2" ghostty
+x_host_stub "$ST2" ptyxis; x_xdg_stub "$ST2"
+HOME2="$FXROOT/home12b"; mkdir -p "$HOME2"
+printf 'export PATH=%q\n' "$ST2:$MINBIN" > "$HOME2/.bash_profile"
+f2_case(){ # $1=label ; $2..=额外 env（含宿主选择）
+  local label="$1"; shift
+  local ev="$FXROOT/ac12-f2-$label.env"; : > "$ev"
+  set_env -u TMUX -u NAO_TERMINAL TMUX="sock12,4242,0" TMUX_PANE="$CALLER" \
+    NAO_SKILLS="$FIX2" NAO_TASKS_STATE="$FIX2/.no-tasks-state.md" PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" \
+    NAO_QA_FAKE_ROSTER='[]' PATH="$ST2:$MINBIN" HOME="$HOME2" \
+    WAYLAND_DISPLAY=wayland-1 DISPLAY=:0 XDG_SESSION_TYPE=wayland \
+    T513X_HOST_LOG="$FXROOT/ac12-f2-host.log" T513X_HYPR_LOG="$FXROOT/ac12-f2-hypr.log" \
+    T513X_HYPR_MATCH=1 T513X_WIN_PID=0 T513X_REPO="$FIX2" \
+    T513X_PI_ENV_LOG="$ev" T513X_LABEL="$label" "$@"
+  run_fleet "$FIX2" ensure qa
+  local tries=50; while (( tries-- > 0 )); do [[ -s "$ev" ]] && break; sleep 0.1; done
+  F2_ENV="$ev"
+}
+f2_pi_env_check(){ # $1=标签 $2=env 文件：断言派生 pi 既无 TMUX 也无 TMUX_PANE
+  local l="$1" ev="$2" pid tries=50
+  while (( tries-- > 0 )); do [[ -s "$ev" ]] && break; sleep 0.1; done   # 等 pi 落盘（setsid 异步）
+  pid="$(awk '{for(i=1;i<=NF;i++) if($i ~ /^PID=/){sub("PID=","",$i); print $i}}' "$ev" | head -1)"
+  [[ -n "$pid" ]] && CLEAN_PIDS+=("$pid")
+  if grep -qE 'TMUX=<unset> TMUX_PANE=<unset>' "$ev"; then
+    pass AC12 "F2 $l 派生 pi 未继承 TMUX/TMUX_PANE"
+  else bad AC12 "F2 $l 派生 pi 继承了 TMUX/TMUX_PANE（$(oneline "$(cat "$ev" 2>/dev/null)")）"; fi
+}
+f2_case foot NAO_TERMINAL=foot;      f2_pi_env_check foot "$F2_ENV"
+f2_case ghostty NAO_TERMINAL=ghostty; f2_pi_env_check ghostty "$F2_ENV"
+f2_case ptyxis NAO_TERMINAL=ptyxis;  f2_pi_env_check ptyxis "$F2_ENV"
+f2_case xdg-window;                   f2_pi_env_check xdg-window "$F2_ENV"
+# screen-bg（分离宿主；无 xdg ⇒ 走 --background + screen）
+STSB="$FXROOT/stub-ac12sb"; mkdir -p "$STSB"; x_screen_stub "$STSB"; x_pi_stub "$STSB"
+printf 'export PATH=%q\n' "$STSB:$MINBIN" > "$HOME2/.bash_profile"
+SB_ENV="$FXROOT/ac12-f2-screen-bg.env"; : > "$SB_ENV"; : > "$FXROOT/ac12-f2-sb.state"
+set_env -u TMUX -u NAO_TERMINAL TMUX="sock12,4242,0" TMUX_PANE="$CALLER" \
+  NAO_SKILLS="$FIX2" NAO_TASKS_STATE="$FIX2/.no-tasks-state.md" PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" \
+  NAO_QA_FAKE_ROSTER='[]' PATH="$STSB:$MINBIN" HOME="$HOME2" \
+  T513X_TMUX_LOG="$FXROOT/ac12-f2-sb.tmux" T513X_SCREEN_STATE="$FXROOT/ac12-f2-sb.state" \
+  T513X_PI_ENV_LOG="$SB_ENV" T513X_LABEL=screen-bg T513X_REPO="$FIX2"
+run_fleet "$FIX2" ensure --background qa
+sb_tries=50; while (( sb_tries-- > 0 )); do [[ -s "$SB_ENV" ]] && break; sleep 0.1; done
+f2_pi_env_check screen-bg "$SB_ENV"
+# tmux-bg（分离宿主）：新 pane 由 tmux server 注入正确句柄；调用者 pane 不得回流（server 仿真）
+STTB="$FXROOT/stub-ac12tb"; mkdir -p "$STTB"; x_tmux_stub "$STTB"; x_pi_stub "$STTB"
+printf 'export PATH=%q\n' "$STTB:$MINBIN" > "$HOME2/.bash_profile"
+TB_ENV="$FXROOT/ac12-f2-tmuxbg.env"; : > "$TB_ENV"; : > "$FXROOT/ac12-f2-tb.envlog"; : > "$FXROOT/ac12-f2-tb.state"
+set_env -u TMUX -u NAO_TERMINAL TMUX_PANE="$CALLER" \
+  NAO_SKILLS="$FIX2" NAO_TASKS_STATE="$FIX2/.no-tasks-state.md" PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" \
+  NAO_QA_FAKE_ROSTER='[]' PATH="$STTB:$MINBIN" HOME="$HOME2" \
+  T513X_TMUX_LOG="$FXROOT/ac12-f2-tb.tmux" T513X_TMUXENV_LOG="$FXROOT/ac12-f2-tb.envlog" \
+  T513X_LABEL=tmuxbg T513X_STATE="$FXROOT/ac12-f2-tb.state" T513X_SESS=nao-qa T513X_REPO="$FIX2" \
+  T513X_SERVER_EMU=1 T513X_INJECT_PANE='%S1' T513X_INJECT_TMUX='srv,1,0' T513X_PI_ENV_LOG="$TB_ENV"
+run_fleet "$FIX2" ensure --background qa
+tb_tries=50; while (( tb_tries-- > 0 )); do [[ -s "$TB_ENV" ]] && break; sleep 0.1; done
+tb_pid="$(awk '{for(i=1;i<=NF;i++) if($i ~ /^PID=/){sub("PID=","",$i); print $i}}' "$TB_ENV" | head -1)"
+[[ -n "$tb_pid" ]] && CLEAN_PIDS+=("$tb_pid")
+if grep -q 'TMUX_PANE=%S1' "$TB_ENV" && ! grep -q 'TMUX_PANE=%99' "$TB_ENV"; then
+  pass AC12 "F2边界 tmux-bg 新 pane 句柄为 server 注入（%S1，非调用者 %99）"
+else bad AC12 "F2边界 tmux-bg pane 句柄异常/回流调用者（$(oneline "$(cat "$TB_ENV" 2>/dev/null)")）"; fi
+# ---- F2 边界：tmux-in ② / tmux-attach ③ argv 与修复前一致（不得注入 env -u）----
+FIXB2="$(mk_fixture ac12b2)"; STB2="$FXROOT/stub-ac12b2"; mkdir -p "$STB2"; x_tmux_stub "$STB2"
+: > "$FXROOT/ac12-b2.tmux"; : > "$FXROOT/ac12-b2.env"
+set_env -u NAO_TERMINAL TMUX="sock12,4242,0" TMUX_PANE="$CALLER" \
+  NAO_SKILLS="$FIXB2" NAO_TASKS_STATE="$FIXB2/.no-tasks-state.md" PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" \
+  NAO_QA_FAKE_ROSTER='[]' PATH="$STB2:$MINBIN" HOME="$FXROOT/home12" \
+  T513X_TMUX_LOG="$FXROOT/ac12-b2.tmux" T513X_TMUXENV_LOG="$FXROOT/ac12-b2.env" \
+  T513X_LIVE_PANES="$CALLER" T513X_REPO="$FIXB2"
+run_fleet "$FIXB2" ensure qa
+o="$(out_s)"; tl="$(cat "$FXROOT/ac12-b2.tmux" 2>/dev/null)"
+if (( RUN_RC == 0 )); then pass AC12 "F2边界② tmux-in ensure rc=0"; else bad AC12 "F2边界② rc=$RUN_RC（$(oneline "$o")）"; fi
+if grep -q 'split-window -h bash -lc' <<< "$tl" && ! grep -q 'env -u TMUX' <<< "$tl"; then
+  pass AC12 "F2边界② split-window argv 保持 bash -lc …（未注入 env -u，无回归）"
+else bad AC12 "F2边界② split-window argv 漂移（$(oneline "$tl")）"; fi
+FIXB3="$(mk_fixture ac12b3)"; STB3="$FXROOT/stub-ac12b3"; mkdir -p "$STB3"; x_tmux_stub "$STB3"; x_xdg_stub "$STB3"
+: > "$FXROOT/ac12-b3.tmux"; : > "$FXROOT/ac12-b3.env"; : > "$FXROOT/ac12-b3.host"; : > "$FXROOT/ac12-b3.state"
+set_env -u TMUX -u NAO_TERMINAL NAO_SKILLS="$FIXB3" NAO_TASKS_STATE="$FIXB3/.no-tasks-state.md" \
+  PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" NAO_QA_FAKE_ROSTER='[]' PATH="$STB3:$MINBIN" HOME="$HOME2" \
+  WAYLAND_DISPLAY=wayland-1 DISPLAY=:0 \
+  T513X_TMUX_LOG="$FXROOT/ac12-b3.tmux" T513X_TMUXENV_LOG="$FXROOT/ac12-b3.env" T513X_HOST_LOG="$FXROOT/ac12-b3.host" \
+  T513X_STATE="$FXROOT/ac12-b3.state" T513X_SESS=nao-qa T513X_REPO="$FIXB3"
+run_fleet "$FIXB3" ensure qa
+o="$(out_s)"; hostl="$(cat "$FXROOT/ac12-b3.host" 2>/dev/null)"
+if (( RUN_RC == 0 )); then pass AC12 "F2边界③ tmux-attach ensure rc=0"; else bad AC12 "F2边界③ rc=$RUN_RC（$(oneline "$o")）"; fi
+if grep -q 'attach -t nao-qa' <<< "$hostl" && ! grep -q 'env -u TMUX' <<< "$hostl"; then
+  pass AC12 "F2边界③ attach argv 保持 tmux attach -t nao-qa（未注入 env -u，无回归）"
+else bad AC12 "F2边界③ attach argv 漂移（$(oneline "$hostl")）"; fi
+fi
+
+# =============================================================================
+if only_match AC13; then
+sec "AC13 D7：apply_tmux_layout 空 display-message 守卫（本批「不许硬崩」；tmux-in 路径）"
+FIX="$(mk_fixture ac13)"; ST="$FXROOT/stub-ac13"; mkdir -p "$ST"; x_tmux_stub "$ST"
+mkdir -p "$FXROOT/home13"
+: > "$FXROOT/ac13.tmux"; : > "$FXROOT/ac13.env"
+set_env -u NAO_TERMINAL TMUX="sock12,4242,0" TMUX_PANE="%99" \
+  NAO_SKILLS="$FIX" NAO_TASKS_STATE="$FIX/.no-tasks-state.md" PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" \
+  NAO_QA_FAKE_ROSTER='[]' PATH="$ST:$MINBIN" HOME="$FXROOT/home13" \
+  T513X_TMUX_LOG="$FXROOT/ac13.tmux" T513X_TMUXENV_LOG="$FXROOT/ac13.env" \
+  T513X_LIVE_PANES="%99" T513X_REPO="$FIX" T513X_EMPTY_DISPLAY=1
+run_fleet "$FIX" ensure qa
+o="$(out_s)"
+if (( RUN_RC == 0 )) && ! grep -qE 'command not found|行 [0-9]+:|第 [0-9]+ 行' <<< "$o"; then
+  pass AC13 "D7 空 display-message ⇒ ensure rc=0 未硬中断（布局步跳过/继续；$(oneline "$o" | cut -c1-100)）"
+else bad AC13 "D7 空 display-message ⇒ ensure 硬中断 rc=$RUN_RC（$(oneline "$o" | cut -c1-160)）"; fi
 fi
 
 # =============================================================================
