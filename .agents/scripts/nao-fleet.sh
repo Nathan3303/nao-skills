@@ -1037,7 +1037,7 @@ spawn_tmux_attach() {  # <name> <repo> <inner>
   return 1
 }
 
-# 宿主阶梯判定（ADR 实施闸门）：echo 动作标签；rc 11=档值非法 / 12=命令缺失 / 1=无宿住
+# 宿主阶梯判定（ADR 实施闸门）：echo 动作标签；rc 11=档值非法 / 12=命令缺失 / 1=无可用宿主
 resolve_action() {
   if [[ -n "${NAO_TERMINAL:-}" ]]; then
     local h ok=0
@@ -1093,6 +1093,7 @@ spawn_one() {
     nao:foot)    spawn_fork_window "$name" foot --app-id="org.nao.$name" --working-directory="$repo" -e bash -lc "$inner" || spawn_rc=1 ;;
     nao:ghostty) spawn_fork_window "$name" ghostty -e bash -lc "$inner" || spawn_rc=1 ;;
     nao:ptyxis)  spawn_fork_window "$name" ptyxis  -- bash -lc "$inner" || spawn_rc=1 ;;
+    *)           spawn_rc=1   # 理论上不可达（resolve_action 标签全覆盖）；防御性不假成功
   esac
   if (( spawn_rc != 0 )); then
     rm -f -- "$prompt_file" 2>/dev/null || true
