@@ -82,6 +82,10 @@ TASKS_STATE="${NAO_TASKS_STATE:-docs/tasks-state.md}"
 log()  { printf '\033[1;32m[fleet]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[fleet]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[fleet]\033[0m %s\n' "$*" >&2; exit 1; }
+# 环境不足/宿主不可运行统一出口：exit 2，单行 `DEGRADED: <诊断>；恢复：<命令>`（对齐 0.12.0 D5 口径）
+die_env() { printf 'DEGRADED: %s；恢复：%s\n' "$1" "$2" >&2; exit 2; }
+# 宿主存在但动作失败（拉起未成）：exit 1（BR3）
+die_spawn() { printf '\033[1;31m[fleet]\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
 # roles.yaml 解析（严格子集：顶层 roles:，2 空格角色条目 / 4 空格字段，禁 Tab）
@@ -313,13 +317,33 @@ resolve_role() {
   PROMPT="${ROLE_CARDS[$id]}"
 }
 
+# 宿主解析（现状阶梯：NAO_TERMINAL → tmux 内 → ghostty/ptyxis/tmux → screen；阶梯本身改动见波 2）。
+# 无任何可用宿主时**不输出**并 rc=1 —— 不再无条件 `echo screen`（P3 根因：screen 缺失时
+# 会在派生处 `行 N: screen: 未找到命令` 裸中断 rc=127）。
+# NAO_TERMINAL 显式值原样返回，由 spawn_one 先校验「受支持 + 已安装」（⇒ 特定诊断，AC3）。
 detect_host() {
-  if [[ -n "${NAO_TERMINAL:-}" ]]; then echo "$NAO_TERMINAL"; return; fi
-  if [[ -n "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1; then echo tmux; return; fi
+  if [[ -n "${NAO_TERMINAL:-}" ]]; then echo "$NAO_TERMINAL"; return 0; fi
+  if [[ -n "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1; then echo tmux; return 0; fi
+  local h
   for h in ghostty ptyxis tmux; do
-    command -v "$h" >/dev/null 2>&1 && { echo "$h"; return; }
+    command -v "$h" >/dev/null 2>&1 && { echo "$h"; return 0; }
   done
-  echo screen
+  command -v screen >/dev/null 2>&1 && { echo screen; return 0; }
+  return 1
+}
+
+# 受支持宿主 → 可执行命令名（存在性探测用；非受支持宿主 rc=1）
+host_bin() {
+  case "$1" in
+    ghostty|ptyxis|tmux|screen) printf '%s\n' "$1" ;;
+    *) return 1 ;;
+  esac
+}
+
+# 宿主可执行存在性（BR2：「已拉起」前置校验）
+host_available() {
+  local b; b="$(host_bin "$1")" || return 1
+  command -v "$b" >/dev/null 2>&1
 }
 
 # ---------------------------------------------------------------------------
@@ -883,11 +907,69 @@ build_system_prompt() {
   echo "$f"
 }
 
+# 等待子进程把 pid 写入 pidfile（setsid -f 的 fork 已完成才会写）；echo pid，超时 rc=1
+wait_for_pidfile() {
+  local f="$1" tries="${2:-30}" pid=""
+  while (( tries-- > 0 )); do
+    pid="$(cat "$f" 2>/dev/null || true)"
+    [[ -n "$pid" ]] && { printf '%s' "$pid"; return 0; }
+    sleep 0.1
+  done
+  return 1
+}
+
+# 非 tmux 窗口宿主（ghostty/ptyxis）派生：P4 根因 = `setsid -f <缺失命令>` 仍 rc=0，
+# 故不能以 setsid 的 rc 当成功 —— 必须验证子进程 pid 存活（BR2）。
+# 失败即回收 pid（不产生孤儿窗口，AC6）。
+spawn_fork_window() {  # <name> <cmd...>
+  local name="$1"; shift
+  local pidf pid
+  pidf="$(mktemp "/tmp/nao-fleet-$name-pid-XXXXXX")" || return 1
+  if ! setsid -f bash -c 'echo $$ >"$1"; shift; exec "$@"' _ "$pidf" "$@" >/dev/null 2>&1; then
+    rm -f -- "$pidf"; return 1
+  fi
+  if ! pid="$(wait_for_pidfile "$pidf")"; then
+    rm -f -- "$pidf"; return 1
+  fi
+  if kill -0 "$pid" 2>/dev/null; then
+    rm -f -- "$pidf"; return 0
+  fi
+  kill "$pid" 2>/dev/null || true
+  rm -f -- "$pidf"
+  return 1
+}
+
+# screen 宿主派生：以「会话存在」为「已拉起」前置；未出现即回收会话（AC6）。
+spawn_screen() {  # <name> <inner>
+  local name="$1" inner="$2" tries=30
+  screen -dmS "nao-$name" bash -lc "$inner" >/dev/null 2>&1 || return 1
+  while (( tries-- > 0 )); do
+    if screen -ls 2>/dev/null | grep -q "[0-9]\.nao-$name\b"; then return 0; fi
+    sleep 0.1
+  done
+  screen -S "nao-$name" -X quit >/dev/null 2>&1 || true
+  return 1
+}
+
 spawn_one() {
-  local name="$1" repo="$2" model="$3" card prompt_file host inner
+  local name="$1" repo="$2" model="$3" card prompt_file host inner spawn_rc=0
   card="$PROMPTS_DIR/$PROMPT"
   [[ -f "$card" ]] || die "角色卡不存在: $card"
   [[ -d "$repo" ]] || die "工作区不存在: $repo"
+
+  # 宿主解析与存在性校验前置：环境不足 ⇒ exit 2 + 单行诊断 + 可复制恢复命令（BR3/AC3/AC4）；
+  # 先于任何资源创建，失败路径零残留（AC6）。
+  host="$(detect_host)" || die_env \
+    "无可用宿主：tmux/ghostty/ptyxis/screen 均未安装或不可用" \
+    "安装任一宿主后重跑，或显式指定 \`NAO_TERMINAL=<ghostty|ptyxis|tmux|screen> nao-fleet.sh ensure $name\`"
+  case "$host" in
+    ghostty|ptyxis|tmux|screen) ;;
+    *) die_env "不支持的宿主: $host（可选 ghostty|ptyxis|tmux|screen）" \
+               "\`NAO_TERMINAL=<ghostty|ptyxis|tmux|screen> nao-fleet.sh ensure $name\`" ;;
+  esac
+  host_available "$host" || die_env \
+    "宿主不可用：未找到命令 $host${NAO_TERMINAL:+（来自 NAO_TERMINAL=$NAO_TERMINAL）}" \
+    "改用已安装宿主，如 \`NAO_TERMINAL=tmux nao-fleet.sh ensure $name\`（先用 \`command -v $host\` 确认安装）"
 
   prompt_file="$(build_system_prompt "$card")"
   inner="cd $(printf %q "$repo") && exec pi --name $(printf %q "$name")"
@@ -895,14 +977,17 @@ spawn_one() {
   inner+=" --append-system-prompt $(printf %q "$prompt_file")"
   ( sleep 60; rm -f -- "$prompt_file" ) & disown 2>/dev/null || true
 
-  host="$(detect_host)"
+  # 拉起 + 前置校验；失败不打印「已拉起」，清理本轮资源后 exit 1（BR2/BR3/AC6）
   case "$host" in
-    ghostty) setsid -f ghostty -e bash -lc "$inner" >/dev/null 2>&1 ;;
-    ptyxis)  setsid -f ptyxis  -- bash -lc "$inner" >/dev/null 2>&1 ;;
+    ghostty) spawn_fork_window "$name" ghostty -e bash -lc "$inner" || spawn_rc=1 ;;
+    ptyxis)  spawn_fork_window "$name" ptyxis  -- bash -lc "$inner" || spawn_rc=1 ;;
     tmux)    spawn_tmux "$name" "$inner" ;;
-    screen)  screen -dmS "nao-$name" bash -lc "$inner" ;;
-    *) die "不支持的宿主: $host" ;;
+    screen)  spawn_screen "$name" "$inner" || spawn_rc=1 ;;
   esac
+  if (( spawn_rc != 0 )); then
+    rm -f -- "$prompt_file" 2>/dev/null || true
+    die_spawn "宿主 $host 未能拉起 $name（动作失败，exit 1）；已清理本轮残留，无孤儿窗口/会话"
+  fi
   log "[$host] 已拉起 $name @ $repo${model:+（model=$model）}$([[ "$host" == tmux ]] && echo "（layout=$TMUX_LAYOUT）")"
 }
 
