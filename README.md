@@ -53,6 +53,8 @@ npx @nathan33/nao-skill migrate   # 旧文件备份到 .agents/.nao-obsolete/，
 
 角色名可以写**别名**或**规范名**（两者等价）：`arch` = `arch-designer`、`infra` = `rd-infra`；上例里两者混用也照常拉起。完整别名表见 `.agents/roles.yaml` 或 `nao-fleet.sh --help`。
 
+**不在 tmux 里也能用**：默认每个角色开一个**看得见的终端窗口**（走 `xdg-terminal-exec`，窗口标识 `org.nao.<角色>`），不是后台黑箱；无图形会话（如 SSH）默认拒绝，需显式 `--background` 才建后台会话，并打印可复制的 `tmux attach` 命令。宿主的完整选择顺序与降级边界见 `nao-fleet.sh --help`。
+
 然后**在 PM 会话里说需求**就行，剩下的它自己流转。大概长这样：
 
 ```text

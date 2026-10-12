@@ -574,6 +574,55 @@ pi_pids_for() {
   done
 }
 
+# ---- ④ 路径句柄（app-id/class；BR7/AC8）-------------------------------------
+# 窗口 client pid：Hyprland `hyprctl clients -j` 主路；sway 树后备（仅存在性探测；NFR4/NFR5）
+app_client_pid() {  # <name> → echo 窗口进程 pid（无则空）
+  local name="$1" cls="org.nao.$name" json=""
+  if command -v hyprctl >/dev/null 2>&1; then
+    json="$(hyprctl clients -j 2>/dev/null || true)"
+  elif command -v swaymsg >/dev/null 2>&1; then
+    json="$(swaymsg -t get_tree 2>/dev/null || true)"
+  fi
+  [[ -n "$json" ]] || return 0
+  printf '%s' "$json" | node -e '
+    let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+      try{const a=JSON.parse(s);const arr=Array.isArray(a)?a:[a];
+        const walk=x=>{for(const n of (x||[])){const c=n.class||n.initialClass||n.app_id;
+          if(c===process.argv[1]&&n.pid!=null){process.stdout.write(String(n.pid));return;}
+          walk(n.nodes);walk(n.floating_nodes);}};
+        walk(arr);}catch(e){}
+    });' "$cls" 2>/dev/null || true
+  return 0
+}
+
+# 深度优先找 comm=pi 的后代（窗口进程往往是终端，pi 在其下）
+pi_descendant_of() {  # <root pid> → echo 首个 pi 后代 pid
+  local root="$1" c r
+  for c in $(pgrep -P "$root" 2>/dev/null); do
+    [[ "$(ps -o comm= -p "$c" 2>/dev/null | tr -d ' ')" == "pi" ]] && { printf '%s\n' "$c"; return 0; }
+    r="$(pi_descendant_of "$c")"
+    [[ -n "$r" ]] && { printf '%s\n' "$r"; return 0; }
+  done
+  return 0
+}
+
+# app-id/class 句柄 → 校验 comm=pi 后的 pi pid（BR7：取 pid 后校验 comm=pi）
+app_pid_for() {  # <name> → echo pi pid（无句柄/不可校验则空）
+  local name="$1" pid d
+  pid="$(app_client_pid "$name")"
+  [[ -n "$pid" ]] || return 0
+  if [[ "$(ps -o comm= -p "$pid" 2>/dev/null | tr -d ' ')" == "pi" ]]; then printf '%s\n' "$pid"; return 0; fi
+  d="$(pi_descendant_of "$pid")"
+  [[ -n "$d" ]] && printf '%s\n' "$d"
+  return 0
+}
+
+# ④ 路径是否有 class 探针（D6：无探针 ⇒ 接受启动 + warn，不 exit 1）
+class_probe_available() {
+  command -v hyprctl >/dev/null 2>&1 || command -v swaymsg >/dev/null 2>&1 || \
+  command -v xdotool >/dev/null 2>&1 || command -v wmctrl >/dev/null 2>&1
+}
+
 running() {
   local name="$1" repo="${2:-}"
   if intercom_online "$name" "$repo"; then return 0; fi
@@ -1015,7 +1064,7 @@ spawn_xdg_window() {  # <name> <repo> <cmd...>
   local vrc=0; wait_for_app_class "$name" || vrc=$?
   case "$vrc" in
     0) return 0 ;;
-    2) warn "无合成器查询工具（hyprctl/swaymsg/xdotool/wmctrl 均缺）：$name 窗口 class 无法校验（NFR5 覆盖限制）"; return 0 ;;
+    2) warn "无 class 探针（hyprctl/swaymsg/xdotool/wmctrl 均缺）：未能校验 $name 窗口可见性（D6）"; return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -1286,11 +1335,37 @@ cmd_check() {
     done
   fi
 
+  echo "== 宿主阶梯（BR1；非 tmux 用户）=="
+  echo "  ① NAO_TERMINAL → ② tmux 内分屏 → ③ tmux 会话+可见窗口 attach → ④ xdg-terminal-exec 直开窗 → ⑤ --background → ⑥ exit 2"
+  if [[ -n "${NAO_TERMINAL:-}" ]]; then
+    local okh=0 h
+    for h in "${NAO_TERMINAL_ALLOWED[@]}"; do [[ "$h" == "$NAO_TERMINAL" ]] && { okh=1; break; }; done
+    if (( ! okh )); then
+      printf '  ✗ NAO_TERMINAL=%-10s 非法（可选 %s）\n' "$NAO_TERMINAL" "${NAO_TERMINAL_ALLOWED[*]}"; rc=1
+    elif ! command -v "$NAO_TERMINAL" >/dev/null 2>&1; then
+      printf '  ✗ NAO_TERMINAL=%-10s 命令缺失（ensure 将 exit 2）\n' "$NAO_TERMINAL"; rc=1
+    else
+      printf '  ✓ NAO_TERMINAL=%-10s 合法且可用\n' "$NAO_TERMINAL"
+    fi
+  else
+    echo '  · NAO_TERMINAL 未设置（按环境自动选择阶梯）'
+  fi
+  if command -v xdg-terminal-exec >/dev/null 2>&1; then
+    echo '  ✓ xdg-terminal-exec 可用（阶梯③/④ 开可见窗口）'
+  else
+    echo '  · xdg-terminal-exec 缺失（阶梯③/④ 不可用；无图形会话需 --background）'
+  fi
+  if command -v tmux >/dev/null 2>&1; then
+    echo '  ✓ tmux 可用（阶梯②/③/⑤）'
+  else
+    echo '  · tmux 缺失（阶梯②/③/⑤ 不可用）'
+  fi
+
   echo "== tmux 布局 =="
   if [[ -n "${TMUX:-}" ]]; then
     echo "  当前在 tmux 内（会话 $(tmux display-message -p '#S' 2>/dev/null || echo '?')）"
   else
-    echo "  （当前不在 tmux 内；若宿主命中 tmux 会创建 detached 会话）"
+    echo "  （当前不在 tmux 内：宿主阶梯将按 ③/④/⑤ 选择可见窗口或 --background）"
   fi
   case "$TMUX_LAYOUT" in
     main-row2|main-col|grid)
@@ -1324,6 +1399,10 @@ cmd_status() {
   local a
   intercom_list_json >/dev/null 2>&1 || true   # 预热名册缓存（后续子 shell 复用）
   echo "== 角色会话在线状态（权威名单见 intercom({action:'list'})；本表按终端标题/名册判定）=="
+  # ④ 路径降级标注（BR6/D2）：非 tmux 宿主无 pane 句柄，turn 判定仅靠名册；恰好一行
+  if [[ -z "${TMUX:-}" ]] && ! command -v tmux >/dev/null 2>&1; then
+    echo '  （turn 判定来源 = 名册；非 tmux 宿主降级：无 tmux pane 句柄，在跑 turn 判定仅供参考）'
+  fi
   for a in "${ROLE_ORDER[@]}"; do
     if running "$a" "${ROLE_WS[$a]:-}"; then
       printf '  ✓ %-14s 在线（--name %s；卡片 %s）\n' "$a" "$a" "${ROLE_CARDS[$a]}"
@@ -1420,6 +1499,17 @@ cmd_close() {
     fi
     if command -v screen >/dev/null 2>&1 && screen -ls 2>/dev/null | grep -q "nao-$name"; then
       if screen -S "nao-$name" -X quit 2>/dev/null; then log "已回收 $name（screen 会话 nao-$name）@ $repo"; return 0; fi
+    fi
+    # ④ 路径句柄（BR7/AC8）：app-id/class → pid（校验 comm=pi）→ kill 优先；
+    # 有句柄即回收，不再依赖名册（名册可能滞后）。
+    local app_pid
+    app_pid="$(app_pid_for "$name")"
+    if [[ -n "$app_pid" ]]; then
+      if kill "$app_pid" 2>/dev/null; then
+        log "已回收 $name（app-id=org.nao.$name · pid=$app_pid）@ $repo"; return 0
+      fi
+      warn "已定位 $name 的 app-id 句柄 pid=$app_pid 但回收失败（进程可能刚好退出；核对后可忽略）"
+      return 1
     fi
     # 无任何可杀句柄：名册若报在线 ⇒ 定位失败，必须非静默（禁止「未运行」而 pane 仍在）
     if intercom_online "$name"; then

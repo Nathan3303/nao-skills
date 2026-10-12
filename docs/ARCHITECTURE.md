@@ -41,6 +41,8 @@
 | **常驻层** | 6 张角色卡（65–198 行）+ 2 份 common 规范——每轮每会话计费，**刻意保持最小** | 最贵，最小化 |
 | **按需层** | skills + checklists + templates：只有 description 常驻，完整指令按需读取（Agent Skills 标准渐进式披露）；`checklists/` 与 `skills/` 内聚，只要置于**含 `SKILL.md` 的 skill 目录之下**就不会被注册为独立 skill | 常态零成本 |
 | **工具层** | fleet 拉起/体检/状态（含残留检测）/回收；ui-tokens-check 硬编码色值扫描（可接 CI） | 一次性执行 |
+
+**工具层 · 宿主面（v0.14.0）**：`nao-fleet.sh` 拉起按**宿主阶梯**选路——`NAO_TERMINAL` 显式 → tmux 内分屏 → tmux 会话 + `xdg-terminal-exec` 可见窗口 attach → 无 tmux 时 `xdg-terminal-exec --app-id=org.nao.<角色> --dir=<repo>` 直开窗 → 无图形会话仅 `--background` → 否则 `exit 2` + 诊断。句柄优先级：tmux pane > app-id/class（`hyprctl`/`sway`/X11 后备）> pi-intercom 名册；非 tmux 宿主下 `status` 将 turn 判定明确降级到名册。
 | **外部能力** | CodeGraph：`context` 一次返回相关符号+代码块（实测约 1/17 于 grep+全文） | 查找精准化 |
 
 ## 核心设计：Token 优先
