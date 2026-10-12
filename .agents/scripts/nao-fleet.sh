@@ -90,7 +90,7 @@ warn() { printf '\033[1;33m[fleet]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[fleet]\033[0m %s\n' "$*" >&2; exit 1; }
 # 环境不足/宿主不可运行统一出口：exit 2，单行 `DEGRADED: <诊断>；恢复：<命令>`（对齐 0.12.0 D5 口径）
 die_env() { printf 'DEGRADED: %s；恢复：%s\n' "$1" "$2" >&2; exit 2; }
-# 宿主存在但动作失败（拉起未成）：exit 1（BR3）
+# 宿主存在但动作失败（拉起未成）：exit 1（BR3）；不清零/不声称已回收（回收结果由各派生函数自报）
 die_spawn() { printf '\033[1;31m[fleet]\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
@@ -331,6 +331,7 @@ resolve_role() {
 #   ⑤ 无图形 + 显式 --background ⇒ detached tmux/screen
 #   ⑥ 否则 exit 2 + 单行 DEGRADED 诊断 + 可复制恢复命令
 NAO_TERMINAL_ALLOWED=(tmux foot ghostty ptyxis screen)
+NAO_TERMINAL_LIST='tmux|foot|ghostty|ptyxis|screen'   # 文案用（与 ALLOWED 同步）
 
 # 图形会话探针（ADR 门禁）：有显示变量且 `xdg-terminal-exec --print-id` 成功
 xdg_launcher_ok() {
@@ -617,11 +618,7 @@ app_pid_for() {  # <name> → echo pi pid（无句柄/不可校验则空）
   return 0
 }
 
-# ④ 路径是否有 class 探针（D6：无探针 ⇒ 接受启动 + warn，不 exit 1）
-class_probe_available() {
-  command -v hyprctl >/dev/null 2>&1 || command -v swaymsg >/dev/null 2>&1 || \
-  command -v xdotool >/dev/null 2>&1 || command -v wmctrl >/dev/null 2>&1
-}
+# ④ 路径 class 探针存在性由 app_class_visible() 返回码 2 表达（无独立 helper，避免死代码）
 
 running() {
   local name="$1" repo="${2:-}"
@@ -1057,16 +1054,32 @@ wait_for_app_class() {  # <name> [tries] → 0 可见 / 1 未出现 / 2 无查�
   return 1
 }
 
-# ④ 直开窗：启动 + 限时 class 出现校验（否则失败，不假成功）
+# ④ 直开窗：启动 + 限时 class 出现校验；失败尽力回收（M1：不假称已清理）
+#   pidfile 记录 inner 自身 pid（wrapper exec 后即 pi）⇒ 终端单实例/daemon 化形态下
+#   仍能可靠定位 pi，不依赖窗口生命周期。
 spawn_xdg_window() {  # <name> <repo> <cmd...>
   local name="$1" repo="$2"; shift 2
-  open_xdg_window "$name" "$repo" "$@" || return 1
-  local vrc=0; wait_for_app_class "$name" || vrc=$?
-  case "$vrc" in
-    0) return 0 ;;
-    2) warn "无 class 探针（hyprctl/swaymsg/xdotool/wmctrl 均缺）：未能校验 $name 窗口可见性（D6）"; return 0 ;;
-    *) return 1 ;;
-  esac
+  local pidf pid="" vrc=0
+  pidf="$(mktemp "/tmp/nao-fleet-$name-pid-XXXXXX")" || return 1
+  if ! open_xdg_window "$name" "$repo" bash -c 'echo $$ >"$1"; shift; exec "$@"' _ "$pidf" "$@"; then
+    rm -f -- "$pidf"; return 1
+  fi
+  wait_for_app_class "$name" || vrc=$?
+  if (( vrc == 0 )); then rm -f -- "$pidf"; return 0; fi
+  if (( vrc == 2 )); then
+    warn "无 class 探针（hyprctl/swaymsg/xdotool/wmctrl 均缺）：未能校验 $name 窗口可见性（D6）"
+    rm -f -- "$pidf"; return 0
+  fi
+  # 有探针但限时未出现 class ⇒ 尽力回收 pi，如实报告回收结果（M1）
+  pid="$(wait_for_pidfile "$pidf" 10)" || pid=""
+  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+    warn "④ 校验失败：已尽力回收 $name 的 pi 进程（pid=$pid）；若窗口仍在请手动关闭"
+  else
+    warn "④ 校验失败：未捕获 $name 的 pi 进程 pid，已开窗口可能仍在，请手动关闭"
+  fi
+  rm -f -- "$pidf"
+  return 1
 }
 
 # ③ tmux 会话 + 可见窗口 attach：new-session -d 后开窗 attach，限时校验 list-clients；
@@ -1086,6 +1099,15 @@ spawn_tmux_attach() {  # <name> <repo> <inner>
   return 1
 }
 
+# 是否有 tmux pane 句柄（L6：status 降级标注按「④ 路径」而非「tmux 命令缺失」判断）
+#   in tmux｜NAO_TERMINAL=tmux｜未显式指定且本机有 tmux（将走 ②/③）⇒ 有 pane 句柄
+has_tmux_handle() {
+  [[ -n "${TMUX:-}" ]] && return 0
+  [[ "${NAO_TERMINAL:-}" == tmux ]] && return 0
+  [[ -z "${NAO_TERMINAL:-}" ]] && command -v tmux >/dev/null 2>&1 && return 0
+  return 1
+}
+
 # 宿主阶梯判定（ADR 实施闸门）：echo 动作标签；rc 11=档值非法 / 12=命令缺失 / 1=无可用宿主
 resolve_action() {
   if [[ -n "${NAO_TERMINAL:-}" ]]; then
@@ -1095,7 +1117,11 @@ resolve_action() {
     command -v "$NAO_TERMINAL" >/dev/null 2>&1 || return 12
     printf 'nao:%s\n' "$NAO_TERMINAL"; return 0
   fi
-  if [[ -n "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1; then printf 'tmux-in\n'; return 0; fi
+  if [[ -n "${TMUX:-}" ]]; then
+    if command -v tmux >/dev/null 2>&1; then printf 'tmux-in\n'; return 0; fi
+    # L1（PM 裁定）：$TMUX 已设但 tmux 命令缺失 ⇒ warn + 继续（不因升级中途变量残留卡死）
+    warn "TMUX 已设置但 tmux 命令缺失：忽略 tmux 句柄，按环境继续选择宿主"
+  fi
   if command -v tmux >/dev/null 2>&1 && xdg_launcher_ok; then printf 'tmux-attach\n'; return 0; fi
   if xdg_launcher_ok; then printf 'xdg-window\n'; return 0; fi
   if [[ "${BACKGROUND:-false}" == true ]]; then
@@ -1116,11 +1142,11 @@ spawn_one() {
   case "$rrc" in
     0) ;;
     11) die_env "不支持的宿主：NAO_TERMINAL=$NAO_TERMINAL（可选 ${NAO_TERMINAL_ALLOWED[*]}）" \
-                "改用受支持宿主：\`NAO_TERMINAL=<${NAO_TERMINAL_ALLOWED[*]// /|}> nao-fleet.sh ensure $name\`" ;;
+                "改用受支持宿主：\`NAO_TERMINAL=<$NAO_TERMINAL_LIST> nao-fleet.sh ensure $name\`" ;;
     12) die_env "宿主不可用：NAO_TERMINAL=$NAO_TERMINAL 未找到命令 $NAO_TERMINAL" \
                 "先用 \`command -v $NAO_TERMINAL\` 确认安装，或改用已安装宿主（如 \`NAO_TERMINAL=tmux nao-fleet.sh ensure $name\`）" ;;
     *)  die_env "无可用宿主：无 tmux / 无图形窗口宿主（xdg-terminal-exec）且未显式 --background" \
-                "恢复：\`NAO_TERMINAL=<${NAO_TERMINAL_ALLOWED[*]// /|}> nao-fleet.sh ensure $name\`；无图形会话时用 \`nao-fleet.sh ensure --background $name\`" ;;
+                "安装或指定已安装宿主：\`NAO_TERMINAL=<$NAO_TERMINAL_LIST> nao-fleet.sh ensure $name\`；无图形会话时用 \`nao-fleet.sh ensure --background $name\`" ;;
   esac
 
   prompt_file="$(build_system_prompt "$card")"
@@ -1146,7 +1172,7 @@ spawn_one() {
   esac
   if (( spawn_rc != 0 )); then
     rm -f -- "$prompt_file" 2>/dev/null || true
-    die_spawn "宿主 $action 未能拉起 $name（动作失败，exit 1）；已清理本轮残留，无孤儿窗口/会话"
+    die_spawn "宿主 $action 未能拉起 $name（动作失败，exit 1；回收结果见上方提示）"
   fi
   case "$action" in
     tmux-in|nao:tmux) htag="tmux" ;;
@@ -1399,8 +1425,8 @@ cmd_status() {
   local a
   intercom_list_json >/dev/null 2>&1 || true   # 预热名册缓存（后续子 shell 复用）
   echo "== 角色会话在线状态（权威名单见 intercom({action:'list'})；本表按终端标题/名册判定）=="
-  # ④ 路径降级标注（BR6/D2）：非 tmux 宿主无 pane 句柄，turn 判定仅靠名册；恰好一行
-  if [[ -z "${TMUX:-}" ]] && ! command -v tmux >/dev/null 2>&1; then
+  # ④ 路径降级标注（BR6/D2/L6）：无 tmux pane 句柄（含 NAO_TERMINAL=foot 等）时 turn 判定仅靠名册；恰好一行
+  if ! has_tmux_handle; then
     echo '  （turn 判定来源 = 名册；非 tmux 宿主降级：无 tmux pane 句柄，在跑 turn 判定仅供参考）'
   fi
   for a in "${ROLE_ORDER[@]}"; do
