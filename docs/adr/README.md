@@ -3,13 +3,15 @@
 > 约定见 `.agents/prompts/architecture-designer.md` §十一：落盘 `docs/adr/YYYY-MM-DD-<简短主题>.md`（日期取评审终签日）；
 > 每篇必含 `参考来源`（链接 + 访问日期）与 `对照过的备选模式`（含不采纳理由）。
 > 本文件是**索引**，不是条款出处；机制条款以 `.agents/` 为准（单一事实来源）。
+> 决策列只放 ≤20 字短结论，细节留在各 ADR 正文（骨架见 `.agents/templates/adr-index.md.example`）。
 
 | 日期 | 主题 | 决策 | 状态 |
 | :--- | :--- | :--- | :--- |
-| 2026-09-25 | [新增 `rd-infra`（工程基座）角色](2026-09-25-new-rd-infra-role.md) | 新增专精角色 `rd-infra`（别名 `infra`），不新增通用开发角色；口诀「改业务行为 ⇒ rd-fe/rd-be；改怎么构建/验/发/治理 ⇒ rd-infra」 | 已接受（已落地 v0.9.0） |
-| 2026-09-25 | [舰队 tmux 布局：新增 `main-col` 与窄列守卫](2026-09-25-tmux-fleet-layout-modes.md) | 新增 `NAO_TMUX_LAYOUT=main-col`（委托内建 `main-vertical`）；`main-row2` 加最小列宽守卫与 `main-col → grid` 回退阶梯 | 已接受（已落地 v0.9.0） |
-| 2026-10-08 | [单 SKILL 化 + pi 原生分发](2026-10-08-nao-skills-single-skill-pi-package.md) | 机制单源迁入包内 `.agents/`（A′），项目仅留转发 shim；pi 按文件声明 2 个 skill；`NAO_SKILLS`=机制包根；不可运行= `exit 2` + `DEGRADED:`；shim 保 2 个 MINOR | 已接受 |
-| 2026-10-08 | [migrate 收尾：迁移标记、shim 判定式与 lock 去重](2026-10-08-migrate-shim-and-marker.md) | 移除死标记 `.nao-migrated`（BR4 靠资产删除达成）；shim 改为 `needsShim = A ∨ A′ ∨ B` 自动判定 + `--shim`/`--no-shim` 覆盖；lock 去重改属性级回退 + 校验 + 失败告警；并入 B2（去重不再受早退分支跳过）——v0.13.0 | 已接受（已落地 v0.13.0 · T510） |
-| 2026-10-12 | [非 tmux 宿主的舰队派生（宿主阶梯 + 派生方式 + 句柄模型）](2026-10-12-non-tmux-host-spawn.md) | 宿主由枚举改环境查询阶梯（`NAO_TERMINAL`→tmux 内→tmux+可见窗口 attach→`xdg-terminal-exec`→显式 `--background`→`exit 2`）；D5 每角色 tmux 会话 + 可见窗口（默认 socket，句柄零改动）；非 tmux 句柄 app-id/pid > 名册，status 明确降级 | 已接受（待 RD 落地 v0.14.0） |
-| 2026-10-13 | [舰队 pane 创建与布局的显式目标寻址（派生宿主窗口）](2026-10-13-derived-pane-window-addressing.md) | pane/布局/窗口选项一律带 `-t` 显式目标 = 派生宿主窗口（调用者 pane 所在 window）；定位链 显式 env > `TMUX_PANE`→window_id > 名册唯一窗 > warn+skip；禁无 `-t` 续建 | 已接受（T517 · 待 RD 落地） |
-| 2026-10-13 | [cleanup 守卫：生产默认 socket 判定与 TMUX_TMPDIR 解耦](2026-10-13-close-anchor-cleanup-guard.md) | 默认 socket 候选 = $TMUX 句柄 + 常量 `/tmp/tmux-<uid>/default` + $TMPDIR 变体，**不依赖 TMUX_TMPDIR**（17:11 事故根因）；脚本护栏同常量独立复算（exit 3）；纪律 `env -u TMUX` + `-S` | 已接受（随 T516 / 0.16.0；随 PR #30 入库） |
+| 2026-09-25 | [新增 `rd-infra`（工程基座）角色](2026-09-25-new-rd-infra-role.md) | 新增专精角色 rd-infra | 已接受（已落地 v0.9.0） |
+| 2026-09-25 | [舰队 tmux 布局：新增 `main-col` 与窄列守卫](2026-09-25-tmux-fleet-layout-modes.md) | 布局新增 main-col 模式 | 已接受（已落地 v0.9.0） |
+| 2026-10-08 | [单 SKILL 化 + pi 原生分发](2026-10-08-nao-skills-single-skill-pi-package.md) | 单 SKILL 化 + 原生分发 | 已接受 |
+| 2026-10-08 | [migrate 收尾：迁移标记、shim 判定式与 lock 去重](2026-10-08-migrate-shim-and-marker.md) | 迁移收尾与 shim 判定式 | 已接受（已落地 v0.13.0 · T510） |
+| 2026-10-12 | [非 tmux 宿主的舰队派生（宿主阶梯 + 派生方式 + 句柄模型）](2026-10-12-non-tmux-host-spawn.md) | 非 tmux 宿主派生阶梯 | 已接受（待 RD 落地 v0.14.0） |
+| 2026-10-13 | [舰队 pane 创建与布局的显式目标寻址（派生宿主窗口）](2026-10-13-derived-pane-window-addressing.md) | 派生 pane 显式目标寻址 | 已接受（T517 · 待 RD 落地） |
+| 2026-10-13 | [cleanup 守卫：生产默认 socket 判定与 TMUX_TMPDIR 解耦](2026-10-13-close-anchor-cleanup-guard.md) | 默认 socket 判定与解耦 | 已接受（随 T516 / 0.16.0；随 PR #30 入库） |
+| 2026-10-14 | [ADR 结构契约（骨架单源 / 状态值域 / 职责下沉）](2026-10-14-adr-structure-contract.md) | ADR 结构契约（骨架单源） | 已接受（待落地 v0.17.2） |
