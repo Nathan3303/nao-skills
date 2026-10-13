@@ -126,7 +126,7 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 
 ## 老用户迁移与维护者注记（新用户可跳过）
 
-本节面向**已有旧版安装**或需要维护 CI / 下游仓库的读者，新用户可以直接跳到「想深入」。
+本节面向**已有旧版安装**或需要维护使用机制的仓库 CI 的读者，新用户可以直接跳到「想深入」。
 
 ### 老项目迁移（migrate）
 
@@ -140,24 +140,18 @@ npx @nathan33/nao-skill migrate   # 旧文件备份到 .agents/.nao-obsolete/，
 
 **从 0.12 起，机制不再铺进项目**：项目里只留一个转发入口，机制的**单一事实来源**是 npm 包 `@nathan33/nao-skill` 内的 `.agents/`。
 
-- **旧的完整性判据已失效**：以前下游靠「项目内 `.agents/**` 与上游逐字节 sha 一致」证明机制没漏没改；现在项目内不再有机制副本，这条判据不再适用。
+- **旧的完整性判据已失效**：以前靠「项目内 `.agents/**` 与包内逐字节 sha 一致」证明机制没漏没改；现在项目内不再有机制副本，这条判据不再适用。
 - **新的完整性判据：以 pin 的包版本为准**。`.pi/settings.json` 记录版本，`pi install/update` 从包物化；包里是什么就是什么，不存在「项目内被就地改动」的问题。转发入口是生成的固定文本，可用 `npx @nathan33/nao-skill init` 幂等重写核对。
 - **版本权威口径**：`.pi/settings.json` 里的 pin 是**唯一权威**（`pi install/update` 据此物化到 `.pi/npm`）；`.agents/.nao-version` 的语义是**本机已安装机制包版本**（供升级检测），**不表达迁移状态**、**不作为版本依据**；两者不一致时**以 pin 为准**。
-- **fmt 边界**：包内 `.agents/**` 仍以上游原始存储形态发布（部分 YAML / Markdown / MTS 未按 oxfmt / prettier 归一）。迁移期仍持有旧版全套 `.agents/**` 的仓库，继续把 `.agents/**` 排除出 fmt 校验即可，⛔ **不要为过 fmt 就地格式化**；新形态项目内只有转发入口，无需再处理。
+- **fmt 边界**：包内 `.agents/**` 按原始存储形态发布（部分 YAML / Markdown / MTS 未按 oxfmt / prettier 归一）。迁移期仍持有旧版全套 `.agents/**` 的仓库，继续把 `.agents/**` 排除出 fmt 校验即可，⛔ **不要为过 fmt 就地格式化**；新形态项目内只有转发入口，无需再处理。
 
 ### 物化与离线（CI / 无 pi 环境必读）
 
 - `.pi/npm/` 由 pi 管理并 **gitignore**。因此 **fresh clone 上没有 `.pi/npm/package.json` 与 lockfile**，`npm ci --prefix .pi/npm` 当前**不可用**。
 - 物化只有一条路：**显式执行** `pi install -l --approve npm:@nathan33/nao-skill@<pin>`（需要 pi 与网络，是有意为之的一步）。
-- **联动条款**：若某个仓库想把机制体检 `check` 放进 CI（即改变「下游 CI 零改动」的约定），**必须同时**用 `git add -f` 把 `.pi/npm/package.json`、`.pi/npm/package-lock.json` 纳入版本控制，`npm ci` 才有输入。
+- **联动条款**：若某个仓库想把机制体检 `check` 放进 CI，**必须同时**用 `git add -f` 把 `.pi/npm/package.json`、`.pi/npm/package-lock.json` 纳入版本控制，`npm ci` 才有输入。
 - **pi 启动的隐式安装**：当 `.pi/npm/node_modules` 缺失时，pi 启动会隐式执行 `npm install --prefix .pi/npm --legacy-peer-deps`；离线且缓存为空会得到可读的 npm 报错，并让 pi 以非 0 退出（不会静默假装成功）。
 - **运行纪律**：**先显式物化，再 `PI_OFFLINE=1` 运行**。nao 机制自身（转发入口 / fleet / CLI / check）**零网络调用**；入口找不到机制包时不静默成功，而是 `exit 2` 并打印一行 `DEGRADED:` + 恢复命令。
-
-### 下游仓库迁移（nao-todo / nao-todo-server / nue-ui）
-
-- **迁移期零改动**：旧的全套 `.agents/scripts/nao-fleet.sh` 照常可用，这些仓库的 CI 目前不调用 `check`，不受影响。
-- 想切到新形态时，在各仓执行 `npx @nathan33/nao-skill migrate`：只删**已知 nao 资产**（共享的 `.agents/skills/` 里项目自有的技能会保留），并把 `skills-lock.json` 里重复的 `frontend-design` 来源收敛为「机制包唯一来源」。
-- **纯文档仓（如 `nao-todo-minimal`）特例**：无脚本、无 `nao-fleet`/`nao-skill` 引用 ⇒ 迁移判定为**纯文档迁移，不建转发入口**（可显式 `--shim` 强制；也可 `--no-shim` 强制不建）；它的 `.agents/commands/`、`.agents/prompts/` 不在 pi 的 skill 扫描面（pi 只扫 `.agents/skills/**`）。
 
 ## 想深入
 
