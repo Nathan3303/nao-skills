@@ -5,7 +5,8 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 当前阶段：**全部批次闭环** —— 上游：T509（#19 别名/守卫/跨仓回收 → v0.12.1）· T510（#21 migrate 收尾 → v0.13.0）· T511（三仓 pin → 0.13.0 + 删 `.nao-migrated`）；下游：T506/T507/T508（三仓迁到 0.12.0）。
+- 当前阶段：**全部批次闭环** —— 上游：T509（#19 别名/守卫/跨仓回收 → v0.12.1）· T510（#21 migrate 收尾 → v0.13.0）· T511（三仓 pin → 0.13.0 + 删 `.nao-migrated`）· **T514（#22 移除 qq-notify → v0.15.0）**；下游：T506/T507/T508（三仓迁到 0.12.0）。
+- ✅ **T514 已交付闭环（2026-10-13，立项→合并→发版当日完成）**：**移除 qq-notify 能力**（用户拍板 D1 全删/D2 0.15.0/D3 随落关 #22）· PRD `docs/prds/2026-10-13-remove-qq-notify.md`（AC1–AC10）· rd-infra 单波 · Draft PR [#28](https://github.com/Nathan3303/nao-skills/pull/28) → squash `7c68901`（恰 1 条/无 wip()/分支删净）· **tag `v0.15.0` + Release 已发（PM，notes 用户可读）**· #22 已关（GitHub 随 PR 自动关 + PM 处置评论）· `check` exit=0 roles=6 files=41 · pi skills 注册 -1）。**计划外触点裁定**：`check_qq_notify` 守卫 + 帮助文案删除（与被删资产强耦合，采纳并留痕）。**教训**：`gh release create --target <短sha>` 会 422，先 `git tag -a` + `git push origin <tag>` 再建 Release。**待用户裁量**：下游 **2 处活引用悬空**（nao-todo `AGENTS.md:120` 整段 QQ 推送用法 · nue-ui `AGENTS.md:81` 路径示例）——pin 升 0.15.0 后失效，需下游小批次清理（rd-infra 随手改）。**npm 发布待用户。**
 - 🔵 ~~**T512 在飞（2026-10-12 起）**~~ ⇒ **已闭环（2026-10-12）**：**调研单** —— arch 检验 **pi-subagents 与 nao 多窗体舰队机制的兼容性**，报告 `docs/reports/2026-10-12-pi-subagents-compat-review.md`。结论：**可组合、非同层替代**；替代常驻舰队不采纳。PM 独立抽检 3 条硬断言全成立（自动 intercom 桥在当前装机**整条死**：pi-subagents 0.77.0 不写 `PI_SUBAGENT_ORCHESTRATOR_TARGET` 等 5 个 env 中任何一条）。**待用户裁量 3 项**（见归档表）。**零代码、未建 Issue/PR、未动需求分支**。
 - ✅ **T513 已交付（2026-10-12 立项 → 10-13 合并，main `cda59b0`）**：原开工记录 —— **非 tmux 宿主的舰队派生** —— PRD `docs/prds/2026-10-12-non-tmux-host-spawn.md` · **Issue #26** · 分支 `feat/26-non-tmux-host-spawn`（base main）· 版本 **0.14.0 MINOR**。用户已拍 **D1–D5**（D5 = tmux 可用但不在 tmux 内时允许用 tmux，**但必须前台可见、禁静默后台会话** ⇒ 阶梯③保留完整 tmux 句柄，回归面大幅缩小）。已派：**T513-A arch ADR** / **T513-QA 用例先行** / **T513a rd-infra 波 1（P3+P4 失败语义，ADR 无关）**；波 2/3 待 ADR 终签后派。
 - ✅ **T513 交付闭环**：AC1–AC14 全过 · `verify.sh` **85/0**（**AC14 连跑 3 次一致 5/5** · AC11 3× 一致 9/9）· `tests/t4` **11 用例 / 263 PASS / 4 NOTE / 0 FAIL**（基线口径**订正为 178**，原记 ≥179 不可复现）· 真机实拉 ③/④ 各一次 · 事故 **H1**（`close` 自伤 ⇒ 整窗消失；既有缺陷、本批放大触发面）→ **F1 不变量 + F2 源头清句柄** + 永久复现资产 · **M2** 首修未建立不变量（重载连跑现「有时绿」）→ 终改**父持管道** · squash `cda59b0`（main 恰 1 条、无 `wip()`）· **tag `v0.14.0` + Release 已发**。
@@ -64,7 +65,7 @@
 | ~~T513~~ | — | 已交付（0.14.0 · PR #27 → `cda59b0`）—— 保留作历史指针，**勿重复派发** | 已闭环 |
 | ~~#19~~ | — | 已由 **T509** 闭环并发布（0.12.1）——保留作历史指针，**勿重复派发** | 已闭环 |
 | ~~#21~~ | — | 已由 **T510** 闭环并发布（0.13.0）——同上 | 已闭环 |
-| **T514** | rd-infra | **移除 qq-notify 能力**（用户拍板 D1 全删/D2 发 0.15.0/D3 随落关闭 #22）：删包内脚本+skill+PM卡§十四+README节+CLI 白名单 2 行 · PRD `docs/prds/2026-10-13-remove-qq-notify.md`（AC1–AC10）· 分支 `feat/22-remove-qq-notify` · Issue [#22](https://github.com/Nathan3303/nao-skills/issues/22)（已加处置升级评论）· 回执 `done(full)` · Reviewer = PM 自复核（免 arch） | 2026-10-13 立项+开工确认，待 ensure rd-infra 后派发 |
+| ~~T514~~ | — | 已交付（0.15.0 · PR #28 → `7c68901`）—— 保留作历史指针，**勿重复派发**；**npm 发布待用户** | 已闭环 |
 
 ## 进行中
 
