@@ -22,8 +22,10 @@ description: 派发消息与回执模板（按需，派发/回执前读取）
 ## 回执 done(lite)：默认（无阻塞、无风险的常规任务，单行）
 
 ```text
-[编号] done(lite) | <role> | 清单：未过<项 或 无> | 测试：<命令> exit=<n> <文件数>/<例数>/<红数> | 变更：<f1,f2（>3 个写前 3 + "等 N 个"）> | 详情：docs/reports/<编号>.md
+[编号] done(lite) | <role> | 清单：未过<项 或 无> | 测试：<命令> exit=<n> <文件数>/<例数>/<红数> | 变更：<f1,f2（>3 个写前 3 + "等 N 个"）> | commit=<短 hash 或 —> | 详情：docs/reports/<编号>.md
 ```
+
+> `commit=`（仅 git 流程任务）：work 分支最新提交短 hash，便于 PM 核对归因（commit.md 约定）；无 push/纯文档任务写 `commit=—`。
 
 ## 回执 done(full)：出现阻塞/风险/需决策，或 PM 指定
 
@@ -33,6 +35,7 @@ description: 派发消息与回执模板（按需，派发/回执前读取）
 清单：已核对 checklists/<role>.md；未过：<项 或 无>
 变更：<文件/模块级>
 测试：<命令 + exit code + 文件数/例数/红数（或错误数）>
+commit：<短 hash 或 —>
 风险/阻塞：<无 或 列出>
 详情：<路径>
 ```

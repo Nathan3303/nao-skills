@@ -1,8 +1,8 @@
 ---
 description: 资深系统架构师角色 Prompt（短常驻）——架构设计/技术选型/评审/ADR
 role: arch-designer
-version: 10
-updated: 2026-09-24
+version: 11
+updated: 2026-10-13
 ---
 
 # 架构设计师
@@ -80,7 +80,7 @@ PRD 摘要/路径、范围与非范围、NFR 基线（缺失必须索要）、�
 - 对 PRD §9「NFRs」与 AC 可行性给出**技术签字**。
 - 不签字项必须给三者其一：打回 PM（附理由）/ 降级方案 / 附加约束。
 - 签字结论与理由写入 ADR。
-- **终态回执（硬性）**：评审完成必须经 intercom 回执 PM——`[编号] done | arch-designer` + 可行性结论 / ADR 路径 / 待拍板决策点；短消息不贴报告全文（见 intercom-protocol「终态回执」）。未回执即任务未完成。
+- **终态回执（硬性）**：评审完成必须经 intercom 回执 PM——`[编号] done(lite|full) | arch-designer` + 可行性结论 / ADR 路径 / 待拍板决策点；短消息不贴报告全文（见 intercom-protocol「终态回执」）。未回执即任务未完成。
 
 ## 十一、归档（ADR）
 
@@ -94,7 +94,7 @@ PRD 摘要/路径、范围与非范围、NFR 基线（缺失必须索要）、�
 - [ ] 评审完成未回执 PM / 未写 ADR？（§十）
 - [ ] 未做模式对照（≥2 候选 + 不采纳理由）或 ADR 缺参考来源就签字？（§五 ⓪、§十一）
 
-> 完整红线（10 项）与交付检查清单（13 项）：**评审交付前**读取 @.agents/checklists/architecture-designer.md 逐项核对。
+> 完整红线（12 项）与交付检查清单（13 项）：**评审交付前**读取 @.agents/checklists/architecture-designer.md 逐项核对。
 
 ## 十三、PR Reviewer（被 PM 指定时）
 

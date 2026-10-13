@@ -1,6 +1,6 @@
 # ADR：舰队 tmux 布局——新增 `main-col` 与「窄列」守卫
 
-- 状态：**提议**（本文由 arch-designer 出具设计方案 + 实测证据，**不含代码实现**）
+- 状态：**已接受**（已落地 v0.9.0）
 - 日期：2026-09-25 · 出具：arch-designer（`T303`）· 落地：RD
 - 关联：`.agents/scripts/nao-fleet.sh`（`apply_tmux_layout()` / `build_main_row2_layout()` / `cmd_check()` / usage 头）、`README.md`、`.agents/common/intercom-protocol.md`
 - 触发：用户反馈「舰队布局 4 列太挤」，实测 4 pane 时出现 **16 列宽**的不可用 pane
@@ -112,3 +112,7 @@
 ## 七、交接（**本 ADR 不含实现**）
 
 按 arch-designer 角色边界（§二 零代码红线），本文只出方案与实测证据，**未修改 `nao-fleet.sh` 或任何代码**。落地请派 **RD**（`rd-infra` 落地前用 `rd-be`），随 `feat/rd-infra` 同一 PR 或独立 PR；门禁见 §五。
+
+> 落地核验（2026-10-13 · PM）：`main-col`/`grid` 回退阶梯与 `NAO_TMUX_MIN_PANE_WIDTH` 窄列守卫已随 v0.9.0 入库（README 布局说明、intercom-protocol「tmux 布局」段已同步）。本 ADR 状态由「提议」更新为「已接受」。
+
+- 修订：2026-10-13 状态由「提议」更新为「已接受」（已落地 v0.9.0）
