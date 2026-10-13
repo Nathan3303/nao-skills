@@ -24,7 +24,7 @@ nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，�
 
    ```bash
    cd 你的项目
-   pi install --local npm:@nathan33/nao-skill@0.14.0   # 声明 pin + 把机制包物化到项目内 .pi/npm
+   pi install --local npm:@nathan33/nao-skill@0.16.0   # 声明 pin + 把机制包物化到项目内 .pi/npm
    npx @nathan33/nao-skill init                        # 写入转发 shim + 生成 AGENTS.md
    ```
 
@@ -93,7 +93,7 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 
 **它会在 GitHub 上开 PR 吗？** 会——每个需求一条分支、一个 PR（Draft 早开、CI 早跑），你确认验收后由研发角色 squash 合并，main 上只留 1 条可读提交。没有远端或 `gh` 时降级为本地分支，流程不变。
 
-**跑完的会话要留着吗？** 后台派生会话验收完可以回收：`nao-fleet.sh close --task T1 rd-be`（等价写法 `nao-fleet.sh close rd-be-T1`，直接用派生会话名即可）；常驻角色留着复用。`nao-fleet.sh status` 会提示哪些是残留。目标在别的项目里也能回收——`close` 会按名册/窗口标题跨项目定位；定位不到时会**非 0 退出并打印诊断**，不会假装已回收。
+**跑完的会话要留着吗？** 后台派生会话验收完可以回收：`nao-fleet.sh close --task T1 rd-be`（等价写法 `nao-fleet.sh close rd-be-T1`，直接用派生会话名即可）；常驻角色留着复用。`nao-fleet.sh status` 会提示哪些是残留。目标在别的项目里也能回收——`close` 会按名册/窗口标题跨项目定位；定位不到时会**非 0 退出并打印诊断**，不会假装已回收。实验/夹具用的隔离 tmux server 用 `nao-fleet.sh cleanup -S <socket>` 清理：**强制显式 socket**，不带 `-S` 或指向生产默认 socket 一律 exit 2 拒绝，绝不会连坐你正在用的真实 server。
 
 **推荐用 tmux 吗？** **推荐**——装上 tmux 后，舰队机制的使用体验最完整：
 
