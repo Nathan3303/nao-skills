@@ -53,7 +53,7 @@ npx @nathan33/nao-skill migrate   # 旧文件备份到 .agents/.nao-obsolete/，
 
 角色名可以写**别名**或**规范名**（两者等价）：`arch` = `arch-designer`、`infra` = `rd-infra`；上例里两者混用也照常拉起。完整别名表见 `.agents/roles.yaml` 或 `nao-fleet.sh --help`。
 
-**不在 tmux 里也能用**：默认每个角色开一个**看得见的终端窗口**（走 `xdg-terminal-exec`，窗口标识 `org.nao.<角色>`），不是后台黑箱；无图形会话（如 SSH）默认拒绝，需显式 `--background` 才建后台会话，并打印可复制的 `tmux attach` 命令。宿主的完整选择顺序与降级边界见 `nao-fleet.sh --help`。
+**不在 tmux 里也能用**：默认每个角色开一个**看得见的终端窗口**（走 `xdg-terminal-exec`，窗口标识 `org.nao.<角色>`），不是后台黑箱；无图形会话（如 SSH）默认拒绝，需显式 `--background` 才建后台会话，并打印可复制的 `tmux attach` 命令。宿主的完整选择顺序与降级边界见 `nao-fleet.sh --help`。不过我们**推荐装 tmux**——多数能力在 tmux 宿主下体验最完整，理由见下方常见问题。
 
 然后**在 PM 会话里说需求**就行，剩下的它自己流转。大概长这样：
 
@@ -111,6 +111,15 @@ $NAO_SKILLS/.agents/scripts/qq-notify --dry-run "连通性自检"      # 只取 
 **它会在 GitHub 上开 PR 吗？** 会——每个需求一条分支、一个 PR（Draft 早开、CI 早跑），你确认验收后由研发角色 squash 合并，main 上只留 1 条可读提交。没有远端或 `gh` 时降级为本地分支，流程不变。
 
 **跑完的会话要留着吗？** 后台派生会话验收完可以回收：`nao-fleet.sh close --task T1 rd-be`（等价写法 `nao-fleet.sh close rd-be-T1`，直接用派生会话名即可）；常驻角色留着复用。`nao-fleet.sh status` 会提示哪些是残留。目标在别的项目里也能回收——`close` 会按名册/窗口标题跨项目定位；定位不到时会**非 0 退出并打印诊断**，不会假装已回收。
+
+**推荐用 tmux 吗？** **推荐**——装上 tmux 后，舰队机制的使用体验最完整：
+
+- **布局可控**：6 个角色会话在 tmux 里按三种布局自动排布（`main-row2` / `main-col` / `grid`），间距与列宽可用 `NAO_TMUX_*` 变量调，不会把桌面铺满一圈窗口。
+- **后台会话可回看**：后台派生的会话随时 `tmux attach` 进去看，不挑图形环境（SSH 无图形会话也能用）。
+- **定位回收更可靠**：`status` 查残留、`close` 跨项目回收，都是按会话名册与窗口标题定位的——tmux 宿主下窗口标题稳定可寻，误判和找不到的概率最低。
+- **多种宿主探测路径**：机制里 tmux 属首选阶梯；非 tmux 宿主走外部终端窗口，探测与降级链路更长。
+
+没装 tmux 也能正常用（见「不在 tmux 里也能用」），只是上述便利项会依次降级。
 
 **终端窗口太挤怎么办？** tmux 宿主支持三种布局：默认 `main-row2`（主会话占左，其余往右分列）、`main-col`（其余在右列竖排）、`grid`（等大网格）。窗口太窄时 `main-row2` 会**自动回退** `main-col`、仍不够再退 `grid`，并打印带数字的提示（不中断拉起）；用 `NAO_TMUX_LAYOUT` / `NAO_TMUX_MAIN_WIDTH` / `NAO_TMUX_MIN_PANE_WIDTH` 调整，详见 `bash .agents/scripts/nao-fleet.sh --help`。
 
