@@ -8,26 +8,28 @@
 
 > 本区是 PM 的**悬空状态**（任务状态见下方五栏）；重开后逐行回读确认（当前阶段 · 未决决策 · 口头约束）。
 
-- 当前阶段：**T519 在飞**（tasks-state 台账瘦身 + 历史下沉 → 目标 v0.17.1；上一批 T518 → v0.17.0 已全链路闭环）
-- 当前 PRD：`docs/prds/2026-10-14-tasks-state-slim.md`（状态：已开工 · 落地中）
+- ✅ **T519 交付闭环（2026-10-14）**：tasks-state 台账瘦身 + 历史下沉 —— **231→83 行**（−64.1%）· 新增 `docs/tasks-archive.md` 217 行（历史快照 · 非权威）· AC1–AC8 全过（含 AC4 七条）· **QA 三次独立复核全 GO**（接缝 → 落地 → 补丁）· PR [#37](https://github.com/Nathan3303/nao-skills/pull/37) squash `1486a8e`（main 恰 1 条 · 无 `wip()` · 分支删净）· 门禁 `check` rc0 roles=6 files=44 · `npm test` rc0 · t4 12/12 · 探针 `PASS=11 FAIL=0`（基线 `PASS=8 FAIL=1` ⇒ 暴露 T511a/b/c 被误判为进行中，本批已闭合）。
+
+- 当前阶段：**全部批次闭环**（T519 台账瘦身 → v0.17.1 已交付并合并；上一批 T518 → v0.17.0 已全链路闭环）
+- 当前 PRD：`docs/prds/2026-10-14-tasks-state-slim.md`（状态：**已归档**）
 - 未决决策点：无
 - 待用户回答：无
 - 未派发队列：见下方「待派发队列」（共 0 项）
-- 下次唤醒条件：RD `done(full)` 回执 / 用户授意 / 用户要求重开 PM；先读本快照 + `docs/prds/README.md`
+- 下次唤醒条件：**下批需求授意 / 用户要求重开 PM**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = **仅 pm 在线**（`qa-T519` / `rd-infra-T519` 已回收）；下批需求先 `ensure pm arch-designer rd-fe rd-be qa rd-infra`
 - 口头约束已落盘：项目 `AGENTS.md` 项目约束（ask-me 提问）· PRD §5 BR6 格式禁令 + §9 R5/R6
 - 需求分支 / PR：见下方「需求分支 / PR / 发布」（降级分支 `nao/tasks-state-slim`）
-- 会话体检：本批（T519）PM ctx ≈7%（66.4k/1000k · 无压缩）· 舰队 = pm + `qa-T519`/`rd-infra-T519`
+- 会话体检：本批（T519）PM 会话 ctx ≈12%（无压缩 · 本批开始时实测 66.4k/1000k）· 舰队 = **仅 pm 在线** · 本快照为接续唯一事实源（main = v0.17.1 发布提交）
 
 ## 需求分支 / PR / 发布（PM 维护）
 
 - Issue：**无（降级批次）** —— 摘要见 `docs/prds/2026-10-14-tasks-state-slim.md`
-- 需求分支：`nao/tasks-state-slim`（base `main` = `9329421`；RD 持有）
+- 需求分支：`nao/tasks-state-slim`（base `main` = `9329421`；**已 squash 合并并删净**）
 - PR owner / Reviewer：rd-infra-T519 / **无**（docs-only · 不改解析器 ⇒ 跳过架构评审）
-- PR：待 RD 建 Draft PR（主题须用户可读）
-- 合并：未合并 · 分支已删：否
-- 版本 / Tag：**v0.17.1（PATCH）** 待发布（合并后 PM 执行 tag/Release；`docs/` 不入包 ⇒ npm 不重发）
+- PR：[#37](https://github.com/Nathan3303/nao-skills/pull/37)（**已 MERGED** · squash `1486a8e`）· 预览环境：无
+- 合并：**已 squash 合并**（main `1486a8e`；main 上本需求**恰 1 条** · 无 `wip()`）· 分支已删：**是**
+- 版本 / Tag：**v0.17.1（PATCH）** —— tag + Release **待 PM 执行**（合并后）· **`package.json` / README pin 保持 0.17.0**（用户拍板 A：tag 仅机制治理留痕 · npm **不重发**，包内容与 0.17.0 一致）
 - 降级标注：无 Issue · 无 Reviewer（用户拍板 D3）
-- 特例提交（白名单）：无
+- 特例提交（白名单）：合并由 rd-infra 执行 —— `gh pr ready 37` + `gh pr merge --squash --delete-branch --subject "…" --match-head-commit <sha>`（**短 sha 被 GraphQL 拒** ⇒ 须完整 40 位，教训留痕）
 
 ## 活约束与遗留跟踪（长期有效 · 不下沉）
 
@@ -42,15 +44,11 @@
 - 📌 **台账写法约定（T519 订正）**：`status` 残留识别按**单元格全等**匹配 ⇒ 进行中行须有**裸批次号**单元格（如 `T508`）；带后缀单元格（`T508-QA`/`T508-RD`）实测判 **`absent`**（非「仅散文提及」）。
 - **通用既定口径（T506 · 留档见 `docs/tasks-archive.md` §9）**：`.pi/*` + `!.pi/settings.json`；迁移判据 = 机制类归零 + 自有资产保留；旧脚本调用改 `$NAO_SKILLS/…`。
 
-### 上游遗留单（独立批次 · 待用户确认开工）
+### 上游遗留单（**已收敛** · 2026-10-14 刷新）
 
-| 编号 | 概要 | 备注 |
-| :--- | :--- | :--- |
-| [#19](https://github.com/Nathan3303/nao-skills/issues/19) | 修角色别名解析（`ensure arch`/`ensure infra` 报未知角色）+ `check` 加「别名可解析」回归守卫 | 已实测：`ensure` 必须用 canonical id（`arch-designer`/`rd-infra`） |
-| [#21](https://github.com/Nathan3303/nao-skills/issues/21) | migrate 收尾：`.nao-migrated` 只写不读（F3）· `migrate` 无条件装 shim 与 minimal 零 shim 特例冲突（F4）· 单行压缩 lock 静默跳过去重（F7） | 由 T506/PR #20 的 arch 评审引出 |
-| （未开单·候选） | `nao-fleet.sh close` 跨仓派生会话回收：宿主定位假阴性（报「未运行」但 pane 存活）→ 需手工 `tmux kill-pane` | T507 / T508 各复现一次；另附：`ensure <role>` 会真拉 tmux pane（AC6 演练后需收尾）—— 是否并入 #19 待用户定 |
-
-> ⚠️ 上表为迁移时点原文（只搬不改）：#19 / #21 已分别由 **T509 / T510** 交付闭环 —— 是否刷新状态由 PM 裁量（未自行改写，守 BR3）。
+- **#19 / #21 已闭环**：分别由 **T509（v0.12.1）/ T510（v0.13.0）** 交付，原「待用户确认开工」状态作废（原文见 `docs/tasks-archive.md` §1）。
+- 原候选「`close` 跨仓派生会话回收宿主定位假阴性（报「未运行」但 pane 存活）」→ 与「待用户裁量的后续项」**② B8** 重复，已合并登记、不再单列。
+- 结论：**当前无待开工的上游遗留单**。
 
 ## 待派发队列
 
@@ -61,7 +59,7 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T519 | qa-T519 → rd-infra-T519 | 台账瘦身 + 历史下沉（降级批次 `nao/tasks-state-slim`；接缝先行 → 单波落地） | 2026-10-14 | AC1–AC8 | 待 RD 首提交（`wip(T519):`） |
+| — | — | （本批次列已清空；T519 已验收归档，见下） | — | — | — |
 
 ## 已回执待验收
 
@@ -77,7 +75,7 @@
 
 | 任务编号 | 结论 | 详情路径 | 备注 |
 | :--- | :--- | :--- | :--- |
+| **T519** | **验收通过 · 已合并归档**（v0.17.1）：台账瘦身 + 历史下沉 —— `tasks-state` **231→83 行**（−64.1%）· 新增 `docs/tasks-archive.md` 217 行（历史快照 · 非权威）· AC1–AC8 全过（AC4 七条：28 历史 id 判 `active` = 0 · G1 在飞 id 仍 `active` · G2 归档墙 `closed` · G3 五标题各 1）· **QA 三次独立复核全 GO**（接缝 → 落地 → 补丁）· 探针 `PASS=11 FAIL=0`（基线 `PASS=8 FAIL=1`，正是它暴露 T511a/b/c 被误判为进行中）· 门禁 `check` rc0 roles=6 files=44 · `npm test` rc0 · t4 12/12 · squash `1486a8e`（main 恰 1 条 · 无 `wip()` · 分支删净）· **tag `v0.17.1` + Release 待发**（npm 不重发） | PR [#37](https://github.com/Nathan3303/nao-skills/pull/37) · 降级批次（无 Issue） · PRD `docs/prds/2026-10-14-tasks-state-slim.md` · 探针 `docs/reports/2026-10-14-T519-ac4-probe.sh` | **已知边界**：4 条 >120 字符新写行（NFR 未入 AC）· 披露-2（4 条运行态字段行未逐字留档）· **教训**：`gh pr merge --match-head-commit` 须**完整 40 位 sha** |
 | **T518** | **验收通过 · 已合并归档**（v0.17.0）：to-spec 改造引入（验证接缝 + 对话综合）· AC1–AC9 全过 · 9 文件 +167/−7 · 门禁 `check` rc0 roles=6 files=44 · t4 12/12 · squash `93ffb0a`（main 恰 1 条 · 无 `wip()`）· **已发布** v0.17.0（tag + Release + npm `latest→0.17.0` 对账逐字节一致） | PR [#36](https://github.com/Nathan3303/nao-skills/pull/36) · Issue [#35](https://github.com/Nathan3303/nao-skills/issues/35) · PRD `docs/prds/2026-10-14-pm-to-spec-adoption.md` | 待办：下游三仓唤醒后补发广播 `card pm v24` / `card qa v14` |
-| **T517** | **验收通过 · 已合并归档**（v0.16.2）：派生会话 tmux 落点修正（`resolve_host_window()` L1–L4 + `-t` 贯穿 10 处）· AC1–AC9 全过（QA 独立 GO：case12 19 红→36/36；tests 12/12 · 263 例 · 0 红）· squash `536d030` | PR [#34](https://github.com/Nathan3303/nao-skills/pull/34) · Issue [#33](https://github.com/Nathan3303/nao-skills/issues/33) · ADR `docs/adr/2026-10-13-derived-pane-window-addressing.md` | **已发布** v0.16.2（tag + Release + npm 对账一致） |
 
-> 更早批次（T516 及以前）见 `docs/tasks-archive.md`。
+> 更早批次（T517 及以前）见 `docs/tasks-archive.md`。
