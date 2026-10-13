@@ -8,7 +8,7 @@
 - 用户 D1–D5：默认可见窗口；非 tmux 句柄支持 + status 降级（D2）；tmux 内不回退（D3）；后台须显式（D4）；tmux 可用则前台可见（D5）。
 ## 决策
 
-1. `detect_host()` 改**环境查询阶梯**（非枚举）：①`NAO_TERMINAL` 显式 → ②`$TMUX` 当前窗口分屏 → ③非 tmux+tmux+图形 ⇒ `new-session -d` + `xdg-terminal-exec` 开窗 attach → ④无 tmux+图形 ⇒ `xdg-terminal-exec --app-id=org.nao.<角色> --dir=<repo>` 直开 → ⑤无图形 ⇒ 仅 `--background` detached → ⑥`exit 2`。
+1. `detect_host()` 改**环境查询阶梯**（非枚举）：①`NAO_TERMINAL` 显式 → ②`$TMUX` 内**派生宿主窗口**（调用者 pane 所在 window）分屏（T517 修订：显式目标寻址，见 `2026-10-13-derived-pane-window-addressing.md`）→ ③非 tmux+tmux+图形 ⇒ `new-session -d` + `xdg-terminal-exec` 开窗 attach → ④无 tmux+图形 ⇒ `xdg-terminal-exec --app-id=org.nao.<角色> --dir=<repo>` 直开 → ⑤无图形 ⇒ 仅 `--background` detached → ⑥`exit 2`。
 2. **禁假成功**：任何「已拉起」前须校验宿主句柄；③取「**每角色一个 tmux 会话 + 每角色一个可见窗口 attach**」+ **默认 socket**（不加 `-L`）⇒ pane 标题契约 / `$TMUX_PANE` / `pane_busy` 完整保留、句柄零改动；④由 app-id 层兜底。
 3. `offline_verifiable()` 新语义：**本批仅落地「名册可用」limb**（名册可读 ⇒ 可断言离线）；「宿主枚举器可用且枚举成功」limb **未实现，属已知边界**（函数仍保留 `$TMUX` 存在 / `NAO_TERMINAL=tmux|screen` 两条旧启发式，不构成可靠枚举）。枚举失败/歧义 ⇒ 不得断言，`close` 非 0。
 ## 理由（四步法）
@@ -36,6 +36,7 @@
 
 - 独立 socket **不要**：现有 tmux 查询全用默认 socket，`-L` 会让 `find_pane_by_title`/`pane_busy` 失据；隐形会话：`destroy-unattached`/attach 竞态可能「会话在、窗口无」⇒ 必须限时校验 `list-clients`。
 - 单窗口装 6 pane **不采纳（本批）**：布局函数基于当前窗口，跨窗口需改目标寻址，多仓/回收耦合大；每角色会话更贴合既有句柄与判重模型，三布局仍只服务②。
+  **T517 已落地跨窗口目标寻址**（pane/布局/选项显式 `-t` 宿主窗口，见 `2026-10-13-derived-pane-window-addressing.md`）；「每角色独立窗口」的结论不变。
 ## 后果与风险
 
 - 正面：非 tmux 可见、失败不骗人，③句柄零改动。风险：attach 竞态（校验+清理）· `setsid -f` 假成功面（句柄前置校验）· hyprctl 仅 Hyprland（存在性探测 + X11 后备，覆盖限制见 NFR5）· class 冲突（app-id 唯一 + `comm=pi`）· 用户 detach 后不可见（用户意图，`status` 标注 detached）。
@@ -78,3 +79,4 @@ elif --background ∧ tmux → new-session -d ｜ else exit 2 + 一行诊断 + �
 
 - 修订：2026-10-12 首版（T513-A 终签）
 - 修订：2026-10-12 T513-S2（新增不变量「`close` 不得回收调用者自己的 pane」：F1 纵深防御 + F2 源头清 TMUX/TMUX_PANE）
+- 修订：2026-10-13 T517（决策 1 阶梯②由「当前窗口」改为「派生宿主窗口」显式寻址，落地本文「D5 的坑」挂账；细则见 `2026-10-13-derived-pane-window-addressing.md`）

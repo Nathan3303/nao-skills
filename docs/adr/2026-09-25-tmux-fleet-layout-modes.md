@@ -87,7 +87,7 @@
 ## 四、限制 / 风险（须写入 release notes「限制」）
 
 1. **只保证宽度，不保证高度**：`main-col` 下 pane 数多时右列高度会塌陷（N=7 / H=40 ⇒ 6 行/pane）。阈值只约束宽度。
-2. **`main-pane-width` 是 window option**：脚本会写当前 window 的这一项；影响面限于该窗口的 `main-*` 布局（`main-horizontal` 用 `main-pane-height`，不受影响）。属**有意的副作用**，需在 release notes 声明。
+2. **`main-pane-width` 是 window option**：脚本会写**派生宿主窗口**的这一项（T517 修订：由「当前 window」改为显式 `-t` 宿主窗口，见 `2026-10-13-derived-pane-window-addressing.md`）；影响面限于该窗口的 `main-*` 布局（`main-horizontal` 用 `main-pane-height`，不受影响）。属**有意的副作用**，需在 release notes 声明。
 3. **`other-pane-width` 优先级更高**（实测：`main=40` + `other=30` ⇒ 主 pane 89）：若用户自己设过 `other-pane-width`，主 pane 百分比会被它压过。脚本**不设**该选项；文档提示「两者不要同时用」。
 4. **极窄窗口无解**：`W` 小到连 pane 都放不下时 tmux 直接拒绝 `split-window`（§3.4），任何布局都救不了 ⇒ 只能是 warn。
 5. 阈值 30 是**经验值**（约等于可读代码的最小宽度），非硬约束；给 `NAO_TMUX_MIN_PANE_WIDTH` 留出用户覆盖口。
@@ -116,3 +116,4 @@
 > 落地核验（2026-10-13 · PM）：`main-col`/`grid` 回退阶梯与 `NAO_TMUX_MIN_PANE_WIDTH` 窄列守卫已随 v0.9.0 入库（README 布局说明、intercom-protocol「tmux 布局」段已同步）。本 ADR 状态由「提议」更新为「已接受」。
 
 - 修订：2026-10-13 状态由「提议」更新为「已接受」（已落地 v0.9.0）
+- 修订：2026-10-13 T517（`-t` 目标由当前 window 改为派生宿主窗口；窄列守卫按宿主窗宽）
