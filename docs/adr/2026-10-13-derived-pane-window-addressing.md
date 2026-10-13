@@ -14,8 +14,8 @@
 
 1. **目标显式化不变量**：凡「创建 pane / 应用布局 / 写窗口选项」的操作**必须带显式目标**，禁止依赖 tmux「当前窗口」隐式解析。
 2. **目标 = 派生宿主窗口**（调用者 pane 所在 window），非「用户当前视图」。`-t` 贯穿 `split-window`、`select-layout`、`set-window-option`，以及尺寸 / pane 数读取（窄列守卫按**宿主窗宽**生效）。
-3. **定位链**（入口 `resolve_host_window()` 一次性解析为 `@<window_id>`，多角色复用，新增 ≤1 次 tmux 调用）：
-   `NAO_TMUX_HOST_WINDOW`（显式覆盖，`display-message -t` 探测归一化）> `$TMUX_PANE` → `#{window_id}` > 名册唯一命中（`list-panes -a` 建 pane→window 表 + 本仓 cwd 过滤 + 活 pane + 窗口去重后唯一）> **warn + skip**。
+3. **定位链**（入口 `resolve_host_window()` 一次性解析为 `@<window_id>`，多角色复用，新增 ≤1 次 tmux 调用（L1/L2）/ ≤2 次（L3 兜底））：
+   `NAO_TMUX_HOST_WINDOW`（显式覆盖，`display-message -t` 探测归一化；**允许跨 session**，warn 标注，建议用 `@id`）> `$TMUX_PANE` → `#{window_id}` > 名册唯一命中（`list-panes -a` 建 pane→window 表 + 本仓 cwd 过滤 + 活 pane + **仅在本 `$TMUX` 所属 session 内取候选窗**（不跨 session 推断，warn 标来源）+ 窗口去重后唯一）> **warn + skip**。
 4. **L4 = warn + skip（不创建该 pane）**，禁止「无 `-t` 续建」（后者即拆用户视图）；降级不 `die`（不劣化 rc、其余角色继续），每级 warn 带原因且可区分。
 5. 单窗口 / 调用者即宿主 ⇒ 与修前逐值零回归；本决策只改 `$TMUX` 分支（②）；非 tmux 阶梯 ③④⑤、`new-session -d`、`status`/`close` 定位均不动。
 
@@ -57,4 +57,4 @@
 - 本机实测（2026-10-13，tmux 3.7c，隔离 socket）：`split-window -h -t @W` 不改 current window；`set-window-option -t @W` 不外溢；跨 session `-t @W` 生效。
 - rd-infra 勘查回执（[T517] done(full)，2026-10-13）：5 组隔离实验 + 真实 server 旁证；根因与证据由 PRD §一 收录。
 
-- 修订：2026-10-13 首版（T517-arch 终签）
+- 修订：2026-10-13 首版（T517-arch 终签）；同日补记 PM 拍板 D-B/D-C（L3 限本 session 内推断 + warn 标来源；显式覆盖允许跨 session、建议 `@id`）与 D-D（调用预算 L1/L2 ≤1、L3 ≤2）
