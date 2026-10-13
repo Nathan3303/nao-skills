@@ -607,8 +607,10 @@ derived_in_field() {  # <name> → 派生名列表（每行一个；空 = 无）
 screen_token_for() {  # <name> → echo pid.name（无精确匹配则空；恒 rc 0）
   local name="$1"
   command -v screen >/dev/null 2>&1 || return 0
+  # 左锚：`[0-9]+\.nao-` 必须紧接 pid 点（弃 `[^[:space:]]*` —— 旧式允许 `pid.Xnao-<名>` 型非目标会话被当精确令牌，
+  # QA 波4 (e) 红：误杀非目标 + 幻影成功 + 误报在线）。右锚 `([[:space:]]|$)` 同时排除派生 `nao-<名>-<任务>`。
   screen -ls 2>/dev/null \
-    | grep -oE '[0-9]+\.[^[:space:]]*nao-'"$name"'([[:space:]]|$)' \
+    | grep -oE '[0-9]+\.nao-'"$name"'([[:space:]]|$)' \
     | sed -E 's/[[:space:]]+$//' \
     | head -1 || true
   return 0
