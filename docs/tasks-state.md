@@ -20,6 +20,7 @@
 - ⚠️ **同仓协作纪律**：nao-skills 本仓工作（如 T509/T510）——RD 持有分支期间 PM 不做本仓 git 写操作；台账提交只在「派发前」「合并后」两个时点
 - ⚠️ 环境注意：`nao-fleet.sh` 别名解析已修（0.12.1）· `ensure` 会真拉 pane，未信任目录会停在 pi Trust 提示（D7）· `close` 以 intercom 名册为权威在线判定 · `status` 残留识别要求表格内**裸批次号**单元格
 - ⚠️ **本仓 remote（2026-10-13 起）**：origin 已改 **HTTPS**（`https://github.com/Nathan3303/nao-skills.git`）——SSH :22 banner 超时持续，HTTPS push 已验证可用（凭据走全局 `credential.https://github.com.helper` = `gh auth git-credential`）。若后续 SSH 恢复可由用户改回
+- 🧹 **分支清点（2026-10-13，用户拍板「两个都删」）**：远端遗留 `master`（已全量并入 main）与 `docs/t303-arch-design`（T303 旧 arch 分支，2 个 ADR 与 main 版逐字节一致、内容随 #7 收编）均已删；**四仓现状：仅 main（nue-ui 为 master）+ nue-ui `gh-pages`（部署）**
 - 会话体检：ctx ≈40%（窗口 1000k，未压缩）· 记于 2026-10-13T00:55Z（T513 归档时；本次是**主动交接重开**，非 40% 软限）
 - **下次唤醒条件**：下批需求授意时；先读本快照 + `docs/prds/README.md` 索引；常驻会话在 pend（`pm (%0)·qa·rd-infra`），`arch` 需重拉（`ensure arch`）
 
