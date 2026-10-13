@@ -21,6 +21,7 @@
 - **角色卡版本纪律**：改 `.agents/prompts/<card>.md` 必须 bump `version` + 更新 `updated`（version 是唯一事实，roles.yaml 不重复维护），并经 intercom 广播 `card <role> v<N+1>` 摘要。
 - **Git 流程（GitHub Flow）**：一个需求一条分支 `feat/<issue-id>-<slug>`（机制维护批次用降级 `nao/<批次-slug>`）；工作期 `wip(<编号>):` 小步提交 + 路径级暂存（禁 `git add -A`）；**PM 验收通过后由 RD 在 PR 上 squash 合并**（main = 1 条/需求）；**禁直推 main、禁 PM 亲自合并**。
 - **发布与仓库治理**：PM 负责 Issue / PR 验收评论 / tag / release / `.github/` 模板（优先 `gh`，不可用降级 `git`）；**发版说明写法遵循 `.agents/common/release-notes.md`**（面向用户「本次更新」置顶、内部信息下沉、正文不用表格）；已 push 的 tag 不删（改发下一个 PATCH，用户明确要求才删）。
+- **需求确认方式（用户 2026-10-14 口头约束）**：凡需用户确认 / 拍板的问题**一律用 ask-me 提问**，不用正文追问替代。
 
 ## 与 nao 机制衔接
 
