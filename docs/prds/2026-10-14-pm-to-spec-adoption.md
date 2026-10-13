@@ -38,10 +38,13 @@
 
 **非范围**
 
-- 不写「实现决策 / 测试决策」正文（指针指向 `docs/adr/` 与 qa 用例范围）。
-- 不做宿主层斜杠命令 / pi skill 分发；不引入 `spec` 术语；不建 `ready-for-agent` 标签体系。
-- 不动 RICE / 战略筛子 / 开工确认闸门 / Issue 摘要口径 / `nao-fleet.sh` / `tests/`。
-- 不追溯改写历史 PRD（该规则只对之后新写/新改生效）。
+- 不写「实现决策 / 测试决策」正文 —— 理由：PM 越界红线（@.agents/skills/pm-routing.md §二）且与 arch/qa 职责重复；派发协议要求 worker 自读源码，PRD 无需承载实现细节 ⇒ 改指针。
+- 不做宿主层斜杠命令 / pi skill 分发 —— 理由：nao 无 commands 机制；本批不引入宿主安装侧改动，且分发面已实测无需注册。
+- 不引入 `spec` 并列术语 —— 理由：避免同物两名、术语双源导致验收口径漂移（领域词汇里 PRD 已占位）。
+- 不建 `ready-for-agent` 标签体系 —— 理由：与开工确认闸门语义冲突（打标签即派工）；本批只降级为状态语义，标签治理另议。
+- 不动 RICE / 战略筛子 / 开工确认闸门 / Issue 摘要口径 —— 理由：均为既有验收闸门，本批只加「生产方式」，不改闸门。
+- 不动 `nao-fleet.sh` 与 `tests/` —— 理由：本批无执行面（纯机制文档）；改脚本/用例需回归成本，收益不抵，且已由 QA 一次性探针覆盖。
+- 不追溯改写历史 PRD —— 理由：@.agents/checklists/deliverable-docs.md §七「不追溯改写历史文档」，避免无谓 diff 与破坏归档。
 
 ## 四、用户场景
 
@@ -66,15 +69,16 @@
 
 ## 七、AC
 
+- **验证接缝（QA 确认 2026-10-14）**：docs 层「**文档审计 + 全范围门禁**」单接缝 + 复用 `check` 现成断言 + 一次性只读探针；解析级补强 = **卡 version 精确值**（`check` 只查整数，不查 ==24/14）。分发面由临时目录安装探针另行核对。
 - AC1（主路径·技能）：Given 本批落地，When 打开 `.agents/skills/pm-to-spec.md`，Then 含成熟度判定 4 条、接缝步骤、7 节→9 模块映射（列表形式）、缺口检查、路径无关判据。
 - AC2（主路径·PM 卡）：Given 改卡，When 检查 `product-manager.md`，Then 按需技能含 `pm-to-spec.md`、§二 含入口分支、version=24、updated=2026-10-14，且广播 `card pm v24` 留痕。
 - AC3（主路径·grill 不冲突）：Given 打开 `pm-grill.md`，When 读触发口径，Then 明确「成熟度判定命中时不触发」，且与 `pm-to-spec.md` 无相互矛盾表述。
 - AC4（主路径·QA 归属）：Given 改 qa 侧，When 检查 `test-engineer.md` 与 `checklists/qa.md`，Then 含「接缝确认 = PRD 阶段输入」、qa 卡 version=14 且广播留痕。
 - AC5（主路径·清单与模板）：Given 改清单与模板，When 检查 `checklists/pm.md`、`deliverable-docs.md` §三、`templates/prd.md.example`，Then 交付项含接缝与路径无关两条、§三 含「非范围必带理由」、模板含头部 + TL;DR + 9 模块 + AC 占位且不含表格。
 - AC6（异常·缺口回落）：Given 一份缺「目标指标/NFRs/上线闭环/变更治理」的上下文，When 执行综合流程，Then 先输出缺口清单并回落 grill/定点补产，**不得**直接出稿。
-- AC7（边界·负向）：Given 本批 diff，When 核对边界，Then 未引入实现/测试决策正文、未引入 `spec` 并列术语、未新建标签、未改 RICE/开工闸门/Issue 口径、未改 `nao-fleet.sh` 与 `tests/`、未改历史 PRD。
+- AC7（边界·负向）：Given 本批 diff，When 核对边界，Then 未引入实现/测试决策正文、未引入 `spec` 并列术语、未新建标签、未改 RICE/开工闸门/Issue 口径、未改 `nao-fleet.sh` 与 `tests/`、未改历史 PRD。（禁 `spec` 术语探针**限定本批改动文件**：全仓扫会命中 `nao-fleet.sh` 的 `spec` 变量名，属假阳性。）**语境豁免**：探针命中「禁用声明 / 反模式」语境视为合规（非并列术语使用）。
 - AC8（负向闭环）：Given 某 PRD 的接缝与 QA 用例范围不一致，When PM 验收，Then 打回并要求对齐后重新验收（不得带不一致合入）。
-- AC9（设计一致性·自证 + 门禁）：Given 本 PRD 自身，When 按路径无关判据核验，Then 逐条通过，且 `check` rc0 + `npm test` rc0。
+- AC9（设计一致性·自证 + 门禁）：Given 本 PRD 自身，When 按路径无关判据核验，Then 逐条通过，且 `check` rc0 + `npm test` rc0。（第 9 条「索引更新」为**归档时点**闭合项：既有一贯做法是在闭环提交中登记索引（见 `docs/prds/README.md` 首行语义），立项 / 开发期不登记。）
 
 ## 八、上线闭环
 
