@@ -61,3 +61,12 @@
 - **影响**：AC5/AC8 措辞改「生产默认 socket」；`check` 守卫无 cleanup 断言，不受影响；未发布（0.16.0 未 tag），无历史债。
 - **范围修正（同日 · t4 2 红后裁定）**：`=` 锚定**只收敛到匹配类路径**（`running()`/status、`cmd_close`、`has-session`/`kill-session`/`list-clients`、screen 锚、cleanup）。`spawn_tmux` 的日志文案与 `spawn_tmux_attach` 传给窗口桩的 `attach -t` argv **两处回退**为 `nao-<名>`：① §四「做」未含 spawn/attach；② `tmux attach` 的目标由 `new-session -d -s nao-<名>` 刚建、精确名优先命中，无需 `=`（无 #1 前缀误命风险）；③ 保 T513 冻结断言 `attach -t nao-qa`（t4 case 11 / AC7+AC9 口径不回退）。**裁定：PM（方案 A）**，arch 于 PR 复核。
 - **arch 评审 F2 处置（同日 · 中严重度未签）**：`cmd_close` screen 销毁（L1539）与 `spawn_screen` 失败清理（L1001）的 `screen -S nao-<名> -X quit` **仍为前缀目标**（检测已锚、销毁未锚）⇒ 同批修：按 `screen -ls` 锚定行取 `pid.name` 精确令牌再 quit，取不到即不 quit（宁不回收不误伤）；F1（低）同源同修。顺带 `cleanup` 比对前 `readlink -f` 归一化（F3-B3 低，堵符号链接绕过）。**ADR `docs/adr/2026-10-13-close-anchor-cleanup-guard.md` 并入本 PR**。screen 侧行为用例由 qa 以 **PATH 注入 stub `screen`** 覆盖（本机无 screen 二进制，无法runtime 实测）。裁定：PM。
+
+## 八、验收结论（2026-10-13 · PM）
+
+- **结论：通过 ✅** —— AC1–AC10 全过（AC10 由合并核验：main 恰 1 条 `e86817b`、无 `wip()`、分支删净）。
+- **门禁**：`check` rc0 roles=6 files=41 · `tests/t4` 11/11·348/348·0 红 · AC8 tmux **18/18** + 屏侧 stub **17/17**（PATH 注入，含 `pid.Xnao-<名>` 左锚边界）· AC9 T513 AC14 **3× 5/5** · F3-B3 4/4。
+- **负向对照**：同 AC8 脚本对 main 旧 fleet **8 PASS / 10 FAIL**（AC1/AC3/AC5 翻面）⇒ 断言确实捕获缺陷路径，非「只跑绿」。
+- **评审链**：arch 首评 **NO-GO**（F2 screen 侧销毁未锚）→ 同批修 → qa 独立复验 + arch 补签 **GO**。
+- **返工链（均留痕）**：① t4 2 红 → 方案 A 回退 spawn/attach（§七 范围修正）② arch F1/F2 → screen 精确令牌 ③ qa (e) 边界 → 正则左锚。
+- **交付**：PR [#30](https://github.com/Nathan3303/nao-skills/pull/30) squash `e86817b` · **tag `v0.16.0` + Release 已发** · Issue #29 已关 · **npm 发布待用户**。
