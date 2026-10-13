@@ -31,6 +31,9 @@ nao 是一套「多角色 AI 开发舰队」：6 个分工明确的常驻会话�
 2. **拉起舰队**：`bash .agents/scripts/nao-fleet.sh ensure pm arch-designer rd-fe rd-be qa rd-infra`
    - 任务派生（并行隔离）：`ensure --task <编号> <别名>`
    - 状态 / 回收：`status` / `close --task <编号> <别名>`
+   - 实验场清理：`cleanup -S <隔离socket>`（强制显式 socket；无 `-S`/指向默认 socket ⇒ exit 2 拒绝）
+     ⚠ 实验纪律：实验/夹具一律 `env -u TMUX` + `-S <隔离socket>`——tmux 客户端在 `$TMUX` 已设时
+     无视 `TMUX_TMPDIR`，裸 `tmux`/`kill-server` 会连坐真实 server（T515 两次自灭根因）
 3. **迁移旧版安装**：`npx @nathan33/nao-skill migrate`（旧文件备份到 `.agents/.nao-obsolete/`）。是否写 shim 由**判定式**决定（旧脚本 / 已有 shim / 全仓 `nao-fleet|nao-skill|NAO_SKILLS` 引用 ⇒ 写）；纯文档仓判定为跳过并显式告知，可用 `--shim` / `--no-shim` 覆盖。
 
 ## 硬约束（勿违反）
