@@ -24,7 +24,7 @@ nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，�
 
    ```bash
    cd 你的项目
-   pi install --local npm:@nathan33/nao-skill@0.13.0   # 声明 pin + 把机制包物化到项目内 .pi/npm
+   pi install --local npm:@nathan33/nao-skill@0.14.0   # 声明 pin + 把机制包物化到项目内 .pi/npm
    npx @nathan33/nao-skill init                        # 写入转发 shim + 生成 AGENTS.md
    ```
 
@@ -36,13 +36,7 @@ nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，�
 
 升级：改 `.pi/settings.json` 里的 pin 版本，再 `pi update --extensions`（机制以包为准，项目里只有 shim）。
 
-**老项目迁移**（曾在项目里铺开整套 `.agents/` 的）：
-
-```bash
-npx @nathan33/nao-skill migrate   # 旧文件备份到 .agents/.nao-obsolete/，再按需写入转发入口
-```
-
-迁移默认按**判定式**决定是否写转发入口（shim）：仓里还有旧的 `nao-fleet.sh`、或已存在 shim、或全仓有 `nao-fleet` / `nao-skill` / `NAO_SKILLS` 引用，就写；**无脚本、无引用的纯文档仓会被判定跳过**，并打印一行告知。要改变判定结果，显式加 `--shim`（强制写）或 `--no-shim`（强制不写），两者不能同时给（`exit 2`）。旧版的 `.agents/.nao-migrated` 标记**已废弃**：迁移不再读写它，可安全删除。`.agents/.nao-version` 的语义是「本机已安装机制包版本」（供升级检测），**不表达迁移状态**——迁移状态由「是否还有旧资产」推断。
+**老项目迁移**（曾在项目里铺开整套 `.agents/` 的）：执行 `npx @nathan33/nao-skill migrate` 即可，细则见文末「老用户迁移与维护者注记」。
 
 ## 用起来（3 步）
 
@@ -141,7 +135,19 @@ $NAO_SKILLS/.agents/scripts/qq-notify --dry-run "连通性自检"      # 只取 
 
 机制本体（6 张角色卡、协作规矩、清单、按需技能、小工具）都在 npm 包 `@nathan33/nao-skill` 的 `.agents/` 里——**包里是什么就是什么**，项目里不留副本。
 
-## 发布形态与完整性判据（0.12 起有变化）
+## 老用户迁移与维护者注记（新用户可跳过）
+
+本节面向**已有旧版安装**或需要维护 CI / 下游仓库的读者，新用户可以直接跳到「想深入」。
+
+### 老项目迁移（migrate）
+
+```bash
+npx @nathan33/nao-skill migrate   # 旧文件备份到 .agents/.nao-obsolete/，再按需写入转发入口
+```
+
+迁移默认按**判定式**决定是否写转发入口（shim）：仓里还有旧的 `nao-fleet.sh`、或已存在 shim、或全仓有 `nao-fleet` / `nao-skill` / `NAO_SKILLS` 引用，就写；**无脚本、无引用的纯文档仓会被判定跳过**，并打印一行告知。要改变判定结果，显式加 `--shim`（强制写）或 `--no-shim`（强制不写），两者不能同时给（`exit 2`）。旧版的 `.agents/.nao-migrated` 标记**已废弃**：迁移不再读写它，可安全删除。`.agents/.nao-version` 的语义是「本机已安装机制包版本」（供升级检测），**不表达迁移状态**——迁移状态由「是否还有旧资产」推断。
+
+### 发布形态与完整性判据（0.12 起有变化）
 
 **从 0.12 起，机制不再铺进项目**：项目里只留一个转发入口，机制的**单一事实来源**是 npm 包 `@nathan33/nao-skill` 内的 `.agents/`。
 
@@ -158,7 +164,7 @@ $NAO_SKILLS/.agents/scripts/qq-notify --dry-run "连通性自检"      # 只取 
 - **pi 启动的隐式安装**：当 `.pi/npm/node_modules` 缺失时，pi 启动会隐式执行 `npm install --prefix .pi/npm --legacy-peer-deps`；离线且缓存为空会得到可读的 npm 报错，并让 pi 以非 0 退出（不会静默假装成功）。
 - **运行纪律**：**先显式物化，再 `PI_OFFLINE=1` 运行**。nao 机制自身（转发入口 / fleet / CLI / check）**零网络调用**；入口找不到机制包时不静默成功，而是 `exit 2` 并打印一行 `DEGRADED:` + 恢复命令。
 
-## 下游仓库迁移（nao-todo / nao-todo-server / nue-ui）
+### 下游仓库迁移（nao-todo / nao-todo-server / nue-ui）
 
 - **迁移期零改动**：旧的全套 `.agents/scripts/nao-fleet.sh` 照常可用，这些仓库的 CI 目前不调用 `check`，不受影响。
 - 想切到新形态时，在各仓执行 `npx @nathan33/nao-skill migrate`：只删**已知 nao 资产**（共享的 `.agents/skills/` 里项目自有的技能会保留），并把 `skills-lock.json` 里重复的 `frontend-design` 来源收敛为「机制包唯一来源」。
