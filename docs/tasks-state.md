@@ -5,6 +5,8 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
+- 🔄 **T515 在飞（2026-10-13 起）**：舰队机制潜在 BUG 排查（调研单 · 零代码）· rd-infra · 报告 → `docs/reports/2026-10-13-T515-mechanism-bug-hunt.md`。
+- ⚠️ **事故疑点 I1（2026-10-13，T515 期间）**：rd-infra 收单后**自关消失**（pane 无回执无产物，T515 单重发）——与 T513-H1 同型，疑在非 tmux 阶梯新链路复发；已列 T515 优先疑点，报告须回溯 a 注入事实 b 触发时序 c F1/F2 缺口。
 - 当前阶段：**全部批次闭环** —— 上游：T509（#19 别名/守卫/跨仓回收 → v0.12.1）· T510（#21 migrate 收尾 → v0.13.0）· T511（三仓 pin → 0.13.0 + 删 `.nao-migrated`）· **T514（#22 移除 qq-notify → v0.15.0）**；下游：T506/T507/T508（三仓迁到 0.12.0）。
 - ✅ **T514 已交付闭环（2026-10-13，立项→合并→发版当日完成）**：**移除 qq-notify 能力**（用户拍板 D1 全删/D2 0.15.0/D3 随落关 #22）· PRD `docs/prds/2026-10-13-remove-qq-notify.md`（AC1–AC10）· rd-infra 单波 · Draft PR [#28](https://github.com/Nathan3303/nao-skills/pull/28) → squash `7c68901`（恰 1 条/无 wip()/分支删净）· **tag `v0.15.0` + Release 已发（PM，notes 用户可读）**· #22 已关（GitHub 随 PR 自动关 + PM 处置评论）· `check` exit=0 roles=6 files=41 · pi skills 注册 -1）。**计划外触点裁定**：`check_qq_notify` 守卫 + 帮助文案删除（与被删资产强耦合，采纳并留痕）。**教训**：`gh release create --target <短sha>` 会 422，先 `git tag -a` + `git push origin <tag>` 再建 Release。**待用户裁量**：下游 **2 处活引用悬空**（nao-todo `AGENTS.md:120` 整段 QQ 推送用法 · nue-ui `AGENTS.md:81` 路径示例）——pin 升 0.15.0 后失效，需下游小批次清理（rd-infra 随手改）。**npm 发布待用户。**
 - 🔵 ~~**T512 在飞（2026-10-12 起）**~~ ⇒ **已闭环（2026-10-12）**：**调研单** —— arch 检验 **pi-subagents 与 nao 多窗体舰队机制的兼容性**，报告 `docs/reports/2026-10-12-pi-subagents-compat-review.md`。结论：**可组合、非同层替代**；替代常驻舰队不采纳。PM 独立抽检 3 条硬断言全成立（自动 intercom 桥在当前装机**整条死**：pi-subagents 0.77.0 不写 `PI_SUBAGENT_ORCHESTRATOR_TARGET` 等 5 个 env 中任何一条）。**待用户裁量 3 项**（见归档表）。**零代码、未建 Issue/PR、未动需求分支**。
