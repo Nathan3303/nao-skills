@@ -127,10 +127,11 @@
 
 > T2 验收注意事项（已归档，见下）：① 零网络断言为「代理阻断 + npm offline」，非内核级隔离（已披露，接受）；② `.pi/npm/.gitignore` 由 pi 自生成 → D2 无需本仓额外配置。
 
-## 7. 已验收 / 已归档 · 历史行（迁移前 L148–L171 · 22 行；T519 归档墙轮换补入 T517 行）
+## 7. 已验收 / 已归档 · 历史行（迁移前 L148–L171 · 22 行；T519 归档墙轮换补入 T517 行；T520 归档墙轮换补入 T518 行）
 
 | 任务编号 | 结论 | 详情路径 | 备注 |
 | :--- | :--- | :--- | :--- |
+| **T518** | **验收通过 · 已合并归档**（v0.17.0）：to-spec 改造引入（验证接缝 + 对话综合）· AC1–AC9 全过 · 9 文件 +167/−7 · 门禁 `check` rc0 roles=6 files=44 · t4 12/12 · squash `93ffb0a`（main 恰 1 条 · 无 `wip()`）· **已发布** v0.17.0（tag + Release + npm `latest→0.17.0` 对账逐字节一致） | PR [#36](https://github.com/Nathan3303/nao-skills/pull/36) · Issue [#35](https://github.com/Nathan3303/nao-skills/issues/35) · PRD `docs/prds/2026-10-14-pm-to-spec-adoption.md` | 待办（T520 批次终态时仍未闭环）：下游三仓唤醒后补发广播 `card pm v24` / `card qa v14`（后并入 T520 批的 `card arch-designer v12`） |
 | **T517** | **验收通过 · 已合并归档**（v0.16.2）：派生会话 tmux 落点修正（`resolve_host_window()` L1–L4 + `-t` 贯穿 10 处）· AC1–AC9 全过（QA 独立 GO：case12 19 红→36/36；tests 12/12 · 263 例 · 0 红）· squash `536d030` | PR [#34](https://github.com/Nathan3303/nao-skills/pull/34) · Issue [#33](https://github.com/Nathan3303/nao-skills/issues/33) · ADR `docs/adr/2026-10-13-derived-pane-window-addressing.md` | **已发布** v0.16.2（tag + Release + npm 对账一致） |
 | **T516** | **验收通过 · 已合并归档**（0.16.0）：AC1–AC10 全过（AC10 由合并核验）· `check` rc0 roles=6 files=41 · t4 11/11·348/348·0 红 · AC8 tmux **18/18** + 屏侧 **17/17**（PATH stub，含 `pid.Xnao-<名>` 左锚边界）· AC9 T513 AC14 **3× 5/5** · 负向对照 main 旧 fleet 10 FAIL 证翻面 · arch 补签 **GO**（F2 screen 侧同批修）· squash **`e86817b`**（main 恰 1 条 · 无 `wip()` · 分支删净）· **tag `v0.16.0` + Release 已发** | PR [#30](https://github.com/Nathan3303/nao-skills/pull/30) · Issue [#29](https://github.com/Nathan3303/nao-skills/issues/29) · PRD `docs/prds/2026-10-13-close-anchor-safe-clean.md` · ADR `docs/adr/2026-10-13-close-anchor-cleanup-guard.md` | **事故链留痕**：17:11 AC8 脚本连坐真 server（真因 TMUX_TMPDIR 参与默认 socket 判定）→ 修复即本批 §七；评审 F2（screen 销毁未锚）+ qa (e) 左锚边界 → 同批修 · 平台偏差：`arch-designer` 非 GitHub 协作者（422）⇒ 用 review/comment 代 · **npm 发布待用户** |
 | T513 | **验收通过 · 已合并归档**（0.14.0）：AC1–AC14 全过 · `verify.sh` **85 PASS / 0 FAIL**（AC14 连跑 3 次一致 5/5 · AC11 3× 一致 9/9）· `tests/t4` **11 用例 / 263 PASS / 4 NOTE / 0 FAIL**（基线口径订正 178）· 真机实拉 ③/④ 各一次 · **事故 H1**：`close` 自伤（既有缺陷 · 本批放大触发面）→ F1 不变量 + F2 源头清理 + 永久复现资产 · **M2** 首修未建立不变量 → 终改父持管道 · squash **`cda59b0`**（main 恰 1 条 · 无 `wip()`）· **tag `v0.14.0` + Release 已发** | PR [#27](https://github.com/Nathan3303/nao-skills/pull/27) · Issue [#26](https://github.com/Nathan3303/nao-skills/issues/26) · PRD `docs/prds/2026-10-12-non-tmux-host-spawn.md` · ADR `docs/adr/2026-10-12-non-tmux-host-spawn.md` · 事故报告 `docs/reports/2026-10-12-T513-incident-close-selfpane.md` | **npm 发布待用户** · 覆盖限制：仅 foot+Hyprland 真机验证 · 后续项见快照 |
@@ -216,3 +217,4 @@
 ---
 
 > 迁移核对（T519 回执留痕）：本档承接快照区历史条目 **26** 条（逐条见 §1）· 快照区附录 2 节（§2）· 「需求分支 / PR / 发布」历史 10 行（§3）· 待派发历史指针 5 行（§4）· 进行中已闭环遗留 6 行 + 说明块 9 行（§5）· 已回执历史 20 行 + 注意事项 1 行（§6）· 已验收旧行 **22** 行（§7）· T507 / T508+侦察结论+通用既定口径 两附录（§8/§9）。
+> 轮换补入（T520 批次终态）：§7 新增 T518 行 ⇒ §7 = **23** 条。

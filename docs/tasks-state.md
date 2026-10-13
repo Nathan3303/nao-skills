@@ -8,30 +8,30 @@
 
 > 本区是 PM 的**悬空状态**（任务状态见下方五栏）；重开后逐行回读确认（当前阶段 · 未决决策 · 口头约束）。
 
-- 🔄 **PM 会话重开交接（2026-10-14 · 用户拍板「现在重开」· 批次终态）**：T519 已**全链路闭环**（代码 → 验收 → squash 合并 `1486a8e` → tag `v0.17.1` + Release（发布提交 `87193be`）→ 台账闭环 → 派生会话回收），**无在飞任务、无未决决策**；舰队 = **仅 pm 在线**。**唯一待办** = 下游三仓（nao-todo / nao-todo-server / nue-ui）PM 会话唤醒后补发广播 `card pm v24` / `card qa v14`（T518 批遗留）+ `card arch-designer v12`（T520 批）。**新 PM 开工前规则**：先读本文件 + `docs/prds/README.md` 索引 → 向用户**回读确认 3 行**（当前阶段 · 未决决策 · 口头约束）→ 确认后方可调度；旧 pm 窗在本提交后关闭（避两个同名 `pm` 的 intercom 定位歧义）。
-- 🆕 **T520 立项（2026-10-14 · 待用户开工确认）**：文档模板与格式约定（ADR 结构边界 + 骨架单源 + 索引模板）—— 用户选定第 1/3/5 条；PRD = `docs/prds/2026-10-14-doc-templates-convention.md`（已落盘）；**降级批次**（无 Issue）· 分支 `nao/doc-templates` · 目标 v0.17.2（npm 不重发）。**闸门状态 = 等用户答复开工确认卡，未派发任何 worker**。
+- 🔄 **PM 会话重开交接（2026-10-14 · T520 批次终态）**：T520 已**全链路闭环**（PRD → arch 结构定稿 → rd-infra 落地 → QA 独立验证 → squash 合并 `160cc60` → tag `v0.17.2` + Release（发布提交 `9833344`）→ 台账归档），**无在飞任务、无未决决策**。**唯一待办** = 下游三仓（nao-todo / nao-todo-server / nue-ui）PM 会话唤醒后补发广播 `card pm v24` / `card qa v14`（T518 批遗留）+ `card arch-designer v12`（T520 批）。**新 PM 开工前规则**：先读本文件 + `docs/prds/README.md` 索引 → 向用户**回读确认 3 行**（当前阶段 · 未决决策 · 口头约束）→ 确认后方可调度。
+- ✅ **T520 交付闭环（2026-10-14 · v0.17.2）**：ADR 文档契约 —— 必写 5 节 + 可选 3 节（参考来源恒末）· 头部恰 4 字段 · 状态值域 4 值 · 禁写/下沉清单 · 新增 `templates/adr.md.example` + `adr-index.md.example` · `arch-designer` 卡 v11→v12 · QA 探针 `PASS=53 FAIL=0` + 负控 2/2 · squash `160cc60` · tag + Release 已发（`9833344`）· **npm 不重发**。
 - ✅ **T519 交付闭环（2026-10-14）**：tasks-state 台账瘦身 + 历史下沉 —— **231→83 行**（−64.1%）· 新增 `docs/tasks-archive.md` 217 行（历史快照 · 非权威）· AC1–AC8 全过（含 AC4 七条）· **QA 三次独立复核全 GO**（接缝 → 落地 → 补丁）· PR [#37](https://github.com/Nathan3303/nao-skills/pull/37) squash `1486a8e`（main 恰 1 条 · 无 `wip()` · 分支删净）· 门禁 `check` rc0 roles=6 files=44 · `npm test` rc0 · t4 12/12 · 探针 `PASS=11 FAIL=0`（基线 `PASS=8 FAIL=1` ⇒ 暴露 T511a/b/c 被误判为进行中，本批已闭合）· **已发布 v0.17.1**（发布提交 `87193be` · tag + Release 已发 · **npm 不重发** ・`package.json`/README pin 保持 0.17.0）。
 
-- 当前阶段：**T520 实施中**（arch 结构契约已定稿 · rd-infra 落地在飞 · qa 待派；T519 → v0.17.1 已闭环；T518 → v0.17.0 已闭环）
-- 当前 PRD：`docs/prds/2026-10-14-doc-templates-convention.md`（状态：**已开工 · arch 定稿已并入**）
-- 未决决策点：无（arch 待拍板 D1–D3 已由 PM 裁量：全采纳）
+- 当前阶段：**全部批次闭环**（T520 → v0.17.2 已交付并发布 · PR #38 `160cc60`；T519 → v0.17.1；T518 → v0.17.0）
+- 当前 PRD：`docs/prds/2026-10-14-doc-templates-convention.md`（状态：**已归档**）
+- 未决决策点：无
 - 待用户回答：无
-- 未派发队列：见下方「待派发队列」（共 1 项：qa lite，等 rd-infra 落地）
-- 下次唤醒条件：**rd-infra-T520 回执 done(full)** → 派 qa-T520 探针 + 复核；舰队已起 = arch-designer-T520 / rd-infra-T520 / qa-T520（均 idle）
-- 口头约束已落盘：项目 `AGENTS.md` 项目约束（ask-me 提问）· PRD §5 BR6 格式禁令 + §9 R5/R6
-- 需求分支 / PR：见下方「需求分支 / PR / 发布」（降级分支 `nao/tasks-state-slim`）
-- 会话体检：本批（T519）PM 会话 ctx ≈12%（无压缩 · 本批开始时实测 66.4k/1000k）· 舰队 = **仅 pm 在线** · 本快照为接续唯一事实源（main = v0.17.1 发布提交）
+- 未派发队列：见下方「待派发队列」（共 0 项）
+- 下次唤醒条件：**下批需求授意 / 用户要求重开 PM**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = 三个 T520 派生会话待回收（本批次终态）；下批需求先 `ensure pm arch-designer rd-fe rd-be qa rd-infra`
+- 口头约束已落盘：项目 `AGENTS.md` 项目约束（ask-me 提问）· PRD §5 BR6 格式禁令 + §9 R5/R6（T519）· ADR 字段口径 = `deliverable-docs.md` §四（T520 · 状态值域 4 值 / 头部 4 字段 / 60 行上限）
+- 需求分支 / PR：见下方「需求分支 / PR / 发布」（降级分支 `nao/doc-templates`）
+- 会话体检：本批（T520）PM 会话 ctx ≈11%（无压缩 · 本批开始时实测 95.5k/1000k）· 舰队 = pm + 三个 T520 派生会话（待回收）· 本快照为接续唯一事实源（main = v0.17.2 发布提交 `9833344`）
 
 ## 需求分支 / PR / 发布（PM 维护）
 
-- Issue：**无（降级批次）** —— 摘要见 `docs/prds/2026-10-14-tasks-state-slim.md`
-- 需求分支：`nao/tasks-state-slim`（base `main` = `9329421`；**已 squash 合并并删净**）
-- PR owner / Reviewer：rd-infra-T519 / **无**（docs-only · 不改解析器 ⇒ 跳过架构评审）
-- PR：[#37](https://github.com/Nathan3303/nao-skills/pull/37)（**已 MERGED** · squash `1486a8e`）· 预览环境：无
-- 合并：**已 squash 合并**（main `1486a8e`；main 上本需求**恰 1 条** · 无 `wip()`）· 分支已删：**是**
-- 版本 / Tag：**v0.17.1（PATCH）** —— tag + Release **已发**（发布提交 `87193be`；`v0.17.1` tag 指向该提交）· **`package.json` / README pin 保持 0.17.0**（用户拍板 A：tag 仅机制治理留痕 · npm **不重发**，包内容与 0.17.0 一致）
-- 降级标注：无 Issue · 无 Reviewer（用户拍板 D3）
-- 特例提交（白名单）：合并由 rd-infra 执行 —— `gh pr ready 37` + `gh pr merge --squash --delete-branch --subject "…" --match-head-commit <sha>`（**短 sha 被 GraphQL 拒** ⇒ 须完整 40 位，教训留痕）
+- Issue：**无（降级批次）** —— 摘要见 `docs/prds/2026-10-14-doc-templates-convention.md`
+- 需求分支：`nao/doc-templates`（base `main` = `5d9d609`；**已 squash 合并并删净**）
+- PR owner / Reviewer：rd-infra-T520 / arch-designer-T520（结构契约评审 `done(full)` · 待拍板 D1–D3 **全采纳**）
+- PR：[#38](https://github.com/Nathan3303/nao-skills/pull/38)（**已 MERGED** · squash `160cc60`）· 预览环境：无
+- 合并：**已 squash 合并**（main `160cc60`；main 上本需求**恰 1 条** · 无 `wip()`）· 分支已删：**是**
+- 版本 / Tag：**v0.17.2（PATCH）** —— tag + Release **已发**（发布提交 `9833344`）· **`package.json` / README pin 保持 0.17.0**（npm **不重发**，包运行面与 0.17.x 无差异）
+- 降级标注：无 Issue · 无预览环境
+- 特例提交（白名单）：合并由 rd-infra 执行 —— `gh pr merge 38 --squash --delete-branch --subject "文档模板与格式约定：ADR 结构契约 + 骨架单源 + 索引模板" --match-head-commit 160cc60…`（**完整 40 位**；T511 教训沿用）
 
 ## 活约束与遗留跟踪（长期有效 · 不下沉）
 
@@ -56,19 +56,16 @@
 
 | 任务编号 | 目标会话 | 概要 | 排队原因 |
 | :--- | :--- | :--- | :--- |
-| T520 | qa | T520 QA lite：出结构探针 `docs/reports/2026-10-14-T520-doc-contract-probe.sh` + 核 AC1–AC4 证据 | 等 rd-infra 落地 |
 
 ## 进行中
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T520 | rd-infra-T520 | 落地：2 个 `.example` 模板 + `deliverable-docs.md` §四 + `arch-patterns.md` + arch 卡 §十一（v11→v12）+ `docs/adr/README.md` 收敛 + 提交 arch 两稿（分支 `nao/doc-templates`） | 2026-10-14 02:08 | AC1/AC2/AC3/AC4/AC5 | `wip(T520):` |
 
 ## 已回执待验收
 
 | 任务编号 | 回执摘要（≤150字） | 详情路径 | 待办 |
 | :--- | :--- | :--- | :--- |
-| T520 | arch 结构评审 `done(full)`：**可行（技术签字）** · 定稿必写 5 节 + 可选 3 节（逐字）+ 全序（参考来源恒末）+ 头部 4 字段 + ≤60 行仅对新增件 · 待拍板 D1–D3 | `docs/reports/2026-10-14-T520-arch-review.md` · 首实例 `docs/adr/2026-10-14-adr-structure-contract.md` | PM 已裁量 D1–D3 全采纳并并入 PRD 附录；无需返工 |
 
 ## 挂起（被抢占 / 降级）
 
@@ -79,7 +76,6 @@
 
 | 任务编号 | 结论 | 详情路径 | 备注 |
 | :--- | :--- | :--- | :--- |
+| **T520** | **验收通过 · 已合并归档**（v0.17.2）：ADR 文档契约（骨架单源 + 职责下沉 + 索引模板）—— 必写 5 节 + 可选 3 节（参考来源恒末）· 头部恰 4 字段 · 状态值域 4 值 · 禁写/下沉清单 → `docs/reports/<编号>-arch-review.md` · 60 行上限保留（仅新增件断言）· 9 文件（2 新增模板 + 3 机制文件 + 索引 + 首实例 ADR + 评审报告 + 探针）· **QA 独立只读探针 `PASS=53 FAIL=0`**（`--fast` 46/0/4）· 负控 2/2（禁词注入 / 节序打乱均 FAIL）· `check` rc0 roles=6 **files 44→46** · `npm test` rc0 · t4 12/12 · squash `160cc60`（main 恰 1 条 · 无 `wip()` · 分支删净）· **tag `v0.17.2` + Release 已发**（发布提交 `9833344` · npm 不重发） | PR [#38](https://github.com/Nathan3303/nao-skills/pull/38) · 降级批次（无 Issue）· PRD `docs/prds/2026-10-14-doc-templates-convention.md` · 首实例 ADR `docs/adr/2026-10-14-adr-structure-contract.md` · 探针 `docs/reports/2026-10-14-T520-doc-contract-probe.sh` | 角色卡 `arch-designer` **v11→v12**（广播已发本仓；下游三仓待补发）· 历史 7 篇 ADR 零改动（不追溯）· 边界：`check` 的 `files` 只统计 `.agents/**`；探针一次性不入 `tests/` |
 | **T519** | **验收通过 · 已合并归档**（v0.17.1）：台账瘦身 + 历史下沉 —— `tasks-state` **231→83 行**（−64.1%）· 新增 `docs/tasks-archive.md` 217 行（历史快照 · 非权威）· AC1–AC8 全过（AC4 七条：28 历史 id 判 `active` = 0 · G1 在飞 id 仍 `active` · G2 归档墙 `closed` · G3 五标题各 1）· **QA 三次独立复核全 GO**（接缝 → 落地 → 补丁）· 探针 `PASS=11 FAIL=0`（基线 `PASS=8 FAIL=1`，正是它暴露 T511a/b/c 被误判为进行中）· 门禁 `check` rc0 roles=6 files=44 · `npm test` rc0 · t4 12/12 · squash `1486a8e`（main 恰 1 条 · 无 `wip()` · 分支删净）· **tag `v0.17.1` + Release 已发**（发布提交 `87193be` · npm 不重发） | PR [#37](https://github.com/Nathan3303/nao-skills/pull/37) · 降级批次（无 Issue） · PRD `docs/prds/2026-10-14-tasks-state-slim.md` · 探针 `docs/reports/2026-10-14-T519-ac4-probe.sh` | **已知边界**：4 条 >120 字符新写行（NFR 未入 AC）· 披露-2（4 条运行态字段行未逐字留档）· **教训**：`gh pr merge --match-head-commit` 须**完整 40 位 sha** |
-| **T518** | **验收通过 · 已合并归档**（v0.17.0）：to-spec 改造引入（验证接缝 + 对话综合）· AC1–AC9 全过 · 9 文件 +167/−7 · 门禁 `check` rc0 roles=6 files=44 · t4 12/12 · squash `93ffb0a`（main 恰 1 条 · 无 `wip()`）· **已发布** v0.17.0（tag + Release + npm `latest→0.17.0` 对账逐字节一致） | PR [#36](https://github.com/Nathan3303/nao-skills/pull/36) · Issue [#35](https://github.com/Nathan3303/nao-skills/issues/35) · PRD `docs/prds/2026-10-14-pm-to-spec-adoption.md` | 待办：下游三仓唤醒后补发广播 `card pm v24` / `card qa v14` |
-
-> 更早批次（T517 及以前）见 `docs/tasks-archive.md`。
+> 更早批次（T518 及以前）见 `docs/tasks-archive.md`。
