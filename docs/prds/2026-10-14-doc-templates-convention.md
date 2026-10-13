@@ -31,6 +31,7 @@
   1. **第 1 条 · ADR 职责边界与下沉落点**：`deliverable-docs.md` §四 增「禁写 / 下沉清单」，明确实施闸门 / 接线清单 / 交接实现细节下沉 `docs/reports/<编号>-arch-review.md`；≤60 行上限保留（靠下沉复位，不放宽数值）。
   2. **第 3 条 · 单源化**：删 `备选方案` 字段；ADR 骨架唯一载体 = `.agents/templates/adr.md.example`；字段口径（状态值域 / 出具日 / 落地版本 / 通用头部 / 修订行）只写 `deliverable-docs.md` §四；`arch-patterns.md` 保留模式对照法 + 指针。
   3. **第 5 条 · 索引模板与列宽**：新增 `.agents/templates/adr.md.example` + `adr-index.md.example`（表头 4 列：日期 / 主题 / 决策 / 状态）；收敛本仓活索引 `docs/adr/README.md`（决策列 ≤20 字）；`architecture-designer.md` §十一 增索引模板指针（含版本 bump + 广播）。
+  4. **评审回执（结构契约）**：arch-designer 对「必写 5 节 + 可选 3 节 + 状态值域 + 下沉边界」出具评审回执；若其判定需落 ADR（arch 卡 §十一 红线），随批次落 `docs/adr/2026-10-14-adr-structure-contract.md` —— 该文件同时作为新骨架的**首实例**（AC1 增一项实证）。
 - **非范围**（各带理由）
   - 不改 7 篇历史 ADR 正文：理由 `deliverable-docs.md` §七「不追溯改写历史文档」。
   - 不加 `check` 的 ADR / PRD 结构校验：理由 需动 `check_eol` / 工具面并带回归，另开下批（第 6 条）。
@@ -65,10 +66,10 @@
 ## 七、AC
 
 - 验证接缝：`docs/reports/2026-10-14-T520-doc-contract-probe.sh`（一次性 · 不进 `tests/`）+ `nao-fleet.sh check`（**QA 确认待回执**）
-- AC1（主路径 · 骨架单源）：`.agents/templates/adr.md.example` 存在，含必写 5 节（背景 / 决策 / 理由 / 对照过的备选模式 / 参考来源）+ 后果与风险 + 相关指针 + 头部 4 字段（状态 / 更新 / Owner / 指针）；**不含** `备选方案` 字段；`deliverable-docs.md` §四 与 `arch-patterns.md` 均含指针 `templates/adr.md.example`。探针给命中 / 未命中条数。
+- AC1（主路径 · 骨架单源）：`.agents/templates/adr.md.example` 存在，含必写 5 节（背景 / 决策 / 理由 / 对照过的备选模式 / 参考来源）+ 后果与风险 + 相关指针 + 头部 4 字段（状态 / 更新 / Owner / 指针）；**不含** `备选方案` 字段；`deliverable-docs.md` §四 与 `arch-patterns.md` 均含指针 `templates/adr.md.example`。探针给命中 / 未命中条数；若 arch 落了首实例 ADR，同一组断言对其生效。
 - AC2（异常 · 职责边界）：`deliverable-docs.md` §四 含下沉条款且给出落点 `docs/reports/<编号>-arch-review.md`；`arch-patterns.md` 不再出现「实施闸门 / 接线清单 / 交接」示例节。
 - AC3（边界 · 索引模板与列宽）：`.agents/templates/adr-index.md.example` 存在且表头恰 4 列（日期 / 主题 / 决策 / 状态）；`docs/adr/README.md` 仍 4 列、决策列单元格 ≤20 字（探针给最大值）；`architecture-designer.md` §十一 含索引模板指针。
-- AC4（负向闭环 · 不追溯 + 门禁）：本批 diff 在 `docs/adr/*.md`（README 除外）**零命中**；`check` rc=0 且 `files=46`；`npm test` rc=0；`tests/t4/run.sh` 12/12；工作区干净。负控：历史 ADR 被改或 `files` ≠ 46 → FAIL。
+- AC4（负向闭环 · 不追溯 + 门禁）：本批 diff 在 **既有 7 篇** `docs/adr/2026-*.md` **零命中**（`README.md` 按 AC3 收敛、评审所需**新增** ADR 不算违规）；`check` rc=0 且 `files=46`；`npm test` rc=0；`tests/t4/run.sh` 12/12；工作区干净。负控：历史 ADR 被改或 `files` ≠ 46 → FAIL。
 - AC5（设计一致性 · 版本纪律）：`architecture-designer.md` version 11 → 12、`updated` 更新；`check` roles=6 通过；广播 `card arch-designer v12` 已发（回执记录收件方）。
 
 ## 八、上线闭环
