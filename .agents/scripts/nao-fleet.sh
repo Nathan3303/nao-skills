@@ -601,14 +601,30 @@ derived_in_field() {  # <name> → 派生名列表（每行一个；空 = 无）
   done < <(visible_session_names)
 }
 
+# screen 会话精确令牌（T516 F1/F2 · arch 评审）：从 `screen -ls` 取**精确** nao-<名> 会话的 `pid.name` 令牌。
+# 与 running()/close 检测同一锚定（名字后必须是空白或行尾；`\b` 在派生名的 "-" 处仍成立，故不用）。
+# 检测与销毁共用本 helper ⇒ 检测锚与销毁目标不会漂移；**取不到令牌即空，调用方不得 quit**（宁不回收，也不误伤派生）。
+screen_token_for() {  # <name> → echo pid.name（无精确匹配则空；恒 rc 0）
+  local name="$1"
+  command -v screen >/dev/null 2>&1 || return 0
+  screen -ls 2>/dev/null \
+    | grep -oE '[0-9]+\.[^[:space:]]*nao-'"$name"'([[:space:]]|$)' \
+    | sed -E 's/[[:space:]]+$//' \
+    | head -1 || true
+  return 0
+}
+screen_present() {  # <name> → 0 = 精确 screen 会话在场
+  [[ -n "$(screen_token_for "$1")" ]]
+}
+
 running() {
   local name="$1" repo="${2:-}"
   if intercom_online "$name" "$repo"; then return 0; fi
   if [[ -n "$(find_pane_for "$name" "$repo")" ]]; then return 0; fi
   if command -v tmux >/dev/null 2>&1 && tmux has-session -t "=nao-$name" 2>/dev/null; then return 0; fi
   # T516 #1（=锚）：tmux 会话名唯一前缀匹配曾误命中派生 nao-<名>-<任务>（T515 V4 实证）⇒ 一律 =nao-<名>；
-  # screen 同理：\b 在派生名的 "-" 处仍成立，改锚「名字后必须是空白/行尾」。
-  if command -v screen >/dev/null 2>&1 && screen -ls 2>/dev/null | grep -qE '[0-9]\.nao-'"$name"'([[:space:]]|$)'; then return 0; fi
+  # screen 同理：锚定收敛到 screen_present()（同一 helper 服务检测与销毁，见 screen_token_for）。
+  if command -v screen >/dev/null 2>&1 && screen_present "$name"; then return 0; fi
   return 1
 }
 
@@ -992,13 +1008,15 @@ spawn_fork_window() {  # <name> <cmd...>
 
 # screen 宿主派生：以「会话存在」为「已拉起」前置；未出现即回收会话（AC6）。
 spawn_screen() {  # <name> <inner>
-  local name="$1" inner="$2" tries=30
+  local name="$1" inner="$2" tries=30 stok
   screen -dmS "nao-$name" $TMUX_ENV_SCRUB bash -lc "$inner" >/dev/null 2>&1 || return 1
   while (( tries-- > 0 )); do
-    if screen -ls 2>/dev/null | grep -qE '[0-9]\.nao-'"$name"'([[:space:]]|$)'; then return 0; fi
+    if screen_present "$name"; then return 0; fi
     sleep 0.1
   done
-  screen -S "nao-$name" -X quit >/dev/null 2>&1 || true
+  # F1（arch 评审）：失败清理**只 quit 锚定令牌**指向的会话；取不到令牌即不 quit（不对 nao-<名> 前缀下手）。
+  stok="$(screen_token_for "$name")"
+  [[ -n "$stok" ]] && screen -S "$stok" -X quit >/dev/null 2>&1 || true
   return 1
 }
 
@@ -1477,7 +1495,7 @@ cmd_status() {
 cmd_close() {
   local force="$1" task="$2" target="${3:-}"
   [[ -n "$target" ]] || die "close 需要目标：角色别名或派生会话名（如 rd-be / rd-be-T1 / qa-T1）"
-  local name repo cls bus pane pids st tgt a best=""
+  local name repo cls bus pane pids st tgt a best="" stok
   intercom_list_json >/dev/null 2>&1 || true   # 预热名册缓存
 
   # ---- 目标解析：别名/canonical id | 派生会话名 <角色>-<编号> ----
@@ -1535,8 +1553,11 @@ cmd_close() {
     if command -v tmux >/dev/null 2>&1 && tmux has-session -t "=nao-$name" 2>/dev/null; then
       if tmux kill-session -t "=nao-$name" 2>/dev/null; then log "已回收 $name（tmux 会话 nao-$name）@ $repo"; return 0; fi
     fi
-    if command -v screen >/dev/null 2>&1 && screen -ls 2>/dev/null | grep -qE '[0-9]\.nao-'"$name"'([[:space:]]|$)'; then
-      if screen -S "nao-$name" -X quit 2>/dev/null; then log "已回收 $name（screen 会话 nao-$name）@ $repo"; return 0; fi
+    # F2（arch 评审）：销毁目标 = `screen -ls` 锚定行取出的 `pid.name` 精确令牌；取不到即不 quit
+    # （此前 `screen -S nao-<名> -X quit` 是前缀目标，精确+派生并存时无「只杀精确」保障）。
+    stok="$(screen_token_for "$name")"
+    if [[ -n "$stok" ]] && screen -S "$stok" -X quit 2>/dev/null; then
+      log "已回收 $name（screen 会话 $stok）@ $repo"; return 0
     fi
     # ④ 路径句柄（BR7/AC8）：app-id/class → pid（校验 comm=pi）→ kill 优先；
     # 有句柄即回收，不再依赖名册（名册可能滞后）。
@@ -1629,10 +1650,15 @@ cmd_cleanup() {
     printf '[fleet] cleanup 拒绝：未指定 -S <socket>。生产默认 socket 是生产名册所在，禁止默认清理；实验场清理用：env -u TMUX nao-fleet.sh cleanup -S <隔离socket>\n' >&2
     return 2
   fi
+  # F3-B3（arch 评审 · 低）：`-S` 若为符号链接/未归一化路径（`/tmp//…`、symlink）可绕过字符串比对
+  # ⇒ 比对前 readlink -f 归一化；readlink -f 不可用/不可解析时退回原串（保持原语义、无新依赖）。
+  local sock_cmp
+  sock_cmp="$(readlink -f -- "$sock" 2>/dev/null || true)"
+  [[ -n "$sock_cmp" ]] || sock_cmp="$sock"
   local -a prod=() p
   mapfile -t prod < <(prod_sock_candidates | awk '!seen[$0]++')
   for p in "${prod[@]:-}"; do
-    if [[ "$sock" == "$p" ]]; then
+    if [[ "$sock_cmp" == "$p" ]]; then
       printf '[fleet] cleanup 拒绝：-S 指向生产默认 socket（%s）；请用隔离 socket（须不同于生产候选：%s）\n' "$sock" "${prod[*]}" >&2
       return 2
     fi
