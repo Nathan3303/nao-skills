@@ -64,7 +64,7 @@
 | ~~T513~~ | — | 已交付（0.14.0 · PR #27 → `cda59b0`）—— 保留作历史指针，**勿重复派发** | 已闭环 |
 | ~~#19~~ | — | 已由 **T509** 闭环并发布（0.12.1）——保留作历史指针，**勿重复派发** | 已闭环 |
 | ~~#21~~ | — | 已由 **T510** 闭环并发布（0.13.0）——同上 | 已闭环 |
-| #22 | rd-infra（待定） | **候选批次 T514**：`qq-notify.md` 旧口径（项目内路径 12 处 + 第 86–87 行事实已失实）+ 迁移指引缺「项目侧脚本引用清单」（AC2）+ 是否给 `qq-notify`/`ui-tokens-check.sh` 加 shim（需 arch/PM 定） | **待用户裁量开工**（PM 已核对：**T510 未覆盖**，单仍有效，保持 OPEN） |
+| **T514** | rd-infra | **移除 qq-notify 能力**（用户拍板 D1 全删/D2 发 0.15.0/D3 随落关闭 #22）：删包内脚本+skill+PM卡§十四+README节+CLI 白名单 2 行 · PRD `docs/prds/2026-10-13-remove-qq-notify.md`（AC1–AC10）· 分支 `feat/22-remove-qq-notify` · Issue [#22](https://github.com/Nathan3303/nao-skills/issues/22)（已加处置升级评论）· 回执 `done(full)` · Reviewer = PM 自复核（免 arch） | 2026-10-13 立项+开工确认，待 ensure rd-infra 后派发 |
 
 ## 进行中
 
