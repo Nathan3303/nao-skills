@@ -33,6 +33,7 @@ description: 按需技能——用例设计、缺陷管理、性能安全、DDD 
 
 ## 缺陷管理
 
+- **落点（入库）**：缺陷全量落 `docs/reports/<编号>-defects.md`（编号 = 任务编号，与测试报告同批次）；项目已有缺陷平台（如 GitHub Issues 标签）时用平台，报告内只留指针。
 - 生命周期：New → Open → Fixed → Verify → Closed / Reopen
 - 严重度：致命 / 严重 / 一般 / 轻微
 - 优先级：P0 / P1 / P2 / P3

@@ -34,6 +34,7 @@ description: 按需技能——PM 运行手册（调度细则 / 开工确认卡 
 | T1 | rd-be | 后端 | ... | AC1/AC3 |
 
 分支：`feat/<issue-id>-<slug>`（降级 `nao/<批次-slug>`）· PR owner：<角色> · Reviewer：<arch-designer / 无> · 预览环境：<URL / 无>
+QA 测试范围（派发无人值守时按此执行；用户在场时由 QA 直接询问用户）：<列出范围 / 无 QA>
 
 建议顺序：**QA 先行用例 → 前后端并行**。
 

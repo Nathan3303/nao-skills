@@ -7,7 +7,7 @@ description: 后端研发交付核对清单（按需，交付前读取）
 > 角色卡只常驻最硬红线；本文件在**交付前**读取并逐项核对。
 > 汇报只报未过项：`未过：R-XX-03；其余 pass`（见 output-format）。
 
-## 硬性红线（完整 8 项）
+## 硬性红线（完整 9 项）
 
 - [ ] `internal/domain/` 零 ORM(GORM)/Web(Gin)/RPC 导入
 - [ ] Application 无 `if order.Status == Paid` 业务规则（须上移 Domain）
@@ -17,6 +17,7 @@ description: 后端研发交付核对清单（按需，交付前读取）
 - [ ] 业务逻辑禁 `panic`（仅哨兵错误）
 - [ ] VO 用工厂函数（`NewMoney`），禁裸结构体
 - [ ] 所有 I/O 方法首参 `context.Context`
+- [ ] 未跑**全范围门禁**（不是子目录）并回执精确数字？（PM 不重复跑，回执数字即验收唯一依据；全范围口径见项目 `AGENTS.md`）
 
 ## 命名速查
 

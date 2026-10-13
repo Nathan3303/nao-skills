@@ -1,6 +1,6 @@
 # ADR：新增 `rd-infra`（工程基座）角色
 
-- 状态：**提议**（用户已同意新增；本文由 arch-designer 出具设计方案，**不含代码实现**）
+- 状态：**已接受**（已落地 v0.9.0）
 - 日期：2026-09-25 · 出具：arch-designer（`T303`）· 落地：RD（见文末「交接」）
 - 关联：`.agents/roles.yaml`、`.agents/prompts/infra-engineer.md`（待建）、`.agents/checklists/rd-infra.md`（待建）、`.agents/scripts/nao-fleet.sh`
 - 上游依据：PM `docs/tasks-state.md` 已登记「角色设计决策（用户 2026-09-25 同意）」
@@ -148,3 +148,7 @@ nao-skills **无 CodeGraph 索引**（实测 `codegraph status` → `Not initial
 | **P1 角色资产** | 第 1–3 项（`roles.yaml` + 卡 + 清单） | `check` rc=0 且报告 `roles=6`；新卡 frontmatter 三字段校验通过 |
 | **P2 接线** | 第 4–15 项（文档计数、别名表、PM 卡路由纪律、脚本注释、示例） | `check` rc=0；全仓 grep 不再有「5 个/五个角色」残留；交叉引用齐备 |
 | **P3 版本与发布** | 第 16–17 项 + 演练 | `check` rc=0 + `npm test` rc=0 + 错配演练 rc=1（还原后复绿）+ release notes 落盘；**版本 `0.9.0`，tag 待 PM 在合并后推** |
+
+> 落地核验（2026-10-13 · PM）：`roles.yaml`/`infra-engineer.md`/`checklists/rd-infra.md` 已建，PM 卡已含路由纪律与转发对象（v21+），README/互操作协议/脚本注释已同步为 6 角色，v0.9.0 已发布。本 ADR 状态由「提议」更新为「已接受」。
+
+- 修订：2026-10-13 状态由「提议」更新为「已接受」（已落地 v0.9.0）
