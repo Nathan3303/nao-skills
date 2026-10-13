@@ -8,16 +8,16 @@
 
 > 本区是 PM 的**悬空状态**（任务状态见下方五栏）；重开后逐行回读确认（当前阶段 · 未决决策 · 口头约束）。
 
-- 🔄 **PM 会话重开交接（2026-10-14 · 用户拍板「现在重开」· 批次终态）**：T519 已**全链路闭环**（代码 → 验收 → squash 合并 `1486a8e` → tag `v0.17.1` + Release（发布提交 `87193be`）→ 台账闭环 → 派生会话回收），**无在飞任务、无未决决策**；舰队 = **仅 pm 在线**。**唯一待办** = 下游三仓（nao-todo / nao-todo-server / nue-ui）PM 会话唤醒后补发广播 `card pm v24` / `card qa v14`（T518 批遗留）。**新 PM 开工前规则**：先读本文件 + `docs/prds/README.md` 索引 → 向用户**回读确认 3 行**（当前阶段 · 未决决策 · 口头约束）→ 确认后方可调度；旧 pm 窗在本提交后关闭（避两个同名 `pm` 的 intercom 定位歧义）。
+- 🔄 **PM 会话重开交接（2026-10-14 · 用户拍板「现在重开」· 批次终态）**：T519 已**全链路闭环**（代码 → 验收 → squash 合并 `1486a8e` → tag `v0.17.1` + Release（发布提交 `87193be`）→ 台账闭环 → 派生会话回收），**无在飞任务、无未决决策**；舰队 = **仅 pm 在线**。**唯一待办** = 下游三仓（nao-todo / nao-todo-server / nue-ui）PM 会话唤醒后补发广播 `card pm v24` / `card qa v14`（T518 批遗留）+ `card arch-designer v12`（T520 批）。**新 PM 开工前规则**：先读本文件 + `docs/prds/README.md` 索引 → 向用户**回读确认 3 行**（当前阶段 · 未决决策 · 口头约束）→ 确认后方可调度；旧 pm 窗在本提交后关闭（避两个同名 `pm` 的 intercom 定位歧义）。
 - 🆕 **T520 立项（2026-10-14 · 待用户开工确认）**：文档模板与格式约定（ADR 结构边界 + 骨架单源 + 索引模板）—— 用户选定第 1/3/5 条；PRD = `docs/prds/2026-10-14-doc-templates-convention.md`（已落盘）；**降级批次**（无 Issue）· 分支 `nao/doc-templates` · 目标 v0.17.2（npm 不重发）。**闸门状态 = 等用户答复开工确认卡，未派发任何 worker**。
 - ✅ **T519 交付闭环（2026-10-14）**：tasks-state 台账瘦身 + 历史下沉 —— **231→83 行**（−64.1%）· 新增 `docs/tasks-archive.md` 217 行（历史快照 · 非权威）· AC1–AC8 全过（含 AC4 七条）· **QA 三次独立复核全 GO**（接缝 → 落地 → 补丁）· PR [#37](https://github.com/Nathan3303/nao-skills/pull/37) squash `1486a8e`（main 恰 1 条 · 无 `wip()` · 分支删净）· 门禁 `check` rc0 roles=6 files=44 · `npm test` rc0 · t4 12/12 · 探针 `PASS=11 FAIL=0`（基线 `PASS=8 FAIL=1` ⇒ 暴露 T511a/b/c 被误判为进行中，本批已闭合）· **已发布 v0.17.1**（发布提交 `87193be` · tag + Release 已发 · **npm 不重发** ・`package.json`/README pin 保持 0.17.0）。
 
-- 当前阶段：**T520 派发中**（arch 结构评审在飞；rd-infra / qa 排队；T519 → v0.17.1 已闭环；T518 → v0.17.0 已闭环）
-- 当前 PRD：`docs/prds/2026-10-14-doc-templates-convention.md`（状态：**已开工**）
-- 未决决策点：等 arch-designer-T520 结构定稿（必写 5 节 + 可选 3 节 / 状态值域 / 是否落 ADR 首实例）
-- 待用户回答：无（开工确认卡已回：按卡开工 · PM 直推 main · 3 会话）
-- 未派发队列：见下方「待派发队列」（共 2 项：rd-infra 实现 · qa lite）
-- 下次唤醒条件：**arch-designer-T520 回执 done(full)** → 派 rd-infra-T520 落地；再 qa-T520 探针 + 复核；舰队已起 = arch-designer-T520 / rd-infra-T520 / qa-T520（均 idle · 立项提交 `e7d6a9f` 已推 main）
+- 当前阶段：**T520 实施中**（arch 结构契约已定稿 · rd-infra 落地在飞 · qa 待派；T519 → v0.17.1 已闭环；T518 → v0.17.0 已闭环）
+- 当前 PRD：`docs/prds/2026-10-14-doc-templates-convention.md`（状态：**已开工 · arch 定稿已并入**）
+- 未决决策点：无（arch 待拍板 D1–D3 已由 PM 裁量：全采纳）
+- 待用户回答：无
+- 未派发队列：见下方「待派发队列」（共 1 项：qa lite，等 rd-infra 落地）
+- 下次唤醒条件：**rd-infra-T520 回执 done(full)** → 派 qa-T520 探针 + 复核；舰队已起 = arch-designer-T520 / rd-infra-T520 / qa-T520（均 idle）
 - 口头约束已落盘：项目 `AGENTS.md` 项目约束（ask-me 提问）· PRD §5 BR6 格式禁令 + §9 R5/R6
 - 需求分支 / PR：见下方「需求分支 / PR / 发布」（降级分支 `nao/tasks-state-slim`）
 - 会话体检：本批（T519）PM 会话 ctx ≈12%（无压缩 · 本批开始时实测 66.4k/1000k）· 舰队 = **仅 pm 在线** · 本快照为接续唯一事实源（main = v0.17.1 发布提交）
@@ -56,19 +56,19 @@
 
 | 任务编号 | 目标会话 | 概要 | 排队原因 |
 | :--- | :--- | :--- | :--- |
-| T520 | rd-infra | T520 实现：新增 `templates/adr.md.example` + `adr-index.md.example`、改 `deliverable-docs.md` §四 / `arch-patterns.md` / `architecture-designer.md` §十一（v11→v12）、收敛 `docs/adr/README.md`、建分支 `nao/doc-templates` | 等 arch 结构定稿 |
 | T520 | qa | T520 QA lite：出结构探针 `docs/reports/2026-10-14-T520-doc-contract-probe.sh` + 核 AC1–AC4 证据 | 等 rd-infra 落地 |
 
 ## 进行中
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T520 | arch-designer-T520 | ADR 结构契约评审（定稿必写 5 节 + 可选 3 节 / 状态值域 / 是否落 ADR 首实例 / 下沉边界） | 2026-10-14 02:03 | AC1/AC2/AC3 | 无（评审 · 不提交） |
+| T520 | rd-infra-T520 | 落地：2 个 `.example` 模板 + `deliverable-docs.md` §四 + `arch-patterns.md` + arch 卡 §十一（v11→v12）+ `docs/adr/README.md` 收敛 + 提交 arch 两稿（分支 `nao/doc-templates`） | 2026-10-14 02:08 | AC1/AC2/AC3/AC4/AC5 | `wip(T520):` |
 
 ## 已回执待验收
 
 | 任务编号 | 回执摘要（≤150字） | 详情路径 | 待办 |
 | :--- | :--- | :--- | :--- |
+| T520 | arch 结构评审 `done(full)`：**可行（技术签字）** · 定稿必写 5 节 + 可选 3 节（逐字）+ 全序（参考来源恒末）+ 头部 4 字段 + ≤60 行仅对新增件 · 待拍板 D1–D3 | `docs/reports/2026-10-14-T520-arch-review.md` · 首实例 `docs/adr/2026-10-14-adr-structure-contract.md` | PM 已裁量 D1–D3 全采纳并并入 PRD 附录；无需返工 |
 
 ## 挂起（被抢占 / 降级）
 

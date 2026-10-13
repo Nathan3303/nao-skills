@@ -52,7 +52,7 @@
 - **BR1 单源**：骨架正文只在 `.example`，规范只在 `deliverable-docs.md`，其余位置只给指针（禁双写）。
 - **BR2 不追溯**：历史 ADR 正文不改；仅活索引 `docs/adr/README.md` 按新列宽收敛（信息不丢：短结论 + 行内链接）。
 - **BR3 边界优先于上限**：ADR 不含实施闸门 / 接线清单 / 交接实现；超长先下沉，不放宽 60 行上限。
-- **BR4 状态值域**：`提议` / `已接受（待落地）` / `已接受（已落地 vX.Y.Z）` / `已废弃（被 ADR-N 取代）`。
+- **BR4 状态值域**：`提议` / `已接受（待落地）` / `已接受（已落地 vX.Y.Z）` / `已废弃（被 <yyyy-mm-dd-slug> 取代）`（本仓 ADR 无编号，禁用 `ADR-N` 写法）。
 - **BR5 卡片版本纪律**：改 `architecture-designer.md` 必须 bump `version` + `updated`，并广播 `card arch-designer v12`。
 - **BR6 格式禁令**：ADR 正文默认不用表格（§七）；索引属「需被解析的结构化清单」例外，仅 4 窄列。
 - **BR7 索引原子性**：索引「决策」列 ≤20 字，细节一律在 ADR 正文。
@@ -66,8 +66,9 @@
 ## 七、AC
 
 - 验证接缝：`docs/reports/2026-10-14-T520-doc-contract-probe.sh`（一次性 · 不进 `tests/`）+ `nao-fleet.sh check`（**QA 确认待回执**）
-- AC1（主路径 · 骨架单源）：`.agents/templates/adr.md.example` 存在，含必写 5 节（背景 / 决策 / 理由 / 对照过的备选模式 / 参考来源）+ 后果与风险 + 相关指针 + 头部 4 字段（状态 / 更新 / Owner / 指针）；**不含** `备选方案` 字段；`deliverable-docs.md` §四 与 `arch-patterns.md` 均含指针 `templates/adr.md.example`。探针给命中 / 未命中条数；若 arch 落了首实例 ADR，同一组断言对其生效。
-- AC2（异常 · 职责边界）：`deliverable-docs.md` §四 含下沉条款且给出落点 `docs/reports/<编号>-arch-review.md`；`arch-patterns.md` 不再出现「实施闸门 / 接线清单 / 交接」示例节。
+- AC1（主路径 · 骨架单源）：`.agents/templates/adr.md.example` 存在，含**必写 5 节**（`## 背景` / `## 决策` / `## 理由` / `## 对照过的备选模式` / `## 参考来源`）与**可选 3 节**（`## 后果与风险` / `## 限制与已知边界` / `## 相关指针`），全序 = 背景 → 决策 → 理由 → 对照过的备选模式 → [后果与风险] → [限制与已知边界] → [相关指针] → 参考来源（参考来源恒末）；头部恰 4 字段（状态 / 更新 / Owner / 指针）；**不含** `备选方案` 字段；`deliverable-docs.md` §四 与 `arch-patterns.md` 均含指针 `templates/adr.md.example`。
+- AC1-探针口径：必写 5 必在；`## ` 标题集合 ⊆ 上述 8 个；顺序单调；禁用词（`实施闸门` / `接线清单` / `交接` / `备选方案`）命中 = FAIL —— 扫描范围 = `adr.md.example` **正文非注释行**（`<!-- -->` 与 `⛔` 行除外）+ `arch-patterns.md` 的 `## ADR 模板` 段；首实例 ADR 套同一组断言（新增件 ≤60 行 = `wc -l`，历史 7 篇不追溯）。
+- AC2（异常 · 职责边界）：`deliverable-docs.md` §四 含下沉条款且给出落点 `docs/reports/<编号>-arch-review.md`；节序与 arch 定稿一致；「对照模式表」改称 **「对照模式清单」**（BR6 禁表）；`arch-patterns.md` 的 `## ADR 模板` 段不再出现「实施闸门 / 接线清单 / 交接」示例节。
 - AC3（边界 · 索引模板与列宽）：`.agents/templates/adr-index.md.example` 存在且表头恰 4 列（日期 / 主题 / 决策 / 状态）；`docs/adr/README.md` 仍 4 列、决策列单元格 ≤20 字（探针给最大值）；`architecture-designer.md` §十一 含索引模板指针。
 - AC4（负向闭环 · 不追溯 + 门禁）：本批 diff 在 **既有 7 篇** `docs/adr/2026-*.md` **零命中**（`README.md` 按 AC3 收敛、评审所需**新增** ADR 不算违规）；`check` rc=0 且 `files=46`；`npm test` rc=0；`tests/t4/run.sh` 12/12；工作区干净。负控：历史 ADR 被改或 `files` ≠ 46 → FAIL。
 - AC5（设计一致性 · 版本纪律）：`architecture-designer.md` version 11 → 12、`updated` 更新；`check` roles=6 通过；广播 `card arch-designer v12` 已发（回执记录收件方）。
@@ -91,3 +92,4 @@
 - 战略筛子：**命中** —— 机制一致性与文档可读性；不做则 ADR 继续膨胀、字段继续双源。
 - RICE：Reach 9（6 角色 + 下游 3 仓 PM）× Impact 2（结构清晰度）× Confidence 0.8 ÷ Effort 0.5 人日 ≈ **29** ⇒ 高优先 / 低成本。
 - 打分过程不展开；依据即 §一 实测数据与本 PRD 范围。
+- **arch 结构定稿（2026-10-14 · `done(full)` · 报告 `docs/reports/2026-10-14-T520-arch-review.md`）**：D1 **采纳**（改「被 `<yyyy-mm-dd-slug>` 取代」）· D2 **采纳**（头部保 4 字段，出具日 = 文件名日期、落地版本 = 状态值，均不单设字段）· D3 **采纳**（补「限制与已知边界」可选节）—— 三项均属 PM 文档口径范围，已由 PM 裁量并回执 arch。
