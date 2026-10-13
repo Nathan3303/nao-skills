@@ -46,12 +46,12 @@ const VERSION_FILE = '.agents/.nao-version';
 // 旧版全套安装的已知 nao 资产（迁移时**精准**备份+移除；共享目录不得整目录删）
 const LEGACY_TOP_DIRS = ['prompts', 'common', 'checklists', 'templates'];
 const LEGACY_TOP_FILES = ['roles.yaml'];
-const LEGACY_SCRIPT_FILES = ['nao-fleet.sh', 'intercom-probe.mts', 'qq-notify', 'ui-tokens-check.sh'];
+const LEGACY_SCRIPT_FILES = ['nao-fleet.sh', 'intercom-probe.mts', 'ui-tokens-check.sh'];
 const LEGACY_SKILL_ENTRIES = [
   'nao-fleet', 'frontend-design',
   'arch-patterns.md', 'backend-ddd-details.md', 'codegraph.md', 'commit.md',
   'frontend-ddd-details.md', 'github-flow.md', 'pm-grill.md', 'pm-operations.md',
-  'pm-rice.md', 'pm-routing.md', 'qq-notify.md', 'research.md', 'test-design.md',
+  'pm-rice.md', 'pm-routing.md', 'research.md', 'test-design.md',
 ];
 
 const log = (...a) => console.log('[nao-skill]', ...a);
