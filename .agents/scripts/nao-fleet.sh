@@ -13,7 +13,15 @@
 #   nao-fleet.sh ensure --background <别名>...     无图形会话时显式允许后台 detached（否则 exit 2）
 #   nao-fleet.sh close <别名|派生会话名> [--task <编号>] [--force]
 #                                                 回收已完成会话（派生名如 rd-be-T1；跨仓定位；定位失败/名册报在线但无句柄 ⇒ 非 0 + 诊断）
-#                                                 （闸门：在跑 turn / tasks-state 未推进 → 拒绝，--force 跳过）
+#                                                 （闸门：在跑 turn / tasks-state 未推进 → 拒绝，--force 跳过；
+#                                                  常驻缺席而其派生在场 ⇒ 目标歧义拒绝，T516 AC3）
+#   nao-fleet.sh cleanup -S <socket>              终结实验场 tmux server（**强制**显式 -S socket）
+#                                                 不带 -S / 命中生产默认 socket ⇒ exit 2 + 单行拒绝（真 server 不受影响）
+#                                                 ⚠ 生产默认 socket 判定 = $TMUX 句柄 + /tmp/tmux-<uid>/default（+$TMPDIR 变体），
+#                                                 **与 TMUX_TMPDIR 无关**（T516 事故：夹具设 TMUX_TMPDIR 曾令真默认 socket 被放行而连坐自灭）
+#                                                 ⚠ 实验纪律：一律 `env -u TMUX` + `-S <隔离 socket>`（T515 血训：
+#                                                 tmux 客户端在 $TMUX 已设时无视 TMUX_TMPDIR，裸 tmux/kill-server 会连坐真 server）；
+#                                                 验证脚本勿在承载自己会话的 tmux 内执行（清 TMUX_PANE 会令 F1 自 pane 闸门失效）
 #
 # 角色别名 → 角色卡：见 .agents/roles.yaml（单一事实来源）
 #   当前：pm / arch-designer(arch) / rd-fe / rd-be / qa / rd-infra(infra)
@@ -584,12 +592,41 @@ app_pid_for() {  # <name> → echo pi pid（无句柄/不可校验则空）
 
 # ④ 路径 class 探针存在性由 app_class_visible() 返回码 2 表达（无独立 helper，避免死代码）
 
+# 派生会话在场检测（T516 AC3）：visible_session_names 中形如 <name>-<非空后缀> 者。
+# 用于 close <常驻名> 时判目标歧义：常驻精确句柄缺席而其派生在场 ⇒ 拒绝 + 指路（禁静默谎报「未运行」）。
+derived_in_field() {  # <name> → 派生名列表（每行一个；空 = 无）
+  local n
+  while IFS= read -r n; do
+    [[ "$n" == "$1"-?* ]] && printf '%s\n' "$n"
+  done < <(visible_session_names)
+}
+
+# screen 会话精确令牌（T516 F1/F2 · arch 评审）：从 `screen -ls` 取**精确** nao-<名> 会话的 `pid.name` 令牌。
+# 与 running()/close 检测同一锚定（名字后必须是空白或行尾；`\b` 在派生名的 "-" 处仍成立，故不用）。
+# 检测与销毁共用本 helper ⇒ 检测锚与销毁目标不会漂移；**取不到令牌即空，调用方不得 quit**（宁不回收，也不误伤派生）。
+screen_token_for() {  # <name> → echo pid.name（无精确匹配则空；恒 rc 0）
+  local name="$1"
+  command -v screen >/dev/null 2>&1 || return 0
+  # 左锚：`[0-9]+\.nao-` 必须紧接 pid 点（弃 `[^[:space:]]*` —— 旧式允许 `pid.Xnao-<名>` 型非目标会话被当精确令牌，
+  # QA 波4 (e) 红：误杀非目标 + 幻影成功 + 误报在线）。右锚 `([[:space:]]|$)` 同时排除派生 `nao-<名>-<任务>`。
+  screen -ls 2>/dev/null \
+    | grep -oE '[0-9]+\.nao-'"$name"'([[:space:]]|$)' \
+    | sed -E 's/[[:space:]]+$//' \
+    | head -1 || true
+  return 0
+}
+screen_present() {  # <name> → 0 = 精确 screen 会话在场
+  [[ -n "$(screen_token_for "$1")" ]]
+}
+
 running() {
   local name="$1" repo="${2:-}"
   if intercom_online "$name" "$repo"; then return 0; fi
   if [[ -n "$(find_pane_for "$name" "$repo")" ]]; then return 0; fi
-  if command -v tmux >/dev/null 2>&1 && tmux has-session -t "nao-$name" 2>/dev/null; then return 0; fi
-  if command -v screen >/dev/null 2>&1 && screen -ls 2>/dev/null | grep -q "[0-9]\.nao-$name\b"; then return 0; fi
+  if command -v tmux >/dev/null 2>&1 && tmux has-session -t "=nao-$name" 2>/dev/null; then return 0; fi
+  # T516 #1（=锚）：tmux 会话名唯一前缀匹配曾误命中派生 nao-<名>-<任务>（T515 V4 实证）⇒ 一律 =nao-<名>；
+  # screen 同理：锚定收敛到 screen_present()（同一 helper 服务检测与销毁，见 screen_token_for）。
+  if command -v screen >/dev/null 2>&1 && screen_present "$name"; then return 0; fi
   return 1
 }
 
@@ -973,13 +1010,15 @@ spawn_fork_window() {  # <name> <cmd...>
 
 # screen 宿主派生：以「会话存在」为「已拉起」前置；未出现即回收会话（AC6）。
 spawn_screen() {  # <name> <inner>
-  local name="$1" inner="$2" tries=30
+  local name="$1" inner="$2" tries=30 stok
   screen -dmS "nao-$name" $TMUX_ENV_SCRUB bash -lc "$inner" >/dev/null 2>&1 || return 1
   while (( tries-- > 0 )); do
-    if screen -ls 2>/dev/null | grep -q "[0-9]\.nao-$name\b"; then return 0; fi
+    if screen_present "$name"; then return 0; fi
     sleep 0.1
   done
-  screen -S "nao-$name" -X quit >/dev/null 2>&1 || true
+  # F1（arch 评审）：失败清理**只 quit 锚定令牌**指向的会话；取不到令牌即不 quit（不对 nao-<名> 前缀下手）。
+  stok="$(screen_token_for "$name")"
+  [[ -n "$stok" ]] && screen -S "$stok" -X quit >/dev/null 2>&1 || true
   return 1
 }
 
@@ -988,7 +1027,7 @@ spawn_screen() {  # <name> <inner>
 wait_for_tmux_client() {  # <sess> [tries]
   local sess="$1" tries="${2:-50}" out
   while (( tries-- > 0 )); do
-    out="$(tmux list-clients -t "$sess" 2>/dev/null || true)"
+    out="$(tmux list-clients -t "=$sess" 2>/dev/null || true)"
     [[ -n "$out" ]] && return 0
     sleep 0.1
   done
@@ -1076,14 +1115,14 @@ spawn_tmux_attach() {  # <name> <repo> <inner>
   local name="$1" repo="$2" inner="$3" sess="nao-$name"
   tmux new-session -d -s "$sess" "bash -lc $(printf %q "$inner")" >/dev/null 2>&1 || return 1
   if ! open_xdg_window "$name" "$repo" tmux attach -t "$sess"; then
-    tmux kill-session -t "$sess" >/dev/null 2>&1 || true
+    tmux kill-session -t "=$sess" >/dev/null 2>&1 || true
     return 1
   fi
   if wait_for_tmux_client "$sess"; then
     log "tmux 会话 $sess 已创建 + 可见窗口 attach（默认 socket；pane 句柄完整）"
     return 0
   fi
-  tmux kill-session -t "$sess" >/dev/null 2>&1 || true
+  tmux kill-session -t "=$sess" >/dev/null 2>&1 || true
   return 1
 }
 
@@ -1458,7 +1497,7 @@ cmd_status() {
 cmd_close() {
   local force="$1" task="$2" target="${3:-}"
   [[ -n "$target" ]] || die "close 需要目标：角色别名或派生会话名（如 rd-be / rd-be-T1 / qa-T1）"
-  local name repo cls bus pane pids st tgt a best=""
+  local name repo cls bus pane pids st tgt a best="" stok
   intercom_list_json >/dev/null 2>&1 || true   # 预热名册缓存
 
   # ---- 目标解析：别名/canonical id | 派生会话名 <角色>-<编号> ----
@@ -1513,11 +1552,14 @@ cmd_close() {
   fi
   if [[ -z "$pane" ]]; then
     # nao-<会话名> detached tmux / screen 会话（不依赖 repo）
-    if command -v tmux >/dev/null 2>&1 && tmux has-session -t "nao-$name" 2>/dev/null; then
-      if tmux kill-session -t "nao-$name" 2>/dev/null; then log "已回收 $name（tmux 会话 nao-$name）@ $repo"; return 0; fi
+    if command -v tmux >/dev/null 2>&1 && tmux has-session -t "=nao-$name" 2>/dev/null; then
+      if tmux kill-session -t "=nao-$name" 2>/dev/null; then log "已回收 $name（tmux 会话 nao-$name）@ $repo"; return 0; fi
     fi
-    if command -v screen >/dev/null 2>&1 && screen -ls 2>/dev/null | grep -q "nao-$name"; then
-      if screen -S "nao-$name" -X quit 2>/dev/null; then log "已回收 $name（screen 会话 nao-$name）@ $repo"; return 0; fi
+    # F2（arch 评审）：销毁目标 = `screen -ls` 锚定行取出的 `pid.name` 精确令牌；取不到即不 quit
+    # （此前 `screen -S nao-<名> -X quit` 是前缀目标，精确+派生并存时无「只杀精确」保障）。
+    stok="$(screen_token_for "$name")"
+    if [[ -n "$stok" ]] && screen -S "$stok" -X quit 2>/dev/null; then
+      log "已回收 $name（screen 会话 $stok）@ $repo"; return 0
     fi
     # ④ 路径句柄（BR7/AC8）：app-id/class → pid（校验 comm=pi）→ kill 优先；
     # 有句柄即回收，不再依赖名册（名册可能滞后）。
@@ -1535,6 +1577,15 @@ cmd_close() {
       warn "无法回收 $name：pi-intercom 名册报在线（cwd=${repo}）但未定位到存活 pane/会话"
       warn "  标题契约 / 名册 tmuxPane 均未命中；tmuxPane 可能滞后或未注册"
       warn "  请用 intercom({action:'list'}) 人工核对；确认已退出后忽略，或按 pane_id 手工处理"
+      return 1
+    fi
+    # T516 AC3（#1 错定缺陷的负向闸）：常驻精确句柄全缺席而其派生在场 ⇒ 目标歧义，
+    # 拒绝并指路（不得落入 offline_verifiable 的「未运行（无需回收）」静默 no-op）。
+    local -a dfield=()
+    mapfile -t dfield < <(derived_in_field "$name")
+    if (( ${#dfield[@]} > 0 )); then
+      warn "拒绝回收 $name：常驻会话 nao-$name 不存在，但其派生在场：${dfield[*]}"
+      warn "  目标歧义（tmux 会话名前缀匹配曾误回收派生，T515 #1）：如需回收派生用 close <派生名>（如 close ${dfield[0]}）；如需拉起常驻用 ensure $tgt"
       return 1
     fi
     if offline_verifiable; then
@@ -1581,6 +1632,57 @@ cmd_close() {
 }
 
 # ---------------------------------------------------------------------------
+# 实验场安全清理入口（T516 #2 · D2 形态 A）：终结指定实验场 tmux server。
+# 守卫：① 无 -S ⇒ exit 2（默认 socket 是生产名册所在，禁止默认清理）；
+#       ② -S 指向默认 socket ⇒ exit 2（防呆：显式传入也不放行）；
+#       ③ socket 不存在 ⇒ 幂等成功（rc 0）；④ kill 失败 ⇒ 非 0 + 诊断，不谎报。
+# 生产默认 socket 候选。T516 事故修正：判定**不得**依赖 `${TMUX_TMPDIR:-/tmp}` ——
+#   实验夹具为让 fleet 内部裸 `tmux` 落到夹具 server 会把 TMUX_TMPDIR 指向隔离目录，
+#   若据此判定，真实默认 socket 会被误判为「非默认」而遭清理 ⇒ 真 server 连坐自灭
+#   （2026-10-13 AC5e 负向用例实测杀掉调用者自己的 server）。恒含常量 /tmp/tmux-<uid>/default
+#   （id -u 失败也是安全路径）；回归脚本护栏用同一常量**独立复算**（双保险，互不依赖）。
+prod_sock_candidates() {  # 每行一个候选
+  local uid; uid="$(id -u)"
+  [[ -n "${TMUX:-}" ]] && printf '%s\n' "${TMUX%%,*}"
+  printf '%s\n' "/tmp/tmux-$uid/default" "${TMPDIR:-/tmp}/tmux-$uid/default"
+}
+cmd_cleanup() {
+  local sock="${CLEANUP_SOCK:-}"
+  if [[ -z "$sock" ]]; then
+    printf '[fleet] cleanup 拒绝：未指定 -S <socket>。生产默认 socket 是生产名册所在，禁止默认清理；实验场清理用：env -u TMUX nao-fleet.sh cleanup -S <隔离socket>\n' >&2
+    return 2
+  fi
+  # F3-B3（arch 评审 · 低）：`-S` 若为符号链接/未归一化路径（`/tmp//…`、symlink）可绕过字符串比对
+  # ⇒ 比对前 readlink -f 归一化；readlink -f 不可用/不可解析时退回原串（保持原语义、无新依赖）。
+  local sock_cmp
+  sock_cmp="$(readlink -f -- "$sock" 2>/dev/null || true)"
+  [[ -n "$sock_cmp" ]] || sock_cmp="$sock"
+  local -a prod=() p
+  mapfile -t prod < <(prod_sock_candidates | awk '!seen[$0]++')
+  for p in "${prod[@]:-}"; do
+    if [[ "$sock_cmp" == "$p" ]]; then
+      printf '[fleet] cleanup 拒绝：-S 指向生产默认 socket（%s）；请用隔离 socket（须不同于生产候选：%s）\n' "$sock" "${prod[*]}" >&2
+      return 2
+    fi
+  done
+  [[ -n "${TMUX:-}" ]] && warn "当前在 tmux 客户端内：本次 -S 已显式（安全），但实验纪律建议先 env -u TMUX 再执行"
+  if [[ ! -S "$sock" ]]; then
+    log "socket 不存在（无 server，幂等清理）：$sock"; return 0
+  fi
+  # 陈旧 socket（kill-server 后残留的 socket 文件，无 server 监听）：清除文件即幂等成功
+  # （实测 tmux 3.7c 在 -S 自定义路径下 kill-server 不卸载 socket 文件 ⇒ 二次 cleanup 需兜底）
+  if ! tmux -S "$sock" ls >/dev/null 2>&1; then
+    rm -f "$sock" 2>/dev/null || true
+    log "socket 无 server 监听（残留），已清除：$sock"; return 0
+  fi
+  if tmux -S "$sock" kill-server 2>/dev/null; then
+    log "已终结实验场 tmux server：$sock"; return 0
+  fi
+  warn "cleanup 失败：tmux -S $sock kill-server 非 0（server 可能刚好退出；核对 socket 后重试）"
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 cmd_ensure() {
   local force="$1" model="$2" task="$3"; shift 3
   local spec role repo key seen k
@@ -1619,12 +1721,14 @@ usage() {
 }
 
 # ---- 入口 ----
-CMD=""; FORCE=false; STRICT=false; MODEL=""; TASK=""; BACKGROUND=false; TARGETS=()
+CMD=""; FORCE=false; STRICT=false; MODEL=""; TASK=""; BACKGROUND=false; CLEANUP_SOCK=""; TARGETS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     check)  CMD="check";  shift ;;
     status) CMD="status"; shift ;;
     close)  CMD="close";  shift ;;
+    cleanup) CMD="cleanup"; shift ;;
+    -S) CLEANUP_SOCK="${2:-}"; [[ -n "$CLEANUP_SOCK" ]] || die "-S 需要socket路径参数"; shift 2 ;;
     ensure) CMD="ensure"; shift ;;
     -m|--model)
       MODEL="${2:-}"
@@ -1645,6 +1749,14 @@ case "$CMD" in
   check)  : ;;   # cmd_check 自行先做文本契约体检，再 load_manifest（缩进违例时也能先出报告）
   ensure|status|close) load_manifest ;;
 esac
+case "$CMD" in
+  cleanup) : ;;  # cleanup 不需角色清单
+esac
+
+# -S 仅 cleanup 消费：其他子命令带上 -S 视为用法错误（避免静默吞参）
+if [[ -n "${CLEANUP_SOCK:-}" && "$CMD" != "cleanup" ]]; then
+  die "-S 仅用于 cleanup 子命令（实验场安全清理）：nao-fleet.sh cleanup -S <socket>"
+fi
 
 case "$CMD" in
   check)
@@ -1674,6 +1786,7 @@ case "$CMD" in
     ;;
   status) cmd_status ;;
   close)  cmd_close "$FORCE" "$TASK" "${TARGETS[0]:-}" ;;
+  cleanup) cmd_cleanup ;;
   ensure) cmd_ensure "$FORCE" "$MODEL" "$TASK" "${TARGETS[@]}" ;;
   *) usage ;;
 esac
