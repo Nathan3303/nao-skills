@@ -31,6 +31,7 @@
 #   NAO_TMUX_LAYOUT=main-row2|main-col|grid   tmux 布局（默认 main-row2）
 #   NAO_TMUX_MAIN_WIDTH=<10..90>             主 pane 宽度百分比（默认 35；main-row2/main-col 共用）
 #   NAO_TMUX_MIN_PANE_WIDTH=<10..80>         最小非主 pane 列宽守卫（默认 30；低于则回退）
+#   NAO_TMUX_HOST_WINDOW=<window>            显式指定派生宿主窗口（默认自动：$TMUX_PANE→名册；允许跨 session，建议 @id 形式）
 #   NAO_SKILLS=<dir>                          nao 机制包根目录（默认 <脚本>/../..；项目内 shim 会显式指向包根）
 #   NAO_MODEL_WHITELIST=<glob,...>            -m 白名单（默认空=不校验，支持 glob）
 #   NAO_CLOSE_BUSY_PATTERN=<ERE>             close 的在跑 turn 判定正则（默认内置 pi 状态行标记）
@@ -53,7 +54,9 @@
 #   → ⑤ 无图形：仅 --background 时 detached tmux/screen → ⑥ 否则 exit 2 + 一行 DEGRADED 诊断
 #
 # tmux 宿主行为
-#   - 已在 tmux 内（$TMUX 存在）：当前窗口分屏拉起，不新建窗口。
+#   - 已在 tmux 内（$TMUX 存在）：以派生宿主窗口（调用者 pane 所在 window）分屏拉起，不新建窗口；
+#     显式 `-t @<window_id>` 目标（定位链：NAO_TMUX_HOST_WINDOW > $TMUX_PANE > 名册唯一命中；
+#     否则 warn + 跳过该 pane，不落入当前窗口）
 #   - 不在 tmux 内：创建 detached 会话 nao-<角色>，需 tmux attach -t nao-<角色>。
 #   - main-row2：第 1 个 pane 全高占左，后续每角色往右开列、每列上下 2 个（默认）：
 #                 1 | 2 | 4
@@ -86,6 +89,8 @@ TMUX_MAIN_WIDTH="${NAO_TMUX_MAIN_WIDTH:-$TMUX_MAIN_WIDTH_DEFAULT}"
 # 最小非主 pane 列宽守卫：默认值与非法值回退共用同一常量（防漂移）
 TMUX_MIN_PANE_WIDTH_DEFAULT=30
 TMUX_MIN_PANE_WIDTH="${NAO_TMUX_MIN_PANE_WIDTH:-$TMUX_MIN_PANE_WIDTH_DEFAULT}"
+# T517：派生宿主窗口 ID（归一化 @<window_id>；空 = 定位失败 ⇒ 该角色 pane warn+skip，禁无 -t 续建）
+HOST_WINDOW=""
 # check 输出契约：默认单行摘要（省 PM 上下文），-v 展开完整报告；失败始终展开
 VERBOSE=false
 # close 的在跑 turn 判定（pi 默认状态行：Working (esc to interrupt) / Thinking... / Retrying / Compacting）
@@ -295,7 +300,7 @@ resolve_role() {
 
 # 宿主阶梯（ADR 实施闸门 · T513b/c）——由「枚举模拟器」改为「环境查询 + 显式覆盖」：
 #   ① NAO_TERMINAL 显式（档值 ∈ {tmux,foot,ghostty,ptyxis,screen}；命令缺失/非法 ⇒ exit 2）
-#   ② $TMUX 存在 ⇒ 当前窗口 split-window（逐值零回归）
+#   ② $TMUX 存在 ⇒ 派生宿主窗口（调用者 pane 所在 window）split-window（显式 -t @<window_id>；单窗口逐值零回归）
 #   ③ 非 tmux + tmux 可用 + 图形 ⇒ new-session -d + xdg-terminal-exec 开窗 attach（默认 socket）
 #   ④ 无 tmux + 图形 ⇒ xdg-terminal-exec --app-id=org.nao.<角色> --dir=<repo> 直开窗
 #   ⑤ 无图形 + 显式 --background ⇒ detached tmux/screen
@@ -851,37 +856,38 @@ apply_main_col() {
       else
         warn "${from} → main-col 右列 ${right_w} < 最小 ${min_w}（${n} pane @ ${win_w} 列）→ 再回退 grid"
       fi
-      tmux select-layout tiled >/dev/null 2>&1 || true
+      tmux select-layout -t "$HOST_WINDOW" tiled >/dev/null 2>&1 || true
       return 0
     fi
   fi
-  tmux set-window-option main-pane-width "${pct}%" >/dev/null 2>&1 || true
+  tmux set-window-option -t "$HOST_WINDOW" main-pane-width "${pct}%" >/dev/null 2>&1 || true
   local err
-  if ! err=$(tmux select-layout main-vertical 2>&1); then
-    warn "main-col（main-vertical）应用失败，回退 grid"
+  if ! err=$(tmux select-layout -t "$HOST_WINDOW" main-vertical 2>&1); then
+    warn "main-col（main-vertical）应用失败，回退 grid（宿主窗口 $HOST_WINDOW）"
     warn "  tmux:   ${err:-<no message>}"
-    tmux select-layout tiled >/dev/null 2>&1 || true
+    tmux select-layout -t "$HOST_WINDOW" tiled >/dev/null 2>&1 || true
   fi
 }
 
 apply_tmux_layout() {
   [[ -n "${TMUX:-}" ]] || return 0
+  [[ -n "$HOST_WINDOW" ]] || return 0
   if [[ "$TMUX_LAYOUT" == "grid" ]]; then
-    tmux select-layout tiled >/dev/null 2>&1 || true
+    tmux select-layout -t "$HOST_WINDOW" tiled >/dev/null 2>&1 || true
     return
   fi
   # main-row2
   local win_w win_h
   # D7（T513-S3）：display-message 无输出时 `read` 返回 1，set -e 会硬中断整轮 ensure
   #   ⇒ 守卫为 true（读不到尺寸即跳过布局，不硬崩）。
-  read -r win_w win_h < <(tmux display-message -p '#{window_width} #{window_height}' 2>/dev/null) || true
+  read -r win_w win_h < <(tmux display-message -p -t "$HOST_WINDOW" '#{window_width} #{window_height}' 2>/dev/null) || true
   [[ -n "$win_w" && -n "$win_h" ]] || return 0
 
   local -a pane_ids=()
   local line
   while IFS= read -r line; do
     [[ -n "$line" ]] && pane_ids+=("$line")
-  done < <(tmux list-panes -F '#{pane_id}' 2>/dev/null | sed 's/^%//')
+  done < <(tmux list-panes -t "$HOST_WINDOW" -F '#{pane_id}' 2>/dev/null | sed 's/^%//')
   local n=${#pane_ids[@]}
   (( n >= 1 )) || return 0
 
@@ -913,12 +919,83 @@ apply_tmux_layout() {
 
   local ck; ck="$(_layout_checksum "$full")"
   local err
-  if ! err=$(tmux select-layout "${ck},${full}" 2>&1); then
-    warn "main-row2 布局应用失败，回退 tiled"
+  if ! err=$(tmux select-layout -t "$HOST_WINDOW" "${ck},${full}" 2>&1); then
+    warn "main-row2 布局应用失败，回退 tiled（宿主窗口 $HOST_WINDOW）"
     warn "  tmux:   ${err:-<no message>}"
     warn "  layout: $full"
-    tmux select-layout tiled >/dev/null 2>&1 || true
+    tmux select-layout -t "$HOST_WINDOW" tiled >/dev/null 2>&1 || true
   fi
+}
+
+# ---------------------------------------------------------------------------
+# T517 派生宿主窗口解析（ADR 2026-10-13-derived-pane-window-addressing · PRD T517 §五）
+#   入口一次性解析 → 全局 HOST_WINDOW=@<window_id>；空 = 定位失败 ⇒ 解析处 warn 一次（每 run 一次），
+#   spawn_tmux 对空值跳过该 pane（D-A：warn + skip，禁无 -t 续建——那是拆用户视图）。定位链：
+#     L1 NAO_TMUX_HOST_WINDOW   显式覆盖：display-message 探测归一化；允许跨 session（@id 全局唯一），
+#                                非 @id 形式 warn 建议用 @id；解析失败（关窗/垃圾值）⇒ warn + 沿链降级（不 die）
+#     L2 $TMUX_PANE → window_id 调用者 pane 所在 window（= 派生宿主；不依赖 client 视图；核心路径）
+#     L3 名册唯一命中            仅在本 $TMUX 所属 session 内取候选窗（pane→window 全表一次调用
+#                                + 名册 cwd=本仓 + 活 pane + 窗口去重唯一）；歧义/无命中 ⇒ warn 标来源，不猜
+#     L4 skip                    warn + 不创建（其余角色继续；rc 不劣化）
+#   调用预算：L1/L2 各 ≤1 次 tmux 调用；L3 ≤2 次（session 探测 + list-panes 全表）。
+resolve_host_window() {
+  local tgt="" sess_id="" pid wid sid abs rp rw
+  # L1 显式覆盖
+  if [[ -n "${NAO_TMUX_HOST_WINDOW:-}" ]]; then
+    tgt="$(tmux display-message -p -t "$NAO_TMUX_HOST_WINDOW" '#{window_id}' 2>/dev/null || true)"
+    if [[ -n "$tgt" ]]; then
+      [[ "$NAO_TMUX_HOST_WINDOW" == "@"* ]] || \
+        warn "NAO_TMUX_HOST_WINDOW=$NAO_TMUX_HOST_WINDOW 非 @id 形式（裸窗口名跨 session 可能歧义）→ 已归一化 $tgt，建议改用 @id"
+      log "宿主窗口 = NAO_TMUX_HOST_WINDOW（显式覆盖）→ $tgt"
+      HOST_WINDOW="$tgt"; return 0
+    fi
+    warn "NAO_TMUX_HOST_WINDOW=$NAO_TMUX_HOST_WINDOW 解析失败（窗口已关或非法）→ 降级 TMUX_PANE/名册"
+  fi
+  # L2 调用者 pane → window_id（同一次调用顺带取 session_id，供 L3 限定本 session）
+  if [[ -n "${TMUX_PANE:-}" ]]; then
+    read -r tgt sess_id < <(tmux display-message -p -t "$TMUX_PANE" '#{window_id} #{session_id}' 2>/dev/null || true) || true
+    if [[ -n "$tgt" ]]; then
+      HOST_WINDOW="$tgt"; return 0
+    fi
+    warn "TMUX_PANE=$TMUX_PANE 解析不到 window_id（pane 已关？）→ 降级名册推断"
+  else
+    warn "TMUX 已设但 TMUX_PANE 空（AC5b 场景）→ 跳 L2，降级名册推断"
+  fi
+  # L3 名册唯一命中（D-B：仅本 $TMUX 所属 session 内取候选窗，不跨 session 推断）
+  [[ -n "$sess_id" ]] || sess_id="$(tmux display-message -p '#{session_id}' 2>/dev/null || true)"
+  if [[ -z "$sess_id" ]]; then
+    warn "无法确定本 \$TMUX 所属 session（无 client/无 pane 句柄）→ 名册推断无从限定，L4 skip"
+    return 0
+  fi
+  local -A win_of=()
+  # pane→window 全表（1 次调用；pane 在表中即活，无需单独探测）
+  while IFS=$'\t' read -r pid wid sid; do
+    [[ "$sid" == "$sess_id" ]] && win_of["$pid"]="$wid"
+  done < <(tmux list-panes -a -F "#{pane_id}"$'\t'"#{window_id}"$'\t'"#{session_id}" 2>/dev/null || true)
+  abs="$(repo_abspath "$PWD")"; [[ -n "$abs" ]] || return 0
+  local -A seen=()
+  local -a wins=()
+  # 名册 tmuxPane（cwd=本仓）→ 本 session 窗口去重（与 fallback_pane_for 同构的 cwd 过滤）
+  while IFS= read -r rp; do
+    [[ -n "$rp" ]] || continue
+    rw="${win_of[$rp]:-}"
+    [[ -n "$rw" ]] && { [[ -z "${seen[$rw]:-}" ]] && { seen["$rw"]=1; wins+=("$rw"); }; }
+  done < <(intercom_list_json 2>/dev/null | sed 's/},/}\n/g' | awk -v a="$abs" '
+    /"cwd":[[:space:]]*"/  { s=$0; sub(/.*"cwd":[[:space:]]*"/,"",s);  sub(/".*/,"",s);  cc=s }
+    /"tmuxPane":[[:space:]]*"/ { s=$0; sub(/.*"tmuxPane":[[:space:]]*"/,"",s); sub(/".*/,"",s); cp=s
+                                  if (cp != "" && cc == a) print cp }
+  ' || true)  # sed 按对象边界拆行：紧凑/pretty 两种 JSON 布局同语义（逐条目取 cwd+tmuxPane）
+  if (( ${#wins[@]} == 1 )); then
+    HOST_WINDOW="${wins[0]}"
+    warn "名册唯一命中宿主窗口 $HOST_WINDOW（来源：名册 tmuxPane + cwd=本仓 + 仅本 session $sess_id）"
+    return 0
+  fi
+  if (( ${#wins[@]} > 1 )); then
+    warn "名册推断歧义：本 session 内候选窗 ${wins[*]}（>1）→ 不猜，L4 skip（可设 NAO_TMUX_HOST_WINDOW 显式指定）"
+  else
+    warn "名册推断无命中：本 session 内无名册 pane 或 cwd≠本仓 → L4 skip（可设 NAO_TMUX_HOST_WINDOW 显式指定）"
+  fi
+  return 0   # HOST_WINDOW 保持空 ⇒ spawn_tmux 跳过（D-A：warn + skip，禁无 -t 续建）
 }
 
 spawn_tmux() {
@@ -929,11 +1006,14 @@ spawn_tmux() {
   esac
   local wrapped="bash -lc $(printf %q "$inner")"
   if [[ -n "${TMUX:-}" ]]; then
-    # 窄窗口/宿主上限会让 split-window 失败（no space for new pane）；
+    # T517：目标显式化——HOST_WINDOW 解析失败时此处已由解析处 warn（每 run 一次），
+    #   跳过该 pane；禁止无 -t 续建（tmux 会落「当前窗口」= 用户视图，即缺陷根因）。
+    [[ -n "$HOST_WINDOW" ]] || return 0
+    # 窄窗口/宿主上限会让 split-window 失败（no space for new pane，含宿主窗已关竞态）；
     # 捕获后 warn 并继续，不因单个 pane 失败中断整轮 ensure。
     local serr
-    if ! serr=$(tmux split-window -h "$wrapped" 2>&1); then
-      warn "pane 创建失败（窗口过窄或宿主已达上限）：${serr:-<no message>}"
+    if ! serr=$(tmux split-window -h -t "$HOST_WINDOW" "$wrapped" 2>&1); then
+      warn "pane 创建失败（宿主窗口 $HOST_WINDOW 过窄/已关或已达上限）：${serr:-<no message>}"
       warn "  已跳过该 pane，其余角色继续拉起；可放大窗口后重跑 ensure"
       return 0
     fi
@@ -1688,6 +1768,9 @@ cmd_ensure() {
   local spec role repo key seen k
   local -a cg_done=()
   [[ $# -eq 0 ]] && die "ensure 需要至少一个角色，如: nao-fleet.sh ensure arch rd-fe rd-infra"
+  # T517：入口一次性解析派生宿主窗口（仅 $TMUX 分支）；定位失败 ⇒ 解析处 warn 一次，各角色 pane 跳过
+  HOST_WINDOW=""
+  if [[ -n "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1; then resolve_host_window; fi
   for spec in "$@"; do
     if [[ "$spec" == *"@"* ]]; then
       role="${spec%%@*}"; repo="${spec#*@}"
