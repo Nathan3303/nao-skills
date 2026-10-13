@@ -31,7 +31,7 @@ bash tests/t4/run.sh --case 03              # 单跑
 | 09 | T509 别名解析 / check 守卫 / close 跨仓回收 | AC3 · #19 | `init` + shim |
 | 10 | T510 migrate 收尾：shim 判定式 / 开关 / 单行 lock 去重 | AC4 · BR5 · #21 | `migrate` / `init` |
 | 11 | 宿主阶梯 / 失败语义 / 非 tmux 句柄 | AC1–AC14 · T513 | 无（桩驱动 + 真 tmux） |
-| 12 | 派生会话 tmux 落点：宿主窗口显式寻址 | AC1–AC5 · T517 | 无（真 tmux 隔离 socket + 桩 pi；无 tmux 则 SKIP） |
+| 12 | 派生会话 tmux 落点：宿主窗口显式寻址（含幂等/同源） | AC1–AC7 · T517 | 无（真 tmux 隔离 socket + 桩 pi；无 tmux 则 SKIP） |
 
 最近一次跑批：`T4_ALLOW_MISSING=0 bash tests/t4/run.sh` → exit 0 · 8/8 PASS · 109 断言 / 0 红
 （复跑基线 `5537270` v0.12.0；详见 `docs/reports/2026-10-08-T4-qa-report.md`）。

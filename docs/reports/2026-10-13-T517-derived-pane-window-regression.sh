@@ -20,6 +20,8 @@
 #                  b) TMUX 已设但 TMUX_PANE 空 ⇒ 明确降级（warn，不静默）
 #                  c) 跨 session（调用 pane 在 A、client 视图在 B）⇒ 落 A 的窗口、B 不变
 #                  d) 宿主窗口极窄（W1=80、W2=152）⇒ 窄列守卫按宿主窗口宽生效，几何 = 80 列 golden
+#   AC6 幂等：连跑 2 次 ensure（第 2 次命中 running 跳过；--force +1 且布局收敛 golden）
+#   AC7 同源：常驻 ensure 与 --task 派生在 AC2/AC4 场景行为一致（无人工分叉）
 #
 # 实验纪律（T515/T516 血训，硬约束）：
 #   - 全程 `env -u TMUX` 运行；一切 tmux 命令显式 `-S <隔离 socket>`；
@@ -135,6 +137,7 @@ setup_lab
 # ---- 被测调用 --------------------------------------------------------------
 OUT=""; RC=0
 EXTRA_ENV=()                       # 可选附加 env（如 NAO_TMUX_HOST_WINDOW）
+FAKE_ROSTER='[]'                   # 名册桩内容（AC6 模拟已注册会话用于判重跳过）
 TMUX_LAYOUT="main-row2"; TMUX_MAIN_WIDTH=35; TMUX_MIN_PANE_WIDTH=30
 run_fleet(){ # $1=TMUX 值 $2=TMUX_PANE（空=不设）; 其余= fleet 参数
   # 经临时文件取输出（而非 $(...)）：机制内 `(sleep 60; rm prompt)&` 会占住命令替换管道 ⇒ 单次必然阻塞 60s
@@ -144,7 +147,7 @@ run_fleet(){ # $1=TMUX 值 $2=TMUX_PANE（空=不设）; 其余= fleet 参数
   local of="$LAB/out.$$"
   ( cd "$LAB" && timeout 90 env "${opts[@]}" "${assigns[@]}" \
       NAO_SKILLS="$LAB" NAO_TASKS_STATE="$LAB/.no-tasks-state.md" \
-      PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" NAO_QA_FAKE_ROSTER='[]' \
+      PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" NAO_QA_FAKE_ROSTER="$FAKE_ROSTER" \
       PATH="$STUBBIN:$REAL_PATH" HOME="$FIXHOME" \
       NAO_TMUX_LAYOUT="$TMUX_LAYOUT" NAO_TMUX_MAIN_WIDTH="$TMUX_MAIN_WIDTH" NAO_TMUX_MIN_PANE_WIDTH="$TMUX_MIN_PANE_WIDTH" \
       ${EXTRA_ENV[@]+"${EXTRA_ENV[@]}"} \
@@ -377,6 +380,54 @@ if only_match AC5; then
   else
     bad "AC5d：隔离 server 创建失败"
   fi
+fi
+
+# =============================================================================
+sec "AC6 幂等：2 次 ensure 第 2 次命中 running 跳过；--force +1 且布局收敛 golden（PRD §七 AC6）"
+if only_match AC6; then
+  TMUX_LAYOUT="main-row2"
+  new_server 152 34 || bad "AC6：隔离 server 创建失败"
+  FAKE_ROSTER='[]'
+  # ① 首次 ensure（名册空 ⇒ 不判重）：2 角色 → W1 1→3（rc=0）
+  run_fleet "$TMUX_ENV" "$CALLER" ensure pm arch-designer
+  if [[ "$RC" == 0 && "$(np "$W1")" == 3 ]]; then ok "AC6 ① 首次 ensure：W1 1→3（rc=0）"; else bad "AC6 ① 首次 ensure（rc=$RC W1=$(np "$W1")；$(oneline "$OUT")）"; fi
+  # 模拟 pi 上线注册（等价真实：名册 cwd=本仓 + tmuxPane=实际 pane，按创建序映射角色）
+  newp="$(comm -13 <(printf '%s\n' "$CALLER") <(TX list-panes -t "$W1" -F '#{pane_id}' | sort) | grep . || true)"
+  FAKE_ROSTER='[{"name":"pm","id":"pm","status":"idle","cwd":"'"$LAB"'","tmuxPane":"'"$(printf '%s\n' "$newp" | sed -n 1p)"'"},{"name":"arch-designer","id":"arch-designer","status":"idle","cwd":"'"$LAB"'","tmuxPane":"'"$(printf '%s\n' "$newp" | sed -n 2p)"'"}]'
+  # ② 第 2 次 ensure（名册在线 ⇒ 命中 running 跳过）：pane 数不变、2 处「已在运行」
+  N2="$(np "$W1")"
+  run_fleet "$TMUX_ENV" "$CALLER" ensure pm arch-designer
+  if [[ "$RC" == 0 && "$(np "$W1")" == "$N2" ]]; then ok "AC6 ② 第 2 次 ensure：命中 running 跳过（pane 不变 $N2，rc=0）"; else bad "AC6 ② 第 2 次未跳过（$N2→$(np "$W1")；$(oneline "$OUT")）"; fi
+  nskip="$(strip_ansi <<< "$OUT" | grep -c '已在运行' || true)"
+  if [[ "$nskip" == 2 ]]; then ok "AC6 ② 恰 2 处「已在运行」跳过诊断"; else bad "AC6 ②「已在运行」=$nskip（期望 2）"; fi
+  # ③ --force：未注册角色（qa）真拉起 +1，布局收敛 4 pane golden（连跑后收敛性证明）
+  N3_BEFORE="$(np "$W1")"
+  run_fleet "$TMUX_ENV" "$CALLER" ensure --force qa
+  G3="$(geo "$W1")"
+  if [[ "$RC" == 0 && "$(np "$W1")" == "$((N3_BEFORE+1))" ]]; then ok "AC6 ③ --force：pane 数 +1（$N3_BEFORE→$((N3_BEFORE+1))）"; else bad "AC6 ③ --force 未 +1（$N3_BEFORE→$(np "$W1")）；$(oneline "$OUT") "; fi
+  if [[ "$G3" == "$GEO_MAINROW2_152_N4" ]]; then ok "AC6 ③ --force 后布局收敛 golden（4 pane 几何逐值一致）"; else bad "AC6 ③ 布局未收敛 golden（期望「$GEO_MAINROW2_152_N4」实际「$G3」）"; fi
+  FAKE_ROSTER='[]'
+fi
+
+# =============================================================================
+sec "AC7 同源一致：常驻 ensure 与 --task 派生在 AC2/AC4 场景行为一致（无人工分叉）"
+if only_match AC7; then
+  # ① AC2 场景 + --task 派生：新 pane 落 W1、W2 不变、几何 = golden（与常驻 ensure 对照）
+  TMUX_LAYOUT="main-row2"
+  new_server 152 34 || bad "AC7 ①：隔离 server 创建失败"
+  W2="$(add_window)" || bad "AC7 ①：新建 W2 失败"
+  LAY_W2_BEFORE="$(wl "$W2")"; N_W2_BEFORE="$(np "$W2")"
+  run_fleet "$TMUX_ENV" "$CALLER" ensure --force --task T77 pm arch-designer rd-fe
+  if [[ "$(geo "$W1")" == "$GEO_MAINROW2_152_N4" ]]; then ok "AC7 ① --task 派生落 W1 且几何 = golden（与 AC2 常驻一致）"; else bad "AC7 ① 派生落点/布局与常驻不一致（几何「$(geo "$W1")」；$(oneline "$OUT")）"; fi
+  if [[ "$(np "$W2")" == "$N_W2_BEFORE" && "$(wl "$W2")" == "$LAY_W2_BEFORE" ]]; then ok "AC7 ① --task 派生未污染 W2（与 AC2 负向一致）"; else bad "AC7 ① 派生污染 W2（pane $N_W2_BEFORE→$(np "$W2")；layout「$LAY_W2_BEFORE」→「$(wl "$W2")」）"; fi
+  # ② AC4 场景 + --task 派生：main-col 几何 + main-pane-width 落 W1、W2 选项不变（与常驻 ensure 对照）
+  TMUX_LAYOUT="main-col"
+  new_server 152 34 || bad "AC7 ②：隔离 server 创建失败"
+  W2="$(add_window)" || bad "AC7 ②：新建 W2 失败"
+  MPW_W2_BEFORE="$(wopt "$W2")"; LAY_W2_BEFORE="$(wl "$W2")"
+  run_fleet "$TMUX_ENV" "$CALLER" ensure --force --task T77 pm arch-designer rd-fe
+  if [[ "$(geo "$W1")" == "$GEO_MAINCOL_152_N4" && "$(wopt "$W1")" == "35%" ]]; then ok "AC7 ② --task 派生 main-col 几何 + main-pane-width 落 W1（与 AC4 常驻一致）"; else bad "AC7 ② 派生 main-col 不一致（几何「$(geo "$W1")」 mpw=「$(wopt "$W1")」）"; fi
+  if [[ "$(wopt "$W2")" == "$MPW_W2_BEFORE" && "$(wl "$W2")" == "$LAY_W2_BEFORE" ]]; then ok "AC7 ② --task 派生未泄漏选项到 W2（与 AC4 负向一致）"; else bad "AC7 ② 派生泄漏到 W2（mpw「$MPW_W2_BEFORE」→「$(wopt "$W2")」）"; fi
 fi
 
 # ---- 汇总 ------------------------------------------------------------------

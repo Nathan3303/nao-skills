@@ -27,7 +27,7 @@ CASE_TITLES=(
   "T509 别名解析 / check 守卫 / close 跨仓回收（#19）"
   "T510 migrate 收尾：shim 判定式 / 开关 / 单行 lock 去重 / B2（#21）"
   "宿主阶梯 / 失败语义 / 非 tmux 句柄（#26）"
-  "派生会话 tmux 落点：宿主窗口显式寻址（T517 · AC1–AC5）"
+  "派生会话 tmux 落点：宿主窗口显式寻址（T517 · AC1–AC7）"
 )
 
 mode="run"; only=""

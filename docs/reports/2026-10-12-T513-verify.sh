@@ -33,6 +33,10 @@
 #   AC13 D7 空 display-message 守卫（apply_tmux_layout 不得硬崩；桩驱动）
 #   AC14 M2 残留不变量（任何派生成功/接受路径返回后 nao-fleet-<名>-pid-* 新增=0；桩驱动）
 #
+# T517 适配（2026-10-13，QA 验收轮）：tmux 夹具补 TMUX_PANE（真实 tmux 调用者必有，宿主窗口解析源）；
+#   桩 display-message 增补 #{window_id}/#{session_id} 应答；AC12 F2边界② split-window argv 再基线为显式 `-t @…` 契约。
+#   断言意图不变（单窗口几何逐值 golden / 判重跳过 / 未认领 pane 启发式 / argv 无 env -u 注入）。
+#
 # 覆盖限制（NFR5，必须随报告一同披露）:
 #   本机仅 foot + Hyprland ⇒ ghostty/ptyxis/其它合成器路径**无法真测**。AC1/AC2/AC5/AC8 采用
 #   **受控桩**（PATH 替身）驱动真实 nao-fleet.sh 控制流，断言「调用与副作用」而非「真实窗口像素」；
@@ -296,6 +300,8 @@ case "$cmd" in
       *pane_current_path*) printf '%s\n' "${T513X_REPO:-/tmp}"; exit 0 ;;
       *pane_pid*) printf '%s\n' "${T513X_PANE_PID:-}"; exit 0 ;;
       *window_width*) printf '152 34\n'; exit 0 ;;
+      *window_id*) printf '@0 $0\n'; exit 0 ;;   # T517 L2：-t <pane> '#{window_id} #{session_id}' → 宿主窗口+session
+      *session_id*) printf '$0\n'; exit 0 ;;     # T517 L3：裸 '#{session_id}' 探测
     esac; done
     exit 0 ;;
   capture-pane) exit 1 ;;
@@ -493,12 +499,14 @@ printf '#!/bin/bash\nexec sleep 600\n' > "$STPI/pi"; chmod +x "$STPI/pi"
 FH="$(FXROOT_HOME="$FXROOT/home7"; mkdir -p "$FXROOT_HOME"; printf '%s' "$FXROOT_HOME")"
 printf 'export PATH=%q\n' "$STPI:$REAL_PATH" > "$FH/.bash_profile"
 ac7(){ # $1=layout $2=W $3=H $4..roles
+  # T517：真实 tmux 调用者必带 TMUX_PANE（宿主窗口解析 = 调用者 pane 所在 window）；夹具补上，佐证单窗口零回归
   local layout="$1" W="$2" H="$3"; shift 3
   local sockd; sockd="$(mktemp -d "$FXROOT/sock.XXXXXX")"; CLEAN_TMUX+=("$sockd")
   tmux -S "$sockd/sock" new-session -d -s fx -x "$W" -y "$H" >/dev/null 2>&1 || return 9
   sleep 0.3
-  local pid sid; pid="$(tmux -S "$sockd/sock" display -p '#{pid}' 2>/dev/null)"; sid="$(tmux -S "$sockd/sock" display -p '#{session_id}' 2>/dev/null)"
-  set_env "TMUX=$sockd/sock,$pid,$sid" NAO_SKILLS="$FIX" NAO_TASKS_STATE="$FIX/.no-tasks-state.md" \
+  local pid sid cp; pid="$(tmux -S "$sockd/sock" display -p '#{pid}' 2>/dev/null)"; sid="$(tmux -S "$sockd/sock" display -p '#{session_id}' 2>/dev/null)"
+  cp="$(tmux -S "$sockd/sock" list-panes -t fx -F '#{pane_id}' 2>/dev/null | head -1)"
+  set_env "TMUX=$sockd/sock,$pid,$sid" "TMUX_PANE=$cp" NAO_SKILLS="$FIX" NAO_TASKS_STATE="$FIX/.no-tasks-state.md" \
     PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" NAO_QA_FAKE_ROSTER='[]' PATH="$STPI:$REAL_PATH" HOME="$FH" \
     NAO_TMUX_LAYOUT="$layout" NAO_TMUX_MAIN_WIDTH=35 NAO_TMUX_MIN_PANE_WIDTH=30
   run_fleet "$FIX" ensure --force "$@"
@@ -521,8 +529,9 @@ if [[ "$AC7_GEO" == "$GEO_GRID_152_N4" ]]; then pass AC7 "grid W=152 N=4 几何�
 sockd="$(mktemp -d "$FXROOT/sock.XXXXXX")"; CLEAN_TMUX+=("$sockd")
 tmux -S "$sockd/sock" new-session -d -s fx -x 152 -y 34 >/dev/null 2>&1; sleep 0.3
 pid="$(tmux -S "$sockd/sock" display -p '#{pid}' 2>/dev/null)"; sid="$(tmux -S "$sockd/sock" display -p '#{session_id}' 2>/dev/null)"
+cp="$(tmux -S "$sockd/sock" list-panes -t fx -F '#{pane_id}' 2>/dev/null | head -1)"
 ROSTER='[{"name":"qa","id":"qa","status":"idle","cwd":"'"$FIX"'","tmuxPane":""}]'
-set_env "TMUX=$sockd/sock,$pid,$sid" NAO_SKILLS="$FIX" NAO_TASKS_STATE="$FIX/.no-tasks-state.md" \
+set_env "TMUX=$sockd/sock,$pid,$sid" "TMUX_PANE=$cp" NAO_SKILLS="$FIX" NAO_TASKS_STATE="$FIX/.no-tasks-state.md" \
   PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" NAO_QA_FAKE_ROSTER="$ROSTER" PATH="$STPI:$REAL_PATH" HOME="$FH" \
   NAO_TMUX_LAYOUT=main-row2 NAO_TMUX_MAIN_WIDTH=35 NAO_TMUX_MIN_PANE_WIDTH=30
 run_fleet "$FIX" ensure qa rd-be
@@ -596,6 +605,7 @@ FH10="$FXROOT/home10"; mkdir -p "$FH10"
 printf 'export PATH=%q\n' "$STPI:$REAL_PATH" > "$FH10/.bash_profile"
 AC10_SOCK=""
 ac10_setup(){ # 建隔离 tmux server（独立 socket；不碰共享 tmux）
+  # T517：夹具补 TMUX_PANE（真实 tmux 调用者必有）；宿主窗口 = 原始 pane 所在窗
   local pid sid
   [[ -n "$AC10_SOCK" ]] && tmux -S "$AC10_SOCK/sock" kill-server 2>/dev/null || true
   AC10_SOCK="$(mktemp -d "$FXROOT/sock.XXXXXX")"; CLEAN_TMUX+=("$AC10_SOCK")
@@ -603,6 +613,7 @@ ac10_setup(){ # 建隔离 tmux server（独立 socket；不碰共享 tmux）
   sleep 0.3
   pid="$(tmux -S "$AC10_SOCK/sock" display -p '#{pid}' 2>/dev/null)"; sid="$(tmux -S "$AC10_SOCK/sock" display -p '#{session_id}' 2>/dev/null)"
   AC10_TMUX="$AC10_SOCK/sock,$pid,$sid"
+  AC10_CALLER="$(tmux -S "$AC10_SOCK/sock" list-panes -t fx -F '#{pane_id}' 2>/dev/null | head -1)"
 }
 ac10_canary(){ # 造 1 个「未认领 pi pane」（cmd=pi · cwd=$FIX）；打印 pane_id
   tmux -S "$AC10_SOCK/sock" split-window -h -t fx -c "$FIX" "$STPI/pi" >/dev/null 2>&1
@@ -610,7 +621,7 @@ ac10_canary(){ # 造 1 个「未认领 pi pane」（cmd=pi · cwd=$FIX）；打�
   tmux -S "$AC10_SOCK/sock" list-panes -t fx -F '#{pane_id}' 2>/dev/null | tail -1
 }
 ac10_panes(){ tmux -S "$AC10_SOCK/sock" list-panes -t fx -F '#{pane_id}' 2>/dev/null | wc -l | tr -d ' '; }
-ac10_env(){ set_env "TMUX=$AC10_TMUX" NAO_SKILLS="$FIX" NAO_TASKS_STATE="$FIX/.no-tasks-state.md" \
+ac10_env(){ set_env "TMUX=$AC10_TMUX" "TMUX_PANE=$AC10_CALLER" NAO_SKILLS="$FIX" NAO_TASKS_STATE="$FIX/.no-tasks-state.md" \
     PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" NAO_QA_FAKE_ROSTER="$1" \
     PATH="$STPI:$REAL_PATH" HOME="$FH10" \
     NAO_TMUX_LAYOUT=main-row2 NAO_TMUX_MAIN_WIDTH=35 NAO_TMUX_MIN_PANE_WIDTH=30; }
@@ -833,8 +844,10 @@ set_env -u NAO_TERMINAL TMUX="sock12,4242,0" TMUX_PANE="$CALLER" \
 run_fleet "$FIXB2" ensure qa
 o="$(out_s)"; tl="$(cat "$FXROOT/ac12-b2.tmux" 2>/dev/null)"
 if (( RUN_RC == 0 )); then pass AC12 "F2边界② tmux-in ensure rc=0"; else bad AC12 "F2边界② rc=$RUN_RC（$(oneline "$o")）"; fi
-if grep -q 'split-window -h bash -lc' <<< "$tl" && ! grep -q 'env -u TMUX' <<< "$tl"; then
-  pass AC12 "F2边界② split-window argv 保持 bash -lc …（未注入 env -u，无回归）"
+# T517 契约再基线：split-window 必须带显式宿主窗口目标 `-t @…`（解析源 = TMUX_PANE），
+# F2 不变量（不注入 env -u TMUX）保持不变；无 -t 续建 = 拆用户视图（缺陷根因）
+if grep -qE 'split-window -h -t @0 bash -lc' <<< "$tl" && ! grep -q 'env -u TMUX' <<< "$tl"; then
+  pass AC12 "F2边界② split-window argv 含显式宿主目标 -t @0 + bash -lc（未注入 env -u，T517 契约）"
 else bad AC12 "F2边界② split-window argv 漂移（$(oneline "$tl")）"; fi
 FIXB3="$(mk_fixture ac12b3)"; STB3="$FXROOT/stub-ac12b3"; mkdir -p "$STB3"; x_tmux_stub "$STB3"; x_xdg_stub "$STB3"
 : > "$FXROOT/ac12-b3.tmux"; : > "$FXROOT/ac12-b3.env"; : > "$FXROOT/ac12-b3.host"; : > "$FXROOT/ac12-b3.state"
