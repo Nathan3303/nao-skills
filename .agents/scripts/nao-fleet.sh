@@ -922,7 +922,7 @@ spawn_tmux() {
     apply_tmux_layout
   else
     tmux new-session -d -s "nao-$name" "$wrapped"
-    log "tmux 会话 nao-$name 已创建（附加: tmux attach -t =nao-$name）"
+    log "tmux 会话 nao-$name 已创建（附加: tmux attach -t nao-$name）"
   fi
 }
 
@@ -1094,7 +1094,7 @@ spawn_xdg_window() {  # <name> <repo> <cmd...>
 spawn_tmux_attach() {  # <name> <repo> <inner>
   local name="$1" repo="$2" inner="$3" sess="nao-$name"
   tmux new-session -d -s "$sess" "bash -lc $(printf %q "$inner")" >/dev/null 2>&1 || return 1
-  if ! open_xdg_window "$name" "$repo" tmux attach -t "=$sess"; then
+  if ! open_xdg_window "$name" "$repo" tmux attach -t "$sess"; then
     tmux kill-session -t "=$sess" >/dev/null 2>&1 || true
     return 1
   fi
