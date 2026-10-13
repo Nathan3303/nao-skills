@@ -12,12 +12,12 @@
 - 🆕 **T520 立项（2026-10-14 · 待用户开工确认）**：文档模板与格式约定（ADR 结构边界 + 骨架单源 + 索引模板）—— 用户选定第 1/3/5 条；PRD = `docs/prds/2026-10-14-doc-templates-convention.md`（已落盘）；**降级批次**（无 Issue）· 分支 `nao/doc-templates` · 目标 v0.17.2（npm 不重发）。**闸门状态 = 等用户答复开工确认卡，未派发任何 worker**。
 - ✅ **T519 交付闭环（2026-10-14）**：tasks-state 台账瘦身 + 历史下沉 —— **231→83 行**（−64.1%）· 新增 `docs/tasks-archive.md` 217 行（历史快照 · 非权威）· AC1–AC8 全过（含 AC4 七条）· **QA 三次独立复核全 GO**（接缝 → 落地 → 补丁）· PR [#37](https://github.com/Nathan3303/nao-skills/pull/37) squash `1486a8e`（main 恰 1 条 · 无 `wip()` · 分支删净）· 门禁 `check` rc0 roles=6 files=44 · `npm test` rc0 · t4 12/12 · 探针 `PASS=11 FAIL=0`（基线 `PASS=8 FAIL=1` ⇒ 暴露 T511a/b/c 被误判为进行中，本批已闭合）· **已发布 v0.17.1**（发布提交 `87193be` · tag + Release 已发 · **npm 不重发** ・`package.json`/README pin 保持 0.17.0）。
 
-- 当前阶段：**T520 已立项 · 待用户开工确认**（PRD 已落盘；T519 → v0.17.1 已闭环；T518 → v0.17.0 已闭环）
-- 当前 PRD：`docs/prds/2026-10-14-doc-templates-convention.md`（状态：**待用户确认开工**）
-- 未决决策点：**施工路径确认**（降级分支 `nao/doc-templates` / 舰队规模 3 会话 / 立项提交 PM 直落 main）—— 见开工确认卡
-- 待用户回答：开工确认卡「是否开工？会话/角色是否如上？」
-- 未派发队列：见下方「待派发队列」（共 3 项：rd-infra 实现 · arch 评审 · qa lite）
-- 下次唤醒条件：**用户答复开工确认卡**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = **仅 pm 在线**（`qa-T519` / `rd-infra-T519` 已回收）；本批需 `ensure arch-designer rd-infra qa`（`check` 已跑：rc=0 files=44）
+- 当前阶段：**T520 派发中**（arch 结构评审在飞；rd-infra / qa 排队；T519 → v0.17.1 已闭环；T518 → v0.17.0 已闭环）
+- 当前 PRD：`docs/prds/2026-10-14-doc-templates-convention.md`（状态：**已开工**）
+- 未决决策点：等 arch-designer-T520 结构定稿（必写 5 节 + 可选 3 节 / 状态值域 / 是否落 ADR 首实例）
+- 待用户回答：无（开工确认卡已回：按卡开工 · PM 直推 main · 3 会话）
+- 未派发队列：见下方「待派发队列」（共 2 项：rd-infra 实现 · qa lite）
+- 下次唤醒条件：**arch-designer-T520 回执 done(full)** → 派 rd-infra-T520 落地；再 qa-T520 探针 + 复核；舰队已起 = arch-designer-T520 / rd-infra-T520 / qa-T520（均 idle · 立项提交 `e7d6a9f` 已推 main）
 - 口头约束已落盘：项目 `AGENTS.md` 项目约束（ask-me 提问）· PRD §5 BR6 格式禁令 + §9 R5/R6
 - 需求分支 / PR：见下方「需求分支 / PR / 发布」（降级分支 `nao/tasks-state-slim`）
 - 会话体检：本批（T519）PM 会话 ctx ≈12%（无压缩 · 本批开始时实测 66.4k/1000k）· 舰队 = **仅 pm 在线** · 本快照为接续唯一事实源（main = v0.17.1 发布提交）
@@ -56,15 +56,14 @@
 
 | 任务编号 | 目标会话 | 概要 | 排队原因 |
 | :--- | :--- | :--- | :--- |
-| T520 | rd-infra | T520 实现：新增 `templates/adr.md.example` + `adr-index.md.example`、改 `deliverable-docs.md` §四 / `arch-patterns.md` / `architecture-designer.md` §十一（v11→v12）、收敛 `docs/adr/README.md` | 等用户开工确认 |
-| T520 | arch-designer | T520 评审：ADR 必写 5 节 + 可选 3 节、状态值域、下沉边界（写实闸门→评审报告） | 等用户开工确认 + rd-infra 初稿 |
-| T520 | qa | T520 QA lite：出结构探针 `docs/reports/2026-10-14-T520-doc-contract-probe.sh` + 核 AC1–AC4 证据 | 等用户开工确认 |
+| T520 | rd-infra | T520 实现：新增 `templates/adr.md.example` + `adr-index.md.example`、改 `deliverable-docs.md` §四 / `arch-patterns.md` / `architecture-designer.md` §十一（v11→v12）、收敛 `docs/adr/README.md`、建分支 `nao/doc-templates` | 等 arch 结构定稿 |
+| T520 | qa | T520 QA lite：出结构探针 `docs/reports/2026-10-14-T520-doc-contract-probe.sh` + 核 AC1–AC4 证据 | 等 rd-infra 落地 |
 
 ## 进行中
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| — | — | （本批次列已清空；T519 已验收归档，见下） | — | — | — |
+| T520 | arch-designer-T520 | ADR 结构契约评审（定稿必写 5 节 + 可选 3 节 / 状态值域 / 是否落 ADR 首实例 / 下沉边界） | 2026-10-14 02:03 | AC1/AC2/AC3 | 无（评审 · 不提交） |
 
 ## 已回执待验收
 
