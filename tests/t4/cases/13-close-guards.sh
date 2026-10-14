@@ -13,6 +13,8 @@
 #   ④ AC3 反向（真离线）⇒ rc=0 + stdout 含「未运行（无需回收）」（= offline_verifiable 子句①名册可用）
 #   ⑤ AC4 判据三处（BR5）：NAO_TERMINAL=tmux 成立 / NAO_TERMINAL=foot 不成立 / $TMUX 在场成立
 #   ⑥ AC7 锁定现状：--force 不改变本分支 rc 且仍不含「未运行（无需回收）」
+#   ①b/⑥b BR2 文案只写真话：双向断言（输出不含 --force + stderr 仍含「人工核对」），
+#          复用①/⑥两次实跑捕获的 T4_OUT/T4_ERR（零新增子进程）
 #
 # BR6 hermetic：一律派生名 `close --task <唯一号> qa`（禁裸 `close qa` —— 本机测试进程
 #   自身标题即 `π - qa - <repo>`，裸名会命中调用者自身 pane 而落到 F1「拒绝回收」分支，
@@ -61,6 +63,10 @@ t4_assert_ne "0" "$RC_UNVER" "① 不可验证环境（无 \$TMUX / 无 NAO_TERM
 t4_assert_not_contains "$T4_OUT" "$MARK" "② 同场景 stdout 不得报「$MARK」"
 t4_assert_contains "$T4_ERR" "无法确认" "③ 同场景 stderr 含「无法确认…在线状态」（BR4：warn 走 stderr）"
 t4_assert_contains "$T4_ERR" "不做静默 no-op" "③ 同场景 stderr 含「不做静默 no-op」（本批核心）"
+# ①b 文案双向钉住（BR2/AC2）：负向 = 输出（stdout+stderr）不含 --force；
+#     正向 = stderr 仍含人工核对指引（防「整段 warn 被懒删」后负向断言反而恒绿）。
+t4_assert_not_contains "$T4_OUT$T4_ERR" "--force" "①b 不可验证分支输出不含 --force（BR2 负向）"
+t4_assert_contains "$T4_ERR" "人工核对" "①b 同场景 stderr 仍含「人工核对」（BR2 正向）"
 
 # ---------------------------------------------------------------- ④⑤ 能力门（BR7）
 if [ "$tsx_ok" = "1" ]; then
@@ -112,5 +118,8 @@ close_unverifiable --force
 t4_assert_ne "0" "$T4_RC" "⑥ --force 不改变本分支：仍 rc≠0"
 t4_assert_eq "$RC_UNVER" "$T4_RC" "⑥ --force 下 rc 与无 --force 逐值一致（=$RC_UNVER）"
 t4_assert_not_contains "$T4_OUT" "$MARK" "⑥ --force 下 stdout 仍不得报「$MARK」"
+# ⑥b 文案双向钉住（BR2/AC2）—— 与 ①b 同型，复用第六组实跑（零新增子进程）。
+t4_assert_not_contains "$T4_OUT$T4_ERR" "--force" "⑥b --force 路径输出仍不含 --force 字样（BR2 负向）"
+t4_assert_contains "$T4_ERR" "人工核对" "⑥b --force 路径 stderr 仍含「人工核对」（BR2 正向）"
 
 t4_exit

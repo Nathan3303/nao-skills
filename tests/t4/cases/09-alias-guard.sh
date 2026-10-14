@@ -16,6 +16,7 @@ t4_require_cmd node
 FIX_SESS="t4c09-$$"
 cleanup_c09() {
   command -v tmux >/dev/null 2>&1 && tmux kill-session -t "$FIX_SESS" 2>/dev/null || true
+  t4_cache_cleanup   # BR10：本 trap 会覆盖 lib.sh 的 EXIT trap，串一次清理（仅影响单跑 09；经 run.sh 时 OWNED=0，无害）
 }
 trap cleanup_c09 EXIT
 

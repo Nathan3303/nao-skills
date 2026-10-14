@@ -19,10 +19,52 @@ T4_ROOT="${T4_ROOT:-$(cd "$T4_TESTS_DIR/.." && pwd)}"
 
 PKG_NAME="@nathan33/nao-skill"
 PKG_VERSION="$(node -p "try{require('${T4_ROOT}/package.json').version}catch(e){'0.0.0'}" 2>/dev/null || echo 0.0.0)"
-T4_CACHE_DIR="${T4_CACHE_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/nao-t4.XXXXXX")}"
 T4_ALLOW_MISSING="${T4_ALLOW_MISSING:-0}"
 T4_REQUIRE_FULL="${T4_REQUIRE_FULL:-0}"
 T4_TARBALL="${T4_TARBALL:-}"
+
+# ---------------------------------------------------------------- 夹具缓存生命周期（单点实现）
+# 归属（BR3）：只有「本进程自己 mktemp 成功」的目录可被删。T4_CACHE_OWNED 不导出、
+#   不从环境读取——只要 T4_CACHE_DIR 由外部传入（run.sh 导给用例、或 `export T4_CACHE_OWNED=1`
+#   的越权调用）即在此强制 OWNED=0，防子进程先于父进程删掉本批缓存。
+# 前缀（BR4）：删除守卫用创建时捕获的 $T4_CACHE_PARENT（禁硬编码 /tmp）。
+# 逃生口：T4_KEEP_CACHE=1（env-only）⇒ 恒保留。
+# T4_CACHE_NO_CREATE=1：只读探测（run.sh --preflight 的 `source lib.sh` 子进程）抑制建目录（BR8）。
+T4_CACHE_PARENT="${TMPDIR:-/tmp}"
+T4_KEEP_CACHE="${T4_KEEP_CACHE:-0}"
+T4_CACHE_OWNED=0
+if [ -z "${T4_CACHE_DIR:-}" ] && [ "${T4_CACHE_NO_CREATE:-0}" != "1" ]; then
+  if T4_CACHE_DIR="$(mktemp -d "$T4_CACHE_PARENT/nao-t4.XXXXXX")"; then
+    T4_CACHE_OWNED=1
+  else
+    T4_CACHE_DIR=""
+    printf 'T4 夹具缓存创建失败（mktemp: %s/nao-t4.XXXXXX）；不空值续跑（BR9）\n' "$T4_CACHE_PARENT" >&2
+    exit 1
+  fi
+fi
+T4_CACHE_DIR="${T4_CACHE_DIR:-}"
+# 兜底（BR3）：外部传入的 T4_CACHE_DIR 一律不归属本进程；并摘掉可能继承来的导出属性。
+export -n T4_CACHE_OWNED
+
+# t4_cache_cleanup —— 清理逻辑唯一实现点（BR10：run.sh / cases 复用，不复制）。
+# BR5：EXIT trap 内 `local rc=$?; …; return $rc`，禁 exit（不得吞/改退出码）。
+t4_cache_cleanup() {
+  local rc=$?
+  local dir="${T4_CACHE_DIR:-}"
+  [ "${T4_CACHE_OWNED:-0}" = "1" ] || return "$rc"                        # BR3 仅自建
+  [ "${T4_KEEP_CACHE:-0}" = "1" ] && return "$rc"                          # 逃生口
+  [ "$rc" = "0" ] || return "$rc"                                          # BR7 失败一律保留
+  [ -n "$dir" ] || return "$rc"                                            # BR4① 非空
+  case "$dir" in "$T4_CACHE_PARENT"/nao-t4.*) ;; *) return "$rc" ;; esac  # BR4② 前缀（取自捕获值）
+  [ "${dir%/*}" = "$T4_CACHE_PARENT" ] || return "$rc"                    # BR4② 仅一层（防 glob 吃路径穿越）
+  [ -d "$dir" ] || return "$rc"                                            # BR4③ 是目录
+  [ ! -L "$dir" ] || return "$rc"                                          # BR4④ 非软链
+  [ "$dir" != "/" ] || return "$rc"                                        # BR4⑤ 非根
+  rm -rf -- "$dir" 2>/dev/null || printf 'T4 缓存清理失败（已保留目录）: %s\n' "$dir" >&2  # BR9 不改 rc
+  return "$rc"
+}
+trap t4_cache_cleanup EXIT
+
 export T4_ROOT PKG_NAME PKG_VERSION T4_CACHE_DIR T4_ALLOW_MISSING T4_REQUIRE_FULL T4_TARBALL
 
 T4_FAIL=0
