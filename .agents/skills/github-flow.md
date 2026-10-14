@@ -53,6 +53,7 @@ PM 在**立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 PR / 合�
 
 - 版本号：SemVer，PM 按批次范围定（feat→MINOR / fix→PATCH / 破坏性→MAJOR）；项目 `AGENTS.md` 有约定则从之。
 - 门禁：AC 全过 + 验收闭环 + main 门禁全绿 + 工作区干净 + PR 已合并。
+- **发布前置（严格闸门）**：若仓库提供 `test:t4:full` 脚本，发布前须先 `npm run test:t4:full` **rc=0**（判据 = SKIP 计数为 0，SKIP 即 FAIL）。
 - **优先 `gh`**：`gh release create <tag> --title "vX.Y.Z" --notes-file docs/releases/<version>.md`（**标题口径（强约束）：@.agents/common/release-notes.md** —— 标题仅裸版本号，描述进正文首段）。
 - 探测：`gh auth status` 按 **exit code** 判定（`keyring` 警告但 exit 0 **仍可用**，可 `gh api user` 复核）；**不自动 `gh auth login`**（涉用户凭证）。
 - release notes 落盘 `docs/releases/<version>.md`（**写作规范（强约束）：@.agents/common/release-notes.md** —— 面向用户「本次更新」置顶、内部编号 / 文件名 / 属性名一律下沉「技术细节」、正文不用表格；骨架见 @.agents/templates/release-notes.md.example）。
