@@ -21,6 +21,8 @@ npm run test:t4:full                           # 发布前置双轴（= 上面�
 - **`T4_REQUIRE_FULL=1`**（与上者正交，只管 SKIP/DEGRADE 轴）：汇总层 **SKIP 计数 + DEGRADE 计数必须均为 `0`** —— SKIP 含从用例输出解析的**行首** `[SKIP]` / `SKIP:` 行；DEGRADE 为能力降级标记。NOTE 允许并计数。发布用 `npm run test:t4:full`。
 - **`test:t4:full` 能力要求**：`pi` CLI · tmux · bwrap · strace · npm registry 可达。缺任一即产生 DEGRADE/SKIP ⇒ **full rc≠0**（这正是 full 的意义：要求能力齐备）；默认 `npm test` 不因能力缺失变红。
 - **用例 13 的额外能力依赖**：④（名册可用且为空的反向断言）与 ⑤（`offline_verifiable` 判据三处）需要 `tsx`（跑名册探针夹具）；缺失时这两组记 `[DEGRADE]`（默认豁免、`test:t4:full` 计分），其余断言照跑。①②③⑥ 只依赖 bash + 本仓脚本，无额外能力。
+- **用例 15 的能力与夹具纪律**：T2–T6/T8 需真 `tmux`（缺则整例 `SKIP`）；T1/T7/T9 需 `tsx`（假名册探针；缺则 T1–T9 记 `[DEGRADE]`），T10（`check` 守卫）纯 bash 照跑。夹具 = 真 tmux **隔离 socket**（≠ 生产默认候选；`TMUX_TMPDIR` 指向夹具目录，`env -u TMUX -u TMUX_PANE`）+ 假名册逐字段一行 pretty-print + 桩 `pi` 用**复制**的二进制（保 `comm=pi`）；收尾走机制 `cleanup -S <隔离 socket>`（不裸 `kill-server`）。
+- **「子代理不属舰队会话」口径**：由 pi-subagents 拉起的 `subagent-*` 会话（`subagent-<agent>-<id>` / `subagent-chat-<id>`）**不属**舰队会话身份模型 —— `status` 只对其汇总计数（不列名、不参与在线/判重），`close subagent-*` 显式拒绝（生命周期归 pi-subagents 的 stop/retention）。`subagentfoo` / `mysubagent-x` / 裸 `subagent` 不入此面；`qa-subagent-x` 仍是合法派生名。
 - **DEGRADE 语义**：环境缺能力但**其余断言继续跑**（不同于 `t4_skip` 会终止用例）；默认模式豁免、`T4_REQUIRE_FULL=1` 时计分。
 - **计数可见**：汇总尾部打印 `SKIP=n · DEGRADE=m · NOTE=k`；「绿 + N SKIP/DEGRADE」不得表述为「全量通过」。
 - **安装包内不适用**：`tests/` 不入 npm tarball，在消费者机器上 `npm test` 因缺 `tests/t4` 而 rc≠0，属预期（见 `docs/releases/v0.18.0.md`）。
@@ -46,6 +48,7 @@ npm run test:t4:full                           # 发布前置双轴（= 上面�
 | 12 | 派生会话 tmux 落点：宿主窗口显式寻址（含幂等/同源） | AC1–AC7 · T517 | 无（真 tmux 隔离 socket + 桩 pi；无 tmux 则 SKIP） |
 | 13 | `close` 末段在线判定护栏：不可验证 ⇒ 非静默失败（双侧极性 + 判据三处 + `--force` 文案双向） | AC2–AC8 · T523/T524 | `tsx`（名册探针夹具，缺则 ④⑤ DEGRADE）；①②③⑥ 无依赖 |
 | 14 | 夹具缓存生命周期：成功清理 / 失败保留 / 用户目录永不删（守卫负控 + 早退净增 0） | AC4–AC7 · T524 | 无（私有 `TMPDIR` 内纯本地，不依赖 tmux/tsx/网络） |
+| 15 | 子代理会话（`subagent-*`）在 `status`/`close` 的显式识别与排除（汇总计数 / 显式拒绝且父 pane 存活 / E2 孤儿 pane 告警回归 / 前缀边界 / `check` 守卫） | AC2–AC8 · T525 | `tmux`（缺则 SKIP）· `tsx`（名册注入，缺则 T1–T9 DEGRADE）；T10 纯 bash |
 
 ## 夹具缓存纪律
 

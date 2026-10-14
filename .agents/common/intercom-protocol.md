@@ -26,6 +26,7 @@ description: pi-intercom 多会话协作协议（常驻引用）
 拉起：`bash .agents/scripts/nao-fleet.sh ensure <别名>[@<repo>]`
 
 - **任务派生**：`ensure --task <编号> <别名>[@<repo>]` 创建 `<角色>-<编号>` 独立会话（如 `rd-be-T1`），并行隔离、互不排队/打断，避免多任务同名冲突；任务闭环即**回收**：`nao-fleet.sh close --task <编号> <别名>`（内置在跑 turn / tasks-state 闸门）。
+- **子代理会话不属舰队会话身份模型**：由 pi-subagents 拉起的子代理会话以 `subagent-<agent>-<id>`（无名时 `subagent-chat-<id>`）进入 intercom 名册，但**不属**舰队会话 —— `status` 只对其汇总计数（不列名、不参与在线/turn 判重），`close subagent-*` 显式拒绝（生命周期归 pi-subagents 的 stop/retention，nao 不接管）。
 
 - **判重 / 在线判定**：脚本按 pi 自设的**终端标题**（`π - <会话名> - <仓库名>`）+ `pi-intercom` 名册判在线（**不用 `pgrep --name`**：pi 启动后 argv 被改写为 `pi`，会恒失配）；已运行则跳过并 warn。确需重开加 `--force`。
 - **标题被改写时的 pane 定位**（v0.9.4）：终端标题可被外部改写（实测变为 `pi:c`），此时 `status`/`close`/`ensure` 按三层后备定位 pane：① 标题契约 → ② pi-intercom 名册 `tmuxPane`（注册时读 `$TMUX_PANE`，与标题改名无关，权威）→ ③ 本仓「未被认领 pi pane」唯一兜底。三层均未命中才认「无法确认」并 exit 非 0（不静默 no-op）。`close` 的在跑 turn 判定叠加名册活动状态（thinking / tool:* 等）与 pane 末 12 行状态行双重信号。
