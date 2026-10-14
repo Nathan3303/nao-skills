@@ -1,7 +1,7 @@
 # PRD：GitHub Release 标题口径（裸版本号，去描述性文本）
 
-- 状态：待用户确认开工 · Owner：PM · 更新：2026-10-14
-- 指针：上游 = 用户 2026-10-14 指示（「修改 Github 发布模板，标题不要带有描述性文本，仅 vxx.xx.xx」）+ 同轮 ask-me 拍板（范围 = 只改约定不回改历史 · 方式 = 降级批次走 GitHub Flow）· 成熟度判定 = 命中 §一.4「用户明示可直接成稿」
+- 状态：**已开工**（实施中）· Owner：PM · 更新：2026-10-14
+- 指针：上游 = 用户 2026-10-14 指示（「修改 Github 发布模板，标题不要带有描述性文本，仅 vxx.xx.xx」）+ 同轮 ask-me 拍板（范围 = 只改约定不回改历史 · 方式 = 降级批次走 GitHub Flow · D1 = 重发 npm 0.17.3）· 成熟度判定 = 命中 §一.4「用户明示可直接成稿」· **QA 接缝复核** = 2026-10-14 `done(full)`（改定 1 + 补 3 断言 + AC7 裁定 (a)）
 - 优先级：中（发布口径固化 · 低成本高杠杆）· 战略筛子：命中「机制一致性」→ 做 · MoSCoW：Should · Kano：期望型质量属性 · RICE ≈13.5（附录）
 
 ## TL;DR（≤5 行）
@@ -60,22 +60,23 @@
 
 ## 七、AC
 
-- 验证接缝（**候选 · 待 QA 确认**）：`bash .agents/scripts/nao-fleet.sh check`（rc=0）+ 一次性只读探针 `docs/reports/2026-10-14-T521-release-title-probe.sh`（断言：旧占位语 0 命中 · 新条款齐 · 模板注释在 · 卡 v25）。
-- **AC1（主路径 · 接缝）**：Given 舰队就绪，When QA 复核接缝候选，Then 确认或改定更高接缝并记录日期（PM 据此更新本行「已确认」）。
+- 验证接缝（**QA 已确认 2026-10-14**）：`bash .agents/scripts/nao-fleet.sh check` rc=0 **+ `npm test` rc=0**（项目全范围门禁）**+** 一次性只读探针 `docs/reports/2026-10-14-T521-release-title-probe.sh`。
+  - QA 复核结论：接缝数不增（仍 1 个新建探针接缝 + 复用项目门禁）；**改定 1 处** = 候选漏了 `npm test`（4 个被改文件全在 `.agents/` 机制面，按项目红线必须全范围门禁）。
+- **AC1（主路径 · 接缝）**：Given 舰队就绪，When QA 复核接缝候选，Then 确认或改定更高接缝并记录日期 —— **已完成 2026-10-14**（QA `done(full)`：改定 1 处 + 补 3 断言 + AC7 二选一由 PM 裁定）。
 - **AC2（主路径 · 权威单处）**：Given `common/release-notes.md`，When 读 §一，Then 硬约束含「标题 = 裸 `vX.Y.Z`」且明示描述归属正文首段。
-- **AC3（设计一致性 · 引用收敛）**：Given 全 `.agents/` 目录，When `grep -rn '用户可读标题'`，Then 命中数 = 0，且两处引用均为 `--title "vX.Y.Z"` + 指回权威单处。
-- **AC4（角色卡纪律）**：Given `product-manager.md`，When 读 frontmatter，Then `version: 25` + `updated: 2026-10-14`；且 `check` rc=0（roles=6）。
-- **AC5（边界 · 模板）**：Given `release-notes.md.example` 头部注释，When 读，Then 含标题口径一行；模板正文分段结构未被破坏。
-- **AC6（负向闭环 · 不误伤）**：Given 探针负控，When 注入旧占位语副本，Then 断言 FAIL；When 核正文规范关键词（「本次更新」/「技术细节」），Then 仍存在（证明未误删正文规范）。
-- **AC7（异常 · 降级路径）**：Given BR4，When 读规范，Then 含 `git tag -a` 降级口径，且未新增对 `gh` 的硬依赖表述。
+- **AC3（设计一致性 · 引用收敛 + 反删除）**：Given 全 `.agents/` 目录，When `grep -rn '用户可读标题'`，Then 命中数 = 0；**且** `skills/github-flow.md`、`prompts/product-manager.md` 两文件**仍存在且各含 `--title "vX.Y.Z"`（各 1 处）** + 指回权威单处（防「删文件达成 0 命中」的假通过）。
+- **AC4（角色卡纪律）**：Given `product-manager.md`，When 读 frontmatter，Then `version: 25` **且 `updated: 2026-10-14`**（两项均断）；且全范围门禁 rc=0（`check` roles=6）。
+- **AC5（边界 · 模板）**：Given `release-notes.md.example` 头部注释，When 读，Then 含标题口径一行；**且**模板原分段标题（`# 本次更新` / `## ✨ 更好用了` / `## 🐛 修好了` / `## ⚠️ 请留意` / `## 技术细节`）仍在（才等于「分段结构未被破坏」）。
+- **AC6（负向闭环 · 不误伤）**：Given 探针负控，When 注入旧占位语副本，Then 断言 FAIL；When 核正文规范关键词（「本次更新」/「技术细节」），Then 仍存在。**负控须在 `mktemp -d` 临时副本上跑（不得改工作区），探针收尾断言 `git status --short` 为空。**
+- **AC7（异常 · 降级路径）**：**PM 裁定 (a)（不动范围）** —— Given 既有降级口径，When 核 `skills/github-flow.md:71` 降级表行，Then 该行**仍在**（回归保护）+ 全 `.agents/` 未新增对 `gh` 的硬依赖表述（探针加 1 条断言）；权威单处 `release-notes.md` 本批**不**新增 `git tag -a` 行。
 - **AC8（一致性闸门）**：Given PRD 接缝与 QA 用例范围，When 比对，Then 一致；不一致则 PM 验收打回。
-- **AC9（发布自证 · 首个实证）**：Given 本批发布，When 读 Release，Then 标题**严格等于** `v0.17.3`（无描述文本）。
+- **AC9（发布自证 · 首个实证）**：Given 本批发布，When 读 Release，Then 标题**严格等于** `v0.17.3`（无描述文本）。**不属预合入接缝**：发版后由 PM 人工读取核验，探针不覆盖（QA 照实说明）。
 
 ## 八、上线闭环
 
 - **版本**：v0.17.3（PATCH · 机制文档口径）。
 - **回滚**：约定类改动，回滚 = 文本改回并发下一 PATCH；已 push tag 不删。
-- **npm 重发：待用户拍板（D1）** —— `package.json files` 含 `.agents/`，**本批唯一产出即包内文本** ⇒ PM 建议本次**重发 npm 0.17.3**（与 T519/T520「不重发」先例不同，理由：那两批产出偏文档归档，本批直接改包内规范文本；npm 发布由用户执行）。
+- **npm 重发：已拍板（用户 2026-10-14）= 重发 `0.17.3`** —— 理由 `package.json files` 含 `.agents/`，**本批唯一产出即包内文本**（与 T519/T520 先例不同）；`npm publish` 由**用户执行**，成功判据 = **直连 registry 实测**（`dist-tags.latest` 已是 0.17.3 + `dist.integrity` 与本地 `npm pack` tarball 逐字节一致；`PUT 202` 不作判据）。
 - **监控**：无（纯文本）。
 
 ## 九、变更治理
