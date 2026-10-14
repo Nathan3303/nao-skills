@@ -124,6 +124,7 @@ for i in "${!CASE_IDS[@]}"; do
   log="$T4_CACHE_DIR/case-${id}.log"
   sub_skip=0; sub_note=0
   if [ -f "$log" ]; then
+    # SKIP 行解析：[SKIP]（T513 内部标记）/ SKIP:（t4_skip）/ SKIP+空格（T517 子项标记）
     sub_skip="$(grep -cE '^[[:space:]]*(\[SKIP\]|SKIP[[:space:]:])' "$log" 2>/dev/null || true)"
     sub_note="$(grep -cF '[NOTE]' "$log" 2>/dev/null || true)"
   fi
