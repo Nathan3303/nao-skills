@@ -1673,7 +1673,7 @@ cmd_close() {
     fi
     warn "无法确认 $name 在线状态：宿主无 tmux/screen 句柄，且 pi-intercom 名册不可用"
     warn "  pi 启动后 argv 被改写为 \"pi\"，进程扫描不可信 ⇒ 不做静默 no-op（本命令 exit 非 0）"
-    warn "  请用 intercom list 人工核对；确认已退出后忽略本提示，或用 --force 跳过闸门"
+    warn "  请用 intercom list 人工核对；确认已退出后忽略本提示"
     return 1
   fi
 
