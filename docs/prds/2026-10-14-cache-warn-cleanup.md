@@ -1,7 +1,8 @@
 # PRD：`--force` 文案订正 + t4 夹具缓存生命周期自洽（遗留小项合并批）
 
-- 状态：**已交付并合并（待发布 v0.18.2）** · Owner：PM · 更新：2026-10-14
+- 状态：**已交付并发布（v0.18.2 · npm 已重发并核验）** · Owner：PM · 更新：2026-10-14
 - **验收记录** = 2026-10-14 PM 验收**通过（AC1–AC8 全过）**：PR [#42](https://github.com/Nathan3303/nao-skills/pull/42) squash **`e83ced2`**（main 恰 1 条 · 无 `wip()` · 分支删净）· QA 独立复跑 **GO（终）**（`check` rc=0 roles=6 files=46 · `npm test` rc=0 · 106.7s · **14/14 PASS · 断言 282→313** · SKIP=0/DEGRADE=0/NOTE=3 · 空载 `test:t4:full` rc=0）+ ⑯ 双向变异（各恰 2 条 FAIL）+ ⑮ 25+ 守卫探针 + 存量 129→0 · 验收评论见 PR #42
+- **发布记录** = 2026-10-14 **v0.18.2（PATCH）已发布**：发布提交 `d56de97`（pin 升 0.18.2）· **tag `v0.18.2` + Release 已发**（**AC9 自证：`gh release view` name = `v0.18.2`**）· 发布前置 `test:t4:full` rc=0（空载 1m27s · SKIP=0/DEGRADE=0）· **npm 重发已核验**（用户执行 `npm publish`；`dist-tags.latest` = `0.18.2` + `dist.integrity` 与本地 tarball **逐字节一致**（`sha512-pXgAgzq…` · 129,985 B）；registry 由 `0.17.3` 直跳 `0.18.2`）。
 - 开工确认卡（2026-10-14 · ask-me 用户拍板 5 项）：D1 范围 = **按 QA 定稿**（⑯ 删净子句 + `cases/13` 双向断言 · ⑮ S1 + mode 感知 + env 逃生口 + 三态文案 + `mktemp` 失败非 0 · 新增 `cases/14` · 存量 X2）· D2 npm = **发布时重发 0.18.2**（⑯ 在包内 ⇒ 用户执行 `npm publish`；registry 将从 0.17.3 直接跳 0.18.2）· D3 版本 = **v0.18.2（PATCH）** · D4 立项 = **降级 `nao/cache-warn-cleanup`**（无 Issue）· D5 存量 = **X2 一次性清理**（执行前查无在跑批次 + 前后计数留痕）
 - 指针：上游 = 用户 2026-10-14 选定**台账待裁量项 ⑯ + ⑮ 合并小批**（⑯ 由 T523 QA 实测发现；⑮ 由 T522 QA R4 发现）· 成熟度判定 = 命中 `pm-to-spec.md` §一.4（用户明示范围 + 两项均有实测证据）· **QA 接缝复核** = 2026-10-14 `done(full)`（⑯ 采 **C1 扩 `cases/13` + 双向断言 + 删净 `--force` 子句**；⑮ 采 **S1**（trap + mode 感知 + env-only 逃生口）+ 新增 `cases/14-cache-lifecycle.sh`；存量 **X2 一次性清理**）
 - 优先级：中低（一致性 + 卫生 · 低成本）· 战略筛子：命中「机制可信度 / 交付卫生」→ 做 · MoSCoW：Should · Kano：基本型 · RICE ≈6.0（附录）
