@@ -18,7 +18,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 
-CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12" "13" "14" "15")
+CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12" "13" "14" "15" "16")
 CASE_TITLES=(
   "主路径足迹 + check exit=0（AC1）"
   "设计一致性：注册 skill 数==2 且无 collision（AC1/AC6）"
@@ -35,6 +35,7 @@ CASE_TITLES=(
   "close 末段在线判定护栏：不可验证 ⇒ 非静默失败（T523 · AC2–AC8）"
   "夹具缓存生命周期：成功清理 / 失败保留 / 用户目录永不删（T524 · BR3–BR10）"
   "子代理会话（subagent-*）在 status/close 的显式识别与排除（T525 · AC2–AC8）"
+  "子代理桥口径：模板 G1–G3 + 协议条款 + 配置 schema（T526 · AC2–AC7）"
 )
 
 mode="run"; only=""; arg_err=""
@@ -63,7 +64,7 @@ fi
 
 if [ -n "$arg_err" ]; then
   printf '参数错误: %s\n' "$arg_err" >&2
-  printf '用法: bash tests/t4/run.sh [--list | --preflight | --case <01-15>]\n' >&2
+  printf '用法: bash tests/t4/run.sh [--list | --preflight | --case <01-16>]\n' >&2
   exit 1
 fi
 
