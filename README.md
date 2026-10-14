@@ -24,7 +24,7 @@ nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，�
 
    ```bash
    cd 你的项目
-   pi install --local npm:@nathan33/nao-skill@0.17.3   # 声明 pin + 把机制包物化到项目内 .pi/npm
+   pi install --local npm:@nathan33/nao-skill@0.18.0   # 声明 pin + 把机制包物化到项目内 .pi/npm
    npx @nathan33/nao-skill init                        # 写入转发 shim + 生成 AGENTS.md
    ```
 
