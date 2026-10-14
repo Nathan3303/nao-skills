@@ -29,7 +29,6 @@ t4_info "pi install rc=$rcA（$(printf '%s' "$outA" | tail -1)）"
 if [ "$rcA" -ne 0 ]; then
   t4_skip "pi install 未成功启动（rc=$rcA；可能 registry/网络/凭据不可达）：$(printf '%s' "$errA" | tail -1)"
 fi
-t4_assert_eq "0" "$rcA" "真实 pi install exit=0"
 
 # B: tarball 复现
 B="$(t4_fixture)"
