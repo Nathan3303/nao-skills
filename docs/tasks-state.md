@@ -8,6 +8,7 @@
 
 > 本区是 PM 的**悬空状态**（任务状态见下方五栏）；重开后逐行回读确认（当前阶段 · 未决决策 · 口头约束）。
 
+- 🔄 **T522 中段状态（2026-10-14 · arch 评审已回执）**：三关已过（PRD → QA 接缝 → 开工卡）后，arch 结构评审 `done(full)`：**有条件可行**（采纳 `test` 全量串联 / `prepack`=`test:agents` / 默认严格 / v0.18.0 / npm 不重发 / 需补 ADR）+ **P1–P6 已落 PRD 定稿**（网络面极性 · full 判据 SKIP 计数 = 0 · 三类参数错误 · 发布锚点 → `github-flow.md` 阶段 7 · 断言基线 ≥265 · 版本漂移）。**用户二轮拍板 5 项（ask-me）**：D1 修极性 · D2 范围微扩全批准 · D3 授权 arch 落盘 ADR+报告 · D4 npm 默认不重发 · D5 网络中断下继续推进本地实现。**已实测环境**：`github.com:443` / `codeload.github.com:443` 超时（`api.github.com` 通 · registry 200）⇒ `git push` rc=124，台账提交 `554e4aa` 仅本地（origin 未推）；分支 push/PR/合并/发布恢复后补（github-flow 离线降级可用）。
 - 🔄 **T522 批次开工（2026-10-14 · 晚于下条交接）**：新 PM `01a13817`（pane %31）已按重开纪律回读确认 3 行（ask-me · 用户「确认无误，进入待命」+「是，按此推进」）；旧 pm `01a137a8`（%26）已自收窗。**本批 = `tests/t4` 接入 `npm test` 门禁**（降级批次 `nao/t4-gate`）· 已过「PRD + QA 接缝确认 + 开工确认卡」三关：PRD `docs/prds/2026-10-14-t4-gate-wiring.md`（待派发）· QA `done(full)`（接缝 = `npm test` rc=0 不增 · 改定 4 处：prepack 剥离 / 默认严格 / full 入口 / 缺陷 A/B 前置）· 开工卡 **D1–D5 全拍板**（全纳入 · 翻转默认 · 降级 · v0.18.0 · 采纳 arch 评审）。**已实测基线**：t4 严格跑 12/12 PASS · 263 PASS / 0 FAIL / 3 NOTE / rc=0（PM+QA 各一次）· 现 `npm test` = check+tsc 2.2s 不含 t4。**在飞** = arch-designer-T522 结构评审中（闸门：评审回执后派 rd-infra）。
 - 🔄 **PM 会话重开交接（2026-10-14 · 用户拍板重开 · T521 批次终态 · 含下批需求指针）**：T521 已**全链路闭环**（PRD → QA 接缝确认 → rd-infra 落地 → QA 独立复跑 GO → squash `eff44ec` → tag `v0.17.3` + Release（发布提交 `4d97f00` · 标题自证）→ **npm 0.17.3 重发已核验**（`latest: 0.17.3` + integrity 与本地 tarball 逐字节一致）→ 台账归档 + T519 轮换下沉），**无在飞任务、无未决决策**。**下批需求（用户 2026-10-14 选定 · 未立项）** = 把 `tests/t4` 接入 `npm test` 门禁（解「1874 行 `nao-fleet.sh` 无护栏」· 先小批、脚本拆分另议）。**新 PM 开工前规则**：先读本文件 + `docs/prds/README.md` 索引 → 向用户**回读确认 3 行**（当前阶段 · 未决决策 · 口头约束）→ 确认后方可调度；旧 pm 窗（%26）在本次交接消息发出后自行收窗。
 - ✅ **PM 交接收尾（2026-10-14 · 用户拍板重开 · T520 批次终态）**：T520 **全链路闭环**（PRD → arch 结构定稿 → rd-infra 落地 → QA 独立验证 → squash `160cc60` → tag `v0.17.2` + Release（`9833344`）→ 台账归档），**无在飞任务、无未决决策**。新 PM `01a137a8`（pane %26）**已按交接回读确认 3 行**（ask-me · 用户「确认无误，进入待命」），旧 pm `01a13661`（%15）已自收窗，**舰队无派生会话残留**（实测 `list` 仅本会话）。**唯一待办** = 下游三仓（nao-todo / nao-todo-server / nue-ui）PM 会话唤醒后补发广播 `card pm v25`（T518/T521 批累计，原 v24 被 T521 取代）/ `card qa v14`（T518 批遗留）+ `card arch-designer v12`（T520 批）——**触发条件 = 目标会话在线且 `idle`，发前 `list` 核验并留痕**（本仓侧均已发）。
@@ -18,11 +19,11 @@
 - 当前 PRD：`docs/prds/2026-10-14-release-title-bare-version.md`（状态：**待开工确认**）
 - 未决决策点：无（D1 **已拍板** = 重发 npm 0.17.3；AC7 **已裁定 (a)** 不动范围）；PR Reviewer = qa（已落开工卡）
 - 待用户回答：无
-- 当前阶段：**T522 开工中**（`tests/t4` 接入 `npm test` 门禁 · 降级批次 `nao/t4-gate`）：PRD 已完成 + QA 接缝已确认 + 开工卡已拍板 → **arch-designer-T522 结构评审中**（评审回执抵达后派 rd-infra；qa-T522 已在场待命）；上批 T521（v0.17.3）已闭环发布
-- 当前 PRD：`docs/prds/2026-10-14-t4-gate-wiring.md`（状态：**待派发**）
-- 未决决策点：无（D1–D5 **已拍板** 2026-10-14 开工卡 = 全纳入 / 转默认 / 降级 / v0.18.0 / 采纳 arch 评审）；PR Reviewer = qa（无 `gh --reviewer` 指派 → 结论走 intercom）
-- 待用户回答：无（发布节点是否重发 npm 待那一步再拍）
-- 未派发队列：见下方「待派发队列」（共 2 项：① arch 评审回执后 `rd-infra-T522` 落地 wiring；② rd-infra 落地后 `qa-T522` 加 06 断言 + 独立负控 N1–N3）
+- 当前阶段：**T522 实施中**（`tests/t4` 接入 `npm test` 门禁 · 降级批次 `nao/t4-gate`）：PRD 已按 arch 评审定稿 + 开工卡两轮拍板完成 → **rd-infra-T522 落地 wiring 中**（下一步：arch 落盘 ADR/报告 → qa 断言 + 负控）；上批 T521（v0.17.3）已闭环发布
+- 当前 PRD：`docs/prds/2026-10-14-t4-gate-wiring.md`（状态：**实施中（已定稿）**）
+- 未决决策点：无（D1–D5 开工卡 + 二轮 D1–D5 全部拍板）；PR Reviewer = qa（无 `gh --reviewer` 指派 → 结论走 intercom）
+- 待用户回答：无（npm 重发 = 默认不重发，发布节点终拍）
+- 未派发队列：见下方「待派发队列」（共 2 项：① `arch-designer-T522` 落盘 ADR + 评审报告（等 rd-infra 回执后，同分支顺序写）；② `qa-T522` 加 06 断言 ≥3 条 + 独立负控 N1–N5）
 - 下次唤醒条件：**arch 回执 / 下批需求授意 / 用户要求重开 PM**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = PM + qa-T522 + arch-designer-T522（rd-infra 未拉）；下批需求先 `ensure pm arch-designer rd-fe rd-be qa rd-infra`
 - 口头约束已落盘：项目 `AGENTS.md` 项目约束（ask-me 提问）· PRD §5 BR6 格式禁令 + §9 R5/R6（T519）· ADR 字段口径 = `deliverable-docs.md` §四（T520 · 状态值域 4 值 / 头部 4 字段 / 60 行上限）
 - 需求分支 / PR：见下方「需求分支 / PR / 发布」（本批降级分支 `nao/t4-gate`——待起；T521 的 `nao/release-title-bare` 已 squash 合并并删净）
@@ -84,19 +85,20 @@
 
 | 任务编号 | 目标会话 | 概要 | 排队原因 |
 | :--- | :--- | :--- | :--- |
-| T522-rd | rd-infra-T522 | 落地 wiring：`package.json` scripts 重排 + `run.sh`/`lib.sh` 默认严格 + `T4_REQUIRE_FULL` + 缺陷 A/B 修复 + `tests/README.md` + 文档同步 | **闸门：arch-designer-T522 结构评审回执未到** |
-| T522-qa | qa-T522 | 06 静态契约断言 2 条 + 独立负控 N1–N3 + 复跑复核 | 依赖 rd-infra 先落地（同分支顺序写，禁并发） |
+| T522-arch | arch-designer-T522 | 落盘 ADR（`docs/adr/2026-10-14-npm-test-gate-scope.md`）+ 评审报告（`docs/reports/2026-10-14-T522-arch-review.md`）（用户已授权 D3） | **依赖 rd-infra 先落地**（同分支顺序写） |
+| T522-qa | qa-T522 | 06 静态契约断言 ≥3 条 + 独立负控 N1–N5 + 复跑复核（`done(full)`） | 依赖 rd-infra + arch 落盘完成 |
 
 ## 进行中
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T522-arch | arch-designer-T522 | 结构评审（构建配置 + 门禁语义 + NFR 时长/可移植性 + prepack 解耦 + 递归安全） | 2026-10-14 | AC1–AC9 结构面 | — |
+| T522-rd | rd-infra-T522 | 起分支 `nao/t4-gate` + 落地 wiring（`package.json` 5 script · `run.sh`/`lib.sh` 默认严格 + full 双轴 + 白名单 + 三类参数错误 + preflight 标签 · case 02/07 极性 · `tests/README.md` · release notes + `github-flow.md` 阶段 7 + `tasks-state` ⑫） | 2026-10-14 | AC2–AC7 | 待起 |
 
 ## 已回执待验收
 
 | 任务编号 | 回执摘要（≤150字） | 详情路径 | 待办 |
 | :--- | :--- | :--- | :--- |
+| T522-arch | **`done(full)` 结构评审：有条件可行** —— 采纳 `test` 全量串联 / `prepack`=`test:agents` / 默认严格 / v0.18.0 / npm 不重发 / 需补 ADR；**P1–P6 PRD 修订已落定稿**；新识别第三类假绿（用例收尾）；风险 D1 网络面极性（硬阻塞，已拍板修极性）；只读基线复核 `check` rc=0 · `npm test` rc=0 未含 t4 | `docs/prds/2026-10-14-t4-gate-wiring.md` · intercom 回执（受只读约束未落盘） | 落盘 ADR + 评审报告（已授权，等 rd-infra 回执后执行）|
 
 ## 挂起（被抢占 / 降级）
 
