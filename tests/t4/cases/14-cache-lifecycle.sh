@@ -19,7 +19,7 @@
 #   ⑩–⑬ --list / --preflight / --case 99 / 裸位置参数 ⇒ 净增 0（BR8）
 #   ⑭ mktemp 失败 ⇒ 非 0 退出（BR9）    ⑮ 未进入 run 循环（堵 /fx.XXXXXX 空值续跑）
 #   ⑯–⑱ 收尾孤儿扫描（probe-tmp / probe-mode / probe-user 由本用例自清）
-#   ⑲⑳ 静态契约（AC7/D-2）：清理逻辑单点定义且 run.sh 复用；缓存删除语句全局唯一（lib.sh）
+#   ⑲⑳ 静态契约（AC7/D-2/R-2）：定义单点（含 function 形态）· 删除语句唯一且限 tests/t4 下 *.sh · rm 词边界
 #
 # hermetic：全部操作在私有 TMPDIR（$T4_CACHE_DIR/probe-*）内，不依赖 tmux/tsx/网络/registry；
 #   探针只经 `source lib.sh` + `t4_exit` 驱动 EXIT trap，恒 PASS、不 DEGRADE。
@@ -166,18 +166,23 @@ t4_assert_absent "$PROBE_USER" "⑱ 收尾：probe-user 已自清"
 # ---------------------------------------------------------------- ⑲⑳ 静态契约（AC7 单点实现 · D-2）
 # 不吃死整句提示语：以「函数定义形态」「缓存删除语句形态」计数；期望值用 `|` 拼接，
 # 失败时 t4_assert_eq 会并排打印期望/实际，可直接定位是哪一项不符。
-DEF_ALL="$(grep -rE '^[[:space:]]*t4_cache_cleanup[[:space:]]*\(\)' "$T4_TESTS_DIR" | wc -l | tr -d ' ')"
-DEF_LIB="$(grep -cE '^[[:space:]]*t4_cache_cleanup[[:space:]]*\(\)' "$LIB")"
-RUN_DEF="$(grep -cE '^[[:space:]]*t4_cache_cleanup[[:space:]]*\(\)' "$RUN")"
+# R-2 收紧：① rm 用词边界（防 confirm/form 假命中）；② 计数范围限 tests/t4 下 *.sh（排除 .md 等文档）；
+#           ③ 定义形态同时识别 POSIX `name()` 与 bash `function name`（防漏判假绿）。
+DEF_RE='^[[:space:]]*(t4_cache_cleanup[[:space:]]*\(\)|function[[:space:]]+t4_cache_cleanup([[:space:]]*\(\))?)'
+RM_RE='(^|[^[:alnum:]_])rm([^[:alnum:]_]|$)'
+DEL_RE='rm[[:space:]]+-rf[[:space:]]+--[[:space:]]+"'
+DEF_ALL="$(grep -rE --include='*.sh' "$DEF_RE" "$T4_TESTS_DIR" | wc -l | tr -d ' ')"
+DEF_LIB="$(grep -cE "$DEF_RE" "$LIB")"
+RUN_DEF="$(grep -cE "$DEF_RE" "$RUN")"
 RUN_SRC="$(grep -cE '^[[:space:]]*source[[:space:]]+.*lib\.sh' "$RUN")"
 t4_assert_eq "1|1|0|1" "$DEF_ALL|$DEF_LIB|$RUN_DEF|$RUN_SRC" \
-  "⑲ 单点实现：t4_cache_cleanup 定义仅 1 处且在 lib.sh，run.sh 不重复定义并经 source 复用（def_all|def_lib|run_def|run_src）"
+  "⑲ 单点实现：t4_cache_cleanup 定义（含 function 形态）仅 1 处且在 lib.sh，run.sh 不重复定义并经 source 复用（def_all|def_lib|run_def|run_src）"
 
-DEL_ALL="$(grep -rE 'rm[[:space:]]+-rf[[:space:]]+--[[:space:]]+"' "$T4_TESTS_DIR" | wc -l | tr -d ' ')"
-DEL_LIB="$(grep -cE 'rm[[:space:]]+-rf[[:space:]]+--[[:space:]]+"' "$LIB")"
-RUN_RM="$(grep -cE 'rm[[:space:]]' "$RUN" || true)"
-RUN_GLOB="$(grep -cE 'rm[[:space:]]+.*\*' "$RUN" || true)"
+DEL_ALL="$(grep -rE --include='*.sh' "$DEL_RE" "$T4_TESTS_DIR" | wc -l | tr -d ' ')"
+DEL_LIB="$(grep -cE "$DEL_RE" "$LIB")"
+RUN_RM="$(grep -cE "$RM_RE" "$RUN" || true)"
+RUN_GLOB="$(grep -cE "$RM_RE.*\*" "$RUN" || true)"
 t4_assert_eq "1|1|0|0" "$DEL_ALL|$DEL_LIB|$RUN_RM|$RUN_GLOB" \
-  "⑳ 破坏面唯一：缓存删除语句（rm -rf --）在 tests/t4 内仅 1 处且在 lib.sh，run.sh 无 rm / 无 glob 删除（del_all|del_lib|run_rm|run_glob）"
+  "⑳ 破坏面唯一：缓存删除语句（rm -rf -- 加引号变量）在 tests/t4 下 *.sh 内仅 1 处且在 lib.sh，run.sh 无真 rm / 无 glob 删除（del_all|del_lib|run_rm|run_glob）"
 
 t4_exit
