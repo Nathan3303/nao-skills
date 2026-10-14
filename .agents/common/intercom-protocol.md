@@ -37,6 +37,13 @@ description: pi-intercom 多会话协作协议（常驻引用）
   显式指定时由 `NAO_MODEL_WHITELIST` 在**命令行入口解析阶段**即校验，
   不命中直接 `die`，无部分拉起；PM 只需如实转达用户 `-m` 指定。
 
+## 会话内子代理（授权与回执归属）
+
+- **授权**：角色可在自身 turn 内用 pi-subagents 起**会话内子代理**（scout / researcher / oracle / reviewer / evidence-auditor 等）。默认**只读**；需要写入时须 `worktree: true` 隔离并指定**单一集成者**（父角色），同一 cwd 禁多写。子代理既**不属**舰队会话身份模型 —— 边界与 `status`/`close` 处置**见上文「子代理会话不属舰队会话身份模型」**，此处不重复。
+- **回执归属（硬性）**：子代理的 run 结果**只是证据，不等于回执**；`[编号] done(lite|full)` **只能由父角色**在自行核对后经 intercom `send` 发出（PM 只认父角色 done）。父角色不得把子代理输出直接转贴为回执。
+- **子代理禁令**：子代理**不得以舰队角色名义回执**、**不得发送 `done` 形态消息**、**不得直发 PM**；需决策/阻塞/授权走 `contact_supervisor`（进程内 native 通道，无需 pi-intercom；父侧对应用 `subagent_supervisor`）。
+- **证据格式**：子代理产物须含**命令 + exit code + 例数/文件数（或断言数）+ 路径**，供父角色写入回执「测试」栏；无证据的「完成」不算证据。注入文本见 `@.agents/templates/pi-subagents/intercom-bridge.md`（安装说明见同目录 `README.md`）。
+
 ## 开工前自检（派发闸门）
 
 派发前跑一次：
