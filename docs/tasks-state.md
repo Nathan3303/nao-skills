@@ -8,6 +8,7 @@
 
 > 本区是 PM 的**悬空状态**（任务状态见下方五栏）；重开后逐行回读确认（当前阶段 · 未决决策 · 口头约束）。
 
+- 🔄 **T527 批次开工（2026-10-14 · 台账 ⑧ = T512-③）**：用户选定 ⑧（**角色→子代理 agent 的单一事实**）。已过三关：PRD `docs/prds/2026-10-14-role-agents-runtime-registration.md`（待派发）· **QA 实测复核 `done(full)`**（**引用式薄壳 B 实测不可行**：`@` 在子代理 system prompt 不被展开；发现序（legacy 项目 `.agents/**` 会被扫、`.agents/skills` 子树排除、包仅认 manifest）；`name`+`description` 均必填；项目/项目包代理受 trust 门控；`tools: []` 解析坑）+ **arch 结构评审 `done(full)`**（六候选对比 → **采候选 ⑤ 运行时注册扩展 E-lite**；A 静态副本≈复制 40,582 B 且带不了机器相关锚点 / C settings 字面串漂移反向 / F 卡片即 agent 违 AC8 `cases/06`；E 机制已用假 `pi.events` 总线实证 6 条注册）· 开工卡 **D1–D6 全拍板**（做 E-lite + M1 前置探针 / tools 不设 / `nao-<role-id>` 不 advertise / 采纳 `NAO_ROLE_AGENTS=off` / v0.18.5 PATCH + 重发 / 降级 `nao/role-agents` + 授权 arch 落盘 ADR）。**在飞** = rd-infra-T527（**M1 前置探针 → 实施**）。
 - ✅ **T526 交付闭环（2026-10-14 · v0.18.4 已发布 · 含 npm 重发已核验）**：**子代理协作口径落地** —— 新增 `.agents/templates/pi-subagents/intercom-bridge.md`（**G1 回执归属 / G2 身份禁令 / G3 证据格式** 三条硬性；走 `contact_supervisor`；**不含 `{orchestratorTarget}`**）+ 同目录 `README.md` 安装说明（两条命令 + 相对路径 config + `/subagents-doctor`）· 协议新增小节「会话内子代理（授权与回执归属）」四条（**只指针** T525 行）· 新增 `tests/t4/cases/16-intercom-bridge.sh`（只读 Node 探针，44 断言）+ `run.sh` 注册 `"16"`。**验收 = 通过（AC2–AC7 全过）**：QA 独立复跑 **GO**（`check` rc=0 ×2 · roles=6 · **files 46→48** · `npm test` rc=0 · 100s · **16/16 PASS · 断言 360→404** · SKIP=0/DEGRADE=0 · 空载 `test:t4:full` rc=0 · 基线 `git archive main` 复算 360）+ 契约四查（G1–G3 语义在位 / 占位符 0 命中 / 协议只指针 / 探针未断上游文案）+ 负控四态（M-A/M-B/M-C/M-D 均中目标 + md5 还原）+ 能力门（pi-subagents 缺失或内部路径变动 ⇒ SKIP）· PR [#44](https://github.com/Nathan3303/nao-skills/pull/44) squash **`2a10e23`**（main 恰 1 条 · 无 `wip()` · 分支删净）· QA 报告 70 行 · **tag `v0.18.4` + Release 已发**（发布提交 `463f507` · **AC9 自证：标题严格 = `v0.18.4`**）· **npm 0.18.4 重发已核验**（用户执行 · `latest = 0.18.4` + `dist.integrity` 与本地 tarball **逐字节一致**（`sha512-rzP9tuEu…` · 134,484 B））。**残差**：R1 case16 与上游内部路径/3 导出名硬耦合（升版漂移 fail-loud）· R2 F 依赖上游默认 `mode=always`（均低危，建议后续「探针健壮性」小项）。
 - 🔄 **T526 批次开工（2026-10-14 · 台账待裁量项 ⑦ = T512-②）**：用户「继续未完成的任务」⇒ T512 余项先做 ⑦（**nao 版子代理桥指令 + 协议「会话内子代理」条款**）。已过三关：PRD `docs/prds/2026-10-14-intercom-bridge-instructions.md`（待派发）· **QA 接缝 + 0.78.0 复现 `done(full)`**（**关键更正**：T512「自动桥整条死」前提**已过期** —— 零配置下 `doctor` 即 `bridge: active` / `mode: always` / target = 父会话名；`subagent_supervisor`/`contact_supervisor` 均不依赖 pi-intercom ⇒ 本批收敛为补 **G1 回执归属沉默 / G2 无身份禁令 / G3 无证据契约** 三个语义差距 + 采 **C1** 只读 Node 探针 `cases/16`）· 开工卡 **D1–D5 全拍板**（按 PRD / 不用 `{orchestratorTarget}` / 说明落模板同目录 README / v0.18.4 PATCH + 重发 / 降级 `nao/intercom-bridge`；**arch 跳过**）。**在飞** = rd-infra-T526 落地中。
 - ✅ **T525 交付闭环（2026-10-14 · v0.18.3 已发布 · 含 npm 重发已核验）**：**子代理会话不属舰队会话身份模型**从偶然成立变显式契约 —— `cmd_close` 解析最前锚首 `subagent-*` 显式拒绝（只判 `$target`、`--force` 不旁路、不触任何 pane）· `status` `subagent_in_field` + 派生节末独立汇总行（N=0 不打印、只计数不列名）· **E2** `roster_pane_claims()` 条目感知（只改 `unattributed_pi_panes`；`fallback_pane_for` claimed 保持含子代理）· `check_alias_resolution` 折入 `subagent-` 保留前缀校验（id+alias）· 新增 `cases/15`（T1–T10）· `intercom-protocol.md` 边界指针 · ADR 49 行 + arch 报告 76 行 + QA 两份报告（recon 37 / verify 66）。**验收 = 通过（AC2–AC8 全过）**：QA 独立复跑 **GO**（`check` rc=0 ×2 · roles=6 files=46 · `npm test` rc=0 · 108s · **15/15 PASS · 断言 313→360** · SKIP=0/DEGRADE=0/NOTE=2 · 空载 `test:t4:full` rc=0）+ 独立探针 **36/36** + 两条负控（M-A ⇒ 恰 T8 2 条；M-B ⇒ 恰 T3×2+T4×1）+ 紧凑 JSON 名册不塌缩 · PR [#43](https://github.com/Nathan3303/nao-skills/pull/43) squash **`fbddd0d`**（main 恰 1 条 · 无 `wip()` · 分支删净）· **tag `v0.18.3` + Release 已发**（发布提交 `181e0f3` · **AC9 自证：标题严格 = `v0.18.3`**）· **npm 0.18.3 重发已核验**（用户执行 · `latest = 0.18.3` + `dist.integrity` 与本地 tarball **逐字节一致**（`sha512-UjGFdSG…` · 131,465 B））。
@@ -24,12 +25,12 @@
 - ✅ **T521 交付闭环（2026-10-14 · v0.17.3）**：GitHub Release 标题口径 = 裸 `vX.Y.Z` —— 权威单处 `common/release-notes.md` §一.5 硬约束 + §四清单 + §五红线 · 两处引用收敛（`github-flow.md:56` / PM 卡 :121）并指回单处 · PM 卡 **v24→v25** · 模板注释 1 行（6 分段标题未动）· 一次性只读探针 `PASS=28 FAIL=0` + 负控 2/2 · QA 独立复跑 **GO** · squash `eff44ec` · tag + Release 已发（发布提交 `4d97f00` · **AC9 自证：标题严格 = `v0.17.3`**）· **npm 重发 0.17.3 已核验**（`latest` + integrity 逐字节）。
 - ✅ **T520 交付闭环（2026-10-14 · v0.17.2）**：ADR 文档契约 —— 必写 5 节 + 可选 3 节（参考来源恒末）· 头部恰 4 字段 · 状态值域 4 值 · 禁写/下沉清单 · 新增 `templates/adr.md.example` + `adr-index.md.example` · `arch-designer` 卡 v11→v12 · QA 探针 `PASS=53 FAIL=0` + 负控 2/2 · squash `160cc60` · tag + Release 已发（`9833344`）· **npm 不重发**。
 
-- 当前阶段：**全部批次闭环**（T526 → **v0.18.4 已交付并发布**（tag + Release 已发（发布提交 `463f507`）· **npm 重发已核验** `latest=0.18.4`）；T525 → v0.18.3；更早批次已归档）· PR [#44](https://github.com/Nathan3303/nao-skills/pull/44) squash `2a10e23` · **剩余动作 = T526 派生会话回收**
-- 当前 PRD：`docs/prds/2026-10-14-intercom-bridge-instructions.md`（状态：**已交付并发布**）
-- 未决决策点：无（D1–D5 已拍板；arch 跳过已记理由；npm 重发已完成并核验）
-- 待用户回答：无
-- 未派发队列：见下方「待派发队列」（共 0 项）
-- 下次唤醒条件：**npm 重发核验 / 下批需求授意 / 用户要求重开 PM**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = PM + rd-infra-T526 + qa-T526（**发布闭环后 `close --task T526` 回收**）
+- 当前阶段：**T527 实施中**（⑧ 角色 agent 运行时注册 · 降级批次 `nao/role-agents`）：PRD 已成稿 + QA 实测/arch 结构评审均完成 + 开工卡已拍板 → **rd-infra-T527 落地中**（先 M1 零 LLM 可达性探针，通过后实施；下一步：arch 落盘 ADR/报告 → qa 独立复核 + live 实证）；上批 T526（v0.18.4）已闭环发布
+- 当前 PRD：`docs/prds/2026-10-14-role-agents-runtime-registration.md`（状态：**待派发→实施中**）
+- 未决决策点：无（D1–D6 已拍板；M1 探针失败则按 D1 转 D 并回报）
+- 待用户回答：无（npm 重发已拍 = 发布时重发 0.18.5）
+- 未派发队列：见下方「待派发队列」（共 2 项：① `arch-designer-T527` 落盘 ADR + 评审报告（等 rd-infra 回执，同分支顺序写）；② `qa-T527` 独立复核 + live 实证 + 报告）
+- 下次唤醒条件：**rd-infra 回执（含 M1 结果）/ 下批需求授意 / 用户要求重开 PM**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = PM + arch-designer-T527 + qa-T527 + rd-infra-T527
 - 口头约束已落盘：项目 `AGENTS.md` 项目约束（ask-me 提问）· PRD §5 BR6 格式禁令 + §9 R5/R6（T519）· ADR 字段口径 = `deliverable-docs.md` §四（T520 · 状态值域 4 值 / 头部 4 字段 / 60 行上限）
 - 需求分支 / PR：见下方「需求分支 / PR / 发布」（本批降级分支 `nao/t4-gate`——**已 squash 合并 `e8a495b` 并删净**）
 - 会话体检：当前 PM 会话 = `01a13817`（pane %31），T522 全批 ctx 5%→16%（闭批时约 160k/1000k · 无压缩）· 舰队 = 仅 PM（派生已回收） · 本快照为接续唯一事实源（main = `85606e9`）
@@ -131,11 +132,14 @@
 
 | 任务编号 | 目标会话 | 概要 | 排队原因 |
 | :--- | :--- | :--- | :--- |
+| T527-arch | arch-designer-T527 | 落盘 ADR `2026-10-14-role-agents-runtime-registration.md` + `docs/reports/2026-10-14-T527-arch-review.md` + ADR 索引一行（已授权） | **依赖 rd-infra 先落地**（同分支顺序写） |
+| T527-qa | qa-T527 | 独立复核（装配字节/锚点 cross-assert/命名双向/假总线 schema/幂等/三态负控）+ **一次 live 实证**（真 pi 会话 `subagent list` 见 6 项 + `inheritProjectContext` 是否被 honor）+ 报告 | 依赖 arch 落盘完成 |
 
 ## 进行中
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| T527-rd | rd-infra-T527 | **M1 零 LLM 前置探针 → 实施**：新增 `.agents/extensions/nao-role-agents.mjs`（纯装配 + 薄 glue）+ `package.json` `pi.extensions` + `check` 断言 + `tests/t4/cases/17-role-agents.sh` + `run.sh` 注册 `"17"` + `tests/README.md` + `docs/releases/v0.18.5.md` | 2026-10-14 | AC2–AC8 | 待起 |
 
 ## 已回执待验收
 
