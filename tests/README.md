@@ -18,11 +18,13 @@ npm run test:t4:full                           # 发布前置双轴（= 上面�
 ```
 
 - **默认严格**：`T4_ALLOW_MISSING` 默认 `0` —— 依赖的 T2 产物缺失即 FAIL；宽松模式**只有显式 `T4_ALLOW_MISSING=1`** 才启用（缺产物记 BLOCKED）。
-- **`T4_REQUIRE_FULL=1`**（与上者正交，只管 SKIP 轴）：汇总层 SKIP 计数必须为 `0`，含从用例输出解析的 `[SKIP]` / `SKIP:` 行；NOTE 允许并计数。发布用 `npm run test:t4:full`（SKIP=0 才算通过）。
-- **SKIP/NOTE 计数可见**：汇总尾部打印 `SKIP: N 例 · M 条` 与 `NOTE: K 条`；「绿 + N SKIP」不得表述为「全量通过」。
+- **`T4_REQUIRE_FULL=1`**（与上者正交，只管 SKIP/DEGRADE 轴）：汇总层 **SKIP 计数 + DEGRADE 计数必须均为 `0`** —— SKIP 含从用例输出解析的**行首** `[SKIP]` / `SKIP:` 行；DEGRADE 为能力降级标记。NOTE 允许并计数。发布用 `npm run test:t4:full`。
+- **`test:t4:full` 能力要求**：`pi` CLI · tmux · bwrap · strace · npm registry 可达。缺任一即产生 DEGRADE/SKIP ⇒ **full rc≠0**（这正是 full 的意义：要求能力齐备）；默认 `npm test` 不因能力缺失变红。
+- **DEGRADE 语义**：环境缺能力但**其余断言继续跑**（不同于 `t4_skip` 会终止用例）；默认模式豁免、`T4_REQUIRE_FULL=1` 时计分。
+- **计数可见**：汇总尾部打印 `SKIP=n · DEGRADE=m · NOTE=k`；「绿 + N SKIP/DEGRADE」不得表述为「全量通过」。
 - **安装包内不适用**：`tests/` 不入 npm tarball，在消费者机器上 `npm test` 因缺 `tests/t4` 而 rc≠0，属预期（见 `docs/releases/v0.18.0.md`）。
 
-退出码：`0` 全 PASS/SKIP · `1` 有 FAIL / 参数错误 / 未识别状态（MISSING、NOT_RUN） / (full) 有 SKIP · `2` 有 BLOCKED（仅宽松模式）。
+退出码：`0` 全 PASS/SKIP（DEGRADE 默认豁免）· `1` 有 FAIL / 参数错误 / 未识别状态（MISSING、NOT_RUN） / (full) 有 SKIP 或 DEGRADE · `2` 有 BLOCKED（仅宽松模式）。
 参数错误（`--case` 缺值 / `--case` 无匹配 / 裸位置参数）一律 rc=1，不得静默全跑。
 
 ## 用例
