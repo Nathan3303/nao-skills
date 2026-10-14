@@ -156,6 +156,7 @@
 | T4-发布后核验 | **验收通过**：真实安装 `@nathan33/nao-skill@0.12.0` exit 0 · 落盘/pin 正确 · 项目足迹仅 2 文件 · 注册 skill **恰 2** collision **0**（stdout/stderr 双查）· shim `check` exit 0；发布 tarball **48 文件 / 109 211 B / sha256 `8c6b530a…`** 与 tag `v0.12.0` 本地 pack **逐字节一致** · `tests/`+`docs/` 零泄漏 · 包内 `pi.skills`=2 无 `pi.prompts` | `docs/reports/2026-10-08-T4-postpublish-verify.md` | **PM 已独立复核**（自算 sha256=一致、文件数=48、白名单无泄漏、包内 manifest） |
 | T0-复核 | **验收通过 · GO**：F1/F2/F5 按建议落实、无新回归；AC1「注册数==2」不变式与 BR5 守住；独立复跑 7/7 · 94 断言 + 定向夹具（F1 末位属性/单行压缩两边界；F2 双路径 + 共享 `nue-ui-dev` 保留）；与 rd-infra 证据交叉核**无分歧** | PR #20 [comment](https://github.com/Nathan3303/nao-skills/pull/20#issuecomment-6058492163) | 新发现（低）：单行压缩 lock 下文本级删条**静默跳过去重** → 已追记 **#21 F7**；另（非阻塞）建议固化 F1/F2 回归断言 → 已在 T4-复跑 要求中 |
 
+| **T519** | **验收通过 · 已合并归档**（v0.17.1）：台账瘦身 + 历史下沉 —— `tasks-state` **231→83 行**（−64.1%）· 新增 `docs/tasks-archive.md` 217 行（历史快照 · 非权威）· AC1–AC8 全过（AC4 七条：28 历史 id 判 `active` = 0 · G1 在飞 id 仍 `active` · G2 归档墙 `closed` · G3 五标题各 1）· **QA 三次独立复核全 GO**（接缝 → 落地 → 补丁）· 探针 `PASS=11 FAIL=0`（基线 `PASS=8 FAIL=1`，正是它暴露 T511a/b/c 被误判为进行中）· 门禁 `check` rc0 roles=6 files=44 · `npm test` rc0 · t4 12/12 · squash `1486a8e`（main 恰 1 条 · 无 `wip()` · 分支删净）· **tag `v0.17.1` + Release 已发**（发布提交 `87193be` · npm 不重发） | PR [#37](https://github.com/Nathan3303/nao-skills/pull/37) · 降级批次（无 Issue） · PRD `docs/prds/2026-10-14-tasks-state-slim.md` · 探针 `docs/reports/2026-10-14-T519-ac4-probe.sh` | **已知边界**：4 条 >120 字符新写行（NFR 未入 AC）· 披露-2（4 条运行态字段行未逐字留档）· **教训**：`gh pr merge --match-head-commit` 须**完整 40 位 sha** |
 ## 8. 已闭环批次附录 · T507（迁移前 L173–L190）
 
 ## 已闭环批次 · T507：nao-todo-server 迁移（**已验收并合并**）
@@ -218,3 +219,4 @@
 
 > 迁移核对（T519 回执留痕）：本档承接快照区历史条目 **26** 条（逐条见 §1）· 快照区附录 2 节（§2）· 「需求分支 / PR / 发布」历史 10 行（§3）· 待派发历史指针 5 行（§4）· 进行中已闭环遗留 6 行 + 说明块 9 行（§5）· 已回执历史 20 行 + 注意事项 1 行（§6）· 已验收旧行 **22** 行（§7）· T507 / T508+侦察结论+通用既定口径 两附录（§8/§9）。
 > 轮换补入（T520 批次终态）：§7 新增 T518 行 ⇒ §7 = **23** 条。
+> 轮换补入（T521 批次终态）：§7 新增 T519 行 ⇒ §7 = **24** 条。

@@ -1,6 +1,6 @@
 # PRD：GitHub Release 标题口径（裸版本号，去描述性文本）
 
-- 状态：**已开工**（实施中）· Owner：PM · 更新：2026-10-14
+- 状态：**已交付并发布（v0.17.3）** · Owner：PM · 更新：2026-10-14
 - 指针：上游 = 用户 2026-10-14 指示（「修改 Github 发布模板，标题不要带有描述性文本，仅 vxx.xx.xx」）+ 同轮 ask-me 拍板（范围 = 只改约定不回改历史 · 方式 = 降级批次走 GitHub Flow · D1 = 重发 npm 0.17.3）· 成熟度判定 = 命中 §一.4「用户明示可直接成稿」· **QA 接缝复核** = 2026-10-14 `done(full)`（改定 1 + 补 3 断言 + AC7 裁定 (a)）
 - 优先级：中（发布口径固化 · 低成本高杠杆）· 战略筛子：命中「机制一致性」→ 做 · MoSCoW：Should · Kano：期望型质量属性 · RICE ≈13.5（附录）
 
@@ -70,7 +70,7 @@
 - **AC6（负向闭环 · 不误伤）**：Given 探针负控，When 注入旧占位语副本，Then 断言 FAIL；When 核正文规范关键词（「本次更新」/「技术细节」），Then 仍存在。**负控须在 `mktemp -d` 临时副本上跑（不得改工作区），探针收尾断言 `git status --short` 为空。**
 - **AC7（异常 · 降级路径）**：**PM 裁定 (a)（不动范围）** —— Given 既有降级口径，When 核 `skills/github-flow.md:71` 降级表行，Then 该行**仍在**（回归保护）+ 全 `.agents/` 未新增对 `gh` 的硬依赖表述（探针加 1 条断言）；权威单处 `release-notes.md` 本批**不**新增 `git tag -a` 行。
 - **AC8（一致性闸门）**：Given PRD 接缝与 QA 用例范围，When 比对，Then 一致；不一致则 PM 验收打回。
-- **AC9（发布自证 · 首个实证）**：Given 本批发布，When 读 Release，Then 标题**严格等于** `v0.17.3`（无描述文本）。**不属预合入接缝**：发版后由 PM 人工读取核验，探针不覆盖（QA 照实说明）。
+- **AC9（发布自证 · 首个实证）**：✅ **已自证（2026-10-14）** —— `gh release view v0.17.3` 的 `name` 严格等于 `v0.17.3`（`gh release list` 首行亦为 `v0.17.3`）。**不属预合入接缝**：发版后由 PM 人工读取核验，探针不覆盖（QA 照实说明）。
 
 ## 八、上线闭环
 
@@ -82,8 +82,9 @@
 ## 九、变更治理
 
 - **流程**：降级批次 `nao/release-title-bare`（无 Issue）→ PR → QA 只读验证 → PM 验收 → RD squash 合并 → PM 发 tag/Release → PRD 归档。
-- **版本记录**：PRD 落 `docs/prds/2026-10-14-release-title-bare-version.md`，闭环后补 `docs/prds/README.md` 索引；运行时状态记 `docs/tasks-state.md`。
-- **角色卡广播**：`card pm v25` 本仓广播 + 下游三仓唤醒后补发（原待补发的 v24 项顺延合并为 **v25**）。
+- **版本记录**：PRD 落 `docs/prds/2026-10-14-release-title-bare-version.md`（✅ 已归档并登记索引）；运行时状态记 `docs/tasks-state.md`（T521 已入「已验收 / 已归档」，T519 已下沉 `docs/tasks-archive.md` §7）。
+- **交付记录**：PR [#39](https://github.com/Nathan3303/nao-skills/pull/39) squash 合并 `eff44ec`（main 恰 1 条 · 无 `wip()` · 分支删净）· 发布提交 `4d97f00` · tag `v0.17.3` + Release 已发（**标题 = `v0.17.3`**）· `package.json`/README pin 已升 0.17.3 · **npm 0.17.3 重发待用户执行**（成功判据 = registry 实测）。
+- **角色卡广播**：`card pm v25` 本仓已发（2026-10-14）+ 下游三仓唤醒后补发（原待补发的 v24 项顺延合并为 **v25**）。
 
 ## 附：RICE 与依据
 

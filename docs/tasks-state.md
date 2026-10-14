@@ -8,27 +8,32 @@
 
 > 本区是 PM 的**悬空状态**（任务状态见下方五栏）；重开后逐行回读确认（当前阶段 · 未决决策 · 口头约束）。
 
-- ✅ **PM 交接收尾（2026-10-14 · 用户拍板重开 · T520 批次终态）**：T520 **全链路闭环**（PRD → arch 结构定稿 → rd-infra 落地 → QA 独立验证 → squash `160cc60` → tag `v0.17.2` + Release（`9833344`）→ 台账归档），**无在飞任务、无未决决策**。新 PM `01a137a8`（pane %26）**已按交接回读确认 3 行**（ask-me · 用户「确认无误，进入待命」），旧 pm `01a13661`（%15）已自收窗，**舰队无派生会话残留**（实测 `list` 仅本会话）。**唯一待办** = 下游三仓（nao-todo / nao-todo-server / nue-ui）PM 会话唤醒后补发广播 `card pm v24` / `card qa v14`（T518 批遗留）+ `card arch-designer v12`（T520 批）——**触发条件 = 目标会话在线且 `idle`，发前 `list` 核验并留痕**（本仓侧均已发）。
+- ✅ **PM 交接收尾（2026-10-14 · 用户拍板重开 · T520 批次终态）**：T520 **全链路闭环**（PRD → arch 结构定稿 → rd-infra 落地 → QA 独立验证 → squash `160cc60` → tag `v0.17.2` + Release（`9833344`）→ 台账归档），**无在飞任务、无未决决策**。新 PM `01a137a8`（pane %26）**已按交接回读确认 3 行**（ask-me · 用户「确认无误，进入待命」），旧 pm `01a13661`（%15）已自收窗，**舰队无派生会话残留**（实测 `list` 仅本会话）。**唯一待办** = 下游三仓（nao-todo / nao-todo-server / nue-ui）PM 会话唤醒后补发广播 `card pm v25`（T518/T521 批累计，原 v24 被 T521 取代）/ `card qa v14`（T518 批遗留）+ `card arch-designer v12`（T520 批）——**触发条件 = 目标会话在线且 `idle`，发前 `list` 核验并留痕**（本仓侧均已发）。
+- ✅ **T521 交付闭环（2026-10-14 · v0.17.3）**：GitHub Release 标题口径 = 裸 `vX.Y.Z` —— 权威单处 `common/release-notes.md` §一.5 硬约束 + §四清单 + §五红线 · 两处引用收敛（`github-flow.md:56` / PM 卡 :121）并指回单处 · PM 卡 **v24→v25** · 模板注释 1 行（6 分段标题未动）· 一次性只读探针 `PASS=28 FAIL=0` + 负控 2/2 · QA 独立复跑 **GO** · squash `eff44ec` · tag + Release 已发（发布提交 `4d97f00` · **AC9 自证：标题严格 = `v0.17.3`**）· **npm 重发 0.17.3（用户执行 · 待核）**。
 - ✅ **T520 交付闭环（2026-10-14 · v0.17.2）**：ADR 文档契约 —— 必写 5 节 + 可选 3 节（参考来源恒末）· 头部恰 4 字段 · 状态值域 4 值 · 禁写/下沉清单 · 新增 `templates/adr.md.example` + `adr-index.md.example` · `arch-designer` 卡 v11→v12 · QA 探针 `PASS=53 FAIL=0` + 负控 2/2 · squash `160cc60` · tag + Release 已发（`9833344`）· **npm 不重发**。
 
 - 当前阶段：**T521 实施中**（发布标题口径 → 裸 `vX.Y.Z` · 降级批次 `nao/release-title-bare`）：**T521-接缝已确认**（QA `done(full)` 2026-10-14）→ rd-infra 落地中；上批 T520（v0.17.2）已闭环发布
 - 当前 PRD：`docs/prds/2026-10-14-release-title-bare-version.md`（状态：**待开工确认**）
 - 未决决策点：无（D1 **已拍板** = 重发 npm 0.17.3；AC7 **已裁定 (a)** 不动范围）；PR Reviewer = qa（已落开工卡）
 - 待用户回答：无
+- 当前阶段：**全部批次闭环**（T521 → v0.17.3 已交付并发布 · PR #39 `eff44ec`；T520 → v0.17.2；更早批次已下沉 `docs/tasks-archive.md`）
+- 当前 PRD：`docs/prds/2026-10-14-release-title-bare-version.md`（状态：**已归档**）
+- 未决决策点：无（D1 = 重发 npm 0.17.3 已拍板；AC7 已裁定 **(a)**）· PR Reviewer = qa（无法 `gh --reviewer` 指派 → 结论走 intercom）
+- 待用户回答：无。**唯一待用户执行动作** = `npm publish` 0.17.3（成功判据 = registry 实测，非 `PUT 202`）
 - 未派发队列：见下方「待派发队列」（共 0 项）
-- 下次唤醒条件：**下批需求授意 / 用户要求重开 PM**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = **仅本 PM 会话**（无派生残留 · 无待回收）；下批需求先 `ensure pm arch-designer rd-fe rd-be qa rd-infra`
+- 下次唤醒条件：**下批需求授意 / 用户要求重开 PM**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = 仅本 PM 会话（T521 派生会话已回收）；下批需求先 `ensure pm arch-designer rd-fe rd-be qa rd-infra`
 - 口头约束已落盘：项目 `AGENTS.md` 项目约束（ask-me 提问）· PRD §5 BR6 格式禁令 + §9 R5/R6（T519）· ADR 字段口径 = `deliverable-docs.md` §四（T520 · 状态值域 4 值 / 头部 4 字段 / 60 行上限）
-- 需求分支 / PR：见下方「需求分支 / PR / 发布」（降级分支 `nao/doc-templates`）
-- 会话体检：当前 PM 会话 = **重开后的 `01a137a8`（pane %26）**，交接回读时 ctx ≈2%（20.2k/1000k · 无压缩）· 旧 pm `01a13661`（%15 · ctx 15% · 149k/1000k）已自收窗 · 舰队无派生会话残留 · 本快照为接续唯一事实源（main = v0.17.2 发布提交 `9833344`）
+- 需求分支 / PR：见下方「需求分支 / PR / 发布」（降级分支 `nao/release-title-bare`——已 squash 合并并删净）
+- 会话体检：当前 PM 会话 = `01a137a8`（pane %26），T521 全程 ctx ≈ 7%→（交接时 20.2k/1000k · 无压缩）· 旧 pm 已自收窗 · 舰队无派生会话残留（T521 派生已回收）· 本快照为接续唯一事实源（main = v0.17.3 发布提交 `4d97f00`）
 
 ## 需求分支 / PR / 发布（PM 维护）
 
 - Issue：**无（降级批次 T521）** —— 摘要见 `docs/prds/2026-10-14-release-title-bare-version.md`
-- 需求分支：`nao/release-title-bare`（base `main` = `f0c3d63`；**待 RD 创建**）
-- PR owner / Reviewer：rd-infra / qa（独立只读探针 · 开工确认卡落定）
-- PR：**待开** · 预览环境：无
-- 合并：**待验**（要求 main 恰 1 条 · 无 `wip()` · 分支删净）
-- 版本 / Tag：**v0.17.3（PATCH）** —— 待发（AC9 = Release 标题严格等于 `v0.17.3`）· npm 重发与否 = **D1 待拍板**
+- 需求分支：`nao/release-title-bare`（base `main` = `832459d`；**已 squash 合并 `eff44ec` 并删净**）
+- PR owner / Reviewer：rd-infra / qa（GitHub 侧无 `qa` 账号 ⇒ `--reviewer` 指派失败，QA 结论走 intercom `GO` 2026-10-14）（独立只读探针 · 开工确认卡落定）
+- PR：[#39](https://github.com/Nathan3303/nao-skills/pull/39)（**已 MERGED** · squash `eff44ec`）· 预览环境：无
+- 合并：**已 squash 合并**（main 恰 1 条 · 无 `wip()` · 分支已删）
+- 版本 / Tag：**v0.17.3（PATCH）** —— tag + Release **已发**（发布提交 `4d97f00`）· **AC9 已自证**（`gh release view` name == `v0.17.3`）· **npm 重发 0.17.3（用户执行 · 待核）**（`package.json`/README pin 已升 0.17.3）
 - 降级标注：无 Issue · 无预览环境
 - 特例提交（白名单）：合并须显式 `--subject "<用户可读主题>" --match-head-commit <完整 40 位 sha>`（T511 教训沿用）
 
@@ -87,7 +92,7 @@
 
 | 任务编号 | 结论 | 详情路径 | 备注 |
 | :--- | :--- | :--- | :--- |
+| **T521** | **验收通过 · 已合并归档**（v0.17.3）：Release 标题口径 = 裸 `vX.Y.Z` —— 权威单处 `release-notes.md` §一.5 + §四清单 + §五红线 · 两处引用收敛（`github-flow.md:56` / PM 卡 :121）并指回单处 · PM 卡 **v24→v25** · 模板注释 1 行（6 分段标题未动）· 一次性只读探针 `PASS=28 FAIL=0` + 负控 2/2 · `check` rc0 roles=6 files=46 + `npm test` rc0 · QA 独立复跑 **GO** · PR [#39](https://github.com/Nathan3303/nao-skills/pull/39) squash `eff44ec`（main 恰 1 条 · 无 `wip()` · 分支删净）· **tag `v0.17.3` + Release 已发**（发布提交 `4d97f00` · **AC9 自证：标题严格 = `v0.17.3`**）· **npm 重发 0.17.3（用户执行 · 待核）** | PR [#39](https://github.com/Nathan3303/nao-skills/pull/39) · 降级批次（无 Issue）· PRD `docs/prds/2026-10-14-release-title-bare-version.md` · 探针 `docs/reports/2026-10-14-T521-release-title-probe.sh` | 裁定：AC6 偏差**采纳**（探针自身除外 + raw 回显）· AC7 **(a)** 不动范围 · N1 探针一次性（含行号/`files` 计数 ⇒ 勿作长期门禁）· N2 `npm test` 未含 `tests/t4/`（另批）· Reviewer 无法指派（无 `qa` 账号）结论走 intercom · `card pm v25` 广播：本仓已发 · 下游三仓待唤醒补发 |
 | **T521-接缝** | **接缝确认（2026-10-14 · QA `done(full)`）**：候选够用、接缝数不增；**改定 1 处**（补 `npm test` = 项目全范围门禁）+ **补 3 条断言**（AC3 反删除 / AC4 补 `updated` / AC5 补分段标题）· AC7 二选一 → **PM 裁定 (a)**（不动范围，观测点改 `github-flow.md:71` 防回归） | `docs/prds/2026-10-14-release-title-bare-version.md` §七 | 只读复核，未改文件 · QA 二次验证按改定接缝执行 |
 | **T520** | **验收通过 · 已合并归档**（v0.17.2）：ADR 文档契约（骨架单源 + 职责下沉 + 索引模板）—— 必写 5 节 + 可选 3 节（参考来源恒末）· 头部恰 4 字段 · 状态值域 4 值 · 禁写/下沉清单 → `docs/reports/<编号>-arch-review.md` · 60 行上限保留（仅新增件断言）· 9 文件（2 新增模板 + 3 机制文件 + 索引 + 首实例 ADR + 评审报告 + 探针）· **QA 独立只读探针 `PASS=53 FAIL=0`**（`--fast` 46/0/4）· 负控 2/2（禁词注入 / 节序打乱均 FAIL）· `check` rc0 roles=6 **files 44→46** · `npm test` rc0 · t4 12/12 · squash `160cc60`（main 恰 1 条 · 无 `wip()` · 分支删净）· **tag `v0.17.2` + Release 已发**（发布提交 `9833344` · npm 不重发） | PR [#38](https://github.com/Nathan3303/nao-skills/pull/38) · 降级批次（无 Issue）· PRD `docs/prds/2026-10-14-doc-templates-convention.md` · 首实例 ADR `docs/adr/2026-10-14-adr-structure-contract.md` · 探针 `docs/reports/2026-10-14-T520-doc-contract-probe.sh` | 角色卡 `arch-designer` **v11→v12**（广播已发本仓；下游三仓待补发）· 历史 7 篇 ADR 零改动（不追溯）· 边界：`check` 的 `files` 只统计 `.agents/**`；探针一次性不入 `tests/` |
-| **T519** | **验收通过 · 已合并归档**（v0.17.1）：台账瘦身 + 历史下沉 —— `tasks-state` **231→83 行**（−64.1%）· 新增 `docs/tasks-archive.md` 217 行（历史快照 · 非权威）· AC1–AC8 全过（AC4 七条：28 历史 id 判 `active` = 0 · G1 在飞 id 仍 `active` · G2 归档墙 `closed` · G3 五标题各 1）· **QA 三次独立复核全 GO**（接缝 → 落地 → 补丁）· 探针 `PASS=11 FAIL=0`（基线 `PASS=8 FAIL=1`，正是它暴露 T511a/b/c 被误判为进行中）· 门禁 `check` rc0 roles=6 files=44 · `npm test` rc0 · t4 12/12 · squash `1486a8e`（main 恰 1 条 · 无 `wip()` · 分支删净）· **tag `v0.17.1` + Release 已发**（发布提交 `87193be` · npm 不重发） | PR [#37](https://github.com/Nathan3303/nao-skills/pull/37) · 降级批次（无 Issue） · PRD `docs/prds/2026-10-14-tasks-state-slim.md` · 探针 `docs/reports/2026-10-14-T519-ac4-probe.sh` | **已知边界**：4 条 >120 字符新写行（NFR 未入 AC）· 披露-2（4 条运行态字段行未逐字留档）· **教训**：`gh pr merge --match-head-commit` 须**完整 40 位 sha** |
-> 更早批次（T518 及以前）见 `docs/tasks-archive.md`。
+> 更早批次（T519 及以前）见 `docs/tasks-archive.md`。
