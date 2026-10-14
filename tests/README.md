@@ -20,6 +20,7 @@ npm run test:t4:full                           # 发布前置双轴（= 上面�
 - **默认严格**：`T4_ALLOW_MISSING` 默认 `0` —— 依赖的 T2 产物缺失即 FAIL；宽松模式**只有显式 `T4_ALLOW_MISSING=1`** 才启用（缺产物记 BLOCKED）。
 - **`T4_REQUIRE_FULL=1`**（与上者正交，只管 SKIP/DEGRADE 轴）：汇总层 **SKIP 计数 + DEGRADE 计数必须均为 `0`** —— SKIP 含从用例输出解析的**行首** `[SKIP]` / `SKIP:` 行；DEGRADE 为能力降级标记。NOTE 允许并计数。发布用 `npm run test:t4:full`。
 - **`test:t4:full` 能力要求**：`pi` CLI · tmux · bwrap · strace · npm registry 可达。缺任一即产生 DEGRADE/SKIP ⇒ **full rc≠0**（这正是 full 的意义：要求能力齐备）；默认 `npm test` 不因能力缺失变红。
+- **用例 13 的额外能力依赖**：④（名册可用且为空的反向断言）与 ⑤（`offline_verifiable` 判据三处）需要 `tsx`（跑名册探针夹具）；缺失时这两组记 `[DEGRADE]`（默认豁免、`test:t4:full` 计分），其余断言照跑。①②③⑥ 只依赖 bash + 本仓脚本，无额外能力。
 - **DEGRADE 语义**：环境缺能力但**其余断言继续跑**（不同于 `t4_skip` 会终止用例）；默认模式豁免、`T4_REQUIRE_FULL=1` 时计分。
 - **计数可见**：汇总尾部打印 `SKIP=n · DEGRADE=m · NOTE=k`；「绿 + N SKIP/DEGRADE」不得表述为「全量通过」。
 - **安装包内不适用**：`tests/` 不入 npm tarball，在消费者机器上 `npm test` 因缺 `tests/t4` 而 rc≠0，属预期（见 `docs/releases/v0.18.0.md`）。
@@ -43,6 +44,7 @@ npm run test:t4:full                           # 发布前置双轴（= 上面�
 | 10 | T510 migrate 收尾：shim 判定式 / 开关 / 单行 lock 去重 | AC4 · BR5 · #21 | `migrate` / `init` |
 | 11 | 宿主阶梯 / 失败语义 / 非 tmux 句柄 | AC1–AC14 · T513 | 无（桩驱动 + 真 tmux） |
 | 12 | 派生会话 tmux 落点：宿主窗口显式寻址（含幂等/同源） | AC1–AC7 · T517 | 无（真 tmux 隔离 socket + 桩 pi；无 tmux 则 SKIP） |
+| 13 | `close` 末段在线判定护栏：不可验证 ⇒ 非静默失败（双侧极性 + 判据三处） | AC2–AC8 · T523 | `tsx`（名册探针夹具，缺则 ④⑤ DEGRADE）；①②③⑥ 无依赖 |
 
 ## 设计要点
 
