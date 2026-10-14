@@ -1,6 +1,7 @@
 # PRD：子代理会话内协作口径（nao 版 `intercomBridge.instructionFile` + 协议条款）
 
-- 状态：**待派发（开工已确认 2026-10-14）** · Owner：PM · 更新：2026-10-14
+- 状态：**已交付并合并（待发布 v0.18.4）** · Owner：PM · 更新：2026-10-14
+- **验收记录** = 2026-10-14 PM 验收**通过（AC2–AC7 全过）**：PR [#44](https://github.com/Nathan3303/nao-skills/pull/44) squash **`2a10e23`**（main 恰 1 条 · 无 `wip()` · 分支删净）· QA 独立复跑 **GO**（`check` rc=0 ×2（roles=6 · files 48）· `npm test` rc=0 · 100s · **16/16 PASS · 断言 360→404** · SKIP=0/DEGRADE=0/NOTE=2 · 空载 `test:t4:full` rc=0）+ 契约四查 + 负控四态（含 QA 自建 M-D）+ 能力门实测 · 验收评论见 PR #44
 - 开工确认卡（2026-10-14 · ask-me 用户拍板 5 项）：D1 范围 = **按 PRD**（模板 + 同目录安装说明 + 协议小节 + `cases/16` 探针 + 文档；**安装器留 ⑨**）· D2 占位符 = **不用 `{orchestratorTarget}`**（走 `contact_supervisor`）· D3 安装说明落点 = **模板同目录 `README.md`**（协议小节给指针）· D4 版本/npm = **v0.18.4（PATCH）+ 发布时重发**（用户执行 `npm publish`）· D5 立项 = **降级 `nao/intercom-bridge`**（无 Issue）· **arch 评审 = 跳过**（Q1 选按 PRD ⇒ 无安装器 ⇒ 无机制语义变更，QA 判定不需要）
 - 指针：上游 = 用户 2026-10-14「**继续未完成的任务**」⇒ 台账 **⑦（= T512-②）** · 来源证据 `docs/reports/2026-10-12-pi-subagents-compat-review.md` §4.1（协议/角色卡补「会话内子代理」条款）+ §4.2（nao 版 `intercomBridge.instructionFile` 模板）· 成熟度判定 = 命中 `pm-to-spec.md` §一.4 · **QA 接缝复核** = 2026-10-14 `done(full)`：**T512「自动桥整条死」的前提在 pi-subagents 0.78.0 已过期**（默认 `bridge: active`）⇒ 本批收敛为「**补 nao 语义差距（G1–G3）+ 落模板 + 补协议条款 + 机械探针**」，采 **C1**
 - 优先级：中（协作口径固化 · 低成本 · 零运行时代码）· 战略筛子：命中「机制完整性 / 协作语义」→ 做 · MoSCoW：Should · Kano：期望型 · RICE ≈7.2（附录）
@@ -82,7 +83,7 @@
 - **AC4（边界 · 配置 schema）**：Given 合法与非法 `intercomBridge` 配置样例，When 探针走 pi-subagents 的校验路径，Then 合法（`mode`∈{off,always,fork-only} · `instructionFile` 字符串 · `resultDelivery` 布尔）被接受、非法被拒（BR4/BR6）。
 - **AC5（异常 · 能力门）**：Given `pi-subagents` 缺失环境，When 跑用例 16，Then `t4_skip`（不 FAIL、不计 DEGRADE）；Given 正常环境，Then 用例在册且 PASS（BR6/BR7）。
 - **AC6（负向闭环 · 非空转）**：Given 模板被改坏（删 G1 条款 / 加回 `{orchestratorTarget}` / 删证据格式段），When 跑用例 16，Then 对应用例 FAIL 且指名缺项；还原后全绿（附 md5 证据）。
-- **AC7（设计一致性 · 文档与门禁）**：Given 交付终态，When 跑全范围门禁，Then `check` rc=0（roles=6 · files=46）· `npm test` rc=0 · `16` 在册 · 断言只增不减（基线 **360**）· `tests/README.md` 有用例 16 行与能力说明 · `docs/releases/v0.18.4.md` 已落盘 · `docs/tasks-state.md` ⑦ 收口。
+- **AC7（设计一致性 · 文档与门禁）**：Given 交付终态，When 跑全范围门禁，Then `check` rc=0（roles=6 · **files=48**；46→48 = +2 模板文件，**验收期已订正**）· `npm test` rc=0 · `16` 在册 · 断言只增不减（基线 **360**）· `tests/README.md` 有用例 16 行与能力说明 · `docs/releases/v0.18.4.md` 已落盘 · `docs/tasks-state.md` ⑦ 收口。
 
 ## 八、上线闭环
 
@@ -98,6 +99,8 @@
 - **实现分工（同分支顺序写，禁并发）**：① **rd-infra** 落模板 + 安装说明 + 协议小节 + `cases/16` + `run.sh` 注册 + `tests/README.md` + `docs/releases/v0.18.4.md` → 回执；② **qa** 独立复核（探针 + 模板改坏三态负控 + 配置 schema 接受/拒绝 + 能力门）+ 报告 `docs/reports/2026-10-14-T526-qa-verify.md` → `done(full)`。
 - **架构评审闸门**：**跳过**（QA 判定：纯模板/协议/文档 + t4 探针，无机制脚本语义变更；**唯一例外** = 若采纳「配置安装器」则须 arch —— 本批已把它列入非范围/留给 ⑨）。
 - **版本记录**：PRD 落 `docs/prds/2026-10-14-intercom-bridge-instructions.md`（本文件；归档时登记 `docs/prds/README.md`）；运行时状态记 `docs/tasks-state.md`（⑦ 收口）。
+- **交付记录**：PR [#44](https://github.com/Nathan3303/nao-skills/pull/44) squash **`2a10e23`**（main 恰 1 条 · 无 `wip()` · 分支删净）· RD 1 条 + QA 1 条 `wip(T526)` 提交（7 文件 / +283 −2）· 模板 + 安装说明 + 协议小节 + `cases/16`（44 断言）+ `run.sh` 注册 + `tests/README.md` + release notes · QA 报告 `docs/reports/2026-10-14-T526-qa-verify.md`（70 行）· 无 ADR（arch 跳过）· 未 bump 版本（发布节点 PM 执行）。
+- **本批残差（已记录）**：**R1** `cases/16` 与 pi-subagents **内部路径 + 3 个导出名**硬耦合 ⇒ 升版漂移时 fail-loud（FAIL 而非 SKIP；不违 BR6 字面）· **R2** `cases/16` 的 F 断言依赖上游默认 `mode=always` 语义 · **O-2** 发布前置闸门首跑出现 case 11（T513 冻结实体）AC12 F1- 两条偶发 FAIL，同环境单跑 `--case 11` 与空载重跑全量均 rc=0（定性为非回归；发布口径 = 遇 FAIL 先复现单例再重跑全量）。
 - **待裁量项**：本批关闭 ⑦；维持 ⑧⑨（T512 余项）· ⑫后半 · ①–⑤ 更早遗留 · O-1。
 
 ## 附：RICE 与依据
