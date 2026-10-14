@@ -1,9 +1,10 @@
 # PRD：tests/t4 接入 `npm test` 门禁（补 1874 行 `nao-fleet.sh` 的机械护栏）
 
-- 状态：**已交付并合并（待发布 v0.18.0）** · Owner：PM · 更新：2026-10-14
+- 状态：**已交付并发布（v0.18.0）** · Owner：PM · 更新：2026-10-14
 - 开工确认卡（2026-10-14 · ask-me 用户拍板 5 项）：D1 范围 = **全纳入**（接线 + 默认严格 + full 入口 + 门禁可信度缺陷 A/B 修复）· D2 严格默认 = **翻转 `run.sh`/`lib.sh` 默认**（宽松改显式 `T4_ALLOW_MISSING=1`）· D3 立项 = **降级批次 `nao/t4-gate`**（无 Issue）· D4 版本 = **v0.18.0（MINOR）** · D5 闸门 = **采纳**（开工确认后、派发前送 arch-designer 结构评审）
 - 开工确认卡·二轮（2026-10-14 · arch 评审后 ask-me 拍板 5 项）：D1 网络面 = **修极性**（case 02/07 外部不可达/未成功启动 → SKIP/NOTE；仅「拿到真实输出但内容不符」判 FAIL）· D2 范围微扩 = **全批准**（三类参数错误 + 06 第 3 条断言 + N4/N5 负控 + `--preflight` 标签修正）· D3 ADR = **授权 arch 落盘**（`docs/adr/2026-10-14-npm-test-gate-scope.md` + 评审报告）· D4 npm = **默认不重发**（发布节点再终拍）· D5 网络中断 = **继续推进本地实现**（`github.com:443` 超时中，push/PR 待恢复）
 - **验收记录** = 2026-10-14 PM 验收**通过（AC1–AC9 全过）**：PR [#40](https://github.com/Nathan3303/nao-skills/pull/40) squash **`e8a495b`**（main 恰 1 条 · 无 `wip()` · 分支删净）· QA 独立复跑 **GO**（`npm test` rc=0 · 12 例 · **PASS 266 / FAIL 0 / SKIP 0 / DEGRADE 1 / NOTE 2** · `test:t4:full` 本机 rc=1（期望语义）/ 能力齐备 rc=0）· 验收中三处口径订正（AC5 措辞 / AC6 含 DEGRADE / AC7 ≥266）· 验收评论见 PR #40
+- **发布记录** = 2026-10-14 **v0.18.0（MINOR）已发布**：发布提交 `1600450`（pin 升 0.18.0）· **tag `v0.18.0` + Release 已发**（**AC9 自证：`gh release view` name = `v0.18.0`** · `gh release list` 首行 Low）· **发布前置 `test:t4:full` rc=0**（用户安装 `strace` 后 PM 实测：PASS 267 / FAIL 0 / SKIP 0 / DEGRADE 0 / NOTE 2 · 1m40s）· **npm 不重发**（用户拍板：`tests/` 不入包，消费者侧 `npm test` 本不可用）
 - **arch 结构评审** = 2026-10-14 arch-designer `done(full)`：结构**有条件可行** —— 采纳「`test` 全量串联 / `prepack`=`test:agents` / 默认严格 / v0.18.0 / npm 不重发 / 需补 ADR」；**6 处修订 P1–P6 已落本稿** + 新识别**第三类假绿**（用例不以 `t4_exit|t4_skip|exec` 收尾仍可 rc=0）
 - 指针：上游 = 用户 2026-10-14 选定批（由 T521 QA 备注 N2 引出：「`npm test` = `check + tsc`，未跑 `tests/t4/run.sh`」）+ 同轮 ask-me 回执「按此推进」· 成熟度判定 = 命中 §一.4「用户明示可直接成稿」· **QA 接缝复核** = 2026-10-14 `done(full)`（采纳 C1 接缝 + C2 形态；改定 4 处 = `prepack` 剥离 t4 · 默认严格 · 补 full 入口 · 门禁可信度缺陷 A/B 必须前置修复）
 - 优先级：**中高**（本批产出即「唯一机械门禁」的可信度）· 战略筛子：命中「机制护栏 / 低成本高杠杆」→ 做 · MoSCoW：**Must** · Kano：基本型（无护栏 = 缺陷）· RICE ≈10.8（附录）
@@ -96,7 +97,7 @@
 - **灰度**：不适用（本仓内部门禁，无运行面灰度）。
 - **回滚**：改回 `package.json` 三行 + `run.sh`/`lib.sh` 默认值并发下一 PATCH；已 push tag 不删。
 - **npm 重发**：**默认不重发**（D4 拍板；发布节点再终拍）—— `package.json` 在 tarball 内改动可见，但 `tests/` 不入包 ⇒ 消费者侧 `npm test` 本就不可用，重发无收益；**记版本漂移**（repo `0.18.0` / registry `0.17.3`）并在 release notes「技术细节」明写「安装包内 `npm test` 不适用（rc≠0 属预期）」（P6）。
-- **发布门禁（本批新增）**：`npm run test:t4:full` 须 **rc=0**（`github-flow.md` 阶段 7；判据 = SKIP + DEGRADE 计数均为 0）。**本机缺 `strace` ⇒ 该闸门 rc=1（期望语义，非回归）** ⇒ 发布节点由用户拍板：装 `strace` 使闸门转绿（`sudo pacman -S strace`），或**明确授权「门禁例外」发布**（须记入 release notes 技术细节 + 台账，不得静默降级）。
+- **发布门禁（本批新增 · 已实证 rc=0）**：`npm run test:t4:full` 须 **rc=0**（`github-flow.md` 阶段 7；判据 = SKIP + DEGRADE 计数均为 0）。发布期实测：用户安装 `strace` 后 **rc=0 · PASS 267 / FAIL 0 / SKIP 0 / DEGRADE 0 / NOTE 2**。缺能力时的替代路径 = 用户明确授权「门禁例外」发布（须记 release notes + 台账，不得静默降级）—— 本批**未走此路**。
 - **监控**：不适用（本地门禁）；唯一指标 = `npm test` rc + t4 用例/断言/SKIP/NOTE 数字。
 
 ## 九、变更治理
