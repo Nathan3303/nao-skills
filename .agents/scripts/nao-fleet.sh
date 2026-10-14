@@ -243,8 +243,14 @@ check_roles_indent() {
 check_alias_resolution() {
   local rc=0 ga gr
   local -A owner=()
+  # T525 BR6/AC7：`subagent-` 前缀保留给 pi-subagents 子代理会话 —— canonical id 与 alias **都不得占用**
+  # （否则 status/close 的排除面会吃掉该角色）。折入本函数（唯一枚举点，避第二处遍历漂移），
+  # 与缩进/别名唯一性各自累积 rc。
   while IFS=$'\t' read -r ga gr; do
     [[ -n "$ga" && -n "$gr" ]] || continue
+    if [[ "$ga" == subagent-* ]]; then
+      printf '  ✗ 角色 id/别名 %s 以 subagent- 开头（该前缀保留给 pi-subagents 子代理会话，nao 不接管）\n' "$ga"; rc=1
+    fi
     if [[ -n "${owner[$ga]:-}" && "${owner[$ga]}" != "$gr" ]]; then
       printf '  ✗ 别名 %s 跨角色重名：%s 与 %s\n' "$ga" "${owner[$ga]}" "$gr"; rc=1
     fi
@@ -261,11 +267,14 @@ check_alias_resolution() {
         for (i=1;i<=n;i++){ gsub(/^[[:space:]]+|[[:space:]]+$/, "", a[i]); if(a[i]!="") print a[i] "\t" c }
       }' "$MANIFEST")
   for gr in "${ROLE_ORDER[@]}"; do
+    if [[ "$gr" == subagent-* ]]; then
+      printf '  ✗ 角色 id/别名 %s 以 subagent- 开头（该前缀保留给 pi-subagents 子代理会话，nao 不接管）\n' "$gr"; rc=1
+    fi
     if [[ "${owner[$gr]:-}" != "$gr" ]]; then
       printf '  ✗ 角色 %s 的 canonical id 未登记于 aliases（BR2：canonical 须可解析为自身）\n' "$gr"; rc=1
     fi
   done
-  (( rc == 0 )) && printf '  ✓ 别名解析守卫：全部别名可解析且无跨角色重名\n'
+  (( rc == 0 )) && printf '  ✓ 别名解析守卫：全部别名可解析且无跨角色重名 + 无 subagent- 保留前缀\n'
   return $rc
 }
 
@@ -606,6 +615,17 @@ derived_in_field() {  # <name> → 派生名列表（每行一个；空 = 无）
   done < <(visible_session_names)
 }
 
+# 子代理会话计数（T525）：与 derived_in_field 同源（visible_session_names，已去重）中锚首 `subagent-` 者。
+# 子代理（pi-subagents）不属舰队会话身份模型 —— status 只计数不列名；生命周期归 pi-subagents，nao 不回收。
+# BR6 前缀精确：`subagent-*` 不匹配 `subagentfoo` / 裸 `subagent` / `mysubagent-x`。
+subagent_in_field() {  # → echo 子代理会话数（0..N）
+  local n c=0
+  while IFS= read -r n; do
+    [[ "$n" == subagent-* ]] && c=$((c + 1))
+  done < <(visible_session_names)
+  printf '%s\n' "$c"
+}
+
 # screen 会话精确令牌（T516 F1/F2 · arch 评审）：从 `screen -ls` 取**精确** nao-<名> 会话的 `pid.name` 令牌。
 # 与 running()/close 检测同一锚定（名字后必须是空白或行尾；`\b` 在派生名的 "-" 处仍成立，故不用）。
 # 检测与销毁共用本 helper ⇒ 检测锚与销毁目标不会漂移；**取不到令牌即空，调用方不得 quit**（宁不回收，也不误伤派生）。
@@ -661,12 +681,27 @@ visible_session_names() {
   } | awk -F'\t' 'NF {print $1}' | awk '!seen[$0]++'
 }
 
+# 名册「条目感知」pane 认领集（T525 E2）：name↔tmuxPane 配对后**过滤** `^subagent-` 条目 ⇒ 每行一个 pane。
+# 兼容紧凑/pretty 两种 JSON：`sed 's/},/}\n/g'` 先按对象边界切行（纯状态机 awk 在紧凑单行名册里会因
+# 贪婪匹配塌缩成末条 ⇒ 假告警）；取值法与 intercom_pane_for 的逐条目取法同源。
+# ⚠ 仅用于 unattributed_pi_panes：fallback_pane_for 的 claimed 语义是「该 pane 已被占用」（含子代理），
+#   排除会致兜底**误认领父 pane**（D-A 已裁定，见 PRD §三.4）。
+roster_pane_claims() {  # → 被非子代理会话认领的 pane_id（每行一个；rc 恒 0）
+  intercom_list_json 2>/dev/null | sed 's/},/}\n/g' | awk '
+    /"name":[[:space:]]*"/     { s=$0; sub(/.*"name":[[:space:]]*"/,"",s);     sub(/".*/,"",s); n=s }
+    /"tmuxPane":[[:space:]]*"/ { s=$0; sub(/.*"tmuxPane":[[:space:]]*"/,"",s); sub(/".*/,"",s); p=s
+                                 if (p != "" && n !~ /^subagent-/) print p }
+  ' || true
+}
+
 # 未能归属到任何会话名的 pi pane（标题不符契约且名册无 tmuxPane 记录）：
 # 输出 pane_id<TAB>pane_title；供 status 做「非静默」提示（不假装看不到）。
+# T525 E2：claimed 用 roster_pane_claims（条目感知、排除 `^subagent-`）⇒ 仅被子代理继承 tmuxPane 的孤儿
+# pane 回到「无法归属会话名」告警（BR8 非静默优先）。
 unattributed_pi_panes() {
   command -v tmux >/dev/null 2>&1 || return 0
   local claimed p tt
-  claimed="$(intercom_list_json 2>/dev/null | sed -n 's/.*"tmuxPane":[[:space:]]*"\([^"]*\)".*/\1/p')" || claimed=""
+  claimed="$(roster_pane_claims)" || claimed=""
   while IFS=$'\t' read -r p tt; do
     [[ -n "$p" ]] || continue
     grep -qxF "$p" <<< "$claimed" && continue
@@ -1560,6 +1595,10 @@ cmd_status() {
   done < <(visible_session_names)
   (( found )) || echo '  （无）'
   [[ -f "$TASKS_STATE" ]] || echo "  （$TASKS_STATE 不存在，残留判定已跳过）"
+  # T525：子代理会话（pi-subagents）不属舰队会话身份模型 —— 派生节后独立一行、只计数不列名、N=0 不打印（BR3/BR6）。
+  local nsub
+  nsub="$(subagent_in_field)"
+  (( nsub > 0 )) && printf '  · 另有 %d 个子代理会话（subagent-*）· 生命周期由 pi-subagents 管理，nao 不回收\n' "$nsub"
   # 标题被改写/无名的 pi pane：非静默——显式列出，供人工核对
   local -a orph=()
   local pn pt
@@ -1577,6 +1616,12 @@ cmd_status() {
 cmd_close() {
   local force="$1" task="$2" target="${3:-}"
   [[ -n "$target" ]] || die "close 需要目标：角色别名或派生会话名（如 rd-be / rd-be-T1 / qa-T1）"
+  # T525 BR1/BR2/BR4：子代理会话显式拒绝 —— 判定**只针对 $target 位置名**（`close --task subagent-x qa`
+  # 是合法派生 qa-subagent-x，不得误杀）；锚首 glob（`subagentfoo`/裸 `subagent` 不匹配）；`--force` 不旁路；
+  # die 于任何 pane 定位/捕获/kill 之前 ⇒ 父 pane 必存活（父+子共用 tmuxPane 亦然）。
+  if [[ "$target" == subagent-* ]]; then
+    die "拒绝回收 $target：这是 pi-subagents 子代理会话（subagent-*），其生命周期不归 nao 回收（请用 pi-subagents 的 stop / retention 管理）"
+  fi
   local name repo cls bus pane pids st tgt a best="" stok
   intercom_list_json >/dev/null 2>&1 || true   # 预热名册缓存
 
