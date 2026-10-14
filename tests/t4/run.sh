@@ -18,7 +18,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 
-CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12" "13")
+CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12" "13" "14")
 CASE_TITLES=(
   "主路径足迹 + check exit=0（AC1）"
   "设计一致性：注册 skill 数==2 且无 collision（AC1/AC6）"
@@ -33,6 +33,7 @@ CASE_TITLES=(
   "宿主阶梯 / 失败语义 / 非 tmux 句柄（#26）"
   "派生会话 tmux 落点：宿主窗口显式寻址（T517 · AC1–AC7）"
   "close 末段在线判定护栏：不可验证 ⇒ 非静默失败（T523 · AC2–AC8）"
+  "夹具缓存生命周期：成功清理 / 失败保留 / 用户目录永不删（T524 · BR3–BR10）"
 )
 
 mode="run"; only=""; arg_err=""
@@ -61,17 +62,16 @@ fi
 
 if [ -n "$arg_err" ]; then
   printf '参数错误: %s\n' "$arg_err" >&2
-  printf '用法: bash tests/t4/run.sh [--list | --preflight | --case <01-13>]\n' >&2
+  printf '用法: bash tests/t4/run.sh [--list | --preflight | --case <01-14>]\n' >&2
   exit 1
 fi
 
-export T4_CACHE_DIR="${T4_CACHE_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/nao-t4.XXXXXX")}"
 export T4_ROOT="$ROOT"
 export T4_ALLOW_MISSING="${T4_ALLOW_MISSING:-0}"
 export T4_REQUIRE_FULL="${T4_REQUIRE_FULL:-0}"
 
 if [ "$mode" = "list" ]; then
-  printf 'T4 用例清单（PRD #18 · 夹具缓存 %s）\n' "$T4_CACHE_DIR"
+  printf 'T4 用例清单（PRD #18）\n'
   for i in "${!CASE_IDS[@]}"; do
     printf '  %s  %s\n' "${CASE_IDS[$i]}" "${CASE_TITLES[$i]}"
   done
@@ -84,16 +84,22 @@ if [ "$mode" = "preflight" ]; then
   printf '  包版本            : %s\n' "$(node -p "require('$ROOT/package.json').version" 2>/dev/null || echo '?')"
   printf '  bin/nao-skill.js  : %s\n' "$([ -f "$ROOT/bin/nao-skill.js" ] && echo 存在 || echo 缺失)"
   for sub in init migrate exec; do
-    if bash -c "source '$HERE/lib.sh'; t4_cli_supports '$sub'" 2>/dev/null; then st=已交付; else st='未交付(T2 pending)'; fi
+    if bash -c "T4_CACHE_NO_CREATE=1 source '$HERE/lib.sh'; t4_cli_supports '$sub'" 2>/dev/null; then st=已交付; else st='未交付(T2 pending)'; fi
     printf '  CLI %-8s      : %s\n' "$sub" "$st"
   done
   printf '  package.json pi   : %s\n' "$(node -p "(require('$ROOT/package.json').pi)?'有 manifest':'无 manifest(T2 pending)'" 2>/dev/null || echo '?')"
   printf '  shim 源脚本       : %s\n' "$([ -f "$ROOT/.agents/scripts/nao-fleet.sh" ] && echo 存在 || echo 缺失)"
-  printf '  bwrap 网络隔离    : %s\n' "$(bash -c "source '$HERE/lib.sh'; t4_bwrap_available && echo 可用 || echo 不可用")"
-  printf '  strace connect    : %s\n' "$(bash -c "source '$HERE/lib.sh'; t4_strace_available && echo 可用 || echo 不可用")"
+  printf '  bwrap 网络隔离    : %s\n' "$(bash -c "T4_CACHE_NO_CREATE=1 source '$HERE/lib.sh'; t4_bwrap_available && echo 可用 || echo 不可用")"
+  printf '  strace connect    : %s\n' "$(bash -c "T4_CACHE_NO_CREATE=1 source '$HERE/lib.sh'; t4_strace_available && echo 可用 || echo 不可用")"
   printf '  pi CLI            : %s\n' "$(command -v pi >/dev/null 2>&1 && echo 可用 || echo 缺失)"
   exit 0
 fi
+
+# 夹具缓存创建下移到早退之后（BR8）：--list/--preflight/参数错误均已 exit，不建目录。
+# 单点清理逻辑复用 lib.sh（BR10）：source 时创建 $T4_CACHE_DIR 并装 EXIT trap（失败非 0 退出，BR9）。
+# T4_CACHE_NO_CREATE 仅供 --preflight 的 `source lib.sh` 子进程使用，run 路径须忽略可能继承的值。
+unset T4_CACHE_NO_CREATE
+source "$HERE/lib.sh"
 
 declare -A results
 
@@ -146,18 +152,36 @@ done
 printf '  ---\n'
 printf '  SKIP=%d · DEGRADE=%d · NOTE=%d\n' "$skip_cases" "$degrade_lines" "$note_lines"
 printf '  （SKIP 含用例内 [SKIP]/SKIP: 行；DEGRADE=能力降级，默认豁免、full 计分；NOTE 允许）\n'
-printf '缓存目录: %s\n' "$T4_CACHE_DIR"
-if [ "$fail" = "1" ]; then
-  printf 'RESULT: FAIL（存在 FAIL / MISSING / NOT_RUN / 未识别状态）\n'
+
+# 最终 rc 与三态 disposition 先算好，保证打印与磁盘实况一致（BR6）：
+# 清理在 EXIT trap 内执行（BR5），此处预告 disposition，退出后即为实况。
+final_rc=0
+if [ "$fail" = "1" ]; then final_rc=1
+elif [ "$blocked" = "1" ]; then final_rc=2
+elif [ "$T4_REQUIRE_FULL" = "1" ] && [ "$((skip_cases + degrade_lines))" -gt 0 ]; then final_rc=1
+fi
+if [ "${T4_CACHE_OWNED:-0}" != "1" ]; then
+  disposition="用户提供 · 不删"
+elif [ "${T4_KEEP_CACHE:-0}" = "1" ]; then
+  disposition="已保留（T4_KEEP_CACHE=1）"
+elif [ "$final_rc" = "0" ]; then
+  disposition="已清理"
+else
+  disposition="已保留：失败证据"
+fi
+printf '缓存目录: %s（%s）\n' "$T4_CACHE_DIR" "$disposition"
+
+if [ "$final_rc" = "1" ]; then
+  if [ "$fail" = "1" ]; then
+    printf 'RESULT: FAIL（存在 FAIL / MISSING / NOT_RUN / 未识别状态）\n'
+  else
+    printf 'RESULT: FAIL（T4_REQUIRE_FULL=1 且 SKIP=%d + DEGRADE=%d >0 —— 发布前置要求两者均为 0）\n' "$skip_cases" "$degrade_lines"
+  fi
   exit 1
 fi
-if [ "$blocked" = "1" ]; then
+if [ "$final_rc" = "2" ]; then
   printf 'RESULT: BLOCKED（T2 产物缺失；仅宽松 T4_ALLOW_MISSING=1 下出现）\n'
   exit 2
-fi
-if [ "$T4_REQUIRE_FULL" = "1" ] && [ "$((skip_cases + degrade_lines))" -gt 0 ]; then
-  printf 'RESULT: FAIL（T4_REQUIRE_FULL=1 且 SKIP=%d + DEGRADE=%d >0 —— 发布前置要求两者均为 0）\n' "$skip_cases" "$degrade_lines"
-  exit 1
 fi
 printf 'RESULT: PASS（SKIP=%d · DEGRADE=%d · NOTE=%d）\n' "$skip_cases" "$degrade_lines" "$note_lines"
 exit 0
