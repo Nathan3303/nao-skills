@@ -9,7 +9,8 @@
 #
 # 退出码约定（用例脚本）：
 #   0  = PASS      1  = FAIL      77 = SKIP（环境能力缺失）   78 = BLOCKED（依赖的 T2 产物未交付）
-# 依赖物缺失时默认 BLOCKED（T4_ALLOW_MISSING=1）；T2 回执后以 T4_ALLOW_MISSING=0 严格复跑，缺失即 FAIL。
+# 默认严格：依赖物缺失即 FAIL。仅显式 T4_ALLOW_MISSING=1 时降级为 BLOCKED（宽松）。
+# T4_REQUIRE_FULL=1（发布前置）：汇总层 SKIP 计数必须为 0，与 T4_ALLOW_MISSING 正交。
 set -uo pipefail
 
 T4_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,9 +20,10 @@ T4_ROOT="${T4_ROOT:-$(cd "$T4_TESTS_DIR/.." && pwd)}"
 PKG_NAME="@nathan33/nao-skill"
 PKG_VERSION="$(node -p "try{require('${T4_ROOT}/package.json').version}catch(e){'0.0.0'}" 2>/dev/null || echo 0.0.0)"
 T4_CACHE_DIR="${T4_CACHE_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/nao-t4.XXXXXX")}"
-T4_ALLOW_MISSING="${T4_ALLOW_MISSING:-1}"
+T4_ALLOW_MISSING="${T4_ALLOW_MISSING:-0}"
+T4_REQUIRE_FULL="${T4_REQUIRE_FULL:-0}"
 T4_TARBALL="${T4_TARBALL:-}"
-export T4_ROOT PKG_NAME PKG_VERSION T4_CACHE_DIR T4_ALLOW_MISSING T4_TARBALL
+export T4_ROOT PKG_NAME PKG_VERSION T4_CACHE_DIR T4_ALLOW_MISSING T4_REQUIRE_FULL T4_TARBALL
 
 T4_FAIL=0
 T4_RC=0
@@ -53,7 +55,7 @@ t4_skip() {
   exit 77
 }
 
-# 依赖的 T2 产物缺失：宽松模式=BLOCKED(78)，严格模式=FAIL(1)
+# 依赖的 T2 产物缺失：默认严格=FAIL(1)；仅 T4_ALLOW_MISSING=1 宽松模式=BLOCKED(78)
 t4_blocked() {
   if [ "$T4_FAIL" -gt 0 ]; then
     t4_bad "前置缺失且已有断言未过：$1"
@@ -61,7 +63,7 @@ t4_blocked() {
   fi
   if [ "$T4_ALLOW_MISSING" = "1" ]; then
     printf 'BLOCKED: %s\n' "$1"
-    printf '（该产物由 T2 交付；T2 回执后设 T4_ALLOW_MISSING=0 复跑，缺失即判 FAIL）\n'
+    printf '（宽松模式 T4_ALLOW_MISSING=1；默认严格模式下缺失即判 FAIL）\n'
     exit 78
   fi
   t4_bad "前置缺失（strict 模式）：$1"
