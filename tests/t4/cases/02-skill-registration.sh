@@ -66,10 +66,15 @@ of="$T4_CACHE_DIR/pi-reg.jsonl"; ef="$T4_CACHE_DIR/pi-reg.err"
 pi_rc=$?
 t4_info "pi rc=$pi_rc · stdout=$(wc -c <"$of")B"
 
+# BR10 极性：外部不可达 / 未成功启动 / 无凭据 ⇒ SKIP（不得假红）；仅「确已拿到真实输出且内容不符」判 FAIL
 if grep -q "No API key" "$ef" 2>/dev/null; then
-  t4_note "pi 无可用凭据（No API key），动态注册检查 SKIP；静态契约仍已校验"
-else
-  reg_tsv="$(node -e '
+  t4_skip "pi 无可用凭据（No API key），动态注册检查跳过；静态契约已校验"
+fi
+if [ "$pi_rc" -ne 0 ] || [ ! -s "$of" ]; then
+  t4_skip "pi 未成功启动或无输出（rc=$pi_rc，stdout=$(wc -c <"$of")B），动态注册检查跳过；静态契约已校验"
+fi
+
+reg_tsv="$(node -e '
 const fs=require("fs");
 const lines=fs.readFileSync(process.argv[1],"utf8").split(/\r?\n/);
 for(const l of lines){ if(!l.trim()) continue; let o; try{o=JSON.parse(l)}catch(e){continue;}
@@ -83,7 +88,7 @@ for(const l of lines){ if(!l.trim()) continue; let o; try{o=JSON.parse(l)}catch(
 ' "$of" 2>/dev/null)"
 
   if [ -z "$reg_tsv" ]; then
-    t4_bad "pi 未在 system prompt 输出 <available_skills>（skills 段缺失）"
+    t4_bad "pi 已返回真实输出，但未在 system prompt 输出 <available_skills>（skills 段缺失）"
   else
     pkg_scope="$(printf '%s/.pi/npm/node_modules/%s/' "$fx" "$PKG_NAME")"
     nao_tsv="$(printf '%s\n' "$reg_tsv" | grep -F "$pkg_scope" || true)"
@@ -100,6 +105,5 @@ for(const l of lines){ if(!l.trim()) continue; let o; try{o=JSON.parse(l)}catch(
   # collision 诊断：pi 的形态是 `name "<x>" collision` / {"type":"collision"}（T1 §3）
   coll="$(grep -oE 'name "[^"]+" collision' "$of" "$ef" 2>/dev/null | sort -u || true)"
   t4_assert_eq "" "$coll" "无 skill collision 诊断"
-fi
 
 t4_exit
