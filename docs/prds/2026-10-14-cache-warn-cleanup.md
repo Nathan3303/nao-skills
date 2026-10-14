@@ -1,6 +1,7 @@
 # PRD：`--force` 文案订正 + t4 夹具缓存生命周期自洽（遗留小项合并批）
 
-- 状态：**待派发（开工已确认 2026-10-14）** · Owner：PM · 更新：2026-10-14
+- 状态：**已交付并合并（待发布 v0.18.2）** · Owner：PM · 更新：2026-10-14
+- **验收记录** = 2026-10-14 PM 验收**通过（AC1–AC8 全过）**：PR [#42](https://github.com/Nathan3303/nao-skills/pull/42) squash **`e83ced2`**（main 恰 1 条 · 无 `wip()` · 分支删净）· QA 独立复跑 **GO（终）**（`check` rc=0 roles=6 files=46 · `npm test` rc=0 · 106.7s · **14/14 PASS · 断言 282→313** · SKIP=0/DEGRADE=0/NOTE=3 · 空载 `test:t4:full` rc=0）+ ⑯ 双向变异（各恰 2 条 FAIL）+ ⑮ 25+ 守卫探针 + 存量 129→0 · 验收评论见 PR #42
 - 开工确认卡（2026-10-14 · ask-me 用户拍板 5 项）：D1 范围 = **按 QA 定稿**（⑯ 删净子句 + `cases/13` 双向断言 · ⑮ S1 + mode 感知 + env 逃生口 + 三态文案 + `mktemp` 失败非 0 · 新增 `cases/14` · 存量 X2）· D2 npm = **发布时重发 0.18.2**（⑯ 在包内 ⇒ 用户执行 `npm publish`；registry 将从 0.17.3 直接跳 0.18.2）· D3 版本 = **v0.18.2（PATCH）** · D4 立项 = **降级 `nao/cache-warn-cleanup`**（无 Issue）· D5 存量 = **X2 一次性清理**（执行前查无在跑批次 + 前后计数留痕）
 - 指针：上游 = 用户 2026-10-14 选定**台账待裁量项 ⑯ + ⑮ 合并小批**（⑯ 由 T523 QA 实测发现；⑮ 由 T522 QA R4 发现）· 成熟度判定 = 命中 `pm-to-spec.md` §一.4（用户明示范围 + 两项均有实测证据）· **QA 接缝复核** = 2026-10-14 `done(full)`（⑯ 采 **C1 扩 `cases/13` + 双向断言 + 删净 `--force` 子句**；⑮ 采 **S1**（trap + mode 感知 + env-only 逃生口）+ 新增 `cases/14-cache-lifecycle.sh`；存量 **X2 一次性清理**）
 - 优先级：中低（一致性 + 卫生 · 低成本）· 战略筛子：命中「机制可信度 / 交付卫生」→ 做 · MoSCoW：Should · Kano：基本型 · RICE ≈6.0（附录）
@@ -35,7 +36,7 @@
   3. **⑮ 实现（单点）**：`tests/t4/lib.sh` 新增 `t4_cache_cleanup`（**唯一实现点**，`run.sh` 复用不复制）+ 装 `EXIT` trap；`T4_CACHE_OWNED`（**不导出**）· `T4_CACHE_PARENT`（创建时捕获 `${TMPDIR:-/tmp}`，禁硬编码 `/tmp`）· env-only 逃生口 `T4_KEEP_CACHE=1`。
   4. **⑮ 语义**：**成功（rc=0）且自建 ⇒ 清理；rc≠0 ⇒ 保留 + 打印路径；用户传入 `T4_CACHE_DIR` ⇒ 永不删**；`rm` 失败 ⇒ 仅 warn、**不改 rc**；`mktemp` 失败 ⇒ **明确非 0 退出**（堵空值续跑）。
   5. **⑮ mode 感知**：`run.sh` 把默认 `mktemp` **下移到 `--list`/`--preflight` 早退之后、run 循环之前**（参数错误路径已在更早处早退）。
-  6. **⑮ 打印与实况一致（三态）**：自建且成功 →「（已清理；需保留用 `T4_KEEP_CACHE=1`）」· 自建且失败 →「（已保留：失败证据）」· 用户传入 →「（用户提供 · 不删）」。
+  6. **⑮ 打印与实况一致（三态，口径按实现订正 · D-1）**：自建且成功 →「（已清理）」· 自建且 `T4_KEEP_CACHE=1` →「（已保留（T4_KEEP_CACHE=1））」· 自建且 `rc≠0` →「（已保留：失败证据）」· 用户传入 →「（用户提供 · 不删）」；断言只钉「打印 disposition 与 `[ -d ]` 实况一致」，**不吃死字符串**。
   7. **新增 `tests/t4/cases/14-cache-lifecycle.sh`**（≥12 条断言，全 hermetic：私有 `TMPDIR`，不依赖 tmux/tsx/网络）+ `run.sh` 注册 `"14"` / usage `<01-13>` → `<01-14>` + `tests/README.md` 用例表与缓存纪律说明。
   8. **存量 129 一次性清理（X2）**：`pgrep -af 'tests/t4/run.sh'` 确认无在跑批次 → 记录前值 → `rm -rf /tmp/nao-t4.*`（**限定一层、限定前缀，禁 `find -delete`**）→ 记录后值 0 + 命令 + 时间戳（PR 评论/回执留痕）。
   9. **文档同步**：`docs/releases/v0.18.2.md`（PATCH）· `tests/README.md` 缓存纪律段 · `docs/tasks-state.md` ⑯⑮ 收口。
@@ -102,6 +103,8 @@
 - **实现分工（同分支顺序写，禁并发）**：① **rd-infra** 落 `nao-fleet.sh` 文案 + `lib.sh`/`run.sh` 缓存生命周期 + `cases/13` 断言扩展 + 新增 `cases/14` + `tests/README.md` + `docs/releases/v0.18.2.md` + **存量 X2 一次性清理（按 §三.8 纪律留痕）** → 回执；② **qa** 独立复跑 + 变异（文案回填 / 结构懒删）+ 守卫探针（OWNED/前缀/软链/rc 保真/早退净增）+ 报告（`docs/reports/2026-10-14-T524-qa-verify.md`）→ `done(full)`。
 - **架构评审闸门**：**跳过**（QA 判定：⑯ 语义已由 T516 arch 定型且本批不动行为、⑮ 只在 `tests/` 内且不入包、无被测机制耦合；唯一会触发 arch 的分叉「让 `--force` 真生效」已被排除）。
 - **版本记录**：PRD 落 `docs/prds/2026-10-14-cache-warn-cleanup.md`（本文件；归档时登记 `docs/prds/README.md`）；运行时状态记 `docs/tasks-state.md`（⑯、⑮ 收口）。
+- **交付记录**：PR [#42](https://github.com/Nathan3303/nao-skills/pull/42) squash **`e83ced2`**（main 恰 1 条 · 无 `wip()` · 分支删净）· RD 4 条 + QA 2 条 `wip(T524)` 提交（9 文件 / +403 −18）· QA 报告 `docs/reports/2026-10-14-T524-qa-verify.md`（79 行）· 无 ADR（D5 拍板跳过 arch）· 未 bump 版本（发布节点 PM 执行）。
+- **本批残差（已记录）**：**R-4** 用例 14 的 `function` 形态为前缀匹配 ⇒ 只会**误红**不会误绿（非阻塞，报告 §八）· **D-1** 本 PRD §三.6 措辞已按实现订正 · **O-1** 发布判据须**空载**跑 `test:t4:full`。
 - **待裁量项**：本批关闭 ⑯、⑮；维持 ⑫后半（脚本拆分）· ①–⑨ 更早遗留 · O-1 观察项。
 
 ## 附：RICE 与依据
