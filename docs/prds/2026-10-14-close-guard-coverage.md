@@ -1,7 +1,8 @@
 # PRD：`close` 末段「无法确认在线状态」缺口补回归护栏
 
-- 状态：**已交付并合并（待发布 v0.18.1）** · Owner：PM · 更新：2026-10-14
+- 状态：**已交付并发布（v0.18.1）** · Owner：PM · 更新：2026-10-14
 - **验收记录** = 2026-10-14 PM 验收**通过（AC1–AC8 全过）**：PR [#41](https://github.com/Nathan3303/nao-skills/pull/41) squash **`ef391af`**（main 恰 1 条 · 无 `wip()` · 分支删净）· QA 独立复跑 **GO**（`check` rc=0 roles=6 files=46 · `npm test` rc=0 · 91.8s · **13/13 PASS** · SKIP=0/DEGRADE=0/NOTE=3 · **断言 267→282**）+ 三变异 MUT-C/D/E 全拦 + BR2 注册负控 + BR6 裸名实证 · 验收评论见 PR #41
+- **发布记录** = 2026-10-14 **v0.18.1（PATCH）已发布**：发布提交 `292b3f4`（pin 升 0.18.1）· **tag `v0.18.1` + Release 已发**（**AC9 自证：`gh release view` name = `v0.18.1`** · `gh release list` 首行 Latest）· 发布前置 `test:t4:full` **rc=0**（空载 1m59s · SKIP=0 / DEGRADE=0 / NOTE=3）· **npm 不重发**（`package.json` 运行面不变）。
 - 开工确认卡（2026-10-14 · ask-me 用户拍板 5 项）：D1 范围 = **按 QA 定稿**（C2 + `run.sh` 注册三行 + 6 条双侧断言 + MUT-C/D/E）· D2 `:1676` 文案 = **记台账新项 ⑯ 另批**（本批不碰机制脚本）· D3 版本 = **v0.18.1（PATCH）**· D4 立项 = **降级批次 `nao/close-guard`**（无 Issue）· D5 arch 评审 = **跳过**（QA 判定无结构决策；理由已记 §九）
 - 指针：上游 = 用户 2026-10-14 选定台账待裁量项 **⑭**（T522 QA 报告 R2 实测缺口 · 「小批 · 小改测试代码」）· 成熟度判定 = 命中 `pm-to-spec.md` §一.4（用户明示范围 + R2 已给实测复现）· **QA 接缝复核** = 2026-10-14 `done(full)`（采 C2 但**补 `run.sh` 三行**；断言 6 条双侧；变异 **MUT-C/D/E** 实测）
 - 优先级：中低（护栏补缺 · 低成本）· 战略筛子：命中「机制护栏 / 单一门禁可信度」→ 做 · MoSCoW：**Should** · Kano：基本型（缺护栏 = 静默假绿通道）· RICE ≈7.2（附录）
