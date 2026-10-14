@@ -7,14 +7,23 @@ NFR2/NFR3，契约来源另含 §11 D3/D5/D6/D7、§12 闸门 A–D，以及
 ## 运行
 
 ```bash
-bash tests/t4/run.sh --list                 # 列用例
-bash tests/t4/run.sh --preflight            # 前置探测（不执行用例）
-bash tests/t4/run.sh                        # 跑全部（宽松：T2 未交付=>BLOCKED）
-T4_ALLOW_MISSING=0 bash tests/t4/run.sh     # T2 回执后严格复跑（缺产物=FAIL）
-bash tests/t4/run.sh --case 03              # 单跑
+bash tests/t4/run.sh --list                    # 列用例
+bash tests/t4/run.sh --preflight               # 前置探测（不执行用例）
+bash tests/t4/run.sh                           # 跑全部（默认严格：T2 产物缺失=FAIL）
+bash tests/t4/run.sh --case 03                 # 单跑
+T4_ALLOW_MISSING=1 bash tests/t4/run.sh        # 宽松：缺产物=BLOCKED（仅显式 1）
+T4_REQUIRE_FULL=1 bash tests/t4/run.sh         # 发布前置：SKIP 计数>0 即 FAIL
+npm test                                       # 唯一机械门禁 = test:agents + test:t4
+npm run test:t4:full                           # 发布前置双轴（= 上面两个环境变量）
 ```
 
-退出码：`0` 全 PASS/SKIP · `1` 有 FAIL · `2` 有 BLOCKED。
+- **默认严格**：`T4_ALLOW_MISSING` 默认 `0` —— 依赖的 T2 产物缺失即 FAIL；宽松模式**只有显式 `T4_ALLOW_MISSING=1`** 才启用（缺产物记 BLOCKED）。
+- **`T4_REQUIRE_FULL=1`**（与上者正交，只管 SKIP 轴）：汇总层 SKIP 计数必须为 `0`，含从用例输出解析的 `[SKIP]` / `SKIP:` 行；NOTE 允许并计数。发布用 `npm run test:t4:full`（SKIP=0 才算通过）。
+- **SKIP/NOTE 计数可见**：汇总尾部打印 `SKIP: N 例 · M 条` 与 `NOTE: K 条`；「绿 + N SKIP」不得表述为「全量通过」。
+- **安装包内不适用**：`tests/` 不入 npm tarball，在消费者机器上 `npm test` 因缺 `tests/t4` 而 rc≠0，属预期（见 `docs/releases/v0.18.0.md`）。
+
+退出码：`0` 全 PASS/SKIP · `1` 有 FAIL / 参数错误 / 未识别状态（MISSING、NOT_RUN） / (full) 有 SKIP · `2` 有 BLOCKED（仅宽松模式）。
+参数错误（`--case` 缺值 / `--case` 无匹配 / 裸位置参数）一律 rc=1，不得静默全跑。
 
 ## 用例
 
@@ -33,18 +42,12 @@ bash tests/t4/run.sh --case 03              # 单跑
 | 11 | 宿主阶梯 / 失败语义 / 非 tmux 句柄 | AC1–AC14 · T513 | 无（桩驱动 + 真 tmux） |
 | 12 | 派生会话 tmux 落点：宿主窗口显式寻址（含幂等/同源） | AC1–AC7 · T517 | 无（真 tmux 隔离 socket + 桩 pi；无 tmux 则 SKIP） |
 
-最近一次跑批：`T4_ALLOW_MISSING=0 bash tests/t4/run.sh` → exit 0 · 8/8 PASS · 109 断言 / 0 红
-（复跑基线 `5537270` v0.12.0；详见 `docs/reports/2026-10-08-T4-qa-report.md`）。
-
-最近一次跑批：`T4_ALLOW_MISSING=0 bash tests/t4/run.sh` → exit 0 · 7/7 PASS · 94 断言 / 0 红
-（详见 `docs/reports/2026-10-08-T4-qa-report.md`）。
-
 ## 设计要点
 
 - **不改仓库**：只读仓库，夹具全部在临时目录；`npm pack --ignore-scripts` 构造被测包，
   模拟 `pi install --local` 的落盘布局（`.pi/npm` + `.pi/settings.json`，T1 §2 实测）。
-- **BLOCKED vs FAIL**：T2 产物缺失在宽松模式记为 BLOCKED(78)；T2 回执后以
-  `T4_ALLOW_MISSING=0` 复跑，缺失即 FAIL。避免「用例未跑」被误读为「通过」。
+- **BLOCKED vs FAIL**：T2 产物缺失默认即 FAIL；只有显式 `T4_ALLOW_MISSING=1` 才降级为 BLOCKED(78)。
+  汇总用白名单（仅 `PASS`/`SKIP` 通过），`MISSING`/`NOT_RUN`/未知态一律 rc≠0 —— 避免「用例未跑」被误读为「通过」。
 - **可追溯**：每条断言前缀 `[PASS]/[FAIL]`，用例头注释给出 Given/When/Then 与 AC 映射。
 - **零网络证据**：`bwrap --unshare-net` 环境隔离（强）+ `strace connect(2)` 无
   AF_INET/AF_INET6（直接证据）。
