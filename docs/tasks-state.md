@@ -15,15 +15,15 @@
 - ✅ **T521 交付闭环（2026-10-14 · v0.17.3）**：GitHub Release 标题口径 = 裸 `vX.Y.Z` —— 权威单处 `common/release-notes.md` §一.5 硬约束 + §四清单 + §五红线 · 两处引用收敛（`github-flow.md:56` / PM 卡 :121）并指回单处 · PM 卡 **v24→v25** · 模板注释 1 行（6 分段标题未动）· 一次性只读探针 `PASS=28 FAIL=0` + 负控 2/2 · QA 独立复跑 **GO** · squash `eff44ec` · tag + Release 已发（发布提交 `4d97f00` · **AC9 自证：标题严格 = `v0.17.3`**）· **npm 重发 0.17.3 已核验**（`latest` + integrity 逐字节）。
 - ✅ **T520 交付闭环（2026-10-14 · v0.17.2）**：ADR 文档契约 —— 必写 5 节 + 可选 3 节（参考来源恒末）· 头部恰 4 字段 · 状态值域 4 值 · 禁写/下沉清单 · 新增 `templates/adr.md.example` + `adr-index.md.example` · `arch-designer` 卡 v11→v12 · QA 探针 `PASS=53 FAIL=0` + 负控 2/2 · squash `160cc60` · tag + Release 已发（`9833344`）· **npm 不重发**。
 
-- 当前阶段：**全部批次闭环**（T522 → **v0.18.0 已交付并发布** · tag + Release 已发（发布提交 `1600450`）· 发布前置闸门 rc=0 · npm 不重发）· PR [#40](https://github.com/Nathan3303/nao-skills/pull/40) squash `e8a495b` · 更早批次（T521 及以前）已闭环并下沉/归档；**剩余动作 = T522 派生会话回收**
+- 当前阶段：**全部批次闭环**（T522 → **v0.18.0 已交付并发布** · tag + Release 已发（发布提交 `1600450`）· 发布前置闸门 rc=0 · npm 不重发）· PR [#40](https://github.com/Nathan3303/nao-skills/pull/40) squash `e8a495b` · 更早批次（T521 及以前）已闭环并下沉/归档；**派生会话已回收**（`nao-fleet.sh status` 仅余 pm，无残留）
 - 当前 PRD：`docs/prds/2026-10-14-t4-gate-wiring.md`（状态：**已交付并发布**）
 - 未决决策点：无（D1–D5 开工卡 + 二轮 + 发布门禁均拍板；用户选择装 `strace` 使闸门真实转绿）
 - 待用户回答：无（npm 不重发已拍板）
 - 未派发队列：见下方「待派发队列」（共 0 项）
-- 下次唤醒条件：**发布拍板 / 下批需求授意 / 用户要求重开 PM**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = PM + rd-infra-T522 + qa-T522 + arch-designer-T522（**T522 派生会话待回收**，发布闭环后 `close --task T522`）
+- 下次唤醒条件：**发布拍板 / 下批需求授意 / 用户要求重开 PM**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = **仅 PM**（T522 派生会话 rd-infra/qa/arch-designer 均已 `close --task T522` 回收）
 - 口头约束已落盘：项目 `AGENTS.md` 项目约束（ask-me 提问）· PRD §5 BR6 格式禁令 + §9 R5/R6（T519）· ADR 字段口径 = `deliverable-docs.md` §四（T520 · 状态值域 4 值 / 头部 4 字段 / 60 行上限）
 - 需求分支 / PR：见下方「需求分支 / PR / 发布」（本批降级分支 `nao/t4-gate`——**已 squash 合并 `e8a495b` 并删净**）
-- 会话体检：当前 PM 会话 = `01a13817`（pane %31），T522 全批 ctx 5%→16%（闭批时约 160k/1000k · 无压缩）· 舰队 = PM + rd-infra-T522 + qa-T522 + arch-designer-T522 · 本快照为接续唯一事实源（main = `e8a495b`）
+- 会话体检：当前 PM 会话 = `01a13817`（pane %31），T522 全批 ctx 5%→16%（闭批时约 160k/1000k · 无压缩）· 舰队 = 仅 PM（派生已回收） · 本快照为接续唯一事实源（main = `85606e9`）
 
 ## 需求分支 / PR / 发布（PM 维护）
 
