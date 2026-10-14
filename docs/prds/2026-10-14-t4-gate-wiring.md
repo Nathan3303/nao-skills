@@ -1,8 +1,9 @@
 # PRD：tests/t4 接入 `npm test` 门禁（补 1874 行 `nao-fleet.sh` 的机械护栏）
 
-- 状态：**待派发（开工已确认 2026-10-14）** · Owner：PM · 更新：2026-10-14
+- 状态：**已交付并合并（待发布 v0.18.0）** · Owner：PM · 更新：2026-10-14
 - 开工确认卡（2026-10-14 · ask-me 用户拍板 5 项）：D1 范围 = **全纳入**（接线 + 默认严格 + full 入口 + 门禁可信度缺陷 A/B 修复）· D2 严格默认 = **翻转 `run.sh`/`lib.sh` 默认**（宽松改显式 `T4_ALLOW_MISSING=1`）· D3 立项 = **降级批次 `nao/t4-gate`**（无 Issue）· D4 版本 = **v0.18.0（MINOR）** · D5 闸门 = **采纳**（开工确认后、派发前送 arch-designer 结构评审）
 - 开工确认卡·二轮（2026-10-14 · arch 评审后 ask-me 拍板 5 项）：D1 网络面 = **修极性**（case 02/07 外部不可达/未成功启动 → SKIP/NOTE；仅「拿到真实输出但内容不符」判 FAIL）· D2 范围微扩 = **全批准**（三类参数错误 + 06 第 3 条断言 + N4/N5 负控 + `--preflight` 标签修正）· D3 ADR = **授权 arch 落盘**（`docs/adr/2026-10-14-npm-test-gate-scope.md` + 评审报告）· D4 npm = **默认不重发**（发布节点再终拍）· D5 网络中断 = **继续推进本地实现**（`github.com:443` 超时中，push/PR 待恢复）
+- **验收记录** = 2026-10-14 PM 验收**通过（AC1–AC9 全过）**：PR [#40](https://github.com/Nathan3303/nao-skills/pull/40) squash **`e8a495b`**（main 恰 1 条 · 无 `wip()` · 分支删净）· QA 独立复跑 **GO**（`npm test` rc=0 · 12 例 · **PASS 266 / FAIL 0 / SKIP 0 / DEGRADE 1 / NOTE 2** · `test:t4:full` 本机 rc=1（期望语义）/ 能力齐备 rc=0）· 验收中三处口径订正（AC5 措辞 / AC6 含 DEGRADE / AC7 ≥266）· 验收评论见 PR #40
 - **arch 结构评审** = 2026-10-14 arch-designer `done(full)`：结构**有条件可行** —— 采纳「`test` 全量串联 / `prepack`=`test:agents` / 默认严格 / v0.18.0 / npm 不重发 / 需补 ADR」；**6 处修订 P1–P6 已落本稿** + 新识别**第三类假绿**（用例不以 `t4_exit|t4_skip|exec` 收尾仍可 rc=0）
 - 指针：上游 = 用户 2026-10-14 选定批（由 T521 QA 备注 N2 引出：「`npm test` = `check + tsc`，未跑 `tests/t4/run.sh`」）+ 同轮 ask-me 回执「按此推进」· 成熟度判定 = 命中 §一.4「用户明示可直接成稿」· **QA 接缝复核** = 2026-10-14 `done(full)`（采纳 C1 接缝 + C2 形态；改定 4 处 = `prepack` 剥离 t4 · 默认严格 · 补 full 入口 · 门禁可信度缺陷 A/B 必须前置修复）
 - 优先级：**中高**（本批产出即「唯一机械门禁」的可信度）· 战略筛子：命中「机制护栏 / 低成本高杠杆」→ 做 · MoSCoW：**Must** · Kano：基本型（无护栏 = 缺陷）· RICE ≈10.8（附录）
@@ -83,9 +84,9 @@
 - **AC2（主路径 · 真接线，防装饰）**：Given 改后仓库，When（a）读 `package.json.scripts.test` 且（b）06 静态契约断言通过且（c）**N1 负控**临时移走 `tests/t4/run.sh` 后 `npm test` rc≠0（还原后工作区干净），Then 三条同时成立。
 - **AC3（业务规则 · 严格语义 + 极性）**：Given 严格默认，When T2 产物缺失 / 缺 `node`·`npm`·`git`，Then FAIL；When 缺 `pi`/`tmux`/`bwrap`/凭据或 registry 不可达，Then SKIP 且**计数可见**、rc=0（BR3/BR4/BR10）；**负向**：When 真接口返回真实输出但内容不符，Then FAIL（极性不得被滥用为「一律 SKIP」）。
 - **AC4（负向闭环 · prepack 解耦）**：Given 改后 `prepack`，When **N3 负控**跑 `npm run prepack`，Then rc=0 **且输出无 t4 汇总行、无 pi/tmux 调用**；且 06 断言钉住 `scripts.prepack` 不含 t4（BR5）。
-- **AC5（异常 · 失败传播，本批核心价值）**：Given 改后仓库，When 向 `.agents/scripts/nao-fleet.sh` 注入 1 处守卫缺陷（如破坏 `NAO_SHIM_ENTERED` 或 `DEGRADED:` 输出），Then `npm test` rc≠0 且至少用例 03 FAIL；还原后 `git status --porcelain` 空且复跑全绿（**N2 负控**）。
-- **AC6（边界 · 假绿封堵 + full 入口）**：Given 缺陷 A/B 与第三类假绿已封，When（a）`cases/` 临时清空（临时副本）（b）`--case 99`（c）`--case`（缺值）（d）裸位置参数 `run.sh 99`（e）临时用例 `exit 77`，Then（a）–（d）rc≠0 且（e）默认 rc=0 / `T4_REQUIRE_FULL=1` 下 rc≠0（**N4/N5 负控**）；且 `test:t4:full` 判据 = 汇总层 SKIP 计数（含用例内 `[SKIP]` 行）= 0（BR7）。
-- **AC7（设计一致性 · 只增不减 + 文档同步）**：Given 改后 t4，When 严格跑，Then 用例 12 · PASS **≥265**（基线 263 + 06 新增）· 0 FAIL，NOTE/SKIP 明细入回执；且 `tests/README.md` 运行章节含新脚本/严格默认/full 口径/安装包内不适用、两条陈旧跑批行已清；且 `docs/releases/v0.18.0.md` 明写语义变更（数字下沉技术细节）；且 `.agents/skills/github-flow.md` 阶段 7 含发布前置 `npm run test:t4:full`；且 `docs/tasks-state.md` 待裁量项 ⑫ 收口（BR8/BR9/P4/P5）。
+- **AC5（异常 · 失败传播，本批核心价值）**：Given 改后仓库，When 注入 1 处守卫缺陷，Then `npm test` rc≠0 且对应用例 FAIL；还原后 `git status --porcelain` 空且复跑全绿（**N2 负控**）。**口径订正（验收期 · QA R1）**：两个注入点须分开述 —— **`bin/shim/nao-fleet.sh`（T2 shim 模板）⇒ 用例 03 FAIL**（实测 3 条断言：`3b marker 防重入 exit=2` / 恰一行 `DEGRADED:` / 恢复命令）；**`.agents/scripts/nao-fleet.sh`（1874 行机制脚本）⇒ 用例 11 FAIL**（T513 冻结实体 · 实测 4 条）。原文「机制脚本 ⇒ 至少用例 03 FAIL」的文件↔用例配对与实测不符，以此订正为准。
+- **AC6（边界 · 假绿封堵 + full 入口）**：Given 缺陷 A/B 与第三类假绿已封，When（a）`cases/` 临时清空（临时副本）（b）`--case 99`（c）`--case`（缺值）（d）裸位置参数 `run.sh 99`（e）临时用例 `exit 77`，Then（a）–（d）rc≠0 且（e）默认 rc=0 / `T4_REQUIRE_FULL=1` 下 rc≠0（**N4/N5 负控**）；且 `test:t4:full` 判据 = 汇总层 **SKIP 计数 + DEGRADE 计数（含用例内行首 `[SKIP]`/`SKIP:` 行与 `[DEGRADE]` 标记）= 0**（BR7/BR4）—— 口径订正：能力降级（`t4_degrade`）计入 full 判据，本机缺 `strace` ⇒ full rc=1 属**期望语义**。
+- **AC7（设计一致性 · 只增不减 + 文档同步）**：Given 改后 t4，When 严格跑，Then 用例 12 · PASS **≥266**（本机缺 `strace` 口径）/ **267**（能力齐备）· 0 FAIL，NOTE/SKIP/DEGRADE 明细入回执（口径：删 1 条空心断言 `cases/07` + 新增 4 条契约断言 `cases/06`）；且 `tests/README.md` 运行章节含新脚本/严格默认/full 口径/安装包内不适用、两条陈旧跑批行已清；且 `docs/releases/v0.18.0.md` 明写语义变更（数字下沉技术细节）；且 `.agents/skills/github-flow.md` 阶段 7 含发布前置 `npm run test:t4:full`；且 `docs/tasks-state.md` 待裁量项 ⑫ 收口（BR8/BR9/P4/P5）。
 - **AC8（一致性闸门）**：Given PRD 接缝/AC 范围与 QA 用例范围，When 比对，Then 一致；不一致则 PM 验收**打回**。
 - **AC9（负向闭环 · 无残留 + 无递归）**：Given 门禁与负控跑完，When 检查 `git status --porcelain` / `tmux list-sessions` / 残留进程，Then 全空或仅有预期项；且 t4 内部打包走 `--ignore-scripts`（BR6）。
 
@@ -95,15 +96,17 @@
 - **灰度**：不适用（本仓内部门禁，无运行面灰度）。
 - **回滚**：改回 `package.json` 三行 + `run.sh`/`lib.sh` 默认值并发下一 PATCH；已 push tag 不删。
 - **npm 重发**：**默认不重发**（D4 拍板；发布节点再终拍）—— `package.json` 在 tarball 内改动可见，但 `tests/` 不入包 ⇒ 消费者侧 `npm test` 本就不可用，重发无收益；**记版本漂移**（repo `0.18.0` / registry `0.17.3`）并在 release notes「技术细节」明写「安装包内 `npm test` 不适用（rc≠0 属预期）」（P6）。
+- **发布门禁（本批新增）**：`npm run test:t4:full` 须 **rc=0**（`github-flow.md` 阶段 7；判据 = SKIP + DEGRADE 计数均为 0）。**本机缺 `strace` ⇒ 该闸门 rc=1（期望语义，非回归）** ⇒ 发布节点由用户拍板：装 `strace` 使闸门转绿（`sudo pacman -S strace`），或**明确授权「门禁例外」发布**（须记入 release notes 技术细节 + 台账，不得静默降级）。
 - **监控**：不适用（本地门禁）；唯一指标 = `npm test` rc + t4 用例/断言/SKIP/NOTE 数字。
 
 ## 九、变更治理
 
-- **流程**：降级批次分支 `nao/t4-gate`（无 Issue · D3 拍板）→ PR → QA 独立只读复跑 + N1–N5 负控 → PM 验收 → RD `--squash` 合并（显式 `--subject`）→ PM 发 tag/Release → PRD 归档。**网络降级**：`github.com:443` 当前超时（`api.github.com` 通），实现与本地门禁不受影响，push/PR/合并/发布恢复后补（github-flow 离线降级条款，保持 main = 1 条/需求）。
+- **流程（已完成）**：降级批次分支 `nao/t4-gate`（无 Issue · D3 拍板）→ PR [#40](https://github.com/Nathan3303/nao-skills/pull/40) → QA 独立只读复跑 + N1–N5/C1–C5 负控 → PM 验收通过 → RD `--squash` 合并（显式 `--subject` + `--match-head-commit`）→ **PM 发 tag/Release → PRD 归档（待完成）**。**网络降级实况**：`github.com:443` 曾超时（`api.github.com` 通），期间实现与本地门禁不受影响；恢复后 push/PR/合并均正常执行，无降级交付。
 - **实现分工与顺序（同分支顺序写，禁并发）**：① **rd-infra** 起分支 + 落地 `package.json`/`run.sh`/`lib.sh`/`tests/README.md`/文档同步 → 回执；② **arch-designer** 落盘 ADR（`docs/adr/2026-10-14-npm-test-gate-scope.md`，状态 `已接受（待落地 v0.18.0）`；必写 5 节 + 对照模式 + 参考来源）+ 评审报告（`docs/reports/2026-10-14-T522-arch-review.md`，实施办法类内容下沉于此）→ 回执；③ **qa** 加 06 断言（≥3 条）+ 独立负控 N1–N5 + 复跑复核 → `done(full)` 回执。
 - **架构评审闸门**：开工确认后、派发前送 `arch-designer` 评审 —— **已完成 2026-10-14**（`done(full)`：结构有条件可行 + 6 处修订 + 新识别第三类假绿）；**ADR 落盘已获用户授权（D3）**，随本批分支交付。
 - **版本记录**：PRD 落 `docs/prds/2026-10-14-t4-gate-wiring.md`（本文件；归档时登记 `docs/prds/README.md` 索引）；运行时状态记 `docs/tasks-state.md`。
-- **待裁量项 ⑫ 收口**：本批完成后 `nao-fleet.sh` 体量/职责混装一项**保留**（脚本拆分仍未立项），仅把「tests/t4 未接入 npm test」这半条关闭。
+- **交付记录**：PR [#40](https://github.com/Nathan3303/nao-skills/pull/40) squash **`e8a495b`**（main 恰 1 条 · 无 `wip()` · 分支删净）· 12 条批次提交 · 15 文件 / +386 −50 · ADR `docs/adr/2026-10-14-npm-test-gate-scope.md`（55 行）· arch 评审报告 `docs/reports/2026-10-14-T522-arch-review.md`（56 行）· QA 报告 `docs/reports/2026-10-14-T522-qa-verify.md`（69 行）· 未 bump 版本（发布节点 PM 执行）。
+- **待裁量项 ⑫ 收口（本批已关半条）**：`tests/t4` 已接入 `npm test` ✅；`nao-fleet.sh` 体量/职责混装（1874 行 / 72 函数）仍**保留**（脚本拆分未立项）。**本批新增待裁量项**：**⑭** `close` 末段 `offline_verifiable` 静默语义无回归护栏（QA R2：注入后 `npm test` 仍 rc=0，不属本批范围）· **⑮** `/tmp/nao-t4.*` 夹具累积（现 105 个，`run.sh` 每次 `mktemp` 不自动清理）。
 
 ## 附：RICE 与依据
 
