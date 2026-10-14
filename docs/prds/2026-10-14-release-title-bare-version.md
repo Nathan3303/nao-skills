@@ -76,14 +76,14 @@
 
 - **版本**：v0.17.3（PATCH · 机制文档口径）。
 - **回滚**：约定类改动，回滚 = 文本改回并发下一 PATCH；已 push tag 不删。
-- **npm 重发：已拍板（用户 2026-10-14）= 重发 `0.17.3`** —— 理由 `package.json files` 含 `.agents/`，**本批唯一产出即包内文本**（与 T519/T520 先例不同）；`npm publish` 由**用户执行**，成功判据 = **直连 registry 实测**（`dist-tags.latest` 已是 0.17.3 + `dist.integrity` 与本地 `npm pack` tarball 逐字节一致；`PUT 202` 不作判据）。
+- **npm 重发：已拍板（用户 2026-10-14）= 重发 `0.17.3`** —— 理由 `package.json files` 含 `.agents/`，**本批唯一产出即包内文本**（与 T519/T520 先例不同）；`npm publish` 由**用户执行**，成功判据 = **直连 registry 实测**（`dist-tags.latest` 已是 0.17.3 + `dist.integrity` 与本地 `npm pack` tarball 逐字节一致；`PUT 202` 不作判据）。✅ **已核验（2026-10-14）**：`latest = 0.17.3` · integrity 逐字节一致。
 - **监控**：无（纯文本）。
 
 ## 九、变更治理
 
 - **流程**：降级批次 `nao/release-title-bare`（无 Issue）→ PR → QA 只读验证 → PM 验收 → RD squash 合并 → PM 发 tag/Release → PRD 归档。
 - **版本记录**：PRD 落 `docs/prds/2026-10-14-release-title-bare-version.md`（✅ 已归档并登记索引）；运行时状态记 `docs/tasks-state.md`（T521 已入「已验收 / 已归档」，T519 已下沉 `docs/tasks-archive.md` §7）。
-- **交付记录**：PR [#39](https://github.com/Nathan3303/nao-skills/pull/39) squash 合并 `eff44ec`（main 恰 1 条 · 无 `wip()` · 分支删净）· 发布提交 `4d97f00` · tag `v0.17.3` + Release 已发（**标题 = `v0.17.3`**）· `package.json`/README pin 已升 0.17.3 · **npm 0.17.3 重发待用户执行**（成功判据 = registry 实测）。
+- **交付记录**：PR [#39](https://github.com/Nathan3303/nao-skills/pull/39) squash 合并 `eff44ec`（main 恰 1 条 · 无 `wip()` · 分支删净）· 发布提交 `4d97f00` · tag `v0.17.3` + Release 已发（**标题 = `v0.17.3`**）· `package.json`/README pin 已升 0.17.3 · **npm 0.17.3 已重发并核验**（2026-10-14 · 用户执行 · `latest: 0.17.3` + integrity 逐字节一致）。
 - **角色卡广播**：`card pm v25` 本仓已发（2026-10-14）+ 下游三仓唤醒后补发（原待补发的 v24 项顺延合并为 **v25**）。
 
 ## 附：RICE 与依据
