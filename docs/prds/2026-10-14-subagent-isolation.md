@@ -1,6 +1,7 @@
 # PRD：子代理会话（`subagent-*`）在 `status` / `close` 中的显式识别与排除
 
-- 状态：**待派发（开工已确认 2026-10-14）** · Owner：PM · 更新：2026-10-14
+- 状态：**已交付并合并（待发布 v0.18.3）** · Owner：PM · 更新：2026-10-14
+- **验收记录** = 2026-10-14 PM 验收**通过（AC2–AC8 全过）**：PR [#43](https://github.com/Nathan3303/nao-skills/pull/43) squash **`fbddd0d`**（main 恰 1 条 · 无 `wip()` · 分支删净）· QA 独立复跑 **GO**（`check` rc=0 ×2（roles=6 · files=46）· `npm test` rc=0 · 108s · **15/15 PASS · 断言 313→360** · SKIP=0/DEGRADE=0/NOTE=2 · 空载 `test:t4:full` rc=0）+ 独立探针 **36/36** + 负控 M-A（恰 T8 2 条）/ M-B（恰 T3×2+T4×1）+ 紧凑 JSON 名册不塌缩 · 验收评论见 PR #43
 - 开工确认卡（2026-10-14 · ask-me 用户拍板 5 项）：D1 范围 = **完整**（`status` 汇总行 + `close` 显式拒绝且点名 + `running`/`ensure` 负向护栏 + `check` 守卫 + `cases/15` + 两份 QA 报告落盘）· D2 E2 = **收口**（`claimed` 排除 `^subagent-` 条目 ⇒ 非静默优先）· D3 arch = **需要（轻量）**· D4 立项 = **降级 `nao/subagent-isolation` + v0.18.3（PATCH）**· D5 npm = **发布时重发 0.18.3**（用户执行 `npm publish`）
 - 指针：上游 = 用户 2026-10-14 选定台账待裁量项 **⑥（T512-①）** · 来源证据 `docs/reports/2026-10-12-pi-subagents-compat-review.md` §2.2 / §2.3 / §4.3 / 附录 A · 成熟度判定 = 命中 `pm-to-spec.md` §一.4（用户明示 + QA 已做现状复现）· **QA 接缝复核** = 2026-10-14 `done(full)`（采 **C1** 新增 `cases/15`；**现状危害面 ≈ 0**，但安全是**隐式的**；发现 1 个真边界缺口 **E2**）
 - **arch 结构评审（轻量 · 用户 D3 拍板需要）** = 2026-10-14 arch-designer `done(full)`：**有条件可行**，6 项全定稿 —— 排除点置于 `cmd_close` 解析**第一条**（只查 `$target`、不查 `--task` 值、`--force` 不旁路）· `status` 汇总行**逐字措辞 + 派生节末独立行 + N=0 不打印**· **E2 必须改「条目感知」claimed**（纯值提取无法按条目名排除）且**只改 `unattributed_pi_panes`**· `check` 守卫折入 `check_alias_resolution`（id+alias 都查）· **ADR 达标**（`docs/adr/2026-10-14-subagent-session-identity-exclusion.md`，arch 落盘）· 协议加一行**身份模型边界指针**。**PM 裁定 D-A/B/C = 均采纳 arch 默认建议**（D-A：`fallback_pane_for` 的 claimed **保持含子代理条目**，arch 反对两处一致已记录在案）。
@@ -97,7 +98,9 @@
 
 - **流程**：降级批次分支 `nao/subagent-isolation`（无 Issue，与 T518–T524 一致）→ PR → QA 独立复跑 + 前缀/正控/负控 → PM 验收 → RD `--squash` 合并（显式 `--subject` + `--match-head-commit`）→ PM 发 tag/Release（按 §八 决定 npm）→ PRD 归档。
 - **实现分工（同分支顺序写，禁并发）**：① **rd-infra** 落 `nao-fleet.sh`（`status` 汇总行 · `close` 显式拒绝 + 文案 · E2 claimed 收口 · 可选 `check` 守卫）+ `tests/t4/cases/15-subagent-isolation.sh` + `run.sh` 注册 + `tests/README.md` + `docs/releases/v0.18.3.md` → 回执；② **qa** 独立复跑（T1–T10 全量 + 现状复现报告落盘 + 独立验证报告）→ `done(full)`。
-- **架构评审闸门**：**已完成 2026-10-14**（用户拍板「轻量评审」· arch `done(full)`）：结论**有条件可行** + 6 项定稿（排除点位置 / `status` 输出契约（逐字）· E2 条目感知且只改 `unattributed_pi_panes` · `check` 折入 `check_alias_resolution` · ADR 达标 · 协议边界指针）；**PM 裁定 D-A/B/C 均采纳 arch 默认建议**（D-A arch 反对「两处 claimed 一致」已记录）；**ADR 落盘待授权**（`docs/adr/2026-10-14-subagent-session-identity-exclusion.md` · 状态 `已接受（待落地 v0.18.3）` · Owner arch-designer · ≤60 行 · 必写 5 节 + 对照备选 + 参考来源），落盘时机 = rd-infra 落地回执后（同分支单写者）。
+- **架构评审闸门**：**已完成 2026-10-14**（用户拍板「轻量评审」· arch `done(full)`）：结论**有条件可行** + 6 项定稿（排除点位置 / `status` 输出契约（逐字）· E2 条目感知且只改 `unattributed_pi_panes` · `check` 折入 `check_alias_resolution` · ADR 达标 · 协议边界指针）；**PM 裁定 D-A/B/C 均采纳 arch 默认建议**（D-A arch 反对「两处 claimed 一致」已记录）；**ADR 落盘待授权**（`docs/adr/2026-10-14-subagent-session-identity-exclusion.md` · 状态 `已接受（待落地 v0.18.3）` · Owner arch-designer · ≤60 行 · 必写 5 节 + 对照备选 + 参考来源），**ADR 已落盘**（`docs/adr/2026-10-14-subagent-session-identity-exclusion.md` · 49 行 · 状态 `已接受（待落地 v0.18.3）` · Owner arch-designer）+ `docs/adr/README.md` 索引一行 + 评审报告 `docs/reports/2026-10-14-T525-arch-review.md`（76 行）。
+- **交付记录**：PR [#43](https://github.com/Nathan3303/nao-skills/pull/43) squash **`fbddd0d`**（main 恰 1 条 · 无 `wip()` · 分支删净）· RD 3 条 + arch 1 条 + QA 1 条 `wip(T525)` 提交（11 文件 / +564 −4）· ADR + arch 报告 + QA 报告（recon 37 / verify 66 行）· 未 bump 版本（发布节点 PM 执行）。
+- **本批残差（已记录）**：**R-1** 负载偶发 SKIP/DEGRADE ⇒ 发布判据须空载跑 `test:t4:full` · **R-2** E2 收口后「仅被子代理认领的 pane 回告警」= ADR 已记边界 · 未拉真实 pi-subagents 子会话（夹具注入）· 合并 body 一字偏差（「守卫」→「校验」，无实质影响，PM 裁定忽略）。
 - **版本记录**：PRD 落 `docs/prds/2026-10-14-subagent-isolation.md`（本文件；归档时登记 `docs/prds/README.md`）；运行时状态记 `docs/tasks-state.md`（⑥ 收口）。
 - **待裁量项**：本批关闭 ⑥；维持 ⑦⑧⑨（T512 余项）· ⑫后半 · ①②④⑤ 等更早遗留 · O-1 观察项。
 
