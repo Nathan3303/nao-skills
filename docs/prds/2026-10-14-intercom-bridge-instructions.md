@@ -1,7 +1,8 @@
 # PRD：子代理会话内协作口径（nao 版 `intercomBridge.instructionFile` + 协议条款）
 
-- 状态：**已交付并合并（待发布 v0.18.4）** · Owner：PM · 更新：2026-10-14
+- 状态：**已交付并发布（v0.18.4 · npm 已重发并核验）** · Owner：PM · 更新：2026-10-14
 - **验收记录** = 2026-10-14 PM 验收**通过（AC2–AC7 全过）**：PR [#44](https://github.com/Nathan3303/nao-skills/pull/44) squash **`2a10e23`**（main 恰 1 条 · 无 `wip()` · 分支删净）· QA 独立复跑 **GO**（`check` rc=0 ×2（roles=6 · files 48）· `npm test` rc=0 · 100s · **16/16 PASS · 断言 360→404** · SKIP=0/DEGRADE=0/NOTE=2 · 空载 `test:t4:full` rc=0）+ 契约四查 + 负控四态（含 QA 自建 M-D）+ 能力门实测 · 验收评论见 PR #44
+- **发布记录** = 2026-10-14 **v0.18.4（PATCH）已发布**：发布提交 `463f507`（pin 升 0.18.4）· **tag `v0.18.4` + Release 已发**（**AC9 自证：`gh release view` name = `v0.18.4`**）· 发布前置 `test:t4:full` rc=0（空载重跑 1m34s · SKIP=0/DEGRADE=0）· **npm 重发已核验**（用户执行 `npm publish`；`dist-tags.latest` = `0.18.4` + `dist.integrity` 与本地 tarball **逐字节一致**（`sha512-rzP9tuEu…` · 134,484 B））。
 - 开工确认卡（2026-10-14 · ask-me 用户拍板 5 项）：D1 范围 = **按 PRD**（模板 + 同目录安装说明 + 协议小节 + `cases/16` 探针 + 文档；**安装器留 ⑨**）· D2 占位符 = **不用 `{orchestratorTarget}`**（走 `contact_supervisor`）· D3 安装说明落点 = **模板同目录 `README.md`**（协议小节给指针）· D4 版本/npm = **v0.18.4（PATCH）+ 发布时重发**（用户执行 `npm publish`）· D5 立项 = **降级 `nao/intercom-bridge`**（无 Issue）· **arch 评审 = 跳过**（Q1 选按 PRD ⇒ 无安装器 ⇒ 无机制语义变更，QA 判定不需要）
 - 指针：上游 = 用户 2026-10-14「**继续未完成的任务**」⇒ 台账 **⑦（= T512-②）** · 来源证据 `docs/reports/2026-10-12-pi-subagents-compat-review.md` §4.1（协议/角色卡补「会话内子代理」条款）+ §4.2（nao 版 `intercomBridge.instructionFile` 模板）· 成熟度判定 = 命中 `pm-to-spec.md` §一.4 · **QA 接缝复核** = 2026-10-14 `done(full)`：**T512「自动桥整条死」的前提在 pi-subagents 0.78.0 已过期**（默认 `bridge: active`）⇒ 本批收敛为「**补 nao 语义差距（G1–G3）+ 落模板 + 补协议条款 + 机械探针**」，采 **C1**
 - 优先级：中（协作口径固化 · 低成本 · 零运行时代码）· 战略筛子：命中「机制完整性 / 协作语义」→ 做 · MoSCoW：Should · Kano：期望型 · RICE ≈7.2（附录）
