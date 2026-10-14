@@ -8,7 +8,7 @@
 
 > 本区是 PM 的**悬空状态**（任务状态见下方五栏）；重开后逐行回读确认（当前阶段 · 未决决策 · 口头约束）。
 
-- 🔄 **T525 批次开工（2026-10-14 · 台账待裁量项 ⑥ = T512-①）**：用户选定 **⑥**（`status`/`close` 对 `subagent-*` 的**显式识别与排除**，防父子 pane 句柄串扰与枚举污染）。已过三关：PRD `docs/prds/2026-10-14-subagent-isolation.md`（待派发）· **QA 现状复现 + 接缝 `done(full)`**（**核心危害面 ≈ 0**：`status` 不列子代理 / `close subagent-*` 已 rc=1 且父 pane 存活 / `ensure` 不误判；**但安全是隐式的**（`nao-fleet.sh` 内 `grep -c subagent` = 0）⇒ 本批 = 显式化 + 护栏 + 文案点名；**发现真边界缺口 E2**：`unattributed_pi_panes` 的 claimed 会被子代理继承的 `tmuxPane` 认领 ⇒ 孤儿 pane 告警被掩盖）· 开工卡 **D1–D5 全拍板**（完整范围 / E2 收口 / 轻量 arch / 降级 `nao/subagent-isolation` + v0.18.3 / 发布时重发 npm）。**断言清单 T1–T10** 由 QA 给出（含前缀不误伤正控 `qa-subagent-x`、`close qa` 正控）。**在飞** = arch-designer-T525 轻量结构评审中（闸门：回执后派 rd-infra）。
+- 🔄 **T525 批次开工（2026-10-14 · 台账待裁量项 ⑥ = T512-①）**：用户选定 **⑥**（`status`/`close` 对 `subagent-*` 的**显式识别与排除**，防父子 pane 句柄串扰与枚举污染）。已过三关：PRD `docs/prds/2026-10-14-subagent-isolation.md`（待派发）· **QA 现状复现 + 接缝 `done(full)`**（**核心危害面 ≈ 0**：`status` 不列子代理 / `close subagent-*` 已 rc=1 且父 pane 存活 / `ensure` 不误判；**但安全是隐式的**（`nao-fleet.sh` 内 `grep -c subagent` = 0）⇒ 本批 = 显式化 + 护栏 + 文案点名；**发现真边界缺口 E2**：`unattributed_pi_panes` 的 claimed 会被子代理继承的 `tmuxPane` 认领 ⇒ 孤儿 pane 告警被掩盖）· 开工卡 **D1–D5 全拍板**（完整范围 / E2 收口 / 轻量 arch / 降级 `nao/subagent-isolation` + v0.18.3 / 发布时重发 npm）。**断言清单 T1–T10** 由 QA 给出（含前缀不误伤正控 `qa-subagent-x`、`close qa` 正控）。**arch 回执已到（done(full)）**：有条件可行 + 6 项定稿（排除点位置 / `status` 逐字输出契约 / **E2 改条目感知且只改 `unattributed_pi_panes`** / `check` 折入 `check_alias_resolution` / **ADR 达标** / 协议边界指针）+ PM 裁定 D-A/B/C 均采纳 → **在飞** = rd-infra-T525 落地中。
 - ✅ **T524 交付闭环（2026-10-14 · v0.18.2 已发布 · 含 npm 重发已核验）**：⑯ `nao-fleet.sh:1676` **删净**与实现不符的「或用 `--force` 跳过闸门」子句（用例 13 加**双向断言**：负 = 输出不含 `--force`、正 = 仍含「人工核对」；变异 M1/M2 各恰 2 条 FAIL）；⑮ t4 夹具缓存**自洽生命周期**（`lib.sh` 单点 `t4_cache_cleanup` + `EXIT` trap：成功即清 / rc≠0 保留 + 打印路径 / 用户传入永不删 / `T4_KEEP_CACHE=1` 逃生口 / 只读命令不建目录 / `mktemp` 失败非 0；OWNED 不导出 + 前缀/软链/单层守卫），新增 `cases/14`（27 条断言，含 ⑲⑳ 单点与破坏面静态断言），存量 `/tmp/nao-t4.*` **129 → 0**。**验收 = 通过（AC1–AC8 全过）**：QA 独立复跑 **GO（终）**（`check` rc=0 roles=6 files=46 · `npm test` rc=0 · 14/14 PASS · **断言 282→313** · SKIP/DEGRADE=0 · 空载 `test:t4:full` rc=0）· ⑮ 25+ 条独立探针全过 · PR [#42](https://github.com/Nathan3303/nao-skills/pull/42) squash **`e83ced2`**（main 恰 1 条 · 无 `wip()` · 分支删净）· QA 报告 79 行 · **tag `v0.18.2` + Release 已发**（发布提交 `d56de97` · **AC9 自证：标题严格 = `v0.18.2`**）· **npm 0.18.2 重发已核验**（2026-10-14 · 用户执行 · `latest: 0.18.2` + `dist.integrity` 与本地 tarball **逐字节一致**（129,985 B））。
 - 🔄 **T524 批次开工（2026-10-14 · 台账待裁量项 ⑯+⑮ 合并小批）**：用户选定 **⑯**（`nao-fleet.sh:1676` warn 文案与实现不符 —— 该分支不消费 `--force`）+ **⑮**（`/tmp/nao-t4.*` 夹具累积 129 个 · 无 trap 收尾 · 只读命令也建目录 · `mktemp` 失败空值续跑）。已过三关：PRD `docs/prds/2026-10-14-cache-warn-cleanup.md`（待派发）· QA 接缝 `done(full)`（⑯ 采 C1 扩 `cases/13` 双向断言 + **删净** `--force` 子句 · ⑮ 采 S1 = `lib.sh` 单点 `t4_cache_cleanup` + `EXIT` trap + mode 感知 + **env-only** `T4_KEEP_CACHE=1` + 三态打印 · 新增 `cases/14`（≥12 条 hermetic 断言）· 存量 **X2** 一次性清理 · **两项均不需 arch**）· 开工卡 **D1–D5 全拍板**（按 QA 定稿 / **发布时重发 npm 0.18.2** / v0.18.2 / 降级 `nao/cache-warn-cleanup` / X2）。**在飞** = rd-infra-T524 落地中。
 - ✅ **T523 交付闭环（2026-10-14 · v0.18.1 已发布）**：`close` 末段「无法确认在线状态」补回归护栏 —— 新增 `tests/t4/cases/13-close-guards.sh`（6 组 15 条**双侧断言**：不可验证 ⇒ 非静默失败·真离线 ⇒ 静默 rc=0·判据三子句正负·`--force` 现状锁定；③ 查 **stderr** 防恒假断言；夹具用派生名防命中调用者自身）+ `run.sh` 注册 `"13"` / usage `<01-13>` + `tests/README.md` 用例行 + `docs/releases/v0.18.1.md`。**验收 = 通过（AC1–AC8 全过）**：QA 独立复跑 **GO**（`check` rc=0 roles=6 files=46 · `npm test` rc=0 · 91.8s · **13/13 PASS** · SKIP=0/DEGRADE=0/NOTE=3 · **断言 267→282**）· 三变异 MUT-C/D/E 均被拦且还原 md5 一致 · BR2 注册负控（摘掉 `"13"` ⇒ 12 用例）· 机制脚本**一字未改** · PR [#41](https://github.com/Nathan3303/nao-skills/pull/41) squash **`ef391af`**（main 恰 1 条 · 无 `wip()` · 分支删净）· QA 报告 66 行 · **tag + Release 已发**（发布提交 `292b3f4` · **AC9 自证：`gh release view` name = `v0.18.1`**）· npm **不重发** · 发布前置闸门 rc=0（空载 1m59s · SKIP=0/DEGRADE=0）。
@@ -20,12 +20,12 @@
 - ✅ **T521 交付闭环（2026-10-14 · v0.17.3）**：GitHub Release 标题口径 = 裸 `vX.Y.Z` —— 权威单处 `common/release-notes.md` §一.5 硬约束 + §四清单 + §五红线 · 两处引用收敛（`github-flow.md:56` / PM 卡 :121）并指回单处 · PM 卡 **v24→v25** · 模板注释 1 行（6 分段标题未动）· 一次性只读探针 `PASS=28 FAIL=0` + 负控 2/2 · QA 独立复跑 **GO** · squash `eff44ec` · tag + Release 已发（发布提交 `4d97f00` · **AC9 自证：标题严格 = `v0.17.3`**）· **npm 重发 0.17.3 已核验**（`latest` + integrity 逐字节）。
 - ✅ **T520 交付闭环（2026-10-14 · v0.17.2）**：ADR 文档契约 —— 必写 5 节 + 可选 3 节（参考来源恒末）· 头部恰 4 字段 · 状态值域 4 值 · 禁写/下沉清单 · 新增 `templates/adr.md.example` + `adr-index.md.example` · `arch-designer` 卡 v11→v12 · QA 探针 `PASS=53 FAIL=0` + 负控 2/2 · squash `160cc60` · tag + Release 已发（`9833344`）· **npm 不重发**。
 
-- 当前阶段：**T525 开工中**（⑥ 子代理会话隔离 · 降级批次 `nao/subagent-isolation`）：PRD 已完成 + QA 现状复现/接缝已确认 + 开工卡已拍板 → **arch-designer-T525 轻量结构评审中**（回执后派 rd-infra；qa-T525 已在场待命）；上批 T524（v0.18.2）已闭环发布
+- 当前阶段：**T525 实施中**（⑥ 子代理会话隔离 · 降级批次 `nao/subagent-isolation`）：PRD 已定稿（含 arch 6 项冻结）+ QA 现状复现/接缝已确认 + 开工卡已拍板 + **arch 评审已回执** → **rd-infra-T525 落地中**（下一步：arch 落盘 ADR/报告 → qa 独立复跑 T1–T10 + 两份报告）；上批 T524（v0.18.2）已闭环发布
 - 当前 PRD：`docs/prds/2026-10-14-subagent-isolation.md`（状态：**待派发**）
 - 未决决策点：无（D1–D5 已拍板）；PR Reviewer = qa（无 `gh --reviewer` 指派 → 结论走 intercom）
 - 待用户回答：无（npm 重发已拍 = 发布时重发 0.18.3）
-- 未派发队列：见下方「待派发队列」（共 2 项：① arch 回执后 `rd-infra-T525` 落地；② rd-infra 回执后 `qa-T525` 独立复跑 + T1–T10 + 两份报告）
-- 下次唤醒条件：**arch 回执 / 下批需求授意 / 用户要求重开 PM**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = PM + qa-T525 + arch-designer-T525（rd-infra 未拉）
+- 未派发队列：见下方「待派发队列」（共 2 项：① `arch-designer-T525` 落盘 ADR + 评审报告（等 rd-infra 回执，同分支顺序写）；② `qa-T525` 独立复跑 T1–T10 + 两份报告）
+- 下次唤醒条件：**rd-infra 回执 / 下批需求授意 / 用户要求重开 PM**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = PM + qa-T525 + arch-designer-T525 + rd-infra-T525
 - 口头约束已落盘：项目 `AGENTS.md` 项目约束（ask-me 提问）· PRD §5 BR6 格式禁令 + §9 R5/R6（T519）· ADR 字段口径 = `deliverable-docs.md` §四（T520 · 状态值域 4 值 / 头部 4 字段 / 60 行上限）
 - 需求分支 / PR：见下方「需求分支 / PR / 发布」（本批降级分支 `nao/t4-gate`——**已 squash 合并 `e8a495b` 并删净**）
 - 会话体检：当前 PM 会话 = `01a13817`（pane %31），T522 全批 ctx 5%→16%（闭批时约 160k/1000k · 无压缩）· 舰队 = 仅 PM（派生已回收） · 本快照为接续唯一事实源（main = `85606e9`）
@@ -107,19 +107,20 @@
 
 | 任务编号 | 目标会话 | 概要 | 排队原因 |
 | :--- | :--- | :--- | :--- |
-| T525-rd | rd-infra-T525 | `nao-fleet.sh`：`status` 汇总行 + `close` 显式拒绝（点名 subagent-*/pi-subagents）+ E2 claimed 收口 + `check` 守卫 + 新增 `cases/15-subagent-isolation.sh`（T1–T10）+ `run.sh` 注册 `"15"` + `tests/README.md` + `docs/releases/v0.18.3.md` | **闸门：arch-designer-T525 评审回执未到** |
-| T525-qa | qa-T525 | 独立复跑 T1–T10 + 前缀/正控/负控 + 落盘现状复现与验证报告（`done(full)`） | 依赖 rd-infra 先落地（同分支顺序写） |
+| T525-arch | arch-designer-T525 | 落盘 ADR（`docs/adr/2026-10-14-subagent-session-identity-exclusion.md`）+ 评审报告（`docs/reports/2026-10-14-T525-arch-review.md` + ADR 索引一行）（授权待落） | **依赖 rd-infra 先落地**（同分支顺序写） |
+| T525-qa | qa-T525 | 独立复跑 T1–T10 + 前缀/正控/负控 + 落盘现状复现与验证报告（`done(full)`） | 依赖 arch 落盘完成 |
 
 ## 进行中
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T525-arch | arch-designer-T525 | 轻量结构评审（排除点位置 · `status` 输出契约 · E2 与 F1/`offline_verifiable` 交互） | 2026-10-14 | AC2–AC7 结构面 | — |
+| T525-rd | rd-infra-T525 | `nao-fleet.sh`：`status` 汇总行（`subagent_in_field`）+ `close` 显式拒绝（只查 `$target`、`--force` 不旁路）+ E2 `roster_pane_claims()` 条目感知（**只改 `unattributed_pi_panes`**）+ `check` 守卫（折入 `check_alias_resolution`）+ 新增 `cases/15-subagent-isolation.sh`（T1–T10）+ `run.sh` 注册 `"15"` + `tests/README.md` + `intercom-protocol.md` 边界指针 + `docs/releases/v0.18.3.md` | 2026-10-14 | AC2–AC7 | 待起 |
 
 ## 已回执待验收
 
 | 任务编号 | 回执摘要（≤150字） | 详情路径 | 待办 |
 | :--- | :--- | :--- | :--- |
+| T525-arch | **`done(full)` 轻量结构评审：有条件可行** —— 6 项全定稿（排除点于 `cmd_close` 解析第一条且只查 `$target` · `status` 逐字措辞+派生节末独立行+N=0 不打印 · **E2 须改条目感知 claimed 且只改 `unattributed_pi_panes`** · `check` 折入 `check_alias_resolution`（id+alias）· **ADR 达标** · 协议边界指针）· 三栏清单（必须/建议/不做）+ D-A/B/C 默认建议（PM 均采纳；D-A 反对两处 claimed 一致已记录） | 只读回执（未落盘）；拟落 `docs/adr/2026-10-14-subagent-session-identity-exclusion.md` + `docs/reports/2026-10-14-T525-arch-review.md` | 落盘 ADR + 报告 + ADR 索引一行（等 rd-infra 回执后召唤） |
 
 ## 挂起（被抢占 / 降级）
 
