@@ -39,9 +39,12 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "bash .agents/scripts/nao-fleet.sh check && npm run check:agents",
+    "test": "npm run test:agents && npm run test:t4",
+    "test:agents": "bash .agents/scripts/nao-fleet.sh check && npm run check:agents",
+    "test:t4": "bash tests/t4/run.sh",
+    "test:t4:full": "T4_ALLOW_MISSING=0 T4_REQUIRE_FULL=1 bash tests/t4/run.sh",
     "check:agents": "tsc -p tsconfig.agents.json",
-    "prepack": "npm test"
+    "prepack": "npm run test:agents"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",

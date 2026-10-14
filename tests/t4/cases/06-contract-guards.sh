@@ -62,4 +62,49 @@ for s in nao-fleet frontend-design; do
 done
 t4_note "AC2 动态发现（真 pi 加载）见 T4-02；无凭据时以本条静态断言为替代证据"
 
+# --- 门禁接线契约（T522 · PRD §三.1/2 · BR1/BR4/BR5）------------------------
+# 防「接线被后人摘掉无人报警」+ 封第三类假绿（用例脚本不以 t4_exit|t4_skip|exec 收尾时，
+# T4_FAIL 计数已累加但进程 rc 仍 0 ⇒ 假绿）。断言实体由 QA 维护。
+scripts_tsv="$(node -e '
+const s=require(process.argv[1]+"/package.json").scripts||{};
+console.log("test="+(s.test||""));
+console.log("full="+(s["test:t4:full"]||""));
+console.log("prepack="+(s.prepack||""));
+' "$T4_ROOT" 2>&1)"
+script_test="$(printf '%s\n' "$scripts_tsv" | sed -n 's/^test=//p')"
+script_full="$(printf '%s\n' "$scripts_tsv" | sed -n 's/^full=//p')"
+script_prepack="$(printf '%s\n' "$scripts_tsv" | sed -n 's/^prepack=//p')"
+t4_info "scripts: test=[$script_test] full=[$script_full] prepack=[$script_prepack]"
+
+# ① 默认门禁真串联 t4（防「装饰性接线」：写了 test:t4 但 test 不调用它）
+t4_assert_contains "$script_test" "npm run test:t4" "T522 BR1: scripts.test 串联 npm run test:t4"
+
+# ② full 闸门两轴齐备（缺产物轴 + 能力轴；任一缺失则发布判据退化）
+axes=""
+printf '%s' "$script_full" | grep -qF 'T4_ALLOW_MISSING=0' && axes="${axes}A"
+printf '%s' "$script_full" | grep -qF 'T4_REQUIRE_FULL=1' && axes="${axes}R"
+t4_assert_eq "AR" "$axes" "T522 BR4: test:t4:full 同时含两严格轴 A(T4_ALLOW_MISSING=0)+R(T4_REQUIRE_FULL=1)"
+
+# ③ prepack 与 t4 解耦（发布/打包不被 ≈2min + 网络/凭据/tmux 阻塞，BR5）
+#   变异控制实证：仅断言「不含 test:t4」会漏掉 prepack="npm test"（间接引入 t4，X3 曾假通过）
+#   ⇒ 正向钉住 test:agents，且同时排除直连 test:t4 与经由 npm test 的间接引入。
+pre_ok=""
+if printf '%s' "$script_prepack" | grep -qF 'test:agents' \
+   && ! printf '%s' "$script_prepack" | grep -qE '(^|[^:[:alnum:]_-])npm test([^[:alnum:]_-]|$)' \
+   && ! printf '%s' "$script_prepack" | grep -qF 'test:t4'; then pre_ok=1; fi
+t4_assert_eq "1" "$pre_ok" "T522 BR5: scripts.prepack 仅 test:agents（无直连 test:t4 亦无 npm test 间接引入）"
+
+# ④ 全部用例以收尾函数结束（封第三类假绿：只累 T4_FAIL 不退出 ⇒ rc=0）
+bad_tail=""; n_case=0
+for c in "$T4_ROOT"/tests/t4/cases/*.sh; do
+  [ -f "$c" ] || continue
+  n_case=$((n_case + 1))
+  last="$(grep -v '^[[:space:]]*$' "$c" | tail -1)"
+  case "$last" in
+    *t4_exit*|*t4_skip*|*exec*) ;;
+    *) bad_tail="$bad_tail $(basename "$c")" ;;
+  esac
+done
+t4_assert_eq "" "${bad_tail# }" "T522: 全部用例（$n_case 例）以 t4_exit|t4_skip|exec 收尾"
+
 t4_exit

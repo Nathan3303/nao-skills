@@ -15,3 +15,4 @@
 | 2026-10-13 | [舰队 pane 创建与布局的显式目标寻址（派生宿主窗口）](2026-10-13-derived-pane-window-addressing.md) | 派生 pane 显式目标寻址 | 已接受（T517 · 待 RD 落地） |
 | 2026-10-13 | [cleanup 守卫：生产默认 socket 判定与 TMUX_TMPDIR 解耦](2026-10-13-close-anchor-cleanup-guard.md) | 默认 socket 判定与解耦 | 已接受（随 T516 / 0.16.0；随 PR #30 入库） |
 | 2026-10-14 | [ADR 结构契约（骨架单源 / 状态值域 / 职责下沉）](2026-10-14-adr-structure-contract.md) | ADR 结构契约（骨架单源） | 已接受（待落地 v0.17.2） |
+| 2026-10-14 | [npm test 门禁范围与严格性（t4 升格 + prepack 解耦）](2026-10-14-npm-test-gate-scope.md) | npm test 默认全量门禁 | 已接受（待落地 v0.18.0） |
