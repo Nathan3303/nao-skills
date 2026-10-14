@@ -1,6 +1,7 @@
 # PRD：`close` 末段「无法确认在线状态」缺口补回归护栏
 
-- 状态：**待派发（开工已确认 2026-10-14）** · Owner：PM · 更新：2026-10-14
+- 状态：**已交付并合并（待发布 v0.18.1）** · Owner：PM · 更新：2026-10-14
+- **验收记录** = 2026-10-14 PM 验收**通过（AC1–AC8 全过）**：PR [#41](https://github.com/Nathan3303/nao-skills/pull/41) squash **`ef391af`**（main 恰 1 条 · 无 `wip()` · 分支删净）· QA 独立复跑 **GO**（`check` rc=0 roles=6 files=46 · `npm test` rc=0 · 91.8s · **13/13 PASS** · SKIP=0/DEGRADE=0/NOTE=3 · **断言 267→282**）+ 三变异 MUT-C/D/E 全拦 + BR2 注册负控 + BR6 裸名实证 · 验收评论见 PR #41
 - 开工确认卡（2026-10-14 · ask-me 用户拍板 5 项）：D1 范围 = **按 QA 定稿**（C2 + `run.sh` 注册三行 + 6 条双侧断言 + MUT-C/D/E）· D2 `:1676` 文案 = **记台账新项 ⑯ 另批**（本批不碰机制脚本）· D3 版本 = **v0.18.1（PATCH）**· D4 立项 = **降级批次 `nao/close-guard`**（无 Issue）· D5 arch 评审 = **跳过**（QA 判定无结构决策；理由已记 §九）
 - 指针：上游 = 用户 2026-10-14 选定台账待裁量项 **⑭**（T522 QA 报告 R2 实测缺口 · 「小批 · 小改测试代码」）· 成熟度判定 = 命中 `pm-to-spec.md` §一.4（用户明示范围 + R2 已给实测复现）· **QA 接缝复核** = 2026-10-14 `done(full)`（采 C2 但**补 `run.sh` 三行**；断言 6 条双侧；变异 **MUT-C/D/E** 实测）
 - 优先级：中低（护栏补缺 · 低成本）· 战略筛子：命中「机制护栏 / 单一门禁可信度」→ 做 · MoSCoW：**Should** · Kano：基本型（缺护栏 = 静默假绿通道）· RICE ≈7.2（附录）
@@ -24,12 +25,12 @@
 
 - **北极星**：`close` 的**在线状态判据**被默认门禁机械守护 —— 判据被删/被短路（`if true`）/被收窄（删 `NAO_TERMINAL` 子句）**都**会被拦。
 - **预期**：基线 **13/13 PASS · rc=0 · SKIP=0 · DEGRADE=0**（能力齐备机）；MUT-C ⇒ **恰用例 13 FAIL**、其余 12 PASS、`npm test` rc≠0；MUT-D / MUT-E ⇒ 对应断言 FAIL；还原后全绿 + `md5` 前后一致。
-- **观测**：`npm test` rc + 13 用例逐条状态 + 断言数（只增不减：12/263→13/≥270）+ 三变异各自的 FAIL 断言编号。
+- **观测**：`npm test` rc + 13 用例逐条状态 + 断言数（只增不减：**12/267→13/282**；口径订正：派发期写的 263/≥270 为旧快照，以 QA 实测 267 为基线）+ 三变异各自的 FAIL 断言编号。
 
 ## 三、范围 / 非范围
 
 - **范围**
-  1. 新增 `tests/t4/cases/13-close-guards.sh`：**6 条双侧断言**（①不可验证环境 ⇒ rc≠0；②同场景 stdout 不含「未运行（无需回收）」；③同场景 **stderr** 含「无法确认」+「不做静默 no-op」；④反向：名册可用且为空 + 无句柄 ⇒ rc=0 + stdout 含「未运行（无需回收）」；⑤`offline_verifiable` 三子句各一条（`NAO_TERMINAL=tmux` / `NAO_TERMINAL=foot` / `$TMUX` 在场）；⑥`--force` 现状锁定）。
+  1. 新增 `tests/t4/cases/13-close-guards.sh`：**6 条双侧断言**（①不可验证环境 ⇒ rc≠0；②同场景 stdout 不含「未运行（无需回收）」；③同场景 **stderr** 含「无法确认」+「不做静默 no-op」；④反向：名册可用且为空 + 无句柄 ⇒ rc=0 + stdout 含「未运行（无需回收）」；⑤`offline_verifiable` 三子句各一条（`NAO_TERMINAL=tmux` / `NAO_TERMINAL=foot` / `$TMUX` 在场）—— **极性口径：`tmux`/`screen`/`$TMUX` = 正向（可验证 ⇒ rc=0 + MARK）；`foot`（及 `ghostty`/`ptyxis`）= 负向（∉ {tmux,screen}，不构成可验证 ⇒ rc≠0、不含 MARK）**；⑥`--force` 现状锁定）。
   2. `tests/t4/run.sh`：`CASE_IDS`/`CASE_TITLES` 增 `"13"` + usage 文案 `<01-12>` → `<01-13>`（**必需**：该数组是显式枚举，不注册则用例永不执行 —— QA 指出的 PM 候选盲点）。
   3. 变异控编排与留痕：**MUT-C**（`if true`）· **MUT-D**（`if false`，过度矫正）· **MUT-E**（删 `NAO_TERMINAL` 子句，定义收窄）+ **单调性交叉**（MUT-C 下 ④ 仍绿）+ 还原 `md5` 证据。
   4. 文档同步：`tests/README.md` 用例表 +1 行（含能力依赖说明）· `docs/releases/v0.18.1.md`（PATCH）· `docs/tasks-state.md` ⑭ 收口。
@@ -84,7 +85,7 @@
 - **灰度**：不适用（本仓内部门禁）。
 - **回滚**：revert 用例与注册三行并发下一 PATCH；已 push tag 不删。
 - **npm 重发**：**不重发**（`package.json` 不变、`tests/` 不入包；版本漂移已在 release notes 记录）。
-- **发布前置**：`npm run test:t4:full` **rc=0**（本机已具备 `pi`/tmux/bwrap/strace/registry）。
+- **发布前置**：`npm run test:t4:full` **rc=0** —— ✅ 发布期实测（空载 · 合并后 main）：**rc=0 · 1m59s · SKIP=0 / DEGRADE=0 / NOTE=3**（O-1 提醒：连续跑批可能出现负载性 SKIP，发布判据须**空载**跑）。
 - **监控**：不适用；唯一指标 = `npm test` rc + 13 用例逐条状态 + 断言数（只增不减）。
 
 ## 九、变更治理
