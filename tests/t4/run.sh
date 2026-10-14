@@ -7,11 +7,11 @@
 #   bash tests/t4/run.sh --preflight         # 打印前置探测（不执行用例）
 #   bash tests/t4/run.sh --case 03           # 只跑指定编号
 #   T4_ALLOW_MISSING=1 bash tests/t4/run.sh  # 宽松：依赖缺失=BLOCKED（仅显式 1）
-#   T4_REQUIRE_FULL=1 bash tests/t4/run.sh   # 发布前置：SKIP 计数>0 即 FAIL（与上者正交）
+#   T4_REQUIRE_FULL=1 bash tests/t4/run.sh   # 发布前置：SKIP+DEGRADE 计数>0 即 FAIL（与上者正交）
 #
 # 退出码:
 #   0 = 汇总全部 PASS/SKIP（严格默认下不会出现 BLOCKED）
-#   1 = 有 FAIL / 参数错误 / 未识别状态（MISSING、NOT_RUN、未知值）/ (full) SKIP 计数>0
+#   1 = 有 FAIL / 参数错误 / 未识别状态（MISSING、NOT_RUN、未知值）/ (full) SKIP+DEGRADE>0
 #   2 = 有 BLOCKED（仅宽松 T4_ALLOW_MISSING=1 下可能出现）
 set -uo pipefail
 
@@ -116,19 +116,22 @@ for i in "${!CASE_IDS[@]}"; do
 done
 
 printf '\n==================== T4 汇总 ====================\n'
-fail=0; blocked=0; skip_cases=0; skip_lines=0; note_lines=0
+fail=0; blocked=0; skip_cases=0; degrade_lines=0; note_lines=0
 for i in "${!CASE_IDS[@]}"; do
   id="${CASE_IDS[$i]}"
   if [ "$mode" = "case" ] && [ "$only" != "$id" ]; then continue; fi
   st="${results[$id]:-NOT_RUN}"
   log="$T4_CACHE_DIR/case-${id}.log"
-  sub_skip=0; sub_note=0
+  sub_skip=0; sub_degrade=0; sub_note=0
   if [ -f "$log" ]; then
-    # SKIP 行解析：[SKIP]（T513 内部标记）/ SKIP:（t4_skip）/ SKIP+空格（T517 子项标记）
+    # 三类标记均行首锚定（`^[[:space:]]*`），避免行中提及字面被误计：
+    #   [SKIP]（T513 内部标记）/ SKIP:（t4_skip）/ SKIP+空格（T517 子项标记）
+    #   [DEGRADE]（t4_degrade）/ [NOTE]（t4_note）
     sub_skip="$(grep -cE '^[[:space:]]*(\[SKIP\]|SKIP[[:space:]:])' "$log" 2>/dev/null || true)"
-    sub_note="$(grep -cF '[NOTE]' "$log" 2>/dev/null || true)"
+    sub_degrade="$(grep -cE '^[[:space:]]*\[DEGRADE\]' "$log" 2>/dev/null || true)"
+    sub_note="$(grep -cE '^[[:space:]]*\[NOTE\]' "$log" 2>/dev/null || true)"
   fi
-  sub_skip="${sub_skip:-0}"; sub_note="${sub_note:-0}"
+  sub_skip="${sub_skip:-0}"; sub_degrade="${sub_degrade:-0}"; sub_note="${sub_note:-0}"
   printf '  %s  %-12s %s\n' "$id" "$st" "${CASE_TITLES[$i]}"
   case "$st" in
     PASS|SKIP) ;;       # 白名单：仅 PASS/SKIP 视为通过
@@ -136,12 +139,12 @@ for i in "${!CASE_IDS[@]}"; do
     *) fail=1 ;;        # FAIL* / MISSING / NOT_RUN / 未知值 一律 rc≠0
   esac
   if [ "$st" = "SKIP" ] || [ "$sub_skip" -gt 0 ]; then skip_cases=$((skip_cases + 1)); fi
-  skip_lines=$((skip_lines + sub_skip))
+  degrade_lines=$((degrade_lines + sub_degrade))
   note_lines=$((note_lines + sub_note))
 done
 printf '  ---\n'
-printf '  SKIP: %d 例（含用例内 SKIP 行）· %d 条 SKIP 行\n' "$skip_cases" "$skip_lines"
-printf '  NOTE: %d 条（允许，不判 FAIL）\n' "$note_lines"
+printf '  SKIP=%d · DEGRADE=%d · NOTE=%d\n' "$skip_cases" "$degrade_lines" "$note_lines"
+printf '  （SKIP 含用例内 [SKIP]/SKIP: 行；DEGRADE=能力降级，默认豁免、full 计分；NOTE 允许）\n'
 printf '缓存目录: %s\n' "$T4_CACHE_DIR"
 if [ "$fail" = "1" ]; then
   printf 'RESULT: FAIL（存在 FAIL / MISSING / NOT_RUN / 未识别状态）\n'
@@ -151,9 +154,9 @@ if [ "$blocked" = "1" ]; then
   printf 'RESULT: BLOCKED（T2 产物缺失；仅宽松 T4_ALLOW_MISSING=1 下出现）\n'
   exit 2
 fi
-if [ "$T4_REQUIRE_FULL" = "1" ] && [ "$skip_cases" -gt 0 ]; then
-  printf 'RESULT: FAIL（T4_REQUIRE_FULL=1 且 SKIP 计数=%d>0 —— 发布前置要求 SKIP=0）\n' "$skip_cases"
+if [ "$T4_REQUIRE_FULL" = "1" ] && [ "$((skip_cases + degrade_lines))" -gt 0 ]; then
+  printf 'RESULT: FAIL（T4_REQUIRE_FULL=1 且 SKIP=%d + DEGRADE=%d >0 —— 发布前置要求两者均为 0）\n' "$skip_cases" "$degrade_lines"
   exit 1
 fi
-printf 'RESULT: PASS（SKIP=%d · NOTE=%d）\n' "$skip_cases" "$note_lines"
+printf 'RESULT: PASS（SKIP=%d · DEGRADE=%d · NOTE=%d）\n' "$skip_cases" "$degrade_lines" "$note_lines"
 exit 0

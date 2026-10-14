@@ -26,7 +26,7 @@ if t4_bwrap_available; then
   t4_assert_eq "0" "$rc" "4a 无网（unshare-net）下 check exit=0"
   t4_assert_contains "$out" "check: OK" "4a 无网下 check 输出 OK"
 else
-  t4_note "bwrap 不可用，4a 降级为代理黑洞环境（弱证据，4b 仍为强证据）"
+  t4_degrade "bwrap 不可用，4a 降级为代理黑洞环境（弱证据，4b 仍为强证据）"
   of="$(mktemp)"; ef="$(mktemp)"
   ( cd "$fx" && env http_proxy=http://127.0.0.1:9 https_proxy=http://127.0.0.1:9 \
         ALL_PROXY=http://127.0.0.1:9 npm_config_offline=true PI_OFFLINE=1 \
@@ -44,7 +44,7 @@ if t4_strace_available; then
   t4_info "4b connect 总数=$(grep -c 'connect(' "$st" 2>/dev/null || echo 0) · AF_INET 命中=$(printf '%s\n' "$inet" | grep -c . || true)"
   t4_assert_eq "" "$inet" "4b 全程无 AF_INET/AF_INET6 connect（nao 零网络）"
 else
-  t4_note "strace 不可用，4b 跳过（保留 4a 环境隔离证据）"
+  t4_degrade "strace 不可用，4b 跳过（保留 4a 环境隔离证据）"
 fi
 
 # --- 4c 闸门B 反向：未物化 ⇒ exit 2 + DEGRADED ------------------------------

@@ -10,7 +10,7 @@
 # 退出码约定（用例脚本）：
 #   0  = PASS      1  = FAIL      77 = SKIP（环境能力缺失）   78 = BLOCKED（依赖的 T2 产物未交付）
 # 默认严格：依赖物缺失即 FAIL。仅显式 T4_ALLOW_MISSING=1 时降级为 BLOCKED（宽松）。
-# T4_REQUIRE_FULL=1（发布前置）：汇总层 SKIP 计数必须为 0，与 T4_ALLOW_MISSING 正交。
+# T4_REQUIRE_FULL=1（发布前置）：汇总层 SKIP 计数 + DEGRADE 计数必须均为 0，与 T4_ALLOW_MISSING 正交。
 set -uo pipefail
 
 T4_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,6 +26,7 @@ T4_TARBALL="${T4_TARBALL:-}"
 export T4_ROOT PKG_NAME PKG_VERSION T4_CACHE_DIR T4_ALLOW_MISSING T4_REQUIRE_FULL T4_TARBALL
 
 T4_FAIL=0
+T4_DEGRADE=0
 T4_RC=0
 T4_OUT=""
 T4_ERR=""
@@ -35,6 +36,9 @@ t4_log()  { printf '%s\n' "$*"; }
 t4_ok()   { printf '  [PASS] %s\n' "$*"; }
 t4_bad()  { T4_FAIL=$((T4_FAIL + 1)); printf '  [FAIL] %s\n' "$*"; }
 t4_note() { printf '  [NOTE] %s\n' "$*"; }
+# 能力降级（环境缺能力但**继续跑其余断言**）：打印可计分标记 [DEGRADE] + 累加；由 run.sh 汇总并计入 full 判据。
+# 与 t4_skip 的区别：t4_skip 会终止用例（77）；t4_degrade 不终止，默认豁免、T4_REQUIRE_FULL=1 时计分。
+t4_degrade() { T4_DEGRADE=$((T4_DEGRADE + 1)); printf '  [DEGRADE] %s\n' "$*"; }
 t4_info() { printf '  -- %s\n' "$*"; }
 
 t4_exit() {
