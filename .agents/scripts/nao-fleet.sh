@@ -1397,6 +1397,34 @@ cmd_check() {
   shopt -u nullglob
   (( orphan )) || echo '  ✓ 无孤儿卡'
 
+  echo "== pi 扩展声明（T527：声明 + 文件存在，防「声明漏写 ⇒ 静默无 agent」）=="
+  if [[ ! -f "$SKILLS_DIR/package.json" ]]; then
+    # 非包根（legacy 仓内真脚本 / 夹具只有 .agents）：无 manifest 可核，跳过不判 FAIL
+    echo '  · package.json 缺失（非包根/legacy：跳过 pi.extensions 校验）'
+  elif ! command -v node >/dev/null 2>&1; then
+    printf '  ✗ node 缺失，无法校验 pi.extensions 声明\n'; rc=1
+  else
+    local ext_list="" ext_bad=0 e
+    if ext_list="$(node -e '
+      const p=require(process.argv[1]); const pi=p.pi||{};
+      const ex=pi.extensions;
+      if(!Array.isArray(ex)||ex.length===0) process.exit(3);
+      process.stdout.write(ex.join("\n"));
+    ' "$SKILLS_DIR/package.json" 2>/dev/null)"; then
+      while IFS= read -r e; do
+        [[ -n "$e" ]] || continue
+        if [[ ! -e "$SKILLS_DIR/$e" ]]; then
+          printf '  ✗ pi.extensions 声明条目不存在: %s\n' "$e"; ext_bad=1; rc=1
+        fi
+      done <<< "$ext_list"
+      if (( ext_bad == 0 )); then
+        printf '  ✓ pi.extensions 声明 %d 条且文件存在\n' "$(printf '%s\n' "$ext_list" | grep -c .)"
+      fi
+    else
+      printf '  ✗ pi.extensions 未声明或非法（package.json）\n'; rc=1
+    fi
+  fi
+
   echo "== 公共规范 =="
   for f in output-format.md intercom-protocol.md; do
     if [[ -f "$COMMON_DIR/$f" ]]; then printf '  ✓ %s\n' "$f"
