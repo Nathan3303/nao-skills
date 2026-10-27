@@ -1,6 +1,6 @@
 # PRD：角色→子代理 agent 的单一事实（运行时注册扩展）
 
-- 状态：**待派发（开工已确认 2026-10-14）** · Owner：PM · 更新：2026-10-14
+- 状态：**已交付（v0.18.5 · PR #45 squash `fb4c106` · 归档 2026-10-27）** · Owner：PM · 更新：2026-10-27
 - 开工确认卡（2026-10-14 · ask-me 用户拍板 6 项）：D1 方案 = **做 E-lite**（包内扩展运行时注册 6 个 `nao-<role-id>`；含 **M1 零 LLM 前置探针**，失败即转 **D** 并回报）· D2 tools = **Phase 1 不设**（ADR 须写「子代理不被工具约束为只读，角色卡文本是唯一约束」）· D3 命名/可发现性 = **`nao-<role-id>` + 不设裸 alias + 不启 advertise** · D4 = **采纳逃生阀 `NAO_ROLE_AGENTS=off`** + 文档写明分发面 · D5 版本/npm = **v0.18.5（PATCH）+ 发布时重发**（用户执行 `npm publish`）· D6 立项 = **降级 `nao/role-agents`** + **授权 arch 落盘 ADR/评审报告**
 - 指针：上游 = 用户 2026-10-14 选定台账 **⑧（= T512-③）**「角色→pi-subagents agent 薄壳」· 来源 `docs/reports/2026-10-12-pi-subagents-compat-review.md` §2.5/§4.4 · 成熟度判定 = 命中 `pm-to-spec.md` §一.4 · **QA 实测复核** = 2026-10-14 `done(full)`（**引用式薄壳实测不可行**；发现序/信任/字段全部钉死）· **arch 结构评审** = 2026-10-14 `done(full)`（六候选对比 → **推荐候选 ⑤ 运行时注册扩展（E-lite）**；A/B/C/F 均不采纳）
 - 优先级：中（角色在「子代理路径」可用 + 消除双份提示词）· 战略筛子：命中「机制单一事实 / 角色可用性」→ 做 · MoSCoW：Should · Kano：期望型 · RICE ≈6.0（附录）
@@ -109,3 +109,12 @@
 
 - Reach 2（6 个角色会话 + 下游仓）· Impact 2（消除双份提示词、角色在子代理路径可用）· Confidence 0.8（机制由假总线实证，但 **live 行为面**尚待一次真 pi 实证）· Effort 0.8（1 扩展 + 1 用例 + 1 断言 + ADR + 文档）⇒ **RICE ≈6.0**。
 - 战略筛子：命中「机制单一事实 + 角色可用性」→ 本批做；「静态副本（A）· 卡片即 agent（F）· tools 只读化 · model 白名单 · advertise」被筛除（各自理由见 §三）。
+
+## 十、派发记录 / 验收结果 / 变更记录（归档 2026-10-27）
+
+- **派发与顺序**（同分支顺序写，禁并发）：① `rd-infra-T527` 落实现（`de07437`）→ ② `arch-designer-T527` 落 ADR + 评审报告（`e228706`）→ ③ `qa-T527` 独立复核 + live 实证（报告 `docs/reports/2026-10-14-T527-qa-verify.md`，入库 `3ba2d5e`）→ ④ `rd-infra` 执行合并（PM 验收授权）。
+- **需求分支 / PR**：`nao/role-agents`（降级批次，无 Issue）· PR [#45](https://github.com/Nathan3303/nao-skills/pull/45) · **squash 合并 `fb4c106`**（main 恰 1 条 · 无 `wip()` · 分支已删净）· 验收评论 issuecomment-6444421262。
+- **验收结论**：**通过（AC2–AC8 全过）**。QA 独立复核 GO（`check` rc=0 ×2 · roles=6 · **files=49** · `npm test` rc=0 99s · **17/17 PASS · PASS 449**（−45 = 404 基线）· SKIP=0/DEGRADE=0 · 空载 `test:t4:full` rc=0 · 自建探针 53/0 · 三态负控 + 自建两态 md5 还原 · live：6 个 `nao-*` 可列且 `inheritProjectContext` 被 honor）。PM 独立重跑 `check`（rc=0 · files=49）并读实现核对 AC2–AC8；发布前置 `test:t4:full`（空载）rc=0 · SKIP=0/DEGRADE=0。
+- **变更记录**：AC8 口径订正（`files` 48→50 ⇒ **48→49**，`check` 只统计 `.agents/**`）· 版本 v0.18.5（PATCH）。
+- **发布**：tag `v0.18.5` + GitHub Release 已发（标题 = 裸版本号）；npm 重发由用户执行，判据 = `dist-tags.latest` = 0.18.5 且 `dist.integrity` 与本地 `npm pack` tarball 逐字节一致。
+- **遗留项**：**R1（中 · 发布闭环硬条件）** npm 注册表 → `pi.extensions` 未直接观测，发布后须冒烟（`pi install -l --approve npm:@nathan33/nao-skill@0.18.5` → `subagent list` 见 6 个 `nao-*`），失败则回退声明或 `NAO_ROLE_AGENTS=off` · **R2** 已订正 · 探针健壮性（`cases/17` 与上游事件名/导出名硬耦合，升版漂移 fail-loud）留后续小项。
