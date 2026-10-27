@@ -17,3 +17,4 @@
 | 2026-10-14 | [ADR 结构契约（骨架单源 / 状态值域 / 职责下沉）](2026-10-14-adr-structure-contract.md) | ADR 结构契约（骨架单源） | 已接受（待落地 v0.17.2） |
 | 2026-10-14 | [npm test 门禁范围与严格性（t4 升格 + prepack 解耦）](2026-10-14-npm-test-gate-scope.md) | npm test 默认全量门禁 | 已接受（待落地 v0.18.0） |
 | 2026-10-14 | [子代理会话（`subagent-*`）排除面与会话身份模型边界](2026-10-14-subagent-session-identity-exclusion.md) | 子代理不属舰队身份模型 | 已接受（待落地 v0.18.3） |
+| 2026-10-14 | [角色→子代理 agent 的单一事实（运行时注册扩展）](2026-10-14-role-agents-runtime-registration.md) | 运行时注册单一事实 | 已接受（待落地 v0.18.5） |

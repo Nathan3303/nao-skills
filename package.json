@@ -27,6 +27,9 @@
     "skills": [
       "./.agents/skills/nao-fleet/SKILL.md",
       "./.agents/skills/frontend-design/SKILL.md"
+    ],
+    "extensions": [
+      "./.agents/extensions/nao-role-agents.mjs"
     ]
   },
   "author": "Nathan Lee",

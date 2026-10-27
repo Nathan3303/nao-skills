@@ -86,7 +86,7 @@
 - **AC5（边界 · schema 与幂等）**：Given 假 `pi.events` 总线，When `registerAgentViaEvents` ×6 + 连发 2 次 `session_start`，Then 注册成功、`listRuntimeAgentConfigs` == 6、`dispose()` 幂等、**净 6 条**（BR5）。
 - **AC6（负向闭环 · 非空转）**：Given 三态改坏（改卡 1 行 / 删 `package.json` 的 `pi.extensions` 声明 / 给定义加 `advertise`），Then 对应探针或 `check` **FAIL** 且指名缺项；还原后全绿（附 md5 证据）。
 - **AC7（异常 · 能力门与韧性）**：Given `pi-subagents` 缺失，Then `cases/17` **SKIP**（不 FAIL）；Given 注册路径注入失败，Then 脚本/扩展**仅 warn**、不 throw（可用桩证）；Given `NAO_ROLE_AGENTS=off`，Then 不注册（BR6/BR7）。
-- **AC8（一致性 · 门禁与文档）**：Given 交付终态，When 跑全范围门禁，Then `check` rc=0（roles=6 · files 48→50）· `npm test` rc=0 · `17` 在册 · 断言只增不减（基线 **404**）· **`cases/06` 的 AC8 断言仍绿**（BR8）· `tests/README.md` 用例 17 行 · ADR 落盘 · `docs/releases/v0.18.5.md` 落盘 · 指针一行到位 · 台账 ⑧ 收口。
+- **AC8（一致性 · 门禁与文档）**：Given 交付终态，When 跑全范围门禁，Then `check` rc=0（roles=6 · **files 48→49**，`check` 只统计 `.agents/**`，本批 +1 = 新扩展文件）· `npm test` rc=0 · `17` 在册 · 断言只增不减（基线 **404**）· **`cases/06` 的 AC8 断言仍绿**（BR8）· `tests/README.md` 用例 17 行 · ADR 落盘 · `docs/releases/v0.18.5.md` 落盘 · 指针一行到位 · 台账 ⑧ 收口。
 
 ## 八、上线闭环
 
