@@ -1,6 +1,6 @@
 # 任务完成协议（DoD + 遗留项三出口 + 分级复盘）
 
-- 状态：已定稿（待派发 · 排队等 T527 闭环） · 更新：2026-10-14 · Owner：PM
+- 状态：**已交付并发布（v0.18.6 · PR #47 squash `3e98f0d` · 归档 2026-10-27）** · Owner：PM · 更新：2026-10-27
 - 指针：Issue [#46](https://github.com/Nathan3303/nao-skills/issues/46) · 触发事件 = 2026-10-14 `pi update --extensions`（4 漏洞 + 1 待批 install script，命令 exit 0、无任何收口要求）· 现有闸门 @.agents/skills/pm-operations.md · 回执模板 @.agents/checklists/comm-templates.md
 
 ## TL;DR
@@ -104,3 +104,13 @@
 - **交接**：`tasks-state` 快照更新 + 广播 + 派生会话回收。
 
 - 修订：2026-10-14 首版成稿（grill 两轮定 9 项拍板）＋开工卡 D1–D4 拍板（排队 / E0 / v0.18.6 + 重发 / rd-infra+qa）
+
+## 十、派发记录 / 验收结果 / 变更记录（归档 2026-10-27）
+
+- **派发**：`rd-infra-T528` 落地 6 处改动（`9009ef7`）→ `qa-T528` 独立复核（报告 `docs/reports/2026-10-27-T528-qa-verify.md`，入库 `265ca8a`）→ `rd-infra-T528` 收缺陷 D1–D4（`608a941`）→ `qa-T528` 点检 4/4 → `rd-infra-T528` 执行合并。
+- **需求分支 / PR**：`feat/46-task-completion-protocol`（Issue #46）· PR [#47](https://github.com/Nathan3303/nao-skills/pull/47) · **squash 合并 `3e98f0d`**（main 恰 1 条 · 无 `wip()` · 分支删净）· 验收评论 issuecomment-6445928184。
+- **验收结论**：**通过（AC1–AC9）**。QA 独立门禁 `check` rc=0（roles=6 · **files 49→50**）· `npm test` rc=0 · 17/17 PASS · SKIP=0/DEGRADE=0 · 契约守护 PASS=85；PM 复核数字一致 + 逐条读变更文件；发布前置 `test:t4:full`（空载）rc=0。
+- **QA 缺陷处置**：D1 台账遗留改「一行一条」+F3 补严重度/到期 · D2 技能 §五 指针改显式路径 · D3 台账 L0 补四字段 · D4 闸门枚举补「上线闭环」+§号 —— 全部合并前修（`608a941`，净 9+/8-），QA 点检 4/4 修好。
+- **变更记录**：本批未产生 AC 口径订正（PM 派发时的「≤6 行」目标写低，实际 9+/8-，不影响结论）；版本 v0.18.6（PATCH）。
+- **发布**：tag `v0.18.6` + GitHub Release（标题 = 裸版本号）；npm 重发由用户执行，判据 = `dist-tags.latest` = 0.18.6 且 `dist.integrity` 与本地 `npm pack` tarball 逐字节一致。
+- **遗留项**：`事故` 阈值仅半句界定（转办，若出现判歧义按 E1 门槛评估）· `M20261014` 台账 F1/F2 接受至 2026-11-14（另有台账，不重复登记）。
