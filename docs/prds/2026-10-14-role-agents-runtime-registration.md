@@ -117,4 +117,4 @@
 - **验收结论**：**通过（AC2–AC8 全过）**。QA 独立复核 GO（`check` rc=0 ×2 · roles=6 · **files=49** · `npm test` rc=0 99s · **17/17 PASS · PASS 449**（−45 = 404 基线）· SKIP=0/DEGRADE=0 · 空载 `test:t4:full` rc=0 · 自建探针 53/0 · 三态负控 + 自建两态 md5 还原 · live：6 个 `nao-*` 可列且 `inheritProjectContext` 被 honor）。PM 独立重跑 `check`（rc=0 · files=49）并读实现核对 AC2–AC8；发布前置 `test:t4:full`（空载）rc=0 · SKIP=0/DEGRADE=0。
 - **变更记录**：AC8 口径订正（`files` 48→50 ⇒ **48→49**，`check` 只统计 `.agents/**`）· 版本 v0.18.5（PATCH）。
 - **发布**：tag `v0.18.5` + GitHub Release 已发（标题 = 裸版本号）；npm 重发由用户执行，判据 = `dist-tags.latest` = 0.18.5 且 `dist.integrity` 与本地 `npm pack` tarball 逐字节一致。
-- **遗留项**：**R1（中 · 发布闭环硬条件）** npm 注册表 → `pi.extensions` 未直接观测，发布后须冒烟（`pi install -l --approve npm:@nathan33/nao-skill@0.18.5` → `subagent list` 见 6 个 `nao-*`），失败则回退声明或 `NAO_ROLE_AGENTS=off` · **R2** 已订正 · 探针健壮性（`cases/17` 与上游事件名/导出名硬耦合，升版漂移 fail-loud）留后续小项。
+- **遗留项**：**R1 已闭环（2026-10-27）** npm 注册表路线的冒烟实测通过：夹具 `pi install -l --approve npm:@nathan33/nao-skill@0.18.5` 装到 0.18.5 后，`subagent list` 的 `Runtime agents` 段列出 6 条 `nao-*`（description 取自卡 frontmatter），无需回退 · **R2** 已订正 · 探针健壮性（`cases/17` 与上游事件名/导出名硬耦合，升版漂移 fail-loud）留后续小项。
