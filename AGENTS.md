@@ -18,6 +18,7 @@
 - **全范围门禁口径（本项目）**：`bash .agents/scripts/nao-fleet.sh check` rc=0 + `npm test` rc=0（tests/ 全目录，非子目录）；改任何机制文件/角色卡后必跑 `check`。
 - **零敏感值**：仓库内禁 token/私钥/绝对家目录路径；grep 复核是 rd-infra 红线的硬门禁。
 - **幂等**：脚本/迁移/安装器连跑 2 次 effect = 0 且 rc = 0；守卫改动带失败演练。
+- **维护型闭环口径**：外部命令 / 依赖 / 环境类动作 = 维护型任务（`M<YYYYMMDD>-<slug>`），**`exit 0` 不算完成** —— `audit` / `install-scripts` / 每条 `warn`/`error`/`pending approval` 逐条归口，遗留项走三出口（关闭 / 接受含到期 / 转办），台账落 `docs/reports/<编号>-followups.md`（协议 `.agents/skills/task-completion.md`；首个实例 `M20261014-pi-ext-update`）。
 - **角色卡版本纪律**：改 `.agents/prompts/<card>.md` 必须 bump `version` + 更新 `updated`（version 是唯一事实，roles.yaml 不重复维护），并经 intercom 广播 `card <role> v<N+1>` 摘要。
 - **Git 流程（GitHub Flow）**：一个需求一条分支 `feat/<issue-id>-<slug>`（机制维护批次用降级 `nao/<批次-slug>`）；工作期 `wip(<编号>):` 小步提交 + 路径级暂存（禁 `git add -A`）；**PM 验收通过后由 RD 在 PR 上 squash 合并**（main = 1 条/需求）；**禁直推 main、禁 PM 亲自合并**。
 - **发布与仓库治理**：PM 负责 Issue / PR 验收评论 / tag / release / `.github/` 模板（优先 `gh`，不可用降级 `git`）；**发版说明写法遵循 `.agents/common/release-notes.md`**（面向用户「本次更新」置顶、内部信息下沉、正文不用表格）；已 push 的 tag 不删（改发下一个 PATCH，用户明确要求才删）。

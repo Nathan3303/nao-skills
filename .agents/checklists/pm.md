@@ -25,7 +25,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 
 > 写作要求（首屏 TL;DR、每格 ≤3 句、不适用项写法、长度上限 150 行）：@.agents/checklists/deliverable-docs.md §三（写 PRD 前读）。
 
-## 硬性红线（完整 32 项）
+## 硬性红线（完整 33 项）
 
 - [ ] 无目标指标/假设就进开发？
 - [ ] 边界不清晰（未写不做什么）？
@@ -59,9 +59,10 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 未过验收 / 门禁未绿就打 tag 或 release，或 tag 指向非 main 合并提交？（见 `github-flow.md`）
 - [ ] `git push --force` 到 main/共享分支（未经用户明确授权并指明分支）？
 - [ ] release notes 不可读（纯编号/类名/路径），或未落盘 `docs/releases/`？（规范：@.agents/common/release-notes.md —— 面向用户「本次更新」置顶、内部信息下沉、正文不用表格）
+- [ ] 输出里有 `warn`/`error`/`pending approval`/`N vulnerabilities` 却判完成，或遗留项未走三出口（「先放着」不算出口）？（见 @.agents/skills/task-completion.md）
 - [ ] 降级（无 `gh` / 无远端）未在 `tasks-state` 与回执中标注？
 
-## 交付检查清单（完整 38 项）
+## 交付检查清单（完整 40 项）
 
 - [ ] 目标/边界/验收三件事齐备
 - [ ] 证据 + 5 Whys 已产出
@@ -100,6 +101,8 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 合并由 RD 执行（`--squash`）；main 上本需求恰好 1 条提交且无 `wip()`；需求分支已删除
 - [ ] 发布（若有）：版本号符合 SemVer/项目约定；tag 指向 main 合并提交；release notes 用户可读且落盘 `docs/releases/`（核 @.agents/common/release-notes.md）
 - [ ] `gh` 可用则已用 `gh`，降级已注明；发布后 `tasks-state` 版本/Tag 行已更新
+- [ ] 任务 DoD 四类已随**开工确认卡**逐任务实例化（产物路径 / 可执行验证判据 / 遗留项 / 交接），验收按同一份核
+- [ ] 回执含 `遗留：` 字段且遗留项已**三出口**收口（关闭 / 接受含到期日 / 转办；零遗留显式「无」，可执行项已进 `tasks-state` 待派发队列）
 - [ ] 通过上面全部红线
 
 ## 会话回收 / 收窗核对（验收通过后 / 手工关窗前）

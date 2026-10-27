@@ -152,11 +152,15 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| T528 | rd-infra-T528 | **任务完成协议**（Issue #46）：新增 `.agents/skills/task-completion.md`（五节 ≤80 行）+ `comm-templates.md` 两回执模板加 `遗留：` 字段 + PM 卡 v25→v26 + rd-infra 卡 v2→v3 + `checklists/pm.md` 交付清单 +2/红线 +1 + `AGENTS.md` 项目约束 1 行（AC1–AC6）· 回溯演练引用现成台账 `docs/reports/M20261014-pi-ext-update-followups.md`（AC8） | 2026-10-27 | AC1–AC6 / AC8 | `9009ef7`（已回执 lite） |
 
 ## 已回执待验收
 
 | 任务编号 | 回执摘要（≤150字） | 详情路径 | 待办 |
 | :--- | :--- | :--- | :--- |
+| T528-rd | done(lite) `9009ef7`：新技能 49 行（五节 · AC1/AC9 含 L0/L1 正反例 · §三注明 M20261014 台账为首个实例未重写）+ 两回执模板各加 `遗留：` 枚举（AC2）+ PM 卡 v25→v26（§六 新增任务完成闸门一条含四要点+指针 · 红线 32→33 · 检查清单计数校正 36→40）+ rd-infra v2→v3（维护型 DoD：audit 与 install-scripts 必须决策）+ pm.md 交付清单 38→40/红线 32→33 + AGENTS.md 1 行。门禁 `check` exit=0 roles=6 **files 49→50** · `npm test` exit=0 17/17（契约守护 PASS=85 FAIL=0 SKIP=0）。AC6 负向：`nao-fleet.sh`/`bin/`/`tests/` 零改动。 | commit `9009ef7`（分支 `feat/46-task-completion-protocol`） | ✅ 已复核（2026-10-27） |
+
+| T528-qa | done(full) `docs/reports/2026-10-27-T528-qa-verify.md`：**GO**（自跑 `check` rc=0 roles=6 **files=50** · `npm test` rc=0 17/17 SKIP=0/DEGRADE=0，未采信 RD 数字）· AC1–AC7 全通过（技能 49 行五节 / 两模板各含遗留 / pm v26·infra v3 bump / 清单 33·40 实测 / 仅 6 文件且禁改区零改 / 无成段复制）· **AC9 部分通过、AC8 接缝不足**：D1 台账段落式 + F3 缺严重度与到期 · D2 技能 §五「§四 L0 段」指针断链 · D3 台账 L0 缺遗留/日期/编号 · D4 闸门枚举漏上线闭环（另：「事故」无阈值）。**PM 裁定**：D1–D4 合并前修（≤6 行），已回派 `rd-infra-T528`（T528-fix） | 报告 `docs/reports/2026-10-27-T528-qa-verify.md` | ✅ **PM 终验通过（2026-10-27）**：RD fix `608a941`（D1–D4 全收）→ QA 点检 **4/4 修好**（附 3 条 P3 观察，PM 裁定均不改）→ PR [#47](https://github.com/Nathan3303/nao-skills/pull/47) 已建 → 授权 RD squash 合并 |
 
 ## 挂起（被抢占 / 降级）
 
