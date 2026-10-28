@@ -72,15 +72,15 @@
 
 ## 七、验收标准
 
-- **AC1（主路径 · 单一前提）**：Given 非 tmux 环境，When 跑 `ensure`/`status`/`close`/`cleanup`，Then 四者均 **rc=3** 且输出一行含 `tmux` 的可操作提示，**无 session/pane/lock 产生**。
+- **AC1（主路径 · 单一前提）**：Given 非 tmux 环境，When 跑 `ensure`/`status`/`close`，Then 三者均 **rc=3** 且输出一行含 `tmux new -s nao` 的可操作提示，**无 session/pane/lock 产生**。**`cleanup` 豁免**：其正常场景就是「非 tmux 的隔离实验场」（`env -u TMUX … -S <socket>`），保持 **rc=2 用法守卫 + 幂等 0**，不得改为 rc=3。
 - **AC2（删除面）**：Given 合并后的脚本，When `grep -cE 'NAO_TERMINAL|xdg-terminal-exec|hyprctl|swaymsg|xdotool|wmctrl|screen_present|screen_token_for|spawn_screen|spawn_xdg_window|spawn_tmux_attach|wait_for_tmux_client|app_class_visible|wait_for_app_class|spawn_fork_window'`，Then 结果 = **0**；且 `wc -l` 净减 ≥180。
-- **AC3（pi 断言）**：Given `pi` 缺失或版本 < 1.4.0，When 跑 `check`，Then rc≠0 且输出指名「当前版本 / 要求版本」；Given ≥1.4.0，Then 该断言 PASS 且完整 `check` 仍 rc=0（roles=6）。
-- **AC4（close 收窄）**：Given tmux 内一场在跑 turn 的会话 / 一场空闲会话，When `close`，Then 前者拒、后者回收；`nao-fleet.sh` 内 `grep -c '无法确认在线'` = 0；`cases/13` 中依赖 `NAO_TERMINAL=foot|ghostty|ptyxis|screen` 的断言已删或改，**回执报新旧断言数**。
-- **AC5（ADR 与文档）**：Given `docs/adr/`，When 读，Then 新增 ADR 取代旧宿主阶梯 ADR（旧 ADR 状态 = `已废弃（被 2026-10-27-strict-tmux-pi 取代）`）· ADR 索引 +1 行 · `intercom-protocol.md` 布局段只剩 tmux 三选一与窄列回退 · `AGENTS.md` 布局语义行同步。
+- **AC3（pi 断言）**：Given `pi` 缺失或版本 < 1.4.0，When 跑 `check`，Then 输出 `✗ pi 版本 <cur> < 1.4.0` 且 **rc=1（聚合，不复用 3）**，并**继续跑完其余体检**（一次看全，不早退）；Given ≥1.4.0，Then 该断言 PASS 且完整 `check` 仍 rc=0（roles=6）。版本源 = `pi --version` 首个 semver，预发布视为不满足。
+- **AC4（close 收窄 + 用例退役）**：Given tmux 内一场在跑 turn 的会话 / 一场空闲会话，When `close`，Then 前者拒、后者回收；`nao-fleet.sh` 内 `grep -c '无法确认在线'` = 0。**`cases/13`** 中依赖 `NAO_TERMINAL=foot|ghostty|ptyxis|screen` 的断言已删或改。**`cases/11`（宿主阶梯）整案退役**：删 `tests/t4/cases/11-host-ladder.sh` + `run.sh` 注册项与 usage 区间；其实体 `docs/reports/2026-10-12-T513-verify.sh`（971 行 · 39 处 `NAO_TERMINAL`）**原文保留、不追溯改写**（QA 冻结条款），仅在归档处加一行「随 T529 退役」。**回执须报旧基线 → 新基线 + 差额去处**（cases/13 删除项 + cases/11 整案）。
+- **AC5（ADR 与文档）**：（ADR 文件名沿用 `docs/adr/2026-10-27-strict-tmux-pi.md`，不改为 10-28，避免与 PRD/Issue 字符串漂移）Given `docs/adr/`，When 读，Then 新增 ADR 取代旧宿主阶梯 ADR（旧 ADR 状态 = `已废弃（被 2026-10-27-strict-tmux-pi 取代）`）· ADR 索引 +1 行 · `intercom-protocol.md` 布局段只剩 tmux 三选一与窄列回退 · `AGENTS.md` 布局语义行同步。
 - **AC6（负向 / 边界）**：Given 变更集，When 看 diff，Then 未改 GitHub Flow 阶段、未删 `tests/` 中与宿主无关的用例、未引入新依赖、未动下游三仓。
 - **AC7（门禁一致性）**：Given 交付终态，When 跑全范围门禁，Then `check` rc=0（roles=6 · files 计数按新基线）· `npm test` rc=0，两者数字精确可复核；`test:t4:full`（空载）rc=0 且 SKIP=0/DEGRADE=0。
 - **AC8（可用性实测）**：Given 真 tmux 会话，When 依次跑 `ensure`（新拉 + 判重 + `--force`）/`status`/`close`，Then 行为与改动前一致（留命令 + 输出摘要）；Given 非 tmux，Then 按 AC1 失败（留实测输出）。
-- **AC9（破坏性沟通）**：Given `docs/releases/v0.19.0.md`，When 读首屏，Then 明确「必须 tmux + pi ≥1.4.0」与一句迁移指引；Release 标题 = 裸 `v0.19.0`。
+- **AC9（破坏性沟通）**：Given `docs/releases/v0.19.0.md`，When 读首屏，Then 明确「必须 tmux + pi ≥1.4.0」+ 两句迁移指引（① 起 tmux 的方式；② **旧版曾用 `--background`/screen 拉起的会话本版不可见，需 `screen -ls` 手工清理**）；Release 标题 = 裸 `v0.19.0`。
 
 ## 八、上线闭环
 
@@ -98,6 +98,8 @@
 - **Kano**：期望型（越简单越可信）；反面 = 少一个「另外还支持 X」的承诺。
 - **决策留痕（2026-10-27 用户拍板）**：① 绑死程度 = **只留「必须在 tmux 内」**（删五档 + xdg + app-class + screen）② 绑死 pi = **加版本硬检查** ③ 发布 = **一步到位 v0.19.0** ④ 非 tmux = **硬失败 + 提示** ⑤ pi 基线 = **≥1.4.0** ⑥ close 护栏 = **删 T523 段并允许断言净减（一次性豁免）** ⑦ 下游 = **不管，自然升级**。
 - **开工卡拍板（2026-10-27 · D1–D4）**：D1 **现在开工**（派生 `rd-infra-T529`）· D2 **轻量 arch 评审**（只评删除面完备性与 ADR 取代关系，不重写方案）· D3 硬失败退出码 **rc=3**（与 11 档值非法 / 12 命令缺失分开语义）· D4 `cases/13` **允许断言净减**，回执须给旧基线→新基线 + 差额去处。
+- **arch 轻量评审结论（2026-10-28 · `done(lite)`）**：14 项全可删、**零必须保留**；`screen_token_for`/`screen_present` 确被 `status`/`close` 硬依赖，须**成组连带 6 处**一并删；另有 **10 项清单外漏项**（`app_client_pid`/`pi_descendant_of`/`app_pid_for` + close 的 app-id 分支 · pid pipe 全套 · `TMUX_ENV_SCRUB` · `NAO_TERMINAL_LIST` · `offline_verifiable` · `visible_session_names` screen 块 · `--background`/`BACKGROUND` · `spawn_tmux` 的 `new-session -d` else 分支 · `check` 宿主阶梯段 · 头注释）⇒ 实删 **255–285 行**、净减 ≈240。ADR 够格，另加 3 条硬要求（文件名沿用 10-27 · 对照模式含「维持现状」基线 · 逐函数删除表下沉 arch 报告）。**11/12 从来只是 `resolve_action` 的内部 return 码**，进程实际 exit 仅 0/1/2 ⇒ ADR 写「随 `resolve_action` 一并退役，无外部可见退出码消失」。
+- **PM 追加拍板（2026-10-27 · D5–D8）**：D5 **AC1 收窄** —— `cleanup` 豁免（非 tmux 是其正常场景），保持 rc=2 守卫 + 幂等 0 · D6 **`cases/11` 整案退役**（QA 冻结「不改断言」⇒ 只能退役；实体探针原文保留）· D7 **pi 断言失败 rc=1 聚合且跑完全部体检**（check = 已执行并给完整报告，3 = 未执行）· D8 ADR 文件名沿用 `2026-10-27` · D9 release notes 增 legacy screen 手工清理指引。
 - **遗留项预判**：下游三仓旧 pin 继续跑旧行为（出口 = 接受含到期，日期 = v0.19.0 发布 +30 天）；`cases/13` 断言净减需在新基线上留档。
 
 - 修订：2026-10-27 首版（grill 两轮 7 项拍板）
