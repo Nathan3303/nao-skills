@@ -25,7 +25,8 @@
 #                                                 **与 TMUX_TMPDIR 无关**（T516 事故：夹具设 TMUX_TMPDIR 曾令真默认 socket 被放行而连坐自灭）
 #                                                 ⚠ 实验纪律：一律 `env -u TMUX` + `-S <隔离 socket>`（T515 血训：
 #                                                 tmux 客户端在 $TMUX 已设时无视 TMUX_TMPDIR，裸 tmux/kill-server 会连坐真 server）；
-#                                                 验证脚本勿在承载自己会话的 tmux 内执行（清 TMUX_PANE 会令 F1 自 pane 闸门失效）
+#                                                 验证脚本勿在承载自己会话的 tmux 内执行（F1 自 pane 闸门已改为
+#                                                 进程归属判定 pane_hosts_caller，不再依赖 $TMUX_PANE——T530）
 #
 # 角色别名 → 角色卡：见 .agents/roles.yaml（单一事实来源）
 #   当前：pm / arch-designer(arch) / rd-fe / rd-be / qa / rd-infra(infra)
@@ -41,6 +42,8 @@
 #   NAO_TASKS_STATE=<path>                   任务状态文件（默认 docs/tasks-state.md，供残留检测/回收闸门）
 #
 # 在线判定与 pane 定位（status / close / ensure 判重共用）
+#   ⚠️ pane id（%N）是 **server 局部**命名空间（每个 server 首块 pane 都是 %0）⇒ 任何「跨 server 比较
+#     pane id」的判据都是错的（T530 误拒根因）；「解析句柄」与「执行 kill」必须同 server（同 $TMUX）。
 #   pi 启动后用 OSC 0 把终端标题设为 "π - <会话名> - <cwd basename>" 并改写 argv
 #   （/proc/<pid>/cmdline 只剩 "pi"）⇒ 不使用 `pgrep --name`（历史假阴性根因）。
 #   ⚠️ 标题可能被外部改写（PM 实测变为 "pi:c"）⇒ pane 定位按三层后备（find_pane_for）：
@@ -441,6 +444,51 @@ tmux_pane_live() {
   tmux list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qxF "$1"
 }
 
+# 目标 pane 是否就是**调用者自己所在的 pane**（F1 不变量：close 任何路径不得回收调用者的 pane）。
+# T530 修正根因：旧判据是裸 pane id 比较（`"$pane" == "$TMUX_PANE"`）。pane id 是 **server 局部**
+#   命名空间（每个 server 的首块 pane 都是 %0）⇒ 跨 server 撞号时必然误判：隔离/custom socket 的
+#   测试 server 里解析出的 %0 与调用者默认 server 的 $TMUX_PANE=%0 字符串相同 → 误判「是自己」→ **误拒**
+#   正常回收（安全侧失败，不误杀，但功能不可用）。
+#   为什么不用「(socket, pane_id) 二元组相等」：撞号的成因就是 $TMUX_PANE 是**陈旧/外来**的
+#   （$TMUX 指向隔离 server，而 $TMUX_PANE 还是默认 server 的 %0）—— 两边读出来的 socket 恰好都等于
+#   $TMUX 首字段、id 又都是 %0，二元组照样相等 ⇒ 仍误拒。所以判据必须是「我是否真在这个 pane 里」。
+#   实现：目标 pane 的 pane_pid 是否是本进程（$$）的祖先 —— OS 级事实，与 pane id 命名空间无关，
+#   天然免疫跨 server 撞号，且顺带覆盖旧闸门的已知缺口（$TMUX_PANE 被清/未设时旧判据完全失效）。
+#   语义不放松：真自身 pane（如派生时继承 $TMUX_PANE 致名册错注册，T513-S2/T523/T525）⇒ 祖先命中 ⇒ 仍拒。
+#
+# T530-D1（QA 复核）：判据必须 **fail-closed**（三态），不得「不可判定 ⇒ 不声称是自己」。
+#   QA 实证：伪造 `ps` 令祖先链不可读 ＋ 在自身 pane 内跑 close ⇒ 自身 pane 被回收（SELF_KILLED）。
+#   F1「绝不杀自己」是硬不变量 ⇒ 判不了就**拒**（成本是少回收一次，代价是误杀一个会话）。
+#   返回：0 = 确定是自己 · 1 = 确定不是 · 2 = 不可判定（pane_pid 取不到 / ps 读不出 / 链断）
+pane_hosts_caller() {
+  local pane="$1" p_pid cur
+  [[ -n "$pane" ]] || return 2
+  p_pid="$(tmux display-message -p -t "$pane" '#{pane_pid}' 2>/dev/null || true)"
+  [[ "$p_pid" =~ ^[0-9]+$ ]] || return 2          # pane_pid 取不到 ⇒ 不可判定
+  cur="$$"
+  while [[ "$cur" =~ ^[0-9]+$ ]] && (( cur > 1 )); do
+    [[ "$cur" == "$p_pid" ]] && return 0
+    cur="$(ps -o ppid= -p "$cur" 2>/dev/null | tr -d '[:space:]')"
+    [[ -n "$cur" ]] || return 2                  # 链断（ps 不可读/被伪造）⇒ 不可判定
+  done
+  return 1                                        # 走到 init 仍未命中 ⇒ 确定不是
+}
+
+# F1 闸门统一判据（两个调用点共用）：0 = 必须拒绝回收，1 = 放行。
+#   不可判定（rc=2）时**仅当**目标 pane id 与调用者句柄 `$TMUX_PANE` 撞号才拒（保守侧）。
+#   ⛔ 不得把「rc=2 且 id 不等」也拒：跨 server 撞号是陈旧句柄造成的，若一律拒会把 v0.19.0
+#   那种「隔离 server 的 %0 被当成自己」的误拒（发布阻断红态）重新引回来。
+self_pane_refuse() {
+  local pane="$1" rc=0
+  pane_hosts_caller "$pane" || rc=$?
+  case "$rc" in
+    0) return 0 ;;                                                      # 确定是自己 ⇒ 拒
+    2) [[ -n "${TMUX_PANE:-}" && "$pane" == "$TMUX_PANE" ]] && return 0  # 不可判定但撞号 ⇒ 保守拒
+       return 1 ;;
+    *) return 1 ;;                                                      # 确定不是 ⇒ 放行
+  esac
+}
+
 # 名册中该会话的 tmux pane（注册时读 $TMUX_PANE；标题被改写仍有效）
 intercom_pane_for() {
   local name="$1" repo="${2:-}" abs="" json
@@ -551,7 +599,8 @@ pi_pids_for() {
   pane="$(find_pane_for "$1" "${2:-}")"
   [[ -n "$pane" ]] || return 0
   # F1 纵深（T513-S2）：绝不据「调用者自己的 pane」反查 pid，否则会 kill 到自身进程。
-  [[ -n "${TMUX_PANE:-}" && "$pane" == "$TMUX_PANE" ]] && return 0
+  # T530：判据=进程归属（pane_hosts_caller 三态，fail-closed），不比较裸 pane id（server 局部命名空间）。
+  self_pane_refuse "$pane" && return 0
   root="$(tmux display-message -p -t "$pane" '#{pane_pid}' 2>/dev/null)"
   [[ -n "$root" ]] || return 0
   { printf '%s\n' "$root"; pgrep -P "$root" 2>/dev/null || true; } | while IFS= read -r pid; do
@@ -1363,8 +1412,11 @@ cmd_close() {
   # F1 不变量（T513-S2）：close 任何路径不得回收调用者自己的 pane/窗口。
   #   根因：派生窗口若继承 $TMUX_PANE，子进程按该 pane 注册名册 ⇒ 层② 命中调用者自身；
   #   本闸门是纵深防御——无论上游解析为何，命中即拒绝（不 kill-pane、不进入 pi_pids_for 兜底）。
-  if [[ -n "$pane" && -n "${TMUX_PANE:-}" && "$pane" == "$TMUX_PANE" ]]; then
-    warn "拒绝回收 $name：解析出的 pane $pane 与调用者自己的 pane（\$TMUX_PANE=$TMUX_PANE）相同"
+  #   T530：判据=进程归属三态（fail-closed，见 self_pane_refuse），不是裸 pane id 比较 —— pane id 是
+  #   server 局部命名空间，隔离 socket 的 %0 与默认 server 的 $TMUX_PANE=%0 撞号会被误判为「自己」而**误拒**。
+  #   不可判定时只对「撞号」保守拒绝：判不了自己 ⇒ 宁可少回收一次，不得误杀一个会话。
+  if [[ -n "$pane" ]] && self_pane_refuse "$pane"; then
+    warn "拒绝回收 $name：解析出的 pane $pane 判为调用者自身（pane_pid 祖先链命中，或祖先链不可判定且与 \$TMUX_PANE 撞号）"
     warn "  名册 tmuxPane 可能因派生时继承 TMUX_PANE 而错注册；请用 intercom({action:'list'}) 核对目标会话后再处理"
     return 1
   fi
