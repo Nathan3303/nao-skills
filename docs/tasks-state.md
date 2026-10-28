@@ -37,7 +37,7 @@
 - ✅ **T521 交付闭环（2026-10-14 · v0.17.3）**：GitHub Release 标题口径 = 裸 `vX.Y.Z` —— 权威单处 `common/release-notes.md` §一.5 硬约束 + §四清单 + §五红线 · 两处引用收敛（`github-flow.md:56` / PM 卡 :121）并指回单处 · PM 卡 **v24→v25** · 模板注释 1 行（6 分段标题未动）· 一次性只读探针 `PASS=28 FAIL=0` + 负控 2/2 · QA 独立复跑 **GO** · squash `eff44ec` · tag + Release 已发（发布提交 `4d97f00` · **AC9 自证：标题严格 = `v0.17.3`**）· **npm 重发 0.17.3 已核验**（`latest` + integrity 逐字节）。
 - ✅ **T520 交付闭环（2026-10-14 · v0.17.2）**：ADR 文档契约 —— 必写 5 节 + 可选 3 节（参考来源恒末）· 头部恰 4 字段 · 状态值域 4 值 · 禁写/下沉清单 · 新增 `templates/adr.md.example` + `adr-index.md.example` · `arch-designer` 卡 v11→v12 · QA 探针 `PASS=53 FAIL=0` + 负控 2/2 · squash `160cc60` · tag + Release 已发（`9833344`）· **npm 不重发**。
 
-- 当前阶段：**T532 已开工（开工卡 6 项全拍板 2026-10-28）**—— 先跑 `M20261028-codegraph` 实测（T1/T2 文案 + T3 资源门）再落实现；分支 `feat/53-codegraph-plugin`（base `fb0c36d`）；Issue [#53](https://github.com/Nathan3303/nao-skills/issues/53)。
+- 当前阶段：**T532 在飞**——`M20261028-codegraph` 已回（CLI 1.6.2 · 插件 0.1.0 · 索引 4 files/118 nodes/500K · 遥测已关并 strace 证实）；**阻塞点 F6**：arch A6 资源门口径有缺陷（漏采 daemon/worker/watchdog + RSS 重复计共享页），已派 `[T532-arch-amend]` 复议 B1–B4。
 - 当前 PRD：`docs/prds/2026-10-28-codegraph-plugin.md`（T532 · 草稿 · 待 QA 接缝回执后定稿 → Issue → arch 完整评审 → 开工确认卡）
 - 未决决策点：无（用户 2026-10-28 ask-me 6 项已拍板：warn 门禁 / 只检测+文档指引 / 原生优先+CLI 回退 / 本仓起索引 / v0.20.0 MINOR+重发 / arch 完整评审）
 - 待用户回答：开工确认卡（PRD 定稿后出）；以及 M20261028-codegraph 环境动作的执行授权（装 CLI + 插件 + `codegraph init -i`）
@@ -190,6 +190,9 @@
 | :--- | :--- | :--- | :--- |
 | T529-D3 | （backlog · 无会话） | **`MIN_PI_VERSION` 常量提炼**：`nao-fleet.sh:1225` 文案硬编码「< 1.4.0」与 `:311-316` 阈值 `c1/c2` 魔术数并存（负控抬到 9.9.9 时输出「1.4.0 < 1.4.0」自相矛盾）；不影响 AC3，可随时做 | QA D3 转办（本批不做）|
 | T529-D1 | （用户环境 · 不入舰队） | **到期重评** 下游三仓（nao-todo / nao-todo-server / nue-ui）旧 pin 仍跑旧行为（宿主阶梯已删）· 出口 = 接受 | 定时：**2026-11-27**（= v0.19.1 发布 +30 天） |
+| M20261028-F6 | arch-designer（在飞） | **A6 门口径复议（B1–B4）**：漏采 daemon/worker/watchdog + RSS 重复计共享页；另 daemon 泄漏（非会话 `pi` 调用留 ~150MB 孤儿，ppid=systemd --user）· 结果入 PRD §六/AC5 | 阻塞 T532 AC5 与合并 |
+| M20261028-F2 | （用户环境 · 不入舰队） | **到期重评** nao-todo-server 入库了 `.codegraph/.gitignore` ⇒ 目录存在但无索引，插件激活后空转（实测 205.7MB/会话） | 定时：**2026-11-28** |
+| M20261028-F5 | （用户环境 · 不入舰队） | **到期重评** 插件 0.1.0 × CLI 1.6.2 版本耦合（工具集合/行为无版本承诺）；期间观察上游 | 定时：**2026-12-28** |
 | M20261014-F1 | （用户环境 · 不入舰队） | **到期重评** `pi-ask-me` 旧 SDK 子树 12 high（已接受）· 台账 `docs/reports/M20261014-pi-ext-update-followups.md` | 定时：**2026-11-14** 或上游 `pi-ask-me` 升版时 |
 
 ## 进行中
