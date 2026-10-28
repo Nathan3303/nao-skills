@@ -26,7 +26,7 @@
 
 ## 二、目标指标
 
-- **检测覆盖**：`check -v` 四态（含 pending / 不可解析两行）各一行可断言文本（**契约化范围 = 固定前缀 + 命令子串**，不断言整行）；**默认 `check` 只出四行且零外部进程**（两份 `settings.json` + `command -v` + 一次目录判定；实测 `codegraph status` 0.37–0.42s 不进热路径）；**禁用 `pi list` 作检测源**（0.92s 且项目级不显示）。
+- **检测覆盖**：`check -v` 四态 + pending / 不可解析两态各一行可断言文本（**契约化范围 = 固定前缀 + 命令子串**，不断言整行）；**默认 `check`** = 摘要行 + **四态之一回显**（实测 2 行），且**零 `codegraph` 调用**（两份 `settings.json` + `command -v` + 一次目录判定，另有 2 次 `grep` fork，已登记 D1）；实测 `codegraph status` 0.37–0.42s 不进热路径；**禁用 `pi list` 作检测源**（0.92s 且项目级不显示）。
 - **口径统一**：6 卡 + 3 清单 + `pm-operations.md` + `templates/AGENTS.md.example` 中 `codegraph` 提及**全部**为三段式或单句指针；唯一硬编码工具名 = `codegraph_explore`（卡内其余 8 个工具名零命中）。
 - **单源可验**：包名在 `nao-fleet.sh` 常量 `CODEGRAPH_PKG` 与 `bin/nao-skill.js` `PI_PLUGINS` 各一处，由用例**等值断言**兜住（漂移即 `npm test` 硬失败）；**禁止运行时跨语言抽取**（取空即静默假阴性）。
 - **不误伤**：plugin/索引缺失时 `check` rc 不受影响（Pending 项按 arch 裁定）、`ensure` 正常拉起、`npm test` 全绿。
@@ -39,12 +39,12 @@
 1. **`check` 四态检测**（`.agents/scripts/nao-fleet.sh`）：判定源 = 两份 `settings.json` 的 `packages`（`${PI_AGENT_DIR}` + `<cwd>/.pi/settings.json`，**顺带修 `:1219` 硬编码 `$HOME/.pi/agent` 的既存缺陷**），包名取 fleet 常量 `CODEGRAPH_PKG`（**运行时不 sed 抽 `bin/*.js`**，arch A2/BR5）。**判定严格短路**：① 声明 ② `command -v codegraph` ③ `<repo>/.codegraph` ④ `codegraph status` 文本（**④ 仅 `full=1`：`-v` 与 `ensure`**）。单实现 `codegraph_state <repo> [full]`，`cmd_check`（对 `$PWD`；默认 `full=0`，`-v` 时 `full=1`）与 `ensure`（各 repo，`full=1`）共用，**删除 `:1200-1215` 重复 awk 段**；文本常量集中 `CG_MSG_*`。6 行契约：`· 插件未声明` / `! 已声明但 CLI 不在 PATH` / `! 已就绪但无索引` / `✓ 齐备（索引新鲜度用 -v 查）`（默认）/ `✓ 齐备`（`-v`）/ `! 索引 pending`（仅 full=1）/ `! status 输出不可解析`（仅 full=1）。**全部 warn，`--strict` 亦不升级**（A1）。
 2. **`ensure` 提示 + 遥测**：复用 `codegraph_state`（不阻塞拉起）；在 **`spawn_one` 的 `inner` 命令**注入 `export CODEGRAPH_TELEMETRY=0`（tmux pane 继承 server 环境，ensure 侧 export 传不过去，arch A3）；**不加 `DO_NOT_TRACK=1`**（过宽）。
 3. **技能改写**（`.agents/skills/codegraph.md`）：三段阶梯 —— ① 原生入口（`codegraph_explore`；其余工具**不写死**，注明随 CLI 版本 / `CODEGRAPH_MCP_TOOLS` 变化）② CLI（保留为回退，命令须真实：`codegraph init` **无 `-i`**）③ `grep -rn` + 行段。保留 Token 纪律与「禁 cat 全文」；新增两处一句话：**「有插件无索引/无 CLI ⇒ 不生效」** 与 **「插件不供 system prompt 指引（截至 pi 1.4.0 / pi-codegraph 0.1.0），口径由本技能承载」**；副产物小节（`.pi/APPEND_SYSTEM.md` 会被创建/残留 + 用户手工清理 `rm -f`，机制不代跑）。
-4. **6 张角色卡 + 3 清单 + `pm-operations.md`**：逐字口径「代码定位：原生入口 `codegraph_explore`（需插件 + CLI + 索引齐备）→ CLI → `grep -rn` + 行段；详情见 `@.agents/skills/codegraph.md`」；每卡 `version` +1、`updated` 更新；「插件不供指引」**不进卡片**（只技能一处，arch A5）。
+4. **6 张角色卡 + 3 清单 + `pm-operations.md`**：阶梯短语**逐字一致**（`原生入口 codegraph_explore（需插件 + CLI + 索引齐备）→ CLI → grep -rn + 行段；详情见 @.agents/skills/codegraph.md`），**前缀标签按角色场景措辞**（定位 / 影响面评审 / 验收闭环 / 受影响测试 …，QA D5）；每卡 `version` +1、`updated` 更新；「插件不供指引」**不进卡片**（只技能一处，arch A5）。
 5. **`templates/AGENTS.md.example`**：把 `codegraph sync` 单口径改为三段式指针 + 副产物一句（下游无 gitignore 管理机制，只给指针）。
 6. **本仓环境自用**（维护型 `M20261028-codegraph`）：**前置 = 先跑 arch §三 T1/T2 冻结真实命令与 `status` 文案**（文案一落地即错的风险，arch §五-6），再装 CLI → `pi install` 插件 → `codegraph init` → `codegraph status` 验 + **资源/并发门（A6）**；遥测关闭可验证。
 7. **`AGENTS.md` 订正**：「本仓无 CodeGraph 索引」→「已有索引 + 原生入口优先」，指针式不复制正文。
 8. **`.gitignore`**：加 `.pi/APPEND_SYSTEM.md` **单文件**（不 ignore 整个 `.pi/`；arch A4）。
-9. **回归护栏**（`tests/t4/cases/18`）：四态静态断言（夹具 `HOME` + 记录型 PATH stub + 夹具 `.codegraph/`）+ **默认 `check` 零 `codegraph` 调用、`-v`/`ensure` ≤1 次**（AC11）+ **第五组「齐备 + pending ⇒ rc=0」**（`-v`）+ 文本变异负控（改提示文本 ⇒ 断言失败，`check` rc 不变）+ `spawn_one` 遥测字面量断言 + 包名**等值断言** + `run.sh` 注册 + `tests/README.md` 用例行；真装类断言（`tools/list` 真实集合、残留文件、遥测生效性、6 并发锁）走 `t4_skip` 门。
+9. **回归护栏**（`tests/t4/cases/18`）：四态静态断言（夹具 `HOME` + 记录型 PATH stub + 夹具 `.codegraph/`）+ **默认 `check` 零 `codegraph` 调用、`-v`/`ensure` ≤1 次**（AC11）+ **第五组「齐备 + pending ⇒ rc=0」**（`-v`）+ 文本变异负控（改提示文本 ⇒ 断言失败，`check` rc 不变）+ **warn 隔离双断言**（codegraph `!` 态 ⇒ 无 `warn` 字段且第 2 行仍在；codegraph `!` + 一条真 warn ⇒ `warn=1`）+ `spawn_one` 遥测字面量断言 + 包名**等值断言** + `run.sh` 注册 + `tests/README.md` 用例行；真装类断言（`tools/list` 真实集合、残留文件、遥测生效性、6 并发锁）走 `t4_skip` 门。
 10. **README**：插件清单段补 codegraph 前置（CLI + 索引 + 遥测开关）、**资源一行**（PSS 口径 + 本仓实测 675.7MB + 每仓 daemon +155MB）、**副产物/daemon 一节**（`.pi/APPEND_SYSTEM.md` → `.gitignore`；非会话 pi 用 `( cd /tmp && pi … )`；手工 `codegraph daemons`）。
 11. **发布**：v0.20.0（MINOR）+ npm 重发（用户执行，判据 = latest + integrity 逐字节一致）。
 
@@ -68,7 +68,8 @@
 ## 五、业务规则
 
 - **BR1 warn 门禁（含 rc 豁免 · arch A1）**：codegraph 相关提示**永不进 rc 通道** —— 现存 `Pending Changes ⇒ rc=1`（`nao-fleet.sh:1207`）**降为 warn**（删该 `rc=1`），`--strict` 亦不升级；函数头注释写明「codegraph 永不计入 rc」。**显式豁免登记**：本批构成一次「既有断言放松」（索引 pending 由红变可观测 warn），理由 = 六会话并发下 pending 是稳态，长期红会侵蚀真失败信号；下游若有脚本依赖此红 ✅ 显式读出并在台账点名（T4 待实测）。
-- **BR2 四态判定（arch A2 + B3）**：严格短路 ① 声明 → ② CLI → ③ 索引 → ④ `status`（**仅 `full=1`**）；默认 4 行 / `-v` 与 `ensure` 6 行；组合落位：未声明压倒一切（1）· 已声明+无 CLI+有索引 → 2 · 齐备+有改动 → 5。用例断言**固定前缀 + 命令子串**，不断言整行。
+- **BR2 四态判定（arch A2 + B3 · 共 7 条文本）**：严格短路 ① 声明 → ② CLI → ③ 索引 → ④ `status`（**仅 `full=1`**）；文本集合 = 4 态（默认取其一回显）+ `-v`/`ensure` 追加 pending 与不可解析 2 态 + 「齐备」默认/`-v` 两种措辞 ⇒ **共 7 条**；组合落位：未声明压倒一切（1）· 已声明+无 CLI+有索引 → 2 · 齐备+有改动 → pending。用例断言**固定前缀 + 命令子串**，不断言整行。
+- **BR2b warn 通道隔离（arch B5 · 2026-10-28）**：codegraph **任态不计入 `warn=N`** —— `warn` 保持「资产缺陷」语义（无索引是永久环境事实，下游三仓恒命中 ⇒ 恒 amber 会稀释信号），可见性由默认第 2 行独立保证；断言口径 = 取报告 `^  !` 行中**排除** `^  ! codegraph ` 前缀者计数。
 - **BR3 三段阶梯（单一口径）**：原生入口 → CLI → `grep -rn` + `sed` 行段；任一步降级不需审批，**「禁 cat 全文」永久有效**。
 - **BR4 机制零代办 + 命令以实测为准**：不执行 `pi install` / `codegraph init` / `codegraph sync`；只提示**真实存在**的命令（`codegraph init`，无 `-i`）；**上游 README 与本机 CLI 冲突时以实测为准**，机制不抄上游 README 命令（arch §五-7）。
 - **BR5 单源（arch A2 修正）**：包名在 `nao-fleet.sh` 常量 `CODEGRAPH_PKG` 与 `bin/nao-skill.js` `PI_PLUGINS` 各一处，由用例**等值断言**兵；**禁止运行时跨语言抽取**（sed 取空 ⇒ 静默假「未声明」，且 shim-only 安装可能无 `bin/`）；状态文本单实现 `codegraph_state` + `CG_MSG_*` 常量。
@@ -81,7 +82,7 @@
 
 ## 六、NFRs
 
-- **性能（arch B3 定稿）**：`check` 默认路径增量 ≤0.05s 且**零外部进程**（两份 `settings.json` + `command -v` + 一次目录判定）；`-v` / `ensure` 允许每仓一次 `codegraph status`（实测 0.37–0.42s，上限 0.6s）；禁用 `pi list`（0.92s）。
+- **性能（arch B3 定稿 · QA D1 订正）**：`check` 默认路径增量 ≤0.05s 且**零 `codegraph` 调用**（AC11 判据 = codegraph 二进制调用次数 0；实测默认新增 2 次 `grep` fork，可接受）；`-v` / `ensure` 允许每仓一次 `codegraph status`（实测 0.37–0.42s，上限 0.6s）；禁用 `pi list`（0.92s）。
 - **幂等**：新用例连跑 2 次一致、无残留；`M` 任务重跑 `codegraph init` 无破坏性。
 - **资源（arch B1 定稿）**：sidecar 内存口径 = 进程树全集 **PSS 之和**（禁 RSS 求和）；实测本仓 6 会话全集 PSS **675.7MB**、同仓边际 **+70–90MB/会话**、每新增一个有索引的仓 **+155MB**（daemon+watchdog）⇒ 成本按**仓数**算不按会话数；阈值 ≤600MB 接受 / 600–1200MB 接受 + README「资源」一行 + 台账实测 / >1200MB 或锁错 ⇒ 删索引降级；6 并发读锁已验证通过（`database is locked` 0 命中）。**T3 唯一未闭合项**：成本只在舰队重启后出现（现存会话启动于建索引前）⇒ 重启后复测确认。
 - **无网络**：机制零网络；插件零网络；舰队会话由 `spawn_one` 注入 `CODEGRAPH_TELEMETRY=0`（A3），用户手工终端由文档一行提示。
@@ -90,7 +91,7 @@
 
 ## 七、验收标准
 
-- **AC1（主路径 · 默认 4 行 + `-v` 6 行）**：Given 四组夹具（无插件条目 / 有插件但 PATH 无 CLI / 有插件+CLI stub+无 `.codegraph` / 齐备），When 跑默认 `check`，Then 四组各命中对应**契约前缀**、`check` rc 恒 0、且**零 `codegraph` 进程调用**（AC11）；Given 第五组（齐备 + pending），When 跑 `check -v` 与 `ensure`，Then 分别命中 `! 索引 pending` 且 rc 0、拉起正常。
+- **AC1（主路径 · 默认四态取其一 + `-v` 全展开）**：Given 四组夹具（无插件条目 / 有插件但 PATH 无 CLI / 有插件+CLI stub+无 `.codegraph` / 齐备），When 跑默认 `check`，Then 输出恰 **2 行**（摘要行 + 命中态行）、四组各命中对应**契约前缀**、`check` rc 恒 0、且**零 `codegraph` 调用**（AC11）；Given 第五组（齐备 + pending），When 跑 `check -v` 与 `ensure`，Then 分别命中 `! 索引 pending` 且 rc 0、拉起正常。
 - **AC2（门禁强度）**：Given 未声明插件，When 跑 `check` / `check --strict` / `ensure <角色>`，Then 皆 rc=0 且会话正常拉起，提示含可复制命令；Given 索引 pending，When 跑 `check --strict`，Then 亦 rc=0（不升级）。
 - **AC3（技能口径可测性 · arch A5 降级）**：Given 改写后的技能，When 读 + 跑静态断言，Then ① 含 `codegraph_explore` 且文档清单与用例断言**同源**（声明式清单）② 其余 8 个工具名**零硬编码**（只允许「若该版本 MCP 暴露」措辞）③ CLI 段保留为回退且命令真实（`codegraph init`，不带 `-i`）④ `grep` + 行段兜底 ⑤ 两句必备：「有插件无索引/无 CLI ⇒ 不生效」、「插件不供 system prompt 指引（截至 pi 1.4.0 / pi-codegraph 0.1.0）」⑥ 「禁 cat 全文」在位。**不断言**工具集合为 9 个。
 - **AC4（口径统一 · 完整范围）**：Given 6 卡 + 3 清单 + `skills/pm-operations.md` + `templates/AGENTS.md.example`，When `grep -rn codegraph`，Then 每处为三段式或单句指针、无纯 CLI 指令、卡内 `codegraph_(search|callers|callees|impact|node|context|files|status)` **零命中**（`explore` 除外）、「插件不供指引」只出现在技能一处；6 卡 `version` 各 +1 且 `updated` 已改；`check` 卡片校验仍绿。
@@ -148,4 +149,13 @@
 - **遗留（台账 `docs/reports/M20261028-codegraph-followups.md`）**：F1 关闭 · F2 接受至 2026-11-28（nao-todo-server 有 `.codegraph/.gitignore` ⇒ 目录在无索引，205.7MB/会话）· F3 **关闭（arch B4：保留索引，不降级）** · F4 关闭 · F5 接受至 2026-12-28（插件 0.1.0 × CLI 1.6.2 版本耦合）· **F6 已关（arch 复议 B1–B4 落定：PSS 口径 / daemon 不代杀 / 文本契约 + 默认不 fork / 索引保留）**。
 - **T3 未闭合点（转实现任务）**：成本仅在舰队重启后出现 ⇒ 重启后复测 6 会话 PSS 入台账（不阻塞本批实现，但阻塞「资源结论入库」）。
 
-- 修订：2026-10-28 v1 首稿（用户 6 项拍板后）· 同日 v2（QA 接缝回执订正）· 同日 v3（arch 裁决 A1–A7 落地）· 同日 v4（M 任务实测回执 T1–T5 + F6 登记）· 同日 v5（arch 复议 B1–B4 落定：PSS 口径 / daemon 不代杀 + BR11 / 文本契约 + **默认 check 零外部进程** / 索引保留 / 新增 AC11）
+## 十三、QA 独立复核回执（`done(full)` · GO · 2026-10-28）
+
+- **报告**：`docs/reports/2026-10-28-T532-qa-verify.md`（53 行 ≤80）。
+- **AC 判定**：AC1–AC9、AC11 全 ✅（AC10 属合并后）。QA 全部自跑，非转述。
+- **数字对照（RD 声称 × QA 实测）**：`check` rc=0 / roles=6 / files=50 / 默认恰 2 行 · `check --strict` rc=0 · `npm test` PASS（SKIP=0 · DEGRADE=0 · NOTE=2 均 `06:static-contract`，1m21s）· `test:t4:full:dual` 两组 rc=0（2m34s）· `cases/18` 49 PASS ×2 次一致 · 默认 codegraph 二进制调用 **0 次**、`-v` **1 次**、`ensure` full=1（`strace -f -e execve` 口径）· 七组自建夹具（四态 + pending + 不可解析 + pending+`--strict`）rc 全 0、调用数 0/0/0/0/1/1/1 · 项目级 `.pi/settings.json` 也识别 · 两条变异各自命中「断言不再命中」而 `check` rc 仍 0，`settings` md5 与目录还原一致。
+- **缺陷处置（PM 裁定）**：**D1** 修（NFR/§二 措辞改「零 codegraph 调用」，脚本 `:297` 注释同步）· **D2** 修（`cases/18` stub 目录补 `node`/`npm` symlink，加「node 可用 ∧ codegraph 不可用」断言；QA 实证原夹具补 `package.json` 即 rc=1）· **D3** 修（`✓ 齐备` 后补「生效还依赖插件未被过滤/禁用」）· **D4** 修（arch B5：codegraph 任态不计入 `warn=N` + 双断言「不掩蔽真 warn」）· **D5** 修（BR2 改「共 7 条文本」、卡口径改「阶梯短语逐字一致 + 前缀标签按场景」）· **D6** 接受（AC8 第一 Given 属上游行为，沿用接缝实测）。
+- **遗留**：T3 6 会话 PSS 复测（舰队重启后，PM 执行，发布前入台账）。
+
+
+- 修订：2026-10-28 v1 首稿（用户 6 项拍板后）· 同日 v2（QA 接缝回执订正）· 同日 v3（arch 裁决 A1–A7 落地）· 同日 v4（M 任务实测回执 T1–T5 + F6 登记）· 同日 v5（arch 复议 B1–B4：PSS 口径 / daemon 不代杀 + BR11 / 文本契约 + 默认零 codegraph 调用 / 索引保留 / 新增 AC11）· 同日 v6（QA 复核 GO + D1–D5 订正：零 codegraph 调用措辞 / 7 条文本契约 / 标签可按场景 / BR2b warn 隔离（arch B5）+ AC7 双断言）
