@@ -164,7 +164,7 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T529 | rd-infra-T529 | **实现**：删宿主阶梯（14 项 + 10 漏项 · 净减 ≈240 行）+ 非 tmux rc=3 硬失败（cleanup 豁免）+ `check` pi ≥1.4.0（rc=1 聚合）+ close 收窄 + `cases/11` 退役 + 新 ADR/旧 ADR 废弃 + 文档 + `v0.19.0` notes（AC1–AC7） | 2026-10-27 | AC1–AC7 | 待起 |
+| T529 | rd-infra-T529（已回执）→ qa-T529（复核中） | **实现已落地** `da50fcc`：`nao-fleet.sh` 1947→**1591**（净减 356）· 非 tmux rc=3 单行（`cleanup` 豁免 rc=2）· `check` 增 tmux+pi≥1.4.0（失败 rc=1 聚合不早退）· close 收窄（`无法确认在线`=0）· `cases/11` 退役 + `cases/13` 改写 · 新 ADR 54 行 + 旧 ADR 标废弃（正文零改）+ derived 零 diff · `v0.19.0` notes。**断言 438→280（-158）**：cases/11 -149 / cases/13 -8 / cases/15 -1 | 2026-10-28 | AC1–AC7 | `da50fcc` |
 
 ## 已回执待验收
 
@@ -173,6 +173,8 @@
 
 
 | T529-arch | done(lite)：**可行无阻塞** · 14 项三态（可删 12 / 成组连带 2 / **必须保留 0**）· `screen_token_for`/`screen_present` 被 `status`/`close` 硬依赖（`running():654` / `close:1713`）⇒ 成组连删 6 处 · **10 项清单外漏项**（app-id 三函数+close 分支 ≈45 行 · pid pipe ≈20 行 · `TMUX_ENV_SCRUB` · `NAO_TERMINAL_LIST` · `offline_verifiable` · `visible_session_names` · `--background` · `spawn_tmux` else 分支 · `check` 宿主阶梯段 · 头注释）⇒ 净减 ≈240 · ADR 够格 + 3 条硬要求 · **11/12 仅内部 return 码，无外部可见退出码消失** · 两处待确认（cleanup 豁免 / cases 11 实体退役）→ **PM 已拍板并入 PRD（D5–D9）** | `docs/reports/48-arch-review.md`（96 行）+ `5cb78b5` | 已转 RD 实施 |
+
+| T529-rd | done(full) `da50fcc`：见上「进行中」行；DoD 四类齐（产物 / 验证含 AC1·AC3·AC8 实测 / 遗留 1 项 / 交接）· 遗留 = 下游三仓旧 pin（接受，到期 = v0.19.0 发布 +30 天）· **需 PM 定 3 事**：ADR 状态改「已落地」时机 · `package.json` pin 升（发布时）· 报错文案不带 `DEGRADED:` 前缀（PM 裁定：**接受**，rc=3 已区分语义，该词属旧降级语义遗留） | commit `da50fcc` | 等 qa-T529 独立复核 |
 
 ## 挂起（被抢占 / 降级）
 
