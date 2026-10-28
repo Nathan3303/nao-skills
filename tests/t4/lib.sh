@@ -77,7 +77,30 @@ T4_ERR=""
 t4_log()  { printf '%s\n' "$*"; }
 t4_ok()   { printf '  [PASS] %s\n' "$*"; }
 t4_bad()  { T4_FAIL=$((T4_FAIL + 1)); printf '  [FAIL] %s\n' "$*"; }
-t4_note() { printf '  [NOTE] %s\n' "$*"; }
+# NOTE 白名单（T531 · BR1）：tag 枚举的**单点定义** —— run.sh 复用本数组做合法性判定。
+# 新增 tag 必须同时改这里 + 在 tests/README.md「NOTE 白名单」写明理由（缺一不可）。
+# 语义：static-contract=静态替代证据 · pin-fallback=pin 未发布改对照 latest · migrate-fallback=缺 migrate 走 init
+T4_NOTE_TAGS=(static-contract pin-fallback migrate-fallback)
+
+# tag 是否登记在白名单（判定唯一入口；run.sh 聚合层调用）
+t4_note_tag_registered() {
+  local t="${1:-}" x
+  [ -n "$t" ] || return 1
+  for x in "${T4_NOTE_TAGS[@]}"; do [ "$t" = "$x" ] && return 0; done
+  return 1
+}
+
+# NOTE = 用例产出的事实（合法能力/前提说明）；**不合规判定只在 run.sh 聚合层**（BR2，本函数从不 exit）。
+#   t4_note <tag> <msg>   —— 规范形式；tag 须来自 T4_NOTE_TAGS
+#   t4_note <msg>         —— 旧式调用（无 tag，兼容旧分支）：仍打印，非 full 仅警告，full 下判 FAIL
+# 输出形态（run.sh 按行首 `[NOTE]` + 首个 token 解析）：`  [NOTE] <tag> <msg>` / `  [NOTE] (untagged) <msg>`
+t4_note() {
+  if [ "$#" -ge 2 ] && [ -n "${1:-}" ]; then
+    printf '  [NOTE] %s %s\n' "$1" "${*:2}"
+  else
+    printf '  [NOTE] (untagged) %s\n' "$*"
+  fi
+}
 # 能力降级（环境缺能力但**继续跑其余断言**）：打印可计分标记 [DEGRADE] + 累加；由 run.sh 汇总并计入 full 判据。
 # 与 t4_skip 的区别：t4_skip 会终止用例（77）；t4_degrade 不终止，默认豁免、T4_REQUIRE_FULL=1 时计分。
 t4_degrade() { T4_DEGRADE=$((T4_DEGRADE + 1)); printf '  [DEGRADE] %s\n' "$*"; }
@@ -216,7 +239,7 @@ t4_run_migrate() { # 优先 migrate；否则 init（自动迁移路径）
   if t4_cli_supports migrate; then
     t4_run_in_dir "$dir" node "$(t4_pkg_bin "$dir")" migrate
   else
-    t4_note "CLI 未提供 migrate，改用 init（自动迁移路径）"
+    t4_note migrate-fallback "CLI 未提供 migrate，改用 init（自动迁移路径）"
     t4_run_init "$dir"
   fi
 }

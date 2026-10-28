@@ -12,13 +12,15 @@ bash tests/t4/run.sh --preflight               # 前置探测（不执行用例�
 bash tests/t4/run.sh                           # 跑全部（默认严格：T2 产物缺失=FAIL）
 bash tests/t4/run.sh --case 03                 # 单跑
 T4_ALLOW_MISSING=1 bash tests/t4/run.sh        # 宽松：缺产物=BLOCKED（仅显式 1）
-T4_REQUIRE_FULL=1 bash tests/t4/run.sh         # 发布前置：SKIP 计数>0 即 FAIL
+T4_REQUIRE_FULL=1 bash tests/t4/run.sh         # 发布前置：SKIP/DEGRADE>0 或非白名单 NOTE 即 FAIL
 npm test                                       # 唯一机械门禁 = test:agents + test:t4
-npm run test:t4:full                           # 发布前置双轴（= 上面两个环境变量）
+npm run test:t4:full                           # 发布前置双轴（= 上面两个环境变量 · 单环境）
+npm run test:t4:full:dual                      # 发布前置**双环境** gate（两组串跑，任一红即红）
 ```
 
 - **默认严格**：`T4_ALLOW_MISSING` 默认 `0` —— 依赖的 T2 产物缺失即 FAIL；宽松模式**只有显式 `T4_ALLOW_MISSING=1`** 才启用（缺产物记 BLOCKED）。
-- **`T4_REQUIRE_FULL=1`**（与上者正交，只管 SKIP/DEGRADE 轴）：汇总层 **SKIP 计数 + DEGRADE 计数必须均为 `0`** —— SKIP 含从用例输出解析的**行首** `[SKIP]` / `SKIP:` 行；DEGRADE 为能力降级标记。NOTE 允许并计数。发布用 `npm run test:t4:full`。
+- **`T4_REQUIRE_FULL=1`**（与上者正交，只管 SKIP/DEGRADE/NOTE 三轴）：汇总层 **SKIP 计数 + DEGRADE 计数必须均为 `0`，且非白名单 NOTE 计数必须为 `0`** —— SKIP 含从用例输出解析的**行首** `[SKIP]` / `SKIP:` 行；DEGRADE 为能力降级标记；NOTE 按 tag 白名单判定（见下节）。发布用 `npm run test:t4:full:dual`（单环境退用 `npm run test:t4:full`）。
+- **双环境 gate**：`npm run test:t4:full:dual`（`tests/t4/run-dual.sh`）= 同参数两组串跑 —— 组1 保留 `$TMUX_PANE`（撞号态）/ 组2 `env -u TMUX_PANE`（未设态）；**任一非 0 ⇒ 整体非 0**，输出标明组别与失败组。约 2× 单轮耗时；`npm test` 默认路径**不含** dual（不变慢）。
 - **`test:t4:full` 能力要求**：`pi` CLI · tmux · bwrap · strace · npm registry 可达。缺任一即产生 DEGRADE/SKIP ⇒ **full rc≠0**（这正是 full 的意义：要求能力齐备）；默认 `npm test` 不因能力缺失变红。
 - **用例 13 的额外能力依赖**：⑥（tmux 内名册可用且为空 ⇒ 「未运行（无需回收）」rc=0）与 ⑦（`--force` 不改末段判定）需要 `tsx`（跑名册探针夹具）；缺失时这两组记 `[DEGRADE]`（默认豁免、`test:t4:full` 计分），其余断言照跑。①–⑤（非 tmux ⇒ exit 3 三条 + `无法确认在线`/宿主阶梯删除面两条静态 grep）只依赖 bash + 本仓脚本，无额外能力。
 - **用例 15 的能力与夹具纪律**：T2–T6/T8 需真 `tmux`（缺则整例 `SKIP`）；T1/T7/T9 需 `tsx`（假名册探针；缺则 T1–T9 记 `[DEGRADE]`），T10（`check` 守卫）纯 bash 照跑。夹具 = 真 tmux **隔离 socket**（≠ 生产默认候选；`TMUX_TMPDIR` 指向夹具目录，`env -u TMUX -u TMUX_PANE`）+ 假名册逐字段一行 pretty-print + 桩 `pi` 用**复制**的二进制（保 `comm=pi`）；收尾走机制 `cleanup -S <隔离 socket>`（不裸 `kill-server`）。
@@ -26,7 +28,7 @@ npm run test:t4:full                           # 发布前置双轴（= 上面�
 - **用例 17 的能力与边界**：只读 **Node 探针**（动态 import pi-subagents 的 `registerRuntimeAgentEventListener` / `listRuntimeAgentConfigs`，桩 `pi.events` 假总线）；`pi-subagents` 缺失（或 `node` 缺失）⇒ 整例 `SKIP`（不 FAIL、不计 DEGRADE）。断言 **nao 自身契约**（6 条定义字节比对 / 锚点 cross-assert / 命名双向 / schema 与幂等 / 逃生阀 / 三态负控），**不断言 pi-subagents 内部文案**（仅判 ok/throw 与 `unknown fields` 形态，防版本脆断）；零 LLM/零网络、不真跑子代理、不依赖 `pi-intercom`/`tmux`。负控在 `$T4_CACHE_DIR` 夹具副本上做（不触碰仓库工作区）。
 - **「子代理不属舰队会话」口径**：由 pi-subagents 拉起的 `subagent-*` 会话（`subagent-<agent>-<id>` / `subagent-chat-<id>`）**不属**舰队会话身份模型 —— `status` 只对其汇总计数（不列名、不参与在线/判重），`close subagent-*` 显式拒绝（生命周期归 pi-subagents 的 stop/retention）。`subagentfoo` / `mysubagent-x` / 裸 `subagent` 不入此面；`qa-subagent-x` 仍是合法派生名。
 - **DEGRADE 语义**：环境缺能力但**其余断言继续跑**（不同于 `t4_skip` 会终止用例）；默认模式豁免、`T4_REQUIRE_FULL=1` 时计分。
-- **计数可见**：汇总尾部打印 `SKIP=n · DEGRADE=m · NOTE=k`；「绿 + N SKIP/DEGRADE」不得表述为「全量通过」。
+- **计数可见**：汇总尾部打印 `SKIP=n · DEGRADE=m · NOTE=k` + **NOTE 白名单命中明细**（`用例号:tag` 列表，逐条可解释）；「绿 + N SKIP/DEGRADE」不得表述为「全量通过」。
 - **安装包内不适用**：`tests/` 不入 npm tarball，在消费者机器上 `npm test` 因缺 `tests/t4` 而 rc≠0，属预期（见 `docs/releases/v0.18.0.md`）。
 
 退出码：`0` 全 PASS/SKIP（DEGRADE 默认豁免）· `1` 有 FAIL / 参数错误 / 未识别状态（MISSING、NOT_RUN） / (full) 有 SKIP 或 DEGRADE · `2` 有 BLOCKED（仅宽松模式）。
@@ -52,6 +54,20 @@ npm run test:t4:full                           # 发布前置双轴（= 上面�
 | 15 | 子代理会话（`subagent-*`）在 `status`/`close` 的显式识别与排除（汇总计数 / 显式拒绝且父 pane 存活 / E2 孤儿 pane 告警回归 / 前缀边界 / `check` 守卫） | AC2–AC8 · T525 | `tmux`（缺则 SKIP）· `tsx`（名册注入，缺则 T1–T9 DEGRADE）；T10 纯 bash |
 | 16 | 子代理桥口径：模板 G1–G3 契约 + 无目标占位符 + 安装说明 + 协议小节四条 + pi-subagents 配置 schema 接受/拒绝 | AC2–AC7 · T526 | `pi-subagents`（缺则 SKIP）；纯 Node 只读探针，不依赖 tmux/tsx/网络 |
 | 17 | 角色→子代理 agent 单一事实：装配字节比对（卡正文去 frontmatter）· 锚点 cross-assert · 命名双向 · 假总线注册 ×6 + 幂等 + 逃生阀 + 三态负控 | AC2–AC7 · T527 | `pi-subagents`（缺则 SKIP）；纯 Node 只读探针 + 夹具副本，零 LLM/零网络，不依赖 tmux/tsx |
+
+## NOTE 白名单（T531 · `t4_note <tag> <msg>`）
+
+NOTE = 用例产出的**事实性说明**（合法的能力/前提说明，不是通过证据）。为避免「能力缺失时用 NOTE 跳过断言而不阻断」，NOTE 改为**白名单制**并分轴判定：
+
+- **签名**：`t4_note <tag> <msg>`；`tag` 必须是下列三个之一（枚举**单点定义**于 `tests/t4/lib.sh` 的 `T4_NOTE_TAGS`）。
+- **合法 tag（3 个）**：
+  - `static-contract` —— 用**静态断言**替代动态证据（如真 `pi` 加载需凭据，改判 manifest/文档契约）。
+  - `pin-fallback` —— pin 版本尚未发布，改用已发布 `latest` 只做**布局**对照（内容差异不计）。
+  - `migrate-fallback` —— CLI 未提供 `migrate`，改用 `init` 的自动迁移路径。
+- **判定单点**：合法性只在 `run.sh` 汇总层判定（`t4_note` 只打印、从不 `exit`）。非 full ⇒ 只计数 + 未登记 tag 打 `WARN`（不阻断，日常 `npm test` 不因旧式调用变红）；`T4_REQUIRE_FULL=1` ⇒ **未登记 tag 或无 tag ⇒ `RESULT: FAIL` + rc≠0**，输出点名 `用例号:tag`。
+- **旧式调用**（`t4_note "msg"`，无 tag）：打印为 `  [NOTE] (untagged) msg`；非 full 仍跑（仅警告），full 下 FAIL —— 兼容旧分支但不放纵。
+- **新增 tag 的流程**：① 在 `tests/t4/lib.sh` 的 `T4_NOTE_TAGS` 加一项 ② 在本节写清「什么情况下允许、为什么不能改用 `t4_degrade`/`t4_skip`」③ 提交信息说明新增理由。两处缺一不可（`run.sh` 复用常量，不会漏判）。
+- **优先用 `t4_degrade`/`t4_skip`**：真正的「能力缺失」应显式降级（full 计分）或跳过（计 SKIP），**不要**用 NOTE 掩盖断言未执行。
 
 ## 夹具缓存纪律
 
