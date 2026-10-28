@@ -208,10 +208,16 @@ c09_assert_witness() {  # $1=子用例标签
   fi
 }
 
+# O1（QA 提出）：序列号必须在**父 shell** 自增 —— `$(stage_pane ...)` 是子 shell，函数内自增会丢，
+#   三次都落到 -s1（同会话名重入 ⇒ tmux 侧串号；红态演练下 ③ 退化为 SKIP）。
 C09_SEQ=0
-stage_pane() {  # $1=会话名 → 在隔离 server A 内新开 pane，标题契约 + 输出 pane_id
-  local name="$1" sess p
-  C09_SEQ=$((C09_SEQ + 1)); sess="$FIX_SESS-s$C09_SEQ"
+c09_next_sess() {  # 父 shell 自增后输出唯一会话名（调用方必须**直接赋值**，不要放进 $() ）
+  C09_SEQ=$((C09_SEQ + 1))
+  C09_SESS="$FIX_SESS-s$C09_SEQ-$$"
+}
+stage_pane() {  # $1=会话名 $2=唯一 tmux 会话名 → 在隔离 server A 内新开 pane，标题契约 + 输出 pane_id
+  local name="$1" sess="$2" p
+  [ -n "$sess" ] || return 1
   t09 new-session -d -s "$sess" -c "$OTHER" 2>/dev/null || return 1
   p="$(t09 list-panes -t "$sess" -F '#{pane_id}' 2>/dev/null | head -1)"
   [ -n "$p" ] || return 1
@@ -223,7 +229,8 @@ stage_pane() {  # $1=会话名 → 在隔离 server A 内新开 pane，标题契
 
 # ---- ① 正常回收（夹具纪律：-u TMUX_PANE）----
 C09_NAME1="qa-T509R"
-if ! C09_P1="$(stage_pane "$C09_NAME1")"; then
+c09_next_sess
+if ! C09_P1="$(stage_pane "$C09_NAME1" "$C09_SESS")"; then
   t4_skip "AC3: 隔离 server 内建 pane 失败（环境限制）—— 真回收断言必须真跑；full 计分"
 fi
 C09_R1="[{\"name\":\"$C09_NAME1\",\"id\":\"$C09_NAME1\",\"status\":\"idle\",\"cwd\":\"$OTHER\",\"tmuxPane\":\"$C09_P1\"}]"
@@ -240,7 +247,8 @@ c09_assert_witness "①"
 
 # ---- ② 撞号回归：TMUX_PANE 与目标 pane id 相同（修复前此处 rc=1 误拒）----
 C09_NAME2="qa-T509S"
-if ! C09_P2="$(stage_pane "$C09_NAME2")"; then
+c09_next_sess
+if ! C09_P2="$(stage_pane "$C09_NAME2" "$C09_SESS")"; then
   t4_skip "AC3: 隔离 server 内建 pane 失败（环境限制）—— 真回收断言必须真跑；full 计分"
 fi
 C09_R2="[{\"name\":\"$C09_NAME2\",\"id\":\"$C09_NAME2\",\"status\":\"idle\",\"cwd\":\"$OTHER\",\"tmuxPane\":\"$C09_P2\"}]"
@@ -257,17 +265,11 @@ else
 fi
 c09_assert_witness "②"
 
-# ---- ③ 自 pane 不变量：在目标 pane 内真跑 close ⇒ 必须拒（护栏不放松）----
-C09_NAME3="qa-T509T"
-if ! C09_P3="$(stage_pane "$C09_NAME3")"; then
-  t4_skip "AC3: 隔离 server 内建 pane 失败（环境限制）—— 真回收断言必须真跑；full 计分"
-fi
-C09_ROSTER3="$T4_CACHE_DIR/c09-roster-self.json"
-printf '[{"name":"%s","id":"%s","status":"idle","cwd":"%s","tmuxPane":"%s"}]' \
-  "$C09_NAME3" "$C09_NAME3" "$OTHER" "$C09_P3" > "$C09_ROSTER3"
-C09_SELF_OUT="$T4_CACHE_DIR/c09-self.out"
-rm -f "$C09_SELF_OUT"
-cat > "$T4_CACHE_DIR/c09-self.sh" <<'EOS'
+# ---- ③ 自 pane 不变量（fail-closed）：在目标 pane **内部**真跑 close ⇒ 必须拒 ----
+# 两跑同一断言：③ 真 ps（祖先链可读 ⇒ 确定是自己）；③b 伪造 ps（祖先链**不可读** ⇒ 不可判定）。
+# ③b 是 QA 的 SELF_KILLED 场景：判不了就放行 = fail-open ⇒ 自身 pane 被回收。此处必须红变绿。
+C09_SELF_DRIVER="$T4_CACHE_DIR/c09-self.sh"
+cat > "$C09_SELF_DRIVER" <<'EOS'
 #!/usr/bin/env bash
 # F1 自 pane 负控驱动：在目标 pane **内部**执行 close（调用者进程树挂在 pane_pid 下）
 exec >"$C09_SELF_OUT" 2>&1
@@ -276,33 +278,84 @@ NAO_QA_FAKE_ROSTER="$(cat "$C09_ROSTER_FILE")" NAO_SKILLS="$C09_FX" NAO_TASKS_ST
   bash "$C09_FX/.agents/scripts/nao-fleet.sh" close --task "$C09_TASK" qa
 printf '\n__RC__=%s\n' "$?"
 EOS
-chmod +x "$T4_CACHE_DIR/c09-self.sh"
-t09 send-keys -t "$C09_P3" \
-  "C09_SELF_OUT='$C09_SELF_OUT' C09_FX='$FX_N' C09_ROSTER_FILE='$C09_ROSTER3' C09_TASK=T509T bash '$T4_CACHE_DIR/c09-self.sh'" Enter \
-  >/dev/null 2>&1 || true
-c09_self_rc=""
-for _ in $(seq 1 200); do
-  if grep -q '__RC__=' "$C09_SELF_OUT" 2>/dev/null; then
-    c09_self_rc="$(sed -n 's/^__RC__=//p' "$C09_SELF_OUT" | tail -1)"; break
+chmod +x "$C09_SELF_DRIVER"
+
+# 伪造 ps：令祖先链不可读（ppid 查询恒失败）——真 ps 路径前置在 PATH 最前
+C09_FAKEBIN="$T4_CACHE_DIR/c09-fakebin"; mkdir -p "$C09_FAKEBIN"
+REAL_PS="$(command -v ps)"
+cat > "$C09_FAKEBIN/ps" <<EOS
+#!/usr/bin/env bash
+# 伪造 ps：ppid 查询恒失败（模拟「祖先链不可读」）
+case "\$*" in *ppid*) exit 1 ;; esac
+exec "$REAL_PS" "\$@"
+EOS
+chmod +x "$C09_FAKEBIN/ps"
+
+c09_self_drill() {  # $1=标签(③/③b) $2=任务号后缀 $3=PATH 前缀（空=真 ps）
+  local label="$1" task="$2" pathpfx="$3"
+  local name="qa-$task" p roster out rc sendenv
+  c09_next_sess
+  if ! p="$(stage_pane "$name" "$C09_SESS")"; then
+    t4_bad "AC3$label: 隔离 server 内建 pane 失败（环境限制）"
+    return 0
   fi
-  sleep 0.1
-done
-if [ -z "$c09_self_rc" ]; then
-  # 无结果有两种成因：驱动本身失败（pane 仍在），或**闸门缺失致 pane 被自杀**（驱动随 pane 一起死）。
-  if t09 list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qxF "$C09_P3"; then
-    t4_bad "AC3③: 自 pane 负控未产出结果（pane $C09_P3 仍在 ⇒ 驱动超时/失败）—— 见 $C09_SELF_OUT"
+  roster="$T4_CACHE_DIR/c09-roster-$task.json"
+  printf '[{"name":"%s","id":"%s","status":"idle","cwd":"%s","tmuxPane":"%s"}]' \
+    "$name" "$name" "$OTHER" "$p" > "$roster"
+  out="$T4_CACHE_DIR/c09-self-$task.out"; rm -f "$out"
+  sendenv="C09_SELF_OUT='$out' C09_FX='$FX_N' C09_ROSTER_FILE='$roster' C09_TASK=$task"
+  [ -n "$pathpfx" ] && sendenv="PATH='$pathpfx':\$PATH $sendenv"
+  t09 send-keys -t "$p" "$sendenv bash '$C09_SELF_DRIVER'" Enter >/dev/null 2>&1 || true
+  rc=""
+  for _ in $(seq 1 200); do
+    if grep -q '__RC__=' "$out" 2>/dev/null; then
+      rc="$(sed -n 's/^__RC__=//p' "$out" | tail -1)"; break
+    fi
+    sleep 0.1
+  done
+  if [ -z "$rc" ]; then
+    # 无结果有两种成因：驱动本身失败（pane 仍在），或**闸门缺失致 pane 被自杀**（驱动随 pane 一起死）。
+    if t09 list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qxF "$p"; then
+      t4_bad "AC3$label: 自 pane 负控未产出结果（pane $p 仍在 ⇒ 驱动超时/失败）—— 见 $out"
+    else
+      t4_bad "AC3$label: 调用者自身 pane $p 被回收（F1 不变量破坏/SELF_KILLED；驱动随 pane 死亡故无结果）"
+    fi
+    return 0
+  fi
+  t4_assert_ne "0" "$rc" "AC3$label: 目标 pane 就是调用者自身 ⇒ close 必须拒（rc≠0）"
+  t4_assert_contains "$(cat "$out" 2>/dev/null)" "拒绝回收" "AC3$label: 输出「拒绝回收」"
+  if t09 list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qxF "$p"; then
+    t4_ok "AC3$label: 调用者自身 pane $p 存活（未被自杀）"
   else
-    t4_bad "AC3③: 调用者自身 pane $C09_P3 被回收（F1 不变量破坏；驱动进程随 pane 死亡故无结果）"
+    t4_bad "AC3$label: 调用者自身 pane $p 被回收了（F1 不变量破坏/SELF_KILLED）"
   fi
+  c09_assert_witness "$label"
+}
+
+c09_self_drill "③"  "T509T" ""                    # 真 ps：祖先链可读 ⇒ 确定是自己 ⇒ 拒
+c09_self_drill "③b" "T509U" "$C09_FAKEBIN"        # ps 不可读 ⇒ 不可判定 ⇒ fail-closed 仍拒
+
+# ---- ④ 不可判定 + **不撞号** ⇒ 必须放行（防过度矫正把 v0.19.0 误拒引回来）----
+# 判据：rc=2 只对「与 $TMUX_PANE 撞号」保守拒绝；不撞号时不得因此卡死正常回收。
+C09_NAME4="qa-T509V"
+c09_next_sess
+if ! C09_P4="$(stage_pane "$C09_NAME4" "$C09_SESS")"; then
+  t4_bad "AC3④: 隔离 server 内建 pane 失败（环境限制）"
 else
-  t4_assert_ne "0" "$c09_self_rc" "AC3③: 目标 pane 就是调用者自身 ⇒ close 必须拒（rc≠0）"
-  t4_assert_contains "$(cat "$C09_SELF_OUT" 2>/dev/null)" "拒绝回收" "AC3③: 输出「拒绝回收」"
-  if t09 list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qxF "$C09_P3"; then
-    t4_ok "AC3③: 调用者自身 pane $C09_P3 存活（未被自杀）"
+  C09_R4="[{\"name\":\"$C09_NAME4\",\"id\":\"$C09_NAME4\",\"status\":\"idle\",\"cwd\":\"$OTHER\",\"tmuxPane\":\"$C09_P4\"}]"
+  t4_info "不可判定负控：ps 不可读 + \$TMUX_PANE=%9（与目标 $C09_P4 不撞号）⇒ 必须放行"
+  T4_OUT=""; T4_ERR=""; T4_RC=0
+  t4_run_in_dir "$FX_N" env PATH="$C09_FAKEBIN:$PATH" TMUX="$C09_TMUX_REAL" TMUX_PANE="%9" \
+    NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$C09_R4" \
+    bash "$FX_N/.agents/scripts/nao-fleet.sh" close --task T509V qa
+  t4_assert_eq "0" "$T4_RC" "AC3④: 不可判定且不撞号 ⇒ close 放行（rc=0）"
+  t4_assert_not_contains "$T4_OUT$T4_ERR" "拒绝回收" "AC3④: 不得报「拒绝回收」（过度矫正会复现 v0.19.0 误拒）"
+  if c09_reclaimed "$C09_P4"; then
+    t4_ok "AC3④: 目标 pane $C09_P4 已回收"
   else
-    t4_bad "AC3③: 调用者自身 pane $C09_P3 被回收了（F1 不变量破坏）"
+    t4_bad "AC3④: 目标 pane $C09_P4 仍存活或 server 不可达（rc=$T4_RC）"
   fi
-  c09_assert_witness "③"
+  c09_assert_witness "④"
 fi
 
 t09 kill-server >/dev/null 2>&1 || true
