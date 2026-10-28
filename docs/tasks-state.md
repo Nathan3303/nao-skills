@@ -29,16 +29,16 @@
 - ✅ **T521 交付闭环（2026-10-14 · v0.17.3）**：GitHub Release 标题口径 = 裸 `vX.Y.Z` —— 权威单处 `common/release-notes.md` §一.5 硬约束 + §四清单 + §五红线 · 两处引用收敛（`github-flow.md:56` / PM 卡 :121）并指回单处 · PM 卡 **v24→v25** · 模板注释 1 行（6 分段标题未动）· 一次性只读探针 `PASS=28 FAIL=0` + 负控 2/2 · QA 独立复跑 **GO** · squash `eff44ec` · tag + Release 已发（发布提交 `4d97f00` · **AC9 自证：标题严格 = `v0.17.3`**）· **npm 重发 0.17.3 已核验**（`latest` + integrity 逐字节）。
 - ✅ **T520 交付闭环（2026-10-14 · v0.17.2）**：ADR 文档契约 —— 必写 5 节 + 可选 3 节（参考来源恒末）· 头部恰 4 字段 · 状态值域 4 值 · 禁写/下沉清单 · 新增 `templates/adr.md.example` + `adr-index.md.example` · `arch-designer` 卡 v11→v12 · QA 探针 `PASS=53 FAIL=0` + 负控 2/2 · squash `160cc60` · tag + Release 已发（`9833344`）· **npm 不重发**。
 
-- 当前阶段：**T527 实施中**（⑧ 角色 agent 运行时注册 · 降级批次 `nao/role-agents`）：PRD 已成稿 + QA 实测/arch 结构评审均完成 + 开工卡已拍板 → **rd-infra-T527 落地中**（先 M1 零 LLM 可达性探针，通过后实施；下一步：arch 落盘 ADR/报告 → qa 独立复核 + live 实证）；上批 T526（v0.18.4）已闭环发布
-- 当前 PRD：`docs/prds/2026-10-14-role-agents-runtime-registration.md`（状态：**待派发→实施中**）
-- 未决决策点：无（D1–D6 已拍板；M1 探针失败则按 D1 转 D 并回报）
-- 待用户回答：无（npm 重发已拍 = 发布时重发 0.18.5）
-- 未派发队列：见下方「待派发队列」（共 2 项：① `arch-designer-T527` 落盘 ADR + 评审报告（等 rd-infra 回执，同分支顺序写）；② `qa-T527` 独立复核 + live 实证 + 报告）
-- 下批需求候选（**已立项待派发 = T528**）：**任务完成协议**（DoD 四类 + 遗留项三出口 + 分级复盘 · Issue [#46](https://github.com/Nathan3303/nao-skills/issues/46) · PRD `docs/prds/2026-10-14-task-completion-protocol.md`）—— 用户 2026-10-14 拍板 D1–D4：**排队**（T527 闭环后开工）· **E0 纯纪律条款**（E1 升级门槛 = 连续 2 批「遗留项失忆」）· **v0.18.6 PATCH + 发布时重发 npm** · **rd-infra 实施 + qa 复核、arch 跳过**。另一候选 CodeReview 是否新增角色（**已评估 · 未立项**，见 `docs/research/2026-10-14-code-review-role.md`，57 行）；两项均不插队 T527
-- 下次唤醒条件：**rd-infra 回执（含 M1 结果）/ 下批需求授意 / 用户要求重开 PM**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = PM + arch-designer-T527 + qa-T527 + rd-infra-T527
+- 当前阶段：**T528 已交付归档（v0.18.6 已发布 · npm 已核验）= 批次终态 · 待命**。上批 T527（v0.18.5 角色 agent 运行时注册）亦已闭环；本会话已完成 T527+T528 两批，按 §三 触发点① 重开 PM
+- 当前 PRD：无在飞；最近归档 `docs/prds/2026-10-14-task-completion-protocol.md`（T528 · 已交付 v0.18.6）与 `docs/prds/2026-10-14-role-agents-runtime-registration.md`（T527 · 已交付 v0.18.5）
+- 未决决策点：无（T528 D1–D4 开工卡拍板已执行；E0 为现行口径）
+- 待用户回答：无（npm 0.18.6 已发布并核验）
+- 未派发队列：见下方「待派发队列」（仅 1 项：`M20261014-F1` 到期重评 2026-11-14）
+- 下批需求候选（**已评估 · 全部未立项**）：① CodeReview 是否新增角色 → 结论「不新增常驻第 7 角色，走 A+B+C 最小改动包」（见 `docs/research/2026-10-14-code-review-role.md`）② E1 升级（`check` 结构校验「归档时遗留项未收口 → warn」），门槛 = 连续 2 批「遗留项失忆」③ T512 余项（台账 ⑨/⑫后半）、R1/R2 探针健壮性、O-1/O-2 负载偶发、T512 §4.5 model 白名单缺口
+- 下次唤醒条件：**用户授意下批需求 / 目标会话唤醒补发角色卡广播 / `M20261014-F1` 到期（2026-11-14）**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = 仅 PM（派生已回收，常驻 rd-infra 已退出）
 - 口头约束已落盘：项目 `AGENTS.md` 项目约束（ask-me 提问）· PRD §5 BR6 格式禁令 + §9 R5/R6（T519）· ADR 字段口径 = `deliverable-docs.md` §四（T520 · 状态值域 4 值 / 头部 4 字段 / 60 行上限）
-- 需求分支 / PR：见下方「需求分支 / PR / 发布」（本批降级分支 `nao/t4-gate`——**已 squash 合并 `e8a495b` 并删净**）
-- 会话体检：当前 PM 会话 = `01a13817`（pane %31），T522 全批 ctx 5%→16%（闭批时约 160k/1000k · 无压缩）· 舰队 = 仅 PM（派生已回收） · 本快照为接续唯一事实源（main = `85606e9`）
+- 需求分支 / PR：见下方「需求分支 / PR / 发布」（本批 `feat/46-task-completion-protocol`——**已 squash 合并 `3e98f0d` 并删净**）
+- 会话体检：本 PM 会话 `01a17da8`（pane %0）跨 T527+T528 两批，闭批 ctx **≈16%（164k/1000k · 无压缩）**；按用户拍板于批次终态**重开 PM**；本快照 = 接续唯一事实源（main = `8b0d927` 起）
 
 ## 需求分支 / PR / 发布（PM 维护）
 
