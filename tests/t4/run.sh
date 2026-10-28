@@ -40,7 +40,7 @@ CASE_TITLES=(
   "子代理会话（subagent-*）在 status/close 的显式识别与排除（T525 · AC2–AC8）"
   "子代理桥口径：模板 G1–G3 + 协议条款 + 配置 schema（T526 · AC2–AC7）"
   "角色→子代理 agent 单一事实：装配字节比对 + 锚点 cross-assert + 命名双向 + 幂等 + 三态负控（T527 · AC2–AC7）"
-  "codegraph 四态检测 / 默认零 fork / 遥测注入 / 契约文案 + 变异负控（T532 · AC1/AC2/AC7/AC11）"
+  "codegraph 四态检测 / 默认零 codegraph 调用 / warn 口径 / 遥测注入 / 契约文案 + 变异负控（T532 · AC1/AC2/AC7/AC11）"
 )
 
 mode="run"; only=""; arg_err=""

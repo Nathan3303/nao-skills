@@ -8,12 +8,14 @@
 #
 # 断言分组：
 #   A 四态前缀（默认 `check`，full=0）：未声明 / 已声明但无 CLI / 无索引 / 齐备（含 -v 提示）
-#   B AC11 零 fork：默认 `check` 的 codegraph 调用 = 0；`check -v` = 1；`ensure` 调用点静态 = full=1
+#   B AC11 零调用：默认 `check` 的 codegraph 调用 = 0（实现上仍有 2 次 grep fork，判据只数 codegraph）；`check -v` = 1；`ensure` 调用点静态 = full=1
 #   C full=1 文本契约：pending / up to date / 不可解析（三态各命中一次）+ `--strict` 不升级
 #   D 变异负控（AC7）：① 摘插件条目 ② 摘 `.codegraph` ⇒ 各命中新前缀且 `check` rc 不变；还原后 md5 一致
 #   E 单源与遥测（BR5/BR10）：包名等值断言（fleet 常量 ↔ `bin/nao-skill.js`）+ spawn_one 字面量
 #   F 副产物纪律（BR11/AC8）：`.gitignore` 单文件、入库零命中、机制侧不写不删不杀
 #   G 文档口径（AC3/AC4 可测面）：技能必备句 + 唯一硬编码工具名 + 卡内禁用工具名零命中
+#   I warn 计数口径（D4 · arch 裁 A）：codegraph 任态不计入 warn=N；真 warn 照常计数（不掩蔽）
+#   D2 夹具自证：剥 codegraph 不剥 node（夹具带 package.json 强制走 node 分支，缺 node 即 rc=1 回归位）
 #
 # 能力门（不整例 SKIP，避免静态断言被吞）：
 #   真装类（G 组之外的 `codegraph status` 真实原文）只在 CLI + 本仓 `.codegraph/` 齐备时跑；
@@ -33,11 +35,21 @@ t4_assert_file "$SKILL" "技能文件存在（codegraph.md）"
 # ---------------------------------------------------------------- 夹具
 FX="$T4_CACHE_DIR/c18/repo"
 AG="$T4_CACHE_DIR/c18/home/.pi/agent"
-STUB="$T4_CACHE_DIR/c18/bin"
+STUB="$T4_CACHE_DIR/c18/bin"      # 只放 codegraph stub
+TOOLS="$T4_CACHE_DIR/c18/tools"   # 保底 node/npm：剥掉 codegraph 所在目录时**不能连 node 一起剥**（D2）
 LOG="$T4_CACHE_DIR/c18/calls.log"
-mkdir -p "$FX" "$AG" "$STUB"
+mkdir -p "$FX" "$AG" "$STUB" "$TOOLS"
 cp -r "$T4_ROOT/.agents" "$FX/.agents" || t4_blocked "夹具复制 .agents 失败"
+# 夹具补 package.json（含 pi.extensions）：强制走 check 的 node 分支 ——
+# 若 PATH 剥掉 node，check 会报 `✗ node 缺失` 并 rc=1（D2 的原始隐患），此处即回归位。
+cat > "$FX/package.json" <<'PKGJSON'
+{"name":"t4-c18-fixture","version":"0.0.0","pi":{"extensions":["./.agents/extensions/nao-role-agents.mjs"]}}
+PKGJSON
 printf '{"packages":["npm:pi-web-access"]}\n' > "$AG/settings.json"
+for _t in node npm; do
+  _p="$(command -v "$_t" 2>/dev/null || true)"
+  [ -n "$_p" ] && ln -sf "$_p" "$TOOLS/$_t"
+done
 
 # 记录型 stub：每次调用追加一行；输出由 CG_STUB_MODE 决定（契约原文取自 codegraph 1.6.2 实测）
 cat > "$STUB/codegraph" <<'STUB'
@@ -68,8 +80,8 @@ C18_RC=0; C18_OUT=""
 run_cg_check() {
   local kind="$1" mode="$2"; shift 2
   : > "$LOG"
-  local path="$NO_CG_PATH"
-  [ "$kind" = "stub" ] && path="$STUB:$NO_CG_PATH"
+  local path="$TOOLS:$NO_CG_PATH"
+  [ "$kind" = "stub" ] && path="$STUB:$TOOLS:$NO_CG_PATH"
   local of ef; of="$(mktemp)"; ef="$(mktemp)"
   ( cd "$FX" && env PI_CODING_AGENT_DIR="$AG" PATH="$path" \
       CG_STUB_MODE="$mode" CG_STUB_LOG="$LOG" \
@@ -103,7 +115,21 @@ t4_assert_contains "$C18_OUT" "codegraph init" "A3 无索引：提示含真实�
 mkdir -p "$FX/.codegraph"
 run_cg_check stub up
 t4_assert_eq "0" "$C18_RC" "A4 齐备（默认）：check rc=0"
-t4_assert_contains "$C18_OUT" "✓ codegraph 齐备（索引新鲜度用 -v 查）" "A4 齐备：默认文案含「新鲜度用 -v 查」"
+t4_assert_contains "$C18_OUT" "✓ codegraph 齐备" "A4 齐备：命中契约前缀 ✓（默认亦有该行）"
+t4_assert_contains "$C18_OUT" "索引新鲜度用 -v 查" "A4 齐备：默认文案含「新鲜度用 -v 查」（BR9 不静默）"
+t4_assert_contains "$C18_OUT" "生效依赖插件未被过滤/禁用" "A4 齐备：文案自带「已声明 ≠ 生效」保留（D3）"
+
+# D2 夹具自证：剥 codegraph 后 node 仍可用（否则 `✗ node 缺失 ⇒ rc=1` 会假红）
+t4_assert_eq "ok" "$(cd "$FX" && env PATH="$TOOLS:$NO_CG_PATH" sh -c 'command -v node >/dev/null && echo ok || echo missing')" \
+  "D2 夹具：剥 codegraph 后 node 仍可解析（PATH 含 TOOLS 保底）"
+t4_assert_eq "" "$(cd "$FX" && env PATH="$TOOLS:$NO_CG_PATH" sh -c 'command -v codegraph 2>/dev/null')" \
+  "D2 夹具：nostub 模式下 codegraph 确实不可解析"
+# 用一次 -v 报告取全文（默认摘要只有 2 行，看不到 pi.extensions 段）
+run_cg_check nostub up -v
+C18_D2OUT="$C18_OUT"
+t4_assert_not_contains "$C18_D2OUT" "node 缺失" "D2 夹具含 package.json 时 check 未报 node 缺失（rc=1 隐患回归位）"
+t4_assert_contains "$C18_D2OUT" "pi.extensions 声明 1 条且文件存在" "D2 夹具：pi.extensions 校验实际走到 node 分支"
+t4_assert_eq "0" "$C18_RC" "D2 夹具补 package.json 后 check 仍 rc=0（D2 修复生效）"
 
 # ============================================================ B AC11 默认零 fork
 t4_assert_eq "0" "$(cg_calls)" "B1 默认 check：codegraph 调用 0 次（零外部进程）"
@@ -207,5 +233,17 @@ if command -v codegraph >/dev/null 2>&1 && [ -d "$T4_ROOT/.codegraph" ]; then
 else
   t4_note static-contract "H1 缺 codegraph CLI 或本仓 .codegraph/ ⇒ 真装类原文断言跳过（契约串已由 C 组 stub 断言覆盖）"
 fi
+
+# ============================================================ I warn 计数口径（D4 · arch 裁 A）
+# codegraph 任态**不计入** warn=N（可见性由常驻第 2 行承担）；但真 warn 必须照常计数（不掩蔽）。
+run_cg_check nostub up
+t4_assert_not_contains "$C18_OUT" "warn=" "I1 codegraph 的 ! 态不计入 warn（摘要无 warn 字段）"
+t4_assert_contains "$C18_OUT" "! codegraph 插件已声明但 CLI 不在 PATH" "I1 第 2 行四态行仍在（不因不计数而静默）"
+t4_assert_eq "0" "$C18_RC" "I1 codegraph ! 态：check rc=0"
+
+NAO_MODEL_WHITELIST='a,,b' run_cg_check nostub up
+t4_assert_contains "$C18_OUT" "warn=1" "I2 codegraph ! + 一条真 warn ⇒ warn=1（不掩蔽真警告）"
+t4_assert_contains "$C18_OUT" "! codegraph 插件已声明但 CLI 不在 PATH" "I2 两行并存：真 warn 计数 + codegraph 四态行"
+t4_assert_eq "0" "$C18_RC" "I2 check rc=0"
 
 t4_exit

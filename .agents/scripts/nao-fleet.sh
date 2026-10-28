@@ -105,8 +105,8 @@ CODEGRAPH_PKG="@sean_pedersen/pi-codegraph"
 CG_MSG_UNDECLARED='codegraph 插件未声明（装法：pi install npm:@sean_pedersen/pi-codegraph；定位回退 grep）'
 CG_MSG_NO_CLI='codegraph 插件已声明但 CLI 不在 PATH（装：npm i -g @colbymchenry/codegraph；回退 grep -rn + 行段）'
 CG_MSG_NO_INDEX='codegraph 已就绪但当前仓无索引（codegraph init；索引后每会话约 +70–90MB PSS）'
-CG_MSG_READY='codegraph 齐备'
-CG_MSG_READY_SHORT='codegraph 齐备（索引新鲜度用 -v 查）'
+CG_MSG_READY='codegraph 齐备（生效还依赖插件未被过滤/禁用）'
+CG_MSG_READY_SHORT='codegraph 齐备（索引新鲜度用 -v 查；生效依赖插件未被过滤/禁用）'
 CG_MSG_PENDING='codegraph 索引 pending（codegraph sync 同步）'
 CG_MSG_UNPARSABLE='codegraph status 输出不可解析（手工 codegraph status 核对）'
 
@@ -294,7 +294,8 @@ check_alias_resolution() {
 #     理由 = 六会话并发下「索引 pending」是稳态，长期拉红会侵蚀真失败信号（arch A1）。
 #   严格短路：① 声明（两份 settings.json 的 packages 含包名）② command -v codegraph
 #              ③ <repo>/.codegraph ④ status 文本（**仅 full=1**）
-#   full=0（默认 check）：零外部进程（两次文件读 + command -v + 一次目录判定，AC11）
+#   full=0（默认 check）：**零 codegraph 调用**（AC11 判据 = codegraph 调用 0 次）——实际新增 2 次 grep fork
+#     （settings 声明匹配 + 摘要行抽取）；不 spawn 任何第三方进程
 #   full=1（check -v / ensure）：每仓一次 `codegraph status`（实测 0.37–0.42s，不进派发热路径）
 #   契约前缀：· 未声明 / ! 已声明但 CLI 不在 PATH / ! 无索引 / ✓ 齐备 / ! pending / ! 不可解析
 codegraph_state() {
@@ -1228,7 +1229,7 @@ cmd_check() {
   echo "== 交叉引用（@.agents/common|skills|prompts|scripts/... 均须存在）=="
   check_cross_refs || rc=1
 
-  echo "== CodeGraph（四态检测：全部 warn，永不计入 rc；默认不 fork CLI）=="
+  echo "== CodeGraph（四态检测：全部 warn，永不计入 rc；默认不调用 CLI）=="
   local cgfull=0
   if $VERBOSE; then cgfull=1; fi
   codegraph_state "$PWD" "$cgfull"
@@ -1631,8 +1632,9 @@ fi
 case "$CMD" in
   check)
     # 默认摘要 2 行（派发前自检只需 exit code + 计数 + codegraph 态；完整报告 30+ 行不进 PM 上下文）；-v 或失败时展开
-    # warn 计数口径：报告里所有 `  ! ` 行（含 codegraph 的四类 `!` 态：CLI 不在 PATH / 无索引 / pending / 不可解析）
-    #   都计入摘要的 warn=N，但 codegraph 的任何状态**都不进 rc**（BR1：codegraph 永不计入退出码）。
+    # warn 计数口径：只有**非 codegraph** 的 `  ! ` 行计入摘要 warn=N；codegraph 的四类 `!` 态
+    #   （CLI 不在 PATH / 无索引 / pending / 不可解析）**既不计入 warn、也不进 rc**（BR1 + arch D4）——
+    #   它的可见性由常驻的第 2 行（四态之一）承担，故不会因「不计数」而静默。
     # 子 shell 隔离：cmd_check 内部 die/exit 不得吞掉报告（计数从报告解析，不靠子 shell 内变量）
     REPFILE="$(mktemp)"
     set +e
@@ -1640,7 +1642,9 @@ case "$CMD" in
     CHECK_RC=$?
     set -e
     if (( CHECK_RC == 0 )) && ! $VERBOSE; then
-      WARNS="$(grep -c '^  !' "$REPFILE" || true)"
+      # D4（arch 裁 A）：codegraph 任态**不计入** warn 计数 —— 它是常驻第 2 行，不必重复计数；
+      # 六条 CG_MSG_* 全以 `codegraph ` 开头 ⇒ 前缀匹配不误伤其它体检项（grep -c 0 命中 rc=1，|| true 别丢）。
+      WARNS="$(grep '^  !' "$REPFILE" | grep -vc '^  ! codegraph ' || true)"
       ROLES_N="$(grep -oE '解析成功，[0-9]+ 个角色' "$REPFILE" | grep -oE '[0-9]+' | head -1 || true)"
       FILES_N="$(grep -oE '[0-9]+ 个文本文件全 LF' "$REPFILE" | grep -oE '^[0-9]+' | head -1 || true)"
       if (( WARNS > 0 )); then

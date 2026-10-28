@@ -15,6 +15,9 @@ description: 按需技能——CodeGraph 代码定位（三段阶梯：原生入
 - 一次调用拿「相关符号源码 + 调用路径」，等价于 `codegraph explore`。
 - 生效前提（三者齐备）：插件已声明 + CLI 在 PATH + 当前仓有 `.codegraph/` 索引。
   **有插件无索引 / 无 CLI ⇒ 不生效**（插件激活条件 = cwd 存在 `.codegraph/`，否则静默 no-op）。
+- 注意「已声明 ≠ 生效」：`check` 的声明判定读的是 `settings.json` 的 `packages` 条目 ——
+  条目被 `pi` 过滤 / 禁用时仍算已声明（⇒ 会报「齐备」但工具未必出现在会话里）；工具是否真在，
+  以会话工具列表为准。
 - **插件不供 system prompt 指引（截至 pi 1.4.0 / pi-codegraph 0.1.0）** —— 舰队恒带
   `--append-system-prompt`，该开关抑制插件的指引注入 ⇒ 口径由**本技能**承载（不要期待自动注入）。
 
