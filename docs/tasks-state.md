@@ -187,7 +187,9 @@
 
 
 
-| T531-rd | done(full) `feb9e96`：见「进行中」行；**负控 5 组**（未知 tag ⇒ dual 两组 FAIL 点名 / 摘 `static-contract` ⇒ 红 / 摘 `pin-fallback` ⇒ 副本演练红 / 旧式无 tag：非 full 不红 + full 红 / `migrate-fallback` 副本演练命中）+ md5 还原 · AC7 差集干净 · **口径提醒**：白名单命中常态 **2 条**（`06:static-contract`×2；另两个 tag 仅在 pin 未发布 / CLI 缺 migrate 时命中） | `feb9e96` | 等 qa-T531 复核 |
+| T531-rd | done(full) `feb9e96`：见「进行中」行；**负控 5 组**（未知 tag ⇒ dual 两组 FAIL 点名 / 摘 `static-contract` ⇒ 红 / 摘 `pin-fallback` ⇒ 副本演练红 / 旧式无 tag：非 full 不红 + full 红 / `migrate-fallback` 副本演练命中）+ md5 还原 · AC7 差集干净 · **口径提醒**：白名单命中常态 **2 条**（`06:static-contract`×2；另两个 tag 仅在 pin 未发布 / CLI 缺 migrate 时命中） | `feb9e96` | ✅ **qa 复核通过（2026-10-28）** |
+
+| T531-qa | done(full)：**0 未过项**（AC1–AC8 逐项过）。自跑 `check` rc=0（roles=6 · files=50）· `npm test` rc=0（16/16 · SKIP=0/DEGRADE=0/NOTE=2）。关键实证：①单点成立（`t4_note` 无 exit，判定在 `run.sh` 聚合层）②4 处 diff 归一键后与基线**逐字相同** ③三项负控自做（未知 tag ⇒ 非 full 不红 / full 红 / **dual 两端皆红**·摘实命中 `static-contract` ⇒ 红·无 tag ⇒ 非 full 不红 / full 红）④**dual 170s · 两组皆绿**，且「失败归因演练」能标出「失败组: 组2」⑤发布条款/PM 卡 v27/清单 33·41（自数）⑥AC7 干净。**O1（文档口径，PM 认账）** PRD AC3② 措辞「摘 `pin-fallback`」在 pin 已发布态会空转 ⇒ 改为「摘**当前实命中的** tag」（PM 在发布提交订正）· **O2** dual 实测 139–170s（PRD 预算改 ~3 分钟）· **O3** 报告由 PM 代提交 | 报告 `docs/reports/2026-10-28-T531-qa-verify.md` | PM 终验 → PR → 合并 → v0.19.2 |
 
 ## 挂起（被抢占 / 降级）
 
