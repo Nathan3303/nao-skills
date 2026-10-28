@@ -29,10 +29,9 @@ description: pi-intercom 多会话协作协议（常驻引用）
 - **子代理会话不属舰队会话身份模型**：由 pi-subagents 拉起的子代理会话以 `subagent-<agent>-<id>`（无名时 `subagent-chat-<id>`）进入 intercom 名册，但**不属**舰队会话 —— `status` 只对其汇总计数（不列名、不参与在线/turn 判重），`close subagent-*` 显式拒绝（生命周期归 pi-subagents 的 stop/retention，nao 不接管）。
 
 - **判重 / 在线判定**：脚本按 pi 自设的**终端标题**（`π - <会话名> - <仓库名>`）+ `pi-intercom` 名册判在线（**不用 `pgrep --name`**：pi 启动后 argv 被改写为 `pi`，会恒失配）；已运行则跳过并 warn。确需重开加 `--force`。
-- **标题被改写时的 pane 定位**（v0.9.4）：终端标题可被外部改写（实测变为 `pi:c`），此时 `status`/`close`/`ensure` 按三层后备定位 pane：① 标题契约 → ② pi-intercom 名册 `tmuxPane`（注册时读 `$TMUX_PANE`，与标题改名无关，权威）→ ③ 本仓「未被认领 pi pane」唯一兜底。三层均未命中才认「无法确认」并 exit 非 0（不静默 no-op）。`close` 的在跑 turn 判定叠加名册活动状态（thinking / tool:* 等）与 pane 末 12 行状态行双重信号。
-- **宿主阶梯（tmux 外也看得见）**：`nao-fleet.sh ensure` 按环境选宿主：① `NAO_TERMINAL` 显式（`tmux`/`foot`/`ghostty`/`ptyxis`/`screen`；命令缺失或非法 ⇒ `exit 2`）→ ② `$TMUX` 内：**派生宿主窗口**（调用者 pane 所在 window）分屏 → ③ tmux 可用且有图形会话：建 `nao-<别名>` 会话并用 `xdg-terminal-exec` 开**可见窗口** attach（默认 socket，句柄模型完整）→ ④ 无 tmux 有图形：`xdg-terminal-exec --app-id=org.nao.<别名> --dir=<repo>` 直接开窗 → ⑤ 无图形：仅显式 `--background` 才建 detached 会话 → ⑥ 否则 `exit 2` + 一行诊断与恢复命令。**失败不假成功**：打印「已拉起」前必先校验宿主句柄。
-- **tmux 布局**：②/③ 的 tmux 宿主三选一（`NAO_TMUX_LAYOUT`）：默认 `main-row2`（首 pane 全高占左，后续每角色往右开列、每列上下 2 个）；`main-col`（其余在右列竖排）；`grid`（等大网格）。**窄列守卫**：`main-row2` 最窄非主 pane < `NAO_TMUX_MIN_PANE_WIDTH`（默认 30）时自动回退 `main-col`，仍不足再退 `grid`（打印带数字的 warn，**不中断拉起**）。
-- **非 tmux 宿主降级边界（D2/D6）**：④ 路径无 tmux pane 句柄，`status` 会明确标注「turn 判定来源 = 名册」（在跑 turn 判定仅供参照），`close` 按窗口 `app-id`（`org.nao.<别名>`）→ pid（校验 `comm=pi`）回收；无 `hyprctl`/`swaymsg`/`xdotool`/`wmctrl` 等 class 探针时，接受启动并打印一行 warn（**无法校验 ≠ 校验失败**）。
+- **标题被改写时的 pane 定位**（v0.9.4）：终端标题可被外部改写（实测变为 `pi:c`），此时 `status`/`close`/`ensure` 按三层后备定位 pane：① 标题契约 → ② pi-intercom 名册 `tmuxPane`（注册时读 `$TMUX_PANE`，与标题改名无关，权威）→ ③ 本仓「未被认领 pi pane」唯一兜底。三层均未命中 ⇒ 视为无句柄：`close` 走「未运行（无需回收）」或（名册报在线但无句柄）exit 非 0。`close` 的在跑 turn 判定叠加名册活动状态（thinking / tool:* 等）与 pane 末 12 行状态行双重信号。
+- **运行前提（唯一路径 · ADR `2026-10-27-strict-tmux-pi`）**：`ensure`/`status`/`close` **只接受 tmux 会话内**（`$TMUX` 非空且 `tmux` 命令可用）**且 `pi ≥ 1.4.0`**；不满足 ⇒ `exit 3`（前提不满足 ⇒ 命令未执行）+ 单行提示（含 `tmux new -s nao`），**不建 session/pane/lock、不写状态**。`cleanup` 豁免（其正常场景就是非 tmux 的隔离实验场）。拉起路径只有一条：**派生宿主窗口**（调用者 pane 所在 window）分屏，显式 `-t @<window_id>`；**失败不假成功**：打印「已拉起」前必先校验 pane 句柄。
+- **tmux 布局**：宿主三选一（`NAO_TMUX_LAYOUT`）：默认 `main-row2`（首 pane 全高占左，后续每角色往右开列、每列上下 2 个）；`main-col`（其余在右列竖排）；`grid`（等大网格）。**窄列守卫**：`main-row2` 最窄非主 pane < `NAO_TMUX_MIN_PANE_WIDTH`（默认 30）时自动回退 `main-col`，仍不足再退 `grid`（打印带数字的 warn，**不中断拉起**）。
 - **模型规则**：用户未指定则**禁止传 `--model`**，也禁止继承 PM 自身模型。
   显式指定时由 `NAO_MODEL_WHITELIST` 在**命令行入口解析阶段**即校验，
   不命中直接 `die`，无部分拉起；PM 只需如实转达用户 `-m` 指定。

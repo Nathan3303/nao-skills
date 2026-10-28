@@ -23,6 +23,7 @@
 # 夹具纪律（BR9）：真 tmux 隔离 socket（≠ 生产默认候选）+ env -u TMUX -u TMUX_PANE +
 #   假名册逐字段一行 pretty-print（探针 JSON.stringify(...,null,2)；紧凑 JSON 会被名册解析贪婪匹配
 #   只取末条）+ 收尾走机制 cleanup -S；桩 pi 用**复制**的 sleep 二进制（exec 会丢 comm=pi）。
+#   T529：status/close 需在 tmux 内 —— 用隔离 socket 作 $TMUX（见 $FTMUX）。
 #   能力门：tmux 缺 ⇒ t4_skip；tsx 缺 ⇒ t4_degrade（T10 等纯 bash 断言照跑）。
 set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
@@ -40,6 +41,9 @@ LAB="$T4_CACHE_DIR/lab"
 STUBBIN="$LAB/bin"
 SOCKDIR="$LAB/sock"
 SOCK="$SOCKDIR/tmux-$(id -u)/default"
+# T529：ensure/status/close 只接受「tmux 内」。tmux 客户端优先按 $TMUX 里的 socket 路径连接
+#   ⇒ 用隔离 socket 作 $FTMUX 既过入口闸门、又仍落在夹具 server（不碰生产默认 server）。
+FTMUX="$SOCK,0,0"
 GUARD=0
 _TM="${TMUX:-}"
 for p in "/tmp/tmux-$(id -u)/default" "${TMPDIR:-/tmp}/tmux-$(id -u)/default" "${_TM%%,*}"; do
@@ -83,15 +87,14 @@ process.stdout.write(JSON.stringify({ ok: true, sessions: JSON.parse(process.env
 JS
 cp "$(command -v sleep)" "$STUBBIN/pi" && chmod +x "$STUBBIN/pi" \
   || { t4_bad "桩 pi（复制二进制保 comm=pi）失败"; t4_exit; }
-printf '#!/bin/bash\nexit 1\n' > "$STUBBIN/xdg-terminal-exec"; chmod +x "$STUBBIN/xdg-terminal-exec"
 LAB_BASE="$(basename "$LAB")"
 
 # ---- 调用 / 观察封装 ----
 RC=0; OUT=""
-run_fleet() {  # <roster-json> <fleet 参数...>；TMUX_TMPDIR 令 fleet 内部裸 tmux 落隔离 server
+run_fleet() {  # <roster-json> <fleet 参数...>；$TMUX 指向隔离 server（T529 唯一运行前提）
   local roster="$1"; shift
   local of="$LAB/out.$$"
-  ( cd "$LAB" && timeout 90 env -u TMUX -u TMUX_PANE \
+  ( cd "$LAB" && timeout 90 env -u TMUX_PANE TMUX="$FTMUX" \
       TMUX_TMPDIR="$SOCKDIR" \
       NAO_SKILLS="$LAB" NAO_TASKS_STATE="$LAB/.no-tasks-state.md" \
       PI_CODING_AGENT_DIR="$REAL_AGENT_DIR" NAO_QA_FAKE_ROSTER="$roster" \
@@ -143,14 +146,14 @@ if [ "$TSX_OK" = "1" ]; then
   t4_assert_match "$OUT" '· qa +未运行' "T1 角色区 qa 不误报在线"
   t4_assert_not_contains "$OUT" "✓ qa" "T1 角色区无「✓ qa」"
 
-  # ---------------------------------------------------------------- T7 ensure 负/正控
+  # ---------------------------------------------------------------- T7 ensure 前提负控（T529）
+  # 非 tmux ⇒ 入口闸门直接 exit 3（不建 pane/lock、不写状态）；子代理在场也绝不构成「已在运行」假成功。
+  FTMUX_SAVE="$FTMUX"; FTMUX=""
   run_fleet "$R_SUB" ensure qa
-  t4_assert_ne "0" "$RC" "T7 负向：仅子代理在场 ⇒ ensure qa 不假成功（无宿主 exit 2）"
+  FTMUX="$FTMUX_SAVE"
+  t4_assert_eq "3" "$RC" "T7 负向：非 tmux ⇒ ensure exit 3（前提不满足，不假成功）"
   t4_assert_not_contains "$OUT" "已在运行" "T7 负向：不得判「已在运行」"
-  R_QA="$(roster "$(mk_session qa "$LAB" "" idle)")"
-  run_fleet "$R_QA" ensure qa
-  t4_assert_eq "0" "$RC" "T7 正控：精确 qa 在场 ⇒ ensure 判已运行并跳过（rc=0）"
-  t4_assert_contains "$OUT" "已在运行" "T7 正控：输出含「已在运行」"
+  t4_assert_not_contains "$OUT" "已拉起" "T7 负向：不得报「已拉起」"
 
   # ---------------------------------------------------------------- T2/T3/T4 父 pane 存活
   P="$(tx_parent)"; rc9=$?

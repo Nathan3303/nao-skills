@@ -46,9 +46,8 @@ npm run test:t4:full                           # 发布前置双轴（= 上面�
 | 08 | 评审修复回归：F1 lock 保缩进 + F2 init --force 走 migrate 防混装 | AC4 · BR5 | `migrate` / `init` |
 | 09 | T509 别名解析 / check 守卫 / close 跨仓回收 | AC3 · #19 | `init` + shim |
 | 10 | T510 migrate 收尾：shim 判定式 / 开关 / 单行 lock 去重 | AC4 · BR5 · #21 | `migrate` / `init` |
-| 11 | 宿主阶梯 / 失败语义 / 非 tmux 句柄 | AC1–AC14 · T513 | 无（桩驱动 + 真 tmux） |
 | 12 | 派生会话 tmux 落点：宿主窗口显式寻址（含幂等/同源） | AC1–AC7 · T517 | 无（真 tmux 隔离 socket + 桩 pi；无 tmux 则 SKIP） |
-| 13 | `close` 末段在线判定护栏：不可验证 ⇒ 非静默失败（双侧极性 + 判据三处 + `--force` 文案双向） | AC2–AC8 · T523/T524 | `tsx`（名册探针夹具，缺则 ④⑤ DEGRADE）；①②③⑥ 无依赖 |
+| 13 | `close` 前提与末段：非 tmux ⇒ exit 3 单行提示且无副作用；tmux 内名册离线 ⇒ 「未运行」rc=0；`--force` 不改末段；`无法确认在线` 静态归零 | AC1/AC4 · T529 | `tsx`（名册探针夹具，缺则 ③④ DEGRADE）；①② 无依赖 |
 | 14 | 夹具缓存生命周期：成功清理 / 失败保留 / 用户目录永不删（守卫负控 + 早退净增 0） | AC4–AC7 · T524 | 无（私有 `TMPDIR` 内纯本地，不依赖 tmux/tsx/网络） |
 | 15 | 子代理会话（`subagent-*`）在 `status`/`close` 的显式识别与排除（汇总计数 / 显式拒绝且父 pane 存活 / E2 孤儿 pane 告警回归 / 前缀边界 / `check` 守卫） | AC2–AC8 · T525 | `tmux`（缺则 SKIP）· `tsx`（名册注入，缺则 T1–T9 DEGRADE）；T10 纯 bash |
 | 16 | 子代理桥口径：模板 G1–G3 契约 + 无目标占位符 + 安装说明 + 协议小节四条 + pi-subagents 配置 schema 接受/拒绝 | AC2–AC7 · T526 | `pi-subagents`（缺则 SKIP）；纯 Node 只读探针，不依赖 tmux/tsx/网络 |

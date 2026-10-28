@@ -42,7 +42,7 @@
 | **按需层** | skills + checklists + templates：只有 description 常驻，完整指令按需读取（Agent Skills 标准渐进式披露）；`checklists/` 与 `skills/` 内聚，只要置于**含 `SKILL.md` 的 skill 目录之下**就不会被注册为独立 skill | 常态零成本 |
 | **工具层** | fleet 拉起/体检/状态（含残留检测）/回收；ui-tokens-check 硬编码色值扫描（可接 CI） | 一次性执行 |
 
-**工具层 · 宿主面（v0.14.0）**：`nao-fleet.sh` 拉起按**宿主阶梯**选路——`NAO_TERMINAL` 显式 → tmux 内分屏 → tmux 会话 + `xdg-terminal-exec` 可见窗口 attach → 无 tmux 时 `xdg-terminal-exec --app-id=org.nao.<角色> --dir=<repo>` 直开窗 → 无图形会话仅 `--background` → 否则 `exit 2` + 诊断。句柄优先级：tmux pane > app-id/class（`hyprctl`/`sway`/X11 后备）> pi-intercom 名册；非 tmux 宿主下 `status` 将 turn 判定明确降级到名册。
+**工具层 · 运行前提（v0.19.0）**：`nao-fleet.sh` 只有一条路径——**tmux 会话内**（`$TMUX` 非空且 `tmux` 可用）+ **pi ≥ 1.4.0**；以派生宿主窗口（调用者 pane 所在 window）显式 `-t @<window_id>` 分屏拉起，句柄优先级 = tmux pane 标题 > 名册 `tmuxPane` > 本仓未认领 pi pane 唯一兜底。非 tmux ⇒ `ensure`/`status`/`close` 一律 `exit 3` + 单行提示（零副作用）；`close` 无「无法判定在线」分支（tmux 下必有句柄）。细则见 ADR `2026-10-27-strict-tmux-pi` 与 `2026-10-13-derived-pane-window-addressing`。
 | **外部能力** | CodeGraph：`context` 一次返回相关符号+代码块（实测约 1/17 于 grep+全文） | 查找精准化 |
 
 ## 核心设计：Token 优先
