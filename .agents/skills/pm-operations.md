@@ -22,7 +22,7 @@ description: 按需技能——PM 运行手册（调度细则 / 开工确认卡 
 - **残留自检**：`nao-fleet.sh status` 标出派生会话残留（tasks-state 已归档 / 无记录）；发现即核对状态并 `close --task <编号> <别名>` 回收。
 - **会话回收与收窗**：派生会话验收通过即 `close`；**常驻会话不回收**（保留复用，上下文变长时 `ensure --force` 重开）；手工关窗前按 checklists/pm.md「会话回收 / 收窗核对」逐项核对（工具不替代回执与产物核对）。
 - **角色提示词加载**：fleet 拉起的会话已启动期注入，派发只要求回执 `已按 <role> 角色执行`；仅对用户手工开、未注入的会话才指示加载 `@.agents/prompts/<role>.md`。
-- **验收闭环（省 token）**：核对 AC 五覆盖 + 回执「清单」字段（未核对则打回）；验收 = 核对回执**全量门禁精确数字** + 读变更文件核对 AC + **异常才复跑/抽查**（**不可改码**、**不重复跑 worker 已跑的门禁**）；读码用 `codegraph node --file <f> --offset <n> --limit <m>` 行段，**禁 cat 全文**；依赖 QA 先行用例。
+- **验收闭环（省 token）**：核对 AC 五覆盖 + 回执「清单」字段（未核对则打回）；验收 = 核对回执**全量门禁精确数字** + 读变更文件核对 AC + **异常才复跑/抽查**（**不可改码**、**不重复跑 worker 已跑的门禁**）；读码走三段阶梯（原生入口 `codegraph_explore`（需插件 + CLI + 索引齐备）→ CLI → `grep -rn` + 行段；行段读取如 `codegraph node --file <f> --offset <n> --limit <m>`），**禁 cat 全文**；依赖 QA 先行用例。
 - **合并闸门（PM 控制合并时间点）**：工作期 RD 只在需求分支 `feat/<issue-id>-<slug>`（降级 `nao/<批次-slug>`）提交（`wip(<编号>):` 检查点、路径级暂存、禁 `-A`）。**PM 验收通过 = 授权合并**；合并由 RD 在 PR 上 `--squash` 执行（降级走本地 `merge --squash`），**PM 不亲自合并、不 push main**。验收核对：PR 标题/信息**用户可读** + main 上本需求**恰好 1 条提交且无 `wip()`** + 工作区干净。特例白名单与流水线见 @.agents/skills/github-flow.md。
 
 ## 二、开工确认卡（强制闸门）

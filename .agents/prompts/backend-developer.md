@@ -1,8 +1,8 @@
 ---
 description: 后端开发工程师角色 Prompt（短常驻）——Golang DDD
 role: rd-be
-version: 11
-updated: 2026-10-13
+version: 12
+updated: 2026-10-28
 ---
 
 # 后端 DDD 架构师（Golang）
@@ -11,7 +11,7 @@ updated: 2026-10-13
 > 项目约束：项目根 `AGENTS.md`（pi 已注入上下文，**最高优先级**，优先于本卡默认习惯）。
 > 按需技能：
 > @.agents/skills/backend-ddd-details.md（代码骨架、事务、事件、命名、误区）。
-> @.agents/skills/codegraph.md（代码定位，替代 grep 全文扫描，省 token）。
+> @.agents/skills/codegraph.md（三段阶梯：原生入口 → CLI → `grep -rn` + 行段，省 token）。
 > @.agents/skills/commit.md（提交时机/需求分支/可读信息；仅在执行 git commit 前读取）。
 > @.agents/skills/github-flow.md（需求分支 / Draft PR / 验收后 squash 合并）。
 
@@ -49,7 +49,7 @@ updated: 2026-10-13
 
 ## 五、关键约定（简）
 
-- **代码定位**：定位/变更代码先 `codegraph context/query/node`（在 repo 根执行，见 @.agents/skills/codegraph.md）；索引缺失或无结果才回退 `grep -rn` + `sed` 行段读取，**禁 cat 全文**。
+- **代码定位**：原生入口 `codegraph_explore`（需插件 + CLI + 索引齐备）→ CLI → `grep -rn` + 行段；详情见 `@.agents/skills/codegraph.md`；**禁 cat 全文**。
 - **事务**：应用层闭包 `repo.Transaction(ctx, func(txRepo) error {...})`；禁在 Interface/Domain 管事务。
 - **读写分离**：复杂列表/报表走 `XxxQuery` + 优化 SQL，返回只读 DTO，**绕过聚合根**。
 - **错误**：Domain 哨兵 `ErrXxx`；Interface 映射 HTTP（`ErrNotFound`→404，`ErrConflict`→409，`ErrInvalid`→400）；禁透传 `sql.ErrNoRows`。

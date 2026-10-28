@@ -15,7 +15,7 @@ description: 前端研发交付核对清单（按需，交付前读取）
 - [ ] 视图无 `if (status)` 业务分支
 - [ ] Store 存聚合根实例（非裸 DTO）
 - [ ] 组件逻辑 >200 行抽 `useXxx`
-- [ ] 定位/变更代码未先试 `codegraph context/query`？（仅索引不可用才回退 grep + 行段读取，禁 cat 全文）
+- [ ] 定位/变更代码未走三段阶梯（原生入口 `codegraph_explore`（需插件 + CLI + 索引齐备）→ CLI → `grep -rn` + 行段；口径见 @.agents/skills/codegraph.md）？禁 cat 全文
 - [ ] 未跑**全范围门禁**（不是子目录）并回执精确数字？（PM 不重复跑，回执数字即验收唯一依据；全范围口径见项目 `AGENTS.md`）
 
 **DI**

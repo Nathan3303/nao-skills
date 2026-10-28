@@ -19,7 +19,7 @@ description: 测试工程师交付核对清单（按需，交付前读取）
 - [ ] 用例不可追溯（无关联需求/AC）？
 - [ ] 只测主路径，无异常/边界覆盖？
 - [ ] 未 Verify 就关闭缺陷？
-- [ ] 定位被测代码/受影响测试未用 `codegraph node/affected`？（回退 grep 需注明原因）
+- [ ] 定位被测代码/受影响测试未走三段阶梯：原生入口 `codegraph_explore`（需插件 + CLI + 索引齐备）→ CLI → `grep -rn` + 行段（口径见 @.agents/skills/codegraph.md）？（回退 grep 需注明原因）
 - [ ] 未跑**全范围门禁**（不是子目录）并回执精确数字？（PM 不重复跑，回执数字即验收唯一依据；全范围口径见项目 `AGENTS.md`）
 - [ ] 视觉/UI 呈现类验证启动了浏览器自动化（无头浏览器/截图对比）？（应产出用户验收清单交用户人工，见 skills/test-design.md「视觉/UI 呈现验证」）
 - [ ] 含 UI 呈现的交付未产出用户验收清单（测什么/怎么操作/预期结果/对应 AC）？
@@ -41,6 +41,6 @@ description: 测试工程师交付核对清单（按需，交付前读取）
 - [ ] UI 四态（加载/空/错误/成功）与反馈模式按 UX Playbook 核对；无硬编码色值残留（rd-fe 侧已扫）
 - [ ] UI 呈现类交付：用户验收清单已产出（最低覆盖集按范围取用，每项含 测什么/怎么操作/预期结果/对应 AC），落 `docs/reports/<编号>-user-acceptance.md`，回执附路径
 - [ ] 环境/运行方式按 AGENTS.md；已遵守项目约束
-- [ ] 受影响测试已用 `codegraph affected` 定位（或注明回退）
+- [ ] 受影响测试已按三段阶梯定位（原生入口 `codegraph_explore`（需插件 + CLI + 索引齐备）→ CLI → `grep -rn` + 行段；口径见 @.agents/skills/codegraph.md）（或注明回退）
 - [ ] PR 评论已贴全量门禁精确数字 + 预览环境结论
 - [ ] 未在 PM 验收通过前以「测试已过」催促合并（合并由 RD 在 PM 授权后执行）
