@@ -97,6 +97,19 @@ CLOSE_BUSY_PATTERN="${NAO_CLOSE_BUSY_PATTERN:-Working \(|Thinking\.\.\.|to inter
 # 任务状态文件（相对当前目录；供残留检测与回收闸门）
 TASKS_STATE="${NAO_TASKS_STATE:-docs/tasks-state.md}"
 
+# ---- CodeGraph（T532 · BR1/BR2）：四态检测全 warn，**永不计入 rc** ----
+# 包名单源（BR5）：与 bin/nao-skill.js 的 PI_PLUGINS.codegraph 各一处，由 tests/t4/cases/18 等值断言兜住。
+# 运行时**不**跨语言抽取（sed 抽空 ⇒ 静默假「未声明」，且 shim-only 安装可能无 bin/）。
+CODEGRAPH_PKG="@sean_pedersen/pi-codegraph"
+# 状态文案单点（CG_MSG_*）：用例断言只认**固定前缀 + 命令子串**，不断言整行（防文案微调误伤）。
+CG_MSG_UNDECLARED='codegraph 插件未声明（装法：pi install npm:@sean_pedersen/pi-codegraph；定位回退 grep）'
+CG_MSG_NO_CLI='codegraph 插件已声明但 CLI 不在 PATH（装：npm i -g @colbymchenry/codegraph；回退 grep -rn + 行段）'
+CG_MSG_NO_INDEX='codegraph 已就绪但当前仓无索引（codegraph init；索引后每会话约 +70–90MB PSS）'
+CG_MSG_READY='codegraph 齐备'
+CG_MSG_READY_SHORT='codegraph 齐备（索引新鲜度用 -v 查）'
+CG_MSG_PENDING='codegraph 索引 pending（codegraph sync 同步）'
+CG_MSG_UNPARSABLE='codegraph status 输出不可解析（手工 codegraph status 核对）'
+
 log()  { printf '\033[1;32m[fleet]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[fleet]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[fleet]\033[0m %s\n' "$*" >&2; exit 1; }
@@ -275,25 +288,44 @@ check_alias_resolution() {
   return $rc
 }
 
-# CodeGraph 索引健康（ensure 拉起前 / check 用；缺失或过期仅 warn，不阻塞）
-check_codegraph() {
-  local repo="$1" name st
-  name="$(basename "$repo")"
-  command -v codegraph >/dev/null 2>&1 || { warn "$name codegraph 未安装（RD 定位将回退 grep，属预期）"; return 0; }
+# CodeGraph 四态检测（T532 · BR1/BR2）—— check / ensure 唯一发射点。
+#   codegraph_state <repo> [full] [name]
+#   ！（永不计入 rc）所有状态都只是**可观测信号**：不设 rc=1、--strict 亦不升级；
+#     理由 = 六会话并发下「索引 pending」是稳态，长期拉红会侵蚀真失败信号（arch A1）。
+#   严格短路：① 声明（两份 settings.json 的 packages 含包名）② command -v codegraph
+#              ③ <repo>/.codegraph ④ status 文本（**仅 full=1**）
+#   full=0（默认 check）：零外部进程（两次文件读 + command -v + 一次目录判定，AC11）
+#   full=1（check -v / ensure）：每仓一次 `codegraph status`（实测 0.37–0.42s，不进派发热路径）
+#   契约前缀：· 未声明 / ! 已声明但 CLI 不在 PATH / ! 无索引 / ✓ 齐备 / ! pending / ! 不可解析
+codegraph_state() {
+  local repo="$1" full="${2:-0}" name="${3:-}" f declared=0 pre="" st
+  local -a sets=("$PI_AGENT_DIR/settings.json" "$repo/.pi/settings.json")
+  [[ -n "$name" ]] && pre="[$name] "
+  for f in "${sets[@]}"; do
+    [[ -f "$f" ]] || continue
+    if grep -qF -- "$CODEGRAPH_PKG" "$f" 2>/dev/null; then declared=1; break; fi
+  done
+  if (( ! declared )); then
+    printf '  · %s%s\n' "$pre" "$CG_MSG_UNDECLARED"; return 0
+  fi
+  if ! command -v codegraph >/dev/null 2>&1; then
+    printf '  ! %s%s\n' "$pre" "$CG_MSG_NO_CLI"; return 0
+  fi
   if [[ ! -d "$repo/.codegraph" ]]; then
-    warn "$name 无 CodeGraph 索引（RD 定位将回退 grep；建议 codegraph init）"
-    return 0
+    printf '  ! %s%s\n' "$pre" "$CG_MSG_NO_INDEX"; return 0
   fi
-  st="$(cd "$repo" 2>/dev/null && codegraph status 2>&1)"
-  if [[ "$st" == *"Index is up to date"* ]]; then
-    log "$name CodeGraph 索引 ✓ up to date"
-  elif [[ "$st" == *"Pending Changes"* ]]; then
-    warn "$name CodeGraph 索引有未同步变更（建议 codegraph sync）"
-  elif [[ "$st" == *"Not initialized"* ]]; then
-    warn "$name .codegraph 存在但未初始化（建议 codegraph init）"
-  else
-    warn "$name codegraph status 输出不可解析"
+  if (( ! full )); then
+    printf '  ✓ %s%s\n' "$pre" "$CG_MSG_READY_SHORT"; return 0
   fi
+  st="$(cd "$repo" 2>/dev/null && codegraph status 2>&1)" || st=""
+  # 文本契约（已冻结于 codegraph 1.6.2 实测，见 docs/reports/M20261028-codegraph-followups.md §二 T1）
+  case "$st" in
+    *"Index is up to date"*) printf '  ✓ %s%s\n' "$pre" "$CG_MSG_READY" ;;
+    *"Pending Changes"*)     printf '  ! %s%s\n' "$pre" "$CG_MSG_PENDING" ;;
+    *"Not initialized"*)     printf '  ! %s%s\n' "$pre" "$CG_MSG_NO_INDEX" ;;  # 目录在但无 DB（下游常见态）
+    *)                       printf '  ! %s%s\n' "$pre" "$CG_MSG_UNPARSABLE" ;;
+  esac
+  return 0
 }
 
 # pi 运行前提（BR4/AC3）：版本源 = `pi --version` 首个 semver token；预发布（含 `-`）视为不满足。
@@ -1046,7 +1078,7 @@ spawn_one() {
 
   # 前提已由入口 require_tmux 硬校验（exit 3）；此处只走唯一路径（BR1/BR3）。
   prompt_file="$(build_system_prompt "$card")"
-  inner="cd $(printf %q "$repo") && exec pi --name $(printf %q "$name")"
+  inner="cd $(printf %q "$repo") && export CODEGRAPH_TELEMETRY=0 && exec pi --name $(printf %q "$name")"
   [[ -n "$model" ]] && inner+=" --model $(printf %q "$model")"
   inner+=" --append-system-prompt $(printf %q "$prompt_file")"
   ( sleep 60; rm -f -- "$prompt_file" ) & disown 2>/dev/null || true
@@ -1196,27 +1228,13 @@ cmd_check() {
   echo "== 交叉引用（@.agents/common|skills|prompts|scripts/... 均须存在）=="
   check_cross_refs || rc=1
 
-  echo "== CodeGraph 索引（业务 repo 的索引在 ensure 拉起时检查）=="
-  if command -v codegraph >/dev/null 2>&1; then
-    if [[ -d "$PWD/.codegraph" ]]; then
-      local cgst
-      cgst="$(codegraph status 2>&1)"
-      if [[ "$cgst" == *"up to date"* ]]; then
-        echo '  ✓ 当前目录索引 up to date'
-      elif [[ "$cgst" == *"Pending Changes"* ]]; then
-        echo '  ! 当前目录索引有未同步变更（codegraph sync）'; rc=1
-      else
-        echo '  · 当前目录有索引，状态见 codegraph status'
-      fi
-    else
-      echo '  · 当前目录无索引（业务 repo 的索引在 ensure 拉起时检查）'
-    fi
-  else
-    echo '  · codegraph 未安装（回退 grep 属预期行为）'
-  fi
+  echo "== CodeGraph（四态检测：全部 warn，永不计入 rc；默认不 fork CLI）=="
+  local cgfull=0
+  if $VERBOSE; then cgfull=1; fi
+  codegraph_state "$PWD" "$cgfull"
 
   echo "== pi 插件（业界调研能力）=="
-  local piset="$HOME/.pi/agent/settings.json"
+  local piset="$PI_AGENT_DIR/settings.json"
   if [[ -f "$piset" ]]; then
     if grep -q 'pi-web-access' "$piset" 2>/dev/null; then
       echo '  · pi-web-access ✓ 已装（PM/arch 业界调研可用）'
@@ -1553,7 +1571,7 @@ cmd_ensure() {
     # CodeGraph 索引健康（同 repo 只查一次，不阻塞拉起）
     key="$repo"; seen=0
     for k in "${cg_done[@]:-}"; do [[ "$k" == "$key" ]] && seen=1; done
-    if (( ! seen )); then check_codegraph "$repo"; cg_done+=("$key"); fi
+    if (( ! seen )); then codegraph_state "$repo" 1 "$(basename "$repo")"; cg_done+=("$key"); fi
     if [[ "$force" != "true" ]] && running "$disp" "$repo"; then
       warn "$disp 已在运行（终端标题/名册命中），跳过；确需重开请加 --force"
       continue
@@ -1630,6 +1648,9 @@ case "$CMD" in
         printf 'check: OK · roles=%s · files=%s · layout=%s\n' \
           "${ROLES_N:-?}" "${FILES_N:-?}" "$TMUX_LAYOUT"
       fi
+      # CodeGraph 四态行常驻可见（BR9 不静默）：摘要模式下也从报告里抽这一行原样回显，
+      # 保持「默认只出四态中的一行」（PRD AC1）且不额外 fork（full=0 已在报告期算完）。
+      grep -m1 -E '^  . codegraph ' "$REPFILE" || true
     else
       cat "$REPFILE"
     fi
