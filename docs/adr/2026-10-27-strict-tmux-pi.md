@@ -1,6 +1,6 @@
 # ADR：舰队绑死「tmux 内 + pi ≥1.4.0」，删净宿主阶梯
 
-- 状态：已接受（待落地）
+- 状态：已接受（已落地 v0.19.1）
 - 更新：2026-10-27
 - Owner：arch-designer
 - 指针：PRD `docs/prds/2026-10-27-strict-tmux-pi.md` · 评审报告 `docs/reports/48-arch-review.md` · 被取代 `docs/adr/2026-10-12-non-tmux-host-spawn.md`

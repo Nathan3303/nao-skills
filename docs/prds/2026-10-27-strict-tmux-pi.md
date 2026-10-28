@@ -1,6 +1,6 @@
 # 绑定 tmux + pi：删净宿主阶梯，非 tmux 硬失败
 
-- 状态：已定稿（待派发 · 开工已确认 2026-10-27） · Owner：PM · 更新：2026-10-27
+- 状态：**已交付并发布（v0.19.1 · PR #49 squash `f83cc6f` + 修复 PR #50 squash `ac5cc4c` · 归档 2026-10-28）** · Owner：PM · 更新：2026-10-28
 - 指针：Issue [#48](https://github.com/Nathan3303/nao-skills/issues/48) · 取代 ADR `docs/adr/2026-10-12-non-tmux-host-spawn.md`（宿主阶梯）与 `docs/adr/2026-10-13-derived-pane-window-addressing.md` 的宿主外段落 · 现行实现 `.agents/scripts/nao-fleet.sh`（1947 行）· 协议 @.agents/skills/task-completion.md
 
 ## TL;DR
@@ -103,3 +103,12 @@
 - **遗留项预判**：下游三仓旧 pin 继续跑旧行为（出口 = 接受含到期，日期 = v0.19.0 发布 +30 天）；`cases/13` 断言净减需在新基线上留档。
 
 - 修订：2026-10-27 首版（grill 两轮 7 项拍板）
+
+## 十、派发记录 / 验收结果 / 变更记录（归档 2026-10-28）
+
+- **派发链**：`arch-designer-T529`（轻量评审 `docs/reports/48-arch-review.md`）→ `rd-infra-T529` 实现（`da50fcc`）→ `qa-T529` 独立复核（`docs/reports/48-qa-verify.md`）→ `rd-infra` 合并（`f83cc6f`）→ **PM 发布前置闸门 FAIL** → `rd-infra-T530` 修复两轮（`0c17d62` / `876ae02`）→ `qa-T530` 复核 + D-1 点检 → 合并（`ac5cc4c`）。
+- **PR**：[#49](https://github.com/Nathan3303/nao-skills/pull/49)（squash `f83cc6f` · 验收评论 issuecomment-6461012072）· [#50](https://github.com/Nathan3303/nao-skills/pull/50)（squash `ac5cc4c` · 验收评论 issuecomment-6461675826）。
+- **验收结论**：**通过（AC1–AC7）**。门禁：`check` rc=0（roles=6 · files=50）· `npm test` rc=0 · 16/16 · `test:t4:full` 空载 rc=0（SKIP=0/DEGRADE=0）。断言双口径：调用点 261→252（−9）/ 运行期 PASS 行 483→391（−92；全绿 485→391 = −94），去处 `cases/11` −85 · `cases/13` −8 · `cases/15` −1。
+- **发布阻断与根因（PM 初判有误，以 QA 实测为准）**：非「88 处 tmux 调用打默认 server」（tmux 客户端本就认 `$TMUX`），而是**自面板守卫跨 server pane id 撞号**（pane id 为 server 局部命名空间）⇒ 误拒；修复 = `pane_hosts_caller` 进程归属判定 + **三态 fail-closed**（D-1：不可判定且撞号也拒，避免 QA 实证的 SELF_KILLED）。
+- **变更记录**：AC1 收窄（`cleanup` 豁免 rc=3，D5）· `cases/11` 整案退役（D6）· pi 断言失败 rc=1 聚合（D7）· 断言净减一次性豁免并须报差额（BR6）· 版本 v0.19.0 → **v0.19.1**（0.19.0 未发布）。
+- **遗留项**：下游三仓旧 pin（接受，到期 = v0.19.1 发布 +30 天 = **2026-11-27**）· `MIN_PI_VERSION` 常量提炼（D3，backlog）· 未覆盖「真实嵌套 tmux 端到端」（用例以双隔离 server 等价覆盖，接受）· 非 Linux/macOS 的 `ps` 行为未验（接受）。
