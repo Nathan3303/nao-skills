@@ -176,7 +176,7 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T531 | rd-infra-T531 | **三条防线**（Issue #51）：`t4_note <tag>` 白名单化 + full 下非白名单 NOTE 计 FAIL + `test:t4:full:dual` + `github-flow` 阶段 7 改指向 + PM 卡 v27（根因派发须附实测）+ `checklists/pm.md` +1 + `tests/README` 白名单节 | 2026-10-28 | AC1–AC8 | 待起 |
+| T531 | qa-T531（复核中） | **实现已落地** `feb9e96`（+`c569500`）：`T4_NOTE_TAGS` 三 tag 单点枚举 + `t4_note <tag>` + full 下非白名单/untagged ⇒ FAIL 点名 `用例号:tag`（非 full 只计数+WARN）+ `run-dual.sh`（`test:t4:full:dual`，151s 两组皆绿）+ `github-flow` 阶段 7 改指向 dual + PM 卡 **v27**（§六 + §十 各 1 条根因纪律）+ `checklists/pm.md` 清单 41 + `tests/README` 白名单节 + 4 处 NOTE 补 tag（语义零变更） | 2026-10-28 | AC1–AC8 | `feb9e96` |
 
 ## 已回执待验收
 
@@ -186,6 +186,8 @@
 
 
 
+
+| T531-rd | done(full) `feb9e96`：见「进行中」行；**负控 5 组**（未知 tag ⇒ dual 两组 FAIL 点名 / 摘 `static-contract` ⇒ 红 / 摘 `pin-fallback` ⇒ 副本演练红 / 旧式无 tag：非 full 不红 + full 红 / `migrate-fallback` 副本演练命中）+ md5 还原 · AC7 差集干净 · **口径提醒**：白名单命中常态 **2 条**（`06:static-contract`×2；另两个 tag 仅在 pin 未发布 / CLI 缺 migrate 时命中） | `feb9e96` | 等 qa-T531 复核 |
 
 ## 挂起（被抢占 / 降级）
 
