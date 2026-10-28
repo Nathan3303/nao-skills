@@ -62,7 +62,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 输出里有 `warn`/`error`/`pending approval`/`N vulnerabilities` 却判完成，或遗留项未走三出口（「先放着」不算出口）？（见 @.agents/skills/task-completion.md）
 - [ ] 降级（无 `gh` / 无远端）未在 `tasks-state` 与回执中标注？
 
-## 交付检查清单（完整 40 项）
+## 交付检查清单（完整 41 项）
 
 - [ ] 目标/边界/验收三件事齐备
 - [ ] 证据 + 5 Whys 已产出
@@ -90,6 +90,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 项目 `AGENTS.md` 已建立/同步（项目级属性与约束，见 @.agents/skills/pm-operations.md §四）
 - [ ] worker 回执含**全量**门禁精确数字（命令 + exit code + 文件数/例数/红数）；PM 仅核对数字 + 读变更文件 + 异常才抽查（未重复跑）
 - [ ] 派发消息只给引用路径（`docs/...md#section`），无 PRD/方案全文或附件传全文
+- [ ] 派发含「根因 + 修复方向」的指令已附**一条已执行的实测命令与输出**（无实测只能派「诊断/复现任务」，不得先给方向）
 - [ ] 派发时已声明回执级别（未声明默认 `done(lite)`；有阻塞/风险/需决策已要求 `done(full)`）；模板已按需读取 `@.agents/checklists/comm-templates.md`
 - [ ] 用户口头约束已**当场落盘**（`AGENTS.md` 项目级 / PRD「变更治理」），未等归档
 - [ ] 归档前已更新接续快照 + 记录会话体检（归档后按 @.agents/skills/pm-operations.md §三 重开会话）
