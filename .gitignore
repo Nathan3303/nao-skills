@@ -3,6 +3,8 @@ node_modules/
 
 # Codegraph local index
 .codegraph/
+# Codegraph 插件副产物（非会话 pi 调用会重写残留；单文件，不 ignore 整个 .pi/）
+.pi/APPEND_SYSTEM.md
 
 # OS generated files
 .DS_Store

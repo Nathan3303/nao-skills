@@ -44,6 +44,6 @@ description: 架构师交付核对清单（按需，评审/ADR 归档前读取�
 - [ ] 若本次修订**改变既有条款** ⇒ 已附「**连带同步清单（含 Owner）**」（列出**所有持有该结论的文档** + 各自 Owner），并已通知相关 Owner
 - [ ] 性能指标可量化可监控
 - [ ] 评审已纳入 AGENTS.md 项目约束（输入核对）
-- [ ] 影响面评审已用 `codegraph impact/callers`（或注明回退）
+- [ ] 影响面评审已走三段阶梯：原生入口 `codegraph_explore`（需插件 + CLI + 索引齐备）→ CLI → `grep -rn` + 行段（口径见 @.agents/skills/codegraph.md；或注明回退）
 - [ ] 方案已对照 ≥2 个成熟模式（含「维持现状」基线），适用条件与代价已写明（`docs/research/` 或 ADR 内），且已记不采纳理由
 - [ ] 被指定为 PR Reviewer 时：已在 PR 评论给契约/分层/影响面结论（未改代码；需改已转 RD）

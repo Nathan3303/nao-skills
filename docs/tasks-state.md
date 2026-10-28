@@ -8,6 +8,9 @@
 
 > 本区是 PM 的**悬空状态**（任务状态见下方五栏）；重开后逐行回读确认（当前阶段 · 未决决策 · 口头约束）。
 
+- 🔄 **T532 接缝已复 · PRD 已订正 v2 · arch 完整评审在飞（2026-10-28）**：QA `[T532-recon] done(full)`（报告 `docs/reports/2026-10-28-T532-qa-recon.md`）。**推翻 PM 三处事实假设**：① 舰队恒带 `--append-system-prompt` ⇒ `.pi/APPEND_SYSTEM.md` 整段被抑制，插件 fallback（`return {systemPrompt}`）在 pi 1.4.0 是**死代码** ⇒ **舰队内零 system prompt 注入** ② 上游 MCP **默认只暴露 `codegraph_explore`**（余 8 需 `CODEGRAPH_MCP_TOOLS`）⇒ 「9 个工具」不可作机制事实 ③ `codegraph init -i` 不存在（`-i` 属 `install`）。另外：`Pending Changes ⇒ rc=1`（`nao-fleet.sh:1207`，PM 已复核）与拍板 warn-only 冲突；`pi --help -e` 类调用会使副产物**永久残留**；CLI 有**匿名遥测**（`CODEGRAPH_TELEMETRY=0` 可关，`PI_OFFLINE` 无效）；`serve --mcp` 100–250MB/实例 × 6 会话 = 0.6–1.5GB。**PM 订正**：PRD v2 已重写（四态检测 / 范围补 `pm-operations.md` + `templates/AGENTS.md.example` / AC 可测性重写 / 计数改正：6 卡 13 行 16 次 · 清单 4 处 3 文件）。**已派 `[T532-arch]` 完整评审**（7 项裁定 A1–A7）。**PM 认账**：QA 报告 106 行超测试报告 80 行上限，成因 = PM 指定 9 节交付格式。
+- ⚠️ **工作区有非本批未提交改动**：`.agents/scripts/nao-fleet.sh` 的 `TMUX_MAIN_WIDTH_DEFAULT=35 → 33`（单行，非 PM 所为，来源待用户确认）⇒ **开分支前必须处置**（随批带走 / 还原 / 另立小批），否则会污染 T532 需求分支。
+
 - 🔄 **T530 第一章（`0c17d62`）已过 QA，但 QA 判 D-1 必修 → 回流第二轮（2026-10-28）**：修复方向采用「目标 pane 的 `pane_pid` 是否本进程祖先」（QA 实测确认，**未**采纳 PM 初判的 `(socket,pane)` 二元组——撞号时二元组同样相等）；QA 红/绿 1:1 复现、三态负控、NOTE 归零、门禁全绿均通过。**D-1（QA 判 P2 必修，PM 采纳）**：`pane_hosts_caller` 现为「不可判定 ⇒ 不声称是自己」= **fail-open**，QA 实证「自身 pane 内 close + 伪造 `ps` 使祖先链不可读 ⇒ 自身 pane 被回收（SELF_KILLED）」⇒ 改**三态**（0 是自己 / 1 不是 / 2 不可判定），两处调用点统一「0 拒；2 且 `pane == $TMUX_PANE` 也拒；2 且 id 不等放行；1 放行」。**O1**（测试轻微）：`cases/09` 的 `C09_SEQ` 在子 shell 自增失效（三次都用 `-s1`），随批修。**O2（PM 记录口径）**：RD 报「tmux 调用点改动 0 处」应更正为「**既有 0 处改动 + 新增 1 处只读 `display-message`**（87→88）」。
 - ✅ **T531 交付闭环（2026-10-28 · Issue [#51](https://github.com/Nathan3303/nao-skills/issues/51) · PR [#52](https://github.com/Nathan3303/nao-skills/pull/52) squash `ccff198`）**：**三条防线落地** —— ①`t4_note <tag>` 白名单（`static-contract`/`pin-fallback`/`migrate-fallback`；full 下非白名单/untagged ⇒ FAIL 点名 `用例号:tag`，非 full 只 WARN）②`npm run test:t4:full:dual`（两组串跑，失败标出组别）+ `github-flow` 阶段 7 改指向 ③PM 卡 **v27**（§六+§十 各 1 条「根因类派发须附已执行命令与输出」）+ 清单 41。**验收 = 通过（AC1–AC8 · 0 未过项）**：QA 自跑 check rc=0（roles=6 · files=50）· npm test 16/16 · **dual 170s 两组全绿** · 三向负控（含 dual 两端红）· 失败归因可定位。**发布前置自证**：PM 跑 dual rc=0（组1/组2 各 rc=0 · SKIP=0/DEGRADE=0 · 白名单命中 2 条）。**发布**：tag `v0.19.2` + Release 已发（`2f09260` · name 严格 = `v0.19.2`）· **npm 已核验**（`latest` = 0.19.2 · `dist.integrity` = `sha512-a507pV1cOyGrPMFl…kTg==` 与本地 tarball（136,696 B）逐字节一致）· 派生会话 2 个已回收。**O1（PM 认账并订正）**：PRD AC3② 原写「摘 `pin-fallback`」在 pin 已发布态会空转 ⇒ 改「摘当前实命中的 tag」。
 - ✅ **T529 交付闭环（2026-10-28 · Issue [#48](https://github.com/Nathan3303/nao-skills/issues/48) · PR [#49](https://github.com/Nathan3303/nao-skills/pull/49) `f83cc6f` + 修复 PR [#50](https://github.com/Nathan3303/nao-skills/pull/50) `ac5cc4c`）**：**绑定 tmux + pi** —— 删净宿主阶梯（`nao-fleet.sh` 1947→1591，净减 356）· 非 tmux `ensure/status/close` **rc=3** + 一行提示（`cleanup` 豁免 rc=2）· `check` 增 `pi ≥1.4.0`（失败 rc=1 聚合不早退）· `close` 收窄 · `cases/11` 整案退役（17→16 例，实体探针原文归档）· 新 ADR 54 行 + 旧 ADR 标废弃（正文零改）+ derived ADR 零 diff。**验收 = 通过（AC1–AC7）**：QA 独立复核 + 双向负控 + D1–D3 处置；发布前置 **PM gate FAIL**（`cases/09` 真回收）⇒ 转 T530 修复 ⇒ QA 复核 + D-1 点检 5/5 ⇒ 合并。**断言双口径**：调用点 261→252（-9）/ PASS 行 483→391（-92；全绿 -94），去处 `cases/11` -85 · `cases/13` -8 · `cases/15` -1。**发布**：v0.19.0 未发布（tag 未建）· 发 **v0.19.1**（发布提交 `f307a4d` · name 严格 = `v0.19.1`）· **npm 已核验**（`latest` = 0.19.1 · integrity `sha512-HcZs5uUN…pzjIw==` 与本地 tarball（136,377 B）逐字节一致）· 派生会话 5 个已回收。**L1 复盘已落盘**：`docs/reports/2026-10-28-T529-retro.md`（触发 = 返工 ≥1 + 同类第二次；含 3 条防线建议待拍板：full 禁 NOTE 掩盖 / PM 根因须带实测命令 / 发布前置双环境）。
@@ -34,20 +37,29 @@
 - ✅ **T521 交付闭环（2026-10-14 · v0.17.3）**：GitHub Release 标题口径 = 裸 `vX.Y.Z` —— 权威单处 `common/release-notes.md` §一.5 硬约束 + §四清单 + §五红线 · 两处引用收敛（`github-flow.md:56` / PM 卡 :121）并指回单处 · PM 卡 **v24→v25** · 模板注释 1 行（6 分段标题未动）· 一次性只读探针 `PASS=28 FAIL=0` + 负控 2/2 · QA 独立复跑 **GO** · squash `eff44ec` · tag + Release 已发（发布提交 `4d97f00` · **AC9 自证：标题严格 = `v0.17.3`**）· **npm 重发 0.17.3 已核验**（`latest` + integrity 逐字节）。
 - ✅ **T520 交付闭环（2026-10-14 · v0.17.2）**：ADR 文档契约 —— 必写 5 节 + 可选 3 节（参考来源恒末）· 头部恰 4 字段 · 状态值域 4 值 · 禁写/下沉清单 · 新增 `templates/adr.md.example` + `adr-index.md.example` · `arch-designer` 卡 v11→v12 · QA 探针 `PASS=53 FAIL=0` + 负控 2/2 · squash `160cc60` · tag + Release 已发（`9833344`）· **npm 不重发**。
 
-- 当前阶段：**T528 已交付归档（v0.18.6 已发布 · npm 已核验）= 批次终态 · 待命**。上批 T527（v0.18.5 角色 agent 运行时注册）亦已闭环；本会话已完成 T527+T528 两批，按 §三 触发点① 重开 PM
-- 当前 PRD：无在飞；最近归档 `docs/prds/2026-10-14-task-completion-protocol.md`（T528 · 已交付 v0.18.6）与 `docs/prds/2026-10-14-role-agents-runtime-registration.md`（T527 · 已交付 v0.18.5）
-- 未决决策点：无（T528 D1–D4 开工卡拍板已执行；E0 为现行口径）
-- 待用户回答：无（npm 0.18.6 已发布并核验）
+- 当前阶段：**T532 QA 复核 GO · D1–D4 合并前修在飞**（D1 措辞 / D2 夹具 node 保底 / D3 声明文案 / D4 arch B5 warn 隔离）· 修完 QA 点检 ⇒ 验收评论授权合并 ⇒ RD squash ⇒ v0.20.0 发布——head `a3bc344`（分支 `feat/53-codegraph-plugin` · Draft PR **#54**）· PRD **v5** · RD 自报 check rc=0（roles=6 files=50）/ npm test rc=0（NOTE=2 白名单）/ dual 两组 rc=0 / cases/18 49 断言 · 默认 check **2 行**（摘要行 + 四态之一，PM 裁定）。下一步 = QA `[T532-qa]` GO ⇒ PM 验收评论 ⇒ RD squash 合并 ⇒ v0.20.0 发布。
+- 当前 PRD：`docs/prds/2026-10-28-codegraph-plugin.md`（T532 · 草稿 · 待 QA 接缝回执后定稿 → Issue → arch 完整评审 → 开工确认卡）
+- 未决决策点：无（用户 2026-10-28 ask-me 6 项已拍板：warn 门禁 / 只检测+文档指引 / 原生优先+CLI 回退 / 本仓起索引 / v0.20.0 MINOR+重发 / arch 完整评审）
+- 待用户回答：开工确认卡（PRD 定稿后出）；以及 M20261028-codegraph 环境动作的执行授权（装 CLI + 插件 + `codegraph init -i`）
 - 未派发队列：见下方「待派发队列」（仅 1 项：`M20261014-F1` 到期重评 2026-11-14）
 - 下批需求候选（**已评估 · 全部未立项**）：① CodeReview 是否新增角色 → 结论「不新增常驻第 7 角色，走 A+B+C 最小改动包」（见 `docs/research/2026-10-14-code-review-role.md`）② E1 升级（`check` 结构校验「归档时遗留项未收口 → warn」），门槛 = 连续 2 批「遗留项失忆」③ T512 余项（台账 ⑨/⑫后半）、R1/R2 探针健壮性、O-1/O-2 负载偶发、T512 §4.5 model 白名单缺口
-- 下次唤醒条件：**用户授意下批需求 / 目标会话唤醒补发角色卡广播 / `M20261014-F1` 到期（2026-11-14）**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = 仅 PM（派生已回收，常驻 rd-infra 已退出）
+- 下次唤醒条件：**T532 QA 接缝回执到达 / 用户授意 / 目标会话唤醒补发角色卡广播 / `M20261014-F1` 到期（2026-11-14）**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = PM + QA（`qa` 2026-10-28 为 T532 recon 拉起；arch/rd-infra/rd-fe/rd-be 未运行）
 - 口头约束已落盘：项目 `AGENTS.md` 项目约束（ask-me 提问）· PRD §5 BR6 格式禁令 + §9 R5/R6（T519）· ADR 字段口径 = `deliverable-docs.md` §四（T520 · 状态值域 4 值 / 头部 4 字段 / 60 行上限）
 - 需求分支 / PR：见下方「需求分支 / PR / 发布」（本批 `feat/46-task-completion-protocol`——**已 squash 合并 `3e98f0d` 并删净**）
 - 会话体检：本 PM 会话 `01a17da8`（pane %0）跨 T527+T528 两批，闭批 ctx **≈16%（164k/1000k · 无压缩）**；按用户拍板于批次终态**重开 PM**；本快照 = 接续唯一事实源（main = `8b0d927` 起）
 
 ## 需求分支 / PR / 发布（PM 维护）
 
-### 本批 T531（三条防线 · Issue #51 · 已合并 · 发布 v0.19.2）
+### 本批 T532（codegraph 插件引入 · 已开工 · Issue #53）
+
+- PRD：`docs/prds/2026-10-28-codegraph-plugin.md`（v3 · 含 §十 QA 接缝、§十一 arch 裁决）
+- Issue：[#53](https://github.com/Nathan3303/nao-skills/issues/53) · 需求分支：`feat/53-codegraph-plugin`（base `fb0c36d`）
+- 版本 / Tag：v0.20.0（MINOR）+ npm 重发（用户执行）
+- PR owner / Reviewer：rd-infra / qa · arch 完整评审已过（`docs/reports/2026-10-28-T532-arch-review.md` · ADR `docs/adr/2026-10-28-codegraph-plugin-adoption.md`）
+- **开工卡拍板（2026-10-28 · 6/6）**：① 现在开工（先实测再落文案）② **批准 M 任务全部环境动作**（全局装 CLI + 用户级装插件 + 本仓建索引，可回退）③ nao-fleet.sh 单行 `TMUX_MAIN_WIDTH_DEFAULT 35→33` **随批带走**（已单独 `wip(T532)` 提交，非本批 AC）④ 接受 rc 降 warn（arch A1 + PRD 显式豁免）⑤ rd-infra 实现 + QA 独立复核 ⑥ 资源门按 arch 阈值（≤600MB / 600MB–1.2GB 带一行 / >1.2GB 或锁错 ⇒ 删索引回退）
+- 任务单元：`M20261028-codegraph`（前置：实测 + 环境 + 资源门）→ T532 实现 → QA 复核 → 合并/发布
+
+### 上批 T531（三条防线 · Issue #51 · 已合并 · 发布 v0.19.2）
 
 - Issue：[#51](https://github.com/Nathan3303/nao-skills/issues/51)
 - 需求分支：`feat/51-guardrails`（base `d935ad8`；**已 squash 合并 `ccff198` 并删净**）
@@ -178,6 +190,8 @@
 | :--- | :--- | :--- | :--- |
 | T529-D3 | （backlog · 无会话） | **`MIN_PI_VERSION` 常量提炼**：`nao-fleet.sh:1225` 文案硬编码「< 1.4.0」与 `:311-316` 阈值 `c1/c2` 魔术数并存（负控抬到 9.9.9 时输出「1.4.0 < 1.4.0」自相矛盾）；不影响 AC3，可随时做 | QA D3 转办（本批不做）|
 | T529-D1 | （用户环境 · 不入舰队） | **到期重评** 下游三仓（nao-todo / nao-todo-server / nue-ui）旧 pin 仍跑旧行为（宿主阶梯已删）· 出口 = 接受 | 定时：**2026-11-27**（= v0.19.1 发布 +30 天） |
+| M20261028-F2 | （用户环境 · 不入舰队） | **到期重评** nao-todo-server 入库了 `.codegraph/.gitignore` ⇒ 目录存在但无索引，插件激活后空转（实测 205.7MB/会话） | 定时：**2026-11-28** |
+| M20261028-F5 | （用户环境 · 不入舰队） | **到期重评** 插件 0.1.0 × CLI 1.6.2 版本耦合（工具集合/行为无版本承诺）；期间观察上游 | 定时：**2026-12-28** |
 | M20261014-F1 | （用户环境 · 不入舰队） | **到期重评** `pi-ask-me` 旧 SDK 子树 12 high（已接受）· 台账 `docs/reports/M20261014-pi-ext-update-followups.md` | 定时：**2026-11-14** 或上游 `pi-ask-me` 升版时 |
 
 ## 进行中

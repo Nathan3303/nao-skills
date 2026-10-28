@@ -10,7 +10,7 @@
 - **命令**：
   - 机制体检：`bash .agents/scripts/nao-fleet.sh check`（rc=0 才可开工）
   - 测试：`npm test`（tests/ 全范围）
-  - 代码定位：**本仓无 CodeGraph 索引**（实测 `codegraph status` → Not initialized）→ 直接 `grep -rn` + `sed` 行段读取，**禁 cat 全文**（可选 `codegraph init` 自建索引，非必需）
+  - 代码定位：**已有索引 + 原生入口优先** —— 原生入口 `codegraph_explore`（需插件 + CLI + 索引齐备）→ CLI → `grep -rn` + `sed` 行段，**禁 cat 全文**；详 `.agents/skills/codegraph.md`（索引 4 files / 118 nodes，`.codegraph/` 约 500K；索引 pending 不影响定位，提交前 `codegraph sync`）
 - **环境**：`NAO_SKILLS` 必须指向本仓根（凡是引用 `.agents/...` 的绝对路径锚点）；跨仓工作用 `"$NAO_SKILLS/.agents/scripts/nao-fleet.sh"` 显式调用。
 
 ## 项目约束（红线）

@@ -1,8 +1,8 @@
 ---
 description: 前端开发工程师角色 Prompt（短常驻）——Vue 3 / React + TS DDD
 role: rd-fe
-version: 11
-updated: 2026-10-13
+version: 12
+updated: 2026-10-28
 ---
 
 # 前端 DDD 架构师（Vue 3 / React + TS）
@@ -12,7 +12,7 @@ updated: 2026-10-13
 > 按需技能：
 > @.agents/skills/frontend-ddd-details.md（骨架、场景速决、命名、误区、UI/UX 落地）。
 > @.agents/skills/frontend-design/SKILL.md（**新建页面/组件或涉及布局样式前先读**：视觉方向/反 AI 味，官方 anthropics/skills）。
-> @.agents/skills/codegraph.md（代码定位，替代 grep 全文扫描，省 token）。
+> @.agents/skills/codegraph.md（三段阶梯：原生入口 → CLI → `grep -rn` + 行段，省 token）。
 > @.agents/skills/commit.md（提交时机/需求分支/可读信息；仅在执行 git commit 前读取）。
 > @.agents/skills/github-flow.md（需求分支 / Draft PR / 验收后 squash 合并）。
 
@@ -40,7 +40,7 @@ updated: 2026-10-13
 - [ ] Domain 零框架；用例仅依赖端口
 - [ ] 视图无 `if (status)` 业务分支；Store 存聚合根（非裸 DTO）
 - [ ] DI 唯一入口 `useXxx`；禁组件/Store 内 `new 仓储`、禁 Context 传业务依赖
-- [ ] 定位/变更代码未先试 `codegraph context/query`？（仅索引不可用才回退 grep + 行段读取，禁 cat 全文）
+- [ ] 定位/变更代码未走三段阶梯（原生入口 `codegraph_explore`（需插件 + CLI + 索引齐备）→ CLI → `grep -rn` + 行段；详情见 `@.agents/skills/codegraph.md`）？禁 cat 全文
 - [ ] 改/新增组件未先研究项目既有 UI 风格（读同类组件/tokens/playbook）或未按 tokens/组件库落地？（默认延续既有风格；仅用户指定新风格才脱离）
 - [ ] 未跑**全范围门禁**（不是子目录）并回执精确数字？（PM 不重复跑，回执数字即验收唯一依据；全范围口径见项目 `AGENTS.md`）
 

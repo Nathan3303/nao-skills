@@ -15,7 +15,7 @@
   - 构建/启动：`<cmd>`
   - 测试：`<cmd>`
   - lint/格式：`<cmd>`
-  - 代码索引同步：`codegraph sync`（如已配）
+  - 代码定位：原生入口 `codegraph_explore`（需插件 + CLI + 索引齐备）→ CLI → `grep -rn` + 行段（`codegraph init` 建索引**不带 `-i`**；`codegraph sync` 同步；见 @.agents/skills/codegraph.md）
 - **环境**：<关键环境变量 / 运行方式 / 数据依赖>
 
 ## 项目约束（红线）
@@ -28,7 +28,8 @@
 
 ## 与 nao 机制衔接
 
-- **CodeGraph**：本仓库 `.codegraph/` 索引；写完代码 `codegraph sync` 保持新鲜。
+- **CodeGraph**：三段阶梯「原生入口 `codegraph_explore`（需插件 + CLI + 索引齐备）→ CLI → `grep -rn` + 行段」；本仓库若建了 `.codegraph/` 索引，写完代码 `codegraph sync` 保持新鲜。
+- **插件副产物**：`.pi/APPEND_SYSTEM.md` 是插件生成物（非会话 `pi` 调用会残留）→ 建议 `.gitignore` 加**单文件** `.pi/APPEND_SYSTEM.md`；已建索引的仓内跑非会话 `pi` 动作请换 cwd（`( cd /tmp && pi … )`），已泄漏的 daemon 用 `codegraph daemons` 手工停（nao 不代杀）。
 - **UI/UX**：Design Tokens 在 `<src/styles/tokens.css>`；UX Playbook 在 `<docs/ux-playbook.md>`；硬编码色值禁入（`ui-tokens-check.sh` 兜底）。
 - **交付核对**：交付前读取 `@.agents/checklists/<role>.md`（完整红线 + 清单）。
 - **Git 纪律**：提交前读取 `@.agents/skills/commit.md`（需求分支 / 路径级暂存 / 可读信息）；流水线见 `@.agents/skills/github-flow.md`。

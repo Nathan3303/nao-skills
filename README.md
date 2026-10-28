@@ -36,6 +36,23 @@ nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，�
 
 升级：改 `.pi/settings.json` 里的 pin 版本，再 `pi update --extensions`（机制以包为准，项目里只有 shim）。
 
+### CodeGraph（可选增强，不装也能干活）
+
+插件 `@sean_pedersen/pi-codegraph` 给角色一个原生定位入口，但**三者齐备才生效**：插件已声明 + `codegraph` CLI 在 PATH + 当前仓有 `.codegraph/` 索引。缺任一 ⇒ 自动回退 CLI / `grep -rn` + 行段，`check -v` 会告诉你缺什么（**全部只是提示，永不进退出码**）。
+
+```bash
+npm install -g @colbymchenry/codegraph     # CLI（实测 1.6.2）
+codegraph telemetry off                    # 关匿名遥测（舰队 session 由 nao 自动注入 CODEGRAPH_TELEMETRY=0）
+cd <repo> && codegraph init                # 建索引（不带 -i；该 flag 已废弃）
+```
+
+**资源**：sidecar 内存口径 = 进程树全集 **PSS 之和**（RSS 求和会重复计共享页）。本机实测同一仓 6 会话全集 **PSS 675.7MB**、同仓边际 **+70–90MB/会话**、**每新增一个有索引的仓 ≈ +155MB**（daemon + watchdog，按仓共享）⇒ 成本跟**仓数**走，不跟会话数线性放大。默认 `check` 不 fork CLI（零外部进程），`-v` / `ensure` 才每仓跑一次 `codegraph status`（约 0.4s）。
+
+**副产物与 daemon**（已知边界，nao 不代清理）：
+
+- `.pi/APPEND_SYSTEM.md` 由插件生成 —— 正常会话退出会删，但**任何加载扩展的非会话 `pi` 调用**（`pi list` / `pi install` / `pi --help -e`）会写完就残留 ⇒ 已加进本仓 `.gitignore`（单文件）；需清理时**自己** `rm -f .pi/APPEND_SYSTEM.md`。
+- 已建索引的仓内做个非会话 `pi` 动作，可能留下 1 棵孤儿 `codegraph` daemon（约 177MB RSS）。规避：**在非索引 cwd 执行** —— `( cd /tmp && pi list )`（实测 0 副作用）；已泄漏用 `codegraph daemons`（交互选停）。nao 不会去杀它（daemon 的 argv 不含仓库身份，`pkill` 会跨仓误杀）。
+
 **老项目迁移**（曾在项目里铺开整套 `.agents/` 的）：执行 `npx @nathan33/nao-skill migrate` 即可，细则见文末「老用户迁移与维护者注记」。
 
 ## 用起来（3 步）
@@ -81,7 +98,7 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 - **常驻的东西尽量小**：每个角色卡只留最硬的红线，细节放到用到时才读的文件里。
 - **按需才读**：设计规范、检查清单、读代码手册，都是在需要那一刻才读进上下文。
 - **不靠聊天记录记事**：任务状态和待办写在 `docs/` 文件里；会话重开先读文件恢复状态。
-- **查代码用索引**：配了 CodeGraph 就一次拿到相关代码块，比全文搜索省一个数量级。
+- **查代码用索引**：配了 CodeGraph 就一次拿到相关代码块，比全文搜索省一个数量级。它**不是硬依赖** —— 插件 / CLI / 索引缺任一就自动回退 `grep -rn` + 行段，`check` 的 codegraph 行永远只是提示（不进退出码）。
 
 一句话概括定位：这是在给 AI 做「上下文工程」——决定每个会话**该看到什么、不该看到什么**；在这之上再叠了多会话协作和交付纪律。它自己不跑 AI，产出的是给 AI 读的 Markdown。
 
