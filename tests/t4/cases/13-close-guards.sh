@@ -30,7 +30,7 @@ TASKS_NONE="$T4_CACHE_DIR/c13-none.md"               # 不存在 ⇒ 跳过 task
 EMPTY_PI="$(mktemp -d "$T4_CACHE_DIR/c13-pi.XXXXXX")"  # 空 PI dir ⇒ intercom_list_json 失败
 MARK="未运行（无需回收）"
 
-# ---- 前置探测：④⑤ 能力门（tsx 名册探针）；缺失 ⇒ t4_degrade（BR7）----
+# ---- 前置探测：⑥⑦ 能力门（tsx 名册探针）；缺失 ⇒ t4_degrade（BR7）----
 PI_AGENT_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
 tsx_ok=""
 if [ -f "$PI_AGENT_DIR/npm/node_modules/tsx/dist/cli.mjs" ] && command -v node >/dev/null 2>&1; then tsx_ok=1; fi
