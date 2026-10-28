@@ -88,6 +88,18 @@
 - `bash .agents/scripts/nao-fleet.sh check` → **rc=0**，`check: OK · roles=6 · files=50 · layout=main-row2`；`check -v` CodeGraph 段实际输出 `✓ 当前目录索引 up to date`（真实 CLI 驱动，非 stub）。
 - `npm test` → **rc=0**，`RESULT: PASS（SKIP=0 · DEGRADE=0 · NOTE=2 · NOTE白名单=2）`。
 
+### T3 复测（真实舰队 · 合并后 2026-10-28）—— **判定：接受（≤600MB 最优档）**
+
+前置事实：舰队会话是在建索引**之前**启动的，插件不回溯激活 ⇒ 之前 0 个 sidecar。本次真重启验证：
+
+- 关闭 arch / rd-infra / qa 后，`ensure arch rd-fe rd-be qa rd-infra` 重拉 **5 个真实会话**（均在本仓 cwd，`.codegraph/` 在位）⇒ 静置 30s 测量：
+  - `ps -eo rss,pss,args | grep codegraph` ⇒ **17 进程 · RSS 1155092 KB = 1128.0 MB · PSS 491162 KB = 479.7 MB**（口径 = 进程树全集 PSS 之和，arch B1）。
+- 随后**全部关闭**再测（仅剩守护）：**2 进程 · RSS 174.0 MB · PSS 131.6 MB** ⇒ 该 131.6 MB 即「每仓 daemon 基线」，与 arch B1 的 +155MB 量级一致。
+- **同仓边际 = (479.7 − 131.6) / 5 = 69.6 MB PSS/会话**（arch 预测 +70–90 MB 命中）。
+- **外推 6 会话 = 131.6 + 6 × 69.6 = 549.3 MB PSS** ⇒ **≤600 MB ⇒ 接受（最优档）**，无需依赖「README 一行」兜底（该行已随本批落地，保留）。
+- 并发读锁：本轮未再触发写冲突（RD 已测 6 并发 `status` 0 次 `database is locked`）。
+- **daemon 行为复核**：所有会话退出后 daemon（+watchdog）**仍在**（2 进程）⇒ 与 BR11「残留有界（每仓 ≤1 棵）」一致；未做任何清理（nao 不代杀）。
+
 ## 三、遗留项与出口
 
 > 字段固定顺序：编号 / 来源 / 严重度 / 出口 / 到期（@.agents/skills/task-completion.md §三）。
@@ -98,7 +110,7 @@
 - `F4`｜来源 = `pi install` 报 `removed 206 packages`（用户级 npm 根剪枝）｜严重度 = —｜出口 = **关闭**（复核 5 个包版本完好：`pi-intercom@0.18.1`/`pi-ask-me@0.1.1`/`pi-subagents@0.83.0`/`pi-web-access@0.45.0`/`@sean_pedersen/pi-codegraph@0.1.0`；`pi --version` = 1.4.0 正常）｜到期 = —（已关闭 2026-10-28）。
 - `F5`｜来源 = 插件 `0.1.0` 与 CLI `1.6.2` 的版本耦合无声明（插件 `spawn("codegraph", ["serve","--mcp"])`，依赖 CLI 的 `serve --mcp`/`tools/list` 契约）｜严重度 = 低｜出口 = **接受**（watch 上游；本单已实测该组合可用）｜到期 = **2026-12-28**（重评触发：任一组件升级）。
 - `F6`｜来源 = **arch A6 的门判据与采样命令不同量纲**：`ps -o rss= -p $(pgrep -f 'codegraph serve')` 只命中每会话的 launcher（6 × 51.7 MB = 303.1 MB），漏掉 worker、watchdog 与**每仓 1 个共享 daemon**（其 cmdline 为 `codegraph.js serve --mcp --path …`，不含字面 `codegraph serve`）；真实全集 = 20 进程 / **RSS 1439.0 MB / PSS 675.7 MB**（RSS 和又含重复计入的共享页）｜严重度 = 高（**直接决定「保留索引 / 回退」**，且会让未来同类门禁永久低估）｜出口 = **转办**（请 PM/arch 裁定：① 以 A6 原命令为准则 303.1 MB ⇒ 接受；② 以全集 PSS 675.7 MB ⇒ 600–1200 MB 档（README 加「资源」一行 + 台账）；③ 以全集 RSS 1439.0 MB ⇒ >1.2 GB ⇒ 回退 `rm -rf .codegraph` + ADR 改「已落地但降级」；④ 重定义口（改父链遍历 + 改 PSS）后重跑）｜到期 = **2026-10-28 已裁决**（arch 复议 B1 采纳口径 ②：PSS 全集 675.7 MB ⇒ 600–1200 档，接受 + README 一行 + 索引保留；ADR 已记）。
-  - **转办出的残余（未闭合，不阻塞本批实现）**：成本只在**舰队重启后**出现（现存会话启动于建索引前 ⇒ 无 sidecar）⇒ 重启后复测 6 会话 PSS 入台账（PRD §六「T3 唯一未闭合项」）。
+  - **转办出的残余：已于 2026-10-28 闭合** —— 舰队真实重启后实测 5 会话 PSS 479.7MB / daemon 基线 131.6MB / 边际 69.6MB 每会话 ⇒ 外推 6 会话 549.3MB ≤600MB，接受（见上「T3 复测」）。
 
 ## 四、回滚
 
