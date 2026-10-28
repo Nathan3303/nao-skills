@@ -51,3 +51,12 @@
 
 - 代码/文档面 **可发布**（v0.19.0）。合并前须先由 RD/PM 更正 D1 的台账与 PR 数字（AC4/BR6 硬要求），D2 可同批带上；D3 建议开后续小项。
 - 回滚面与 PRD 一致：`git revert` 单提交即可恢复（旧路径已删，回滚即恢复）。
+
+## 追加：为什么我绿、PM 红（`cases/09` §真回收）
+
+- **同提交同命令复现**：`TMUX_PANE=%0 bash tests/t4/run.sh --case 09` ⇒ 与 PM 完全同一条 FAIL（`跨仓 pane %0 仍存活（rc=1）`）；同样命令换成 `TMUX_PANE=%5`（我的 pane）⇒ PASS。差异变量只有一个：调用者 pane id。
+- **根因修正一处**：tmux 客户端**认 `$TMUX`**（实测 `TMUX=/tmp/nao-fake,1,0 tmux list-sessions` ⇒ `error connecting to /tmp/nao-fake`），`close` 并未落到默认 server。真正触发点是 **F1 自 pane 守卫**（`nao-fleet.sh:1366`；`:554` 的 `pane_busy` 同源）：拿调用者所在**默认 server** 的 `$TMUX_PANE=%0` 去比**隔离 server** 的 `%0`，跨 server pane id 撞号 ⇒ 拒杀 rc=1。手工 A/B（隔离 socket + 名册 `tmuxPane=%0`）：`TMUX_PANE=%0` ⇒ rc=1 +「解析出的 pane %0 与调用者自己的 pane 相同」、pane 存活；`TMUX_PANE=%9` ⇒ rc=0「已回收 qa-AB1」、pane 消失。方向是**误拒（安全侧）**，全程无 pane 被误杀（前后 pane 清单逐项一致）。
+- **答 1（是否真执行）**：**是**。我两次全量跑的 NOTE=2 均来自 `cases/06`（AC6 文档侧、AC2 静态替代），无 `cases/09` 的 NOTE；刚才在本 pane 重跑 `--case 09` ⇒ `[PASS] AC3: 真回收跨仓 pane %0（已关闭）`、NOTE=0。
+- **答 2（NOTE 掩盖）**：**存在，且就在本案**。该断言有两条 NOTE 出口——`tests/t4/cases/09-alias-guard.sh:177`（夹具会话建不起来）与 `:180`（无 tmux）；而 `tests/t4/run.sh:163` 的 full 判据只算 SKIP+DEGRADE ⇒ **NOTE 永不判红**（无 tmux 的机器上此断言从未执行也报绿）。另 `:170-173` 的通过判据是「`t09 list-panes` 未列出」而非「server 可达且 pane 已销毁」，命令失败同样走 `t4_ok`（假绿通道）。其余 NOTE 均不跳过断言：`cases/06:51`（T3 范围说明）、`cases/06:63`（静态替代证据）、`cases/07:17`（改用已发布 latest 做布局对照）；能力缺失走 `t4_skip`/`t4_degrade` 的用例是 12/13/15/16/17，**仅 `cases/09` 用 NOTE 跳过断言**。
+- **答 3（差异）**：命令同一条（我 `npm test` 与 `npm run test:t4:full` 各一次，均 rc=0 · 16/16 · SKIP=0 · DEGRADE=0 · NOTE=2）。`T4_REQUIRE_FULL` 对本例无影响（它只对 SKIP/DEGRADE 判红）；差异 100% 来自 `$TMUX_PANE`（我 `%5` / 你 `%0`）。两侧 summary 数字相同，也反证我侧未被 NOTE 掩盖。
+- **结论与加固**：不是「我的门禁宽松」，而是用例**对调用者 pane id 敏感**（缺 `env -u TMUX_PANE`，`cases/13/15` 已有）**且失败出口用 NOTE**。建议 T530 同批：`cases/09` 加 `-u TMUX_PANE`、两条 NOTE 改 `t4_skip`、「已关闭」判据改为「server 可达且 pane 不在」。我的复核清单加固：全量跑后**逐条归因 NOTE 行**；环境维度增加「同机换 `TMUX_PANE` 复跑一次」。
