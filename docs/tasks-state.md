@@ -158,13 +158,14 @@
 | :--- | :--- | :--- | :--- |
 | T529-rd | rd-infra-T529 | 删宿主阶梯 + 非 tmux rc=3 硬失败（fail-fast 无副作用）+ `check` pi ≥1.4.0 断言 + close 收窄（删 T523 段）+ 新 ADR/旧 ADR 废弃 + 文档收窄 + `docs/releases/v0.19.0.md`（AC1–AC7） | 依赖 arch 回执 |
 | T529-qa | qa-T529 | 独立复核 AC1–AC9：删除面 grep 归零 · 行数对照 · 非 tmux 四命令 rc=3 且无 session/pane/lock · tmux 内三命令行为等价 · pi 版本断言正负控 · **新旧断言基线对照** · ADR 结构 | 依赖 T529-rd 回执 |
+| T529-D3 | （backlog · 无会话） | **`MIN_PI_VERSION` 常量提炼**：`nao-fleet.sh:1225` 文案硬编码「< 1.4.0」与 `:311-316` 阈值 `c1/c2` 魔术数并存（负控抬到 9.9.9 时输出「1.4.0 < 1.4.0」自相矛盾）；不影响 AC3，可随时做 | QA D3 转办（本批不做）|
 | M20261014-F1 | （用户环境 · 不入舰队） | **到期重评** `pi-ask-me` 旧 SDK 子树 12 high（已接受）· 台账 `docs/reports/M20261014-pi-ext-update-followups.md` | 定时：**2026-11-14** 或上游 `pi-ask-me` 升版时 |
 
 ## 进行中
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T529 | rd-infra-T529（已回执）→ qa-T529（复核中） | **实现已落地** `da50fcc`：`nao-fleet.sh` 1947→**1591**（净减 356）· 非 tmux rc=3 单行（`cleanup` 豁免 rc=2）· `check` 增 tmux+pi≥1.4.0（失败 rc=1 聚合不早退）· close 收窄（`无法确认在线`=0）· `cases/11` 退役 + `cases/13` 改写 · 新 ADR 54 行 + 旧 ADR 标废弃（正文零改）+ derived 零 diff · `v0.19.0` notes。**断言 438→280（-158）**：cases/11 -149 / cases/13 -8 / cases/15 -1 | 2026-10-28 | AC1–AC7 | `da50fcc` |
+| T529 | rd-infra-T529（已回执）→ qa-T529（复核中） | **实现已落地** `da50fcc`：`nao-fleet.sh` 1947→**1591**（净减 356）· 非 tmux rc=3 单行（`cleanup` 豁免 rc=2）· `check` 增 tmux+pi≥1.4.0（失败 rc=1 聚合不早退）· close 收窄（`无法确认在线`=0）· `cases/11` 退役 + `cases/13` 改写 · 新 ADR 54 行 + 旧 ADR 标废弃（正文零改）+ derived 零 diff · `v0.19.0` notes。**断言差额（QA 独立重算 · 双口径 · RD 原报 438→280 不可复现已作废）**：调用点 **261→252（-9）** / 运行期 PASS 行 **483→391（-92；全绿口径 485→391 = -94）**；去处 = `cases/11` **-85** · `cases/13` -8 · `cases/15` -1，其余 14 例零漂移 | 2026-10-28 | AC1–AC7 | `da50fcc` |
 
 ## 已回执待验收
 
@@ -175,6 +176,8 @@
 | T529-arch | done(lite)：**可行无阻塞** · 14 项三态（可删 12 / 成组连带 2 / **必须保留 0**）· `screen_token_for`/`screen_present` 被 `status`/`close` 硬依赖（`running():654` / `close:1713`）⇒ 成组连删 6 处 · **10 项清单外漏项**（app-id 三函数+close 分支 ≈45 行 · pid pipe ≈20 行 · `TMUX_ENV_SCRUB` · `NAO_TERMINAL_LIST` · `offline_verifiable` · `visible_session_names` · `--background` · `spawn_tmux` else 分支 · `check` 宿主阶梯段 · 头注释）⇒ 净减 ≈240 · ADR 够格 + 3 条硬要求 · **11/12 仅内部 return 码，无外部可见退出码消失** · 两处待确认（cleanup 豁免 / cases 11 实体退役）→ **PM 已拍板并入 PRD（D5–D9）** | `docs/reports/48-arch-review.md`（96 行）+ `5cb78b5` | 已转 RD 实施 |
 
 | T529-rd | done(full) `da50fcc`：见上「进行中」行；DoD 四类齐（产物 / 验证含 AC1·AC3·AC8 实测 / 遗留 1 项 / 交接）· 遗留 = 下游三仓旧 pin（接受，到期 = v0.19.0 发布 +30 天）· **需 PM 定 3 事**：ADR 状态改「已落地」时机 · `package.json` pin 升（发布时）· 报错文案不带 `DEGRADED:` 前缀（PM 裁定：**接受**，rc=3 已区分语义，该词属旧降级语义遗留） | commit `da50fcc` | 等 qa-T529 独立复核 |
+
+| T529-qa | done(full) `9333159`：**9 项全查通过**（AC1 三命令 rc=3 且各恰 1 行、panes/sessions/clients/tmp 哈希前后一致无 lock；AC2 名单 grep=0（base 82）；AC3 1.3.9⇒✗+rc=1 且体检照跑、beta⇒rc=1、1.4.0⇒rc=0；AC4 cases/11 删净 + run.sh 无 11 + T513 实体 numstat=1/0 + cases/13 11 条全 PASS；ADR 54 行 5 节 4 字段合规、旧 ADR 仅状态行、derived 零 diff；release notes 首屏破坏性 + 两句迁移、0 表格）+ 双向负控翻红 md5 还原。**缺陷 D1（一般）**：RD 断言数字不可复现 → **PM 已按双口径更正台账**（见「进行中」行）+ PR 同步；**D2（轻微）** `tests/README` 的 13 行 DEGRADE 编号 ③④→**⑥⑦** → 已回派 RD 随批修；**D3（轻微）** `MIN_PI_VERSION` 常量提炼 → **转办 backlog**。报告 `docs/reports/48-qa-verify.md`（53 行） | `9333159` | D2 回执后 → PM 终验 → PR |
 
 ## 挂起（被抢占 / 降级）
 
