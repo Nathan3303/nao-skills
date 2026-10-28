@@ -46,6 +46,7 @@
     "test:agents": "bash .agents/scripts/nao-fleet.sh check && npm run check:agents",
     "test:t4": "bash tests/t4/run.sh",
     "test:t4:full": "T4_ALLOW_MISSING=0 T4_REQUIRE_FULL=1 bash tests/t4/run.sh",
+    "test:t4:full:dual": "bash tests/t4/run-dual.sh",
     "check:agents": "tsc -p tsconfig.agents.json",
     "prepack": "npm run test:agents"
   },

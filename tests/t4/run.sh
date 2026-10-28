@@ -7,11 +7,15 @@
 #   bash tests/t4/run.sh --preflight         # 打印前置探测（不执行用例）
 #   bash tests/t4/run.sh --case 03           # 只跑指定编号
 #   T4_ALLOW_MISSING=1 bash tests/t4/run.sh  # 宽松：依赖缺失=BLOCKED（仅显式 1）
-#   T4_REQUIRE_FULL=1 bash tests/t4/run.sh   # 发布前置：SKIP+DEGRADE 计数>0 即 FAIL（与上者正交）
+#   T4_REQUIRE_FULL=1 bash tests/t4/run.sh   # 发布前置：SKIP+DEGRADE 计数>0 即 FAIL，非白名单 NOTE 亦 FAIL（与上者正交）
+#
+# NOTE 白名单（T531）：用例产出 `[NOTE] <tag> <msg>`；tag 枚举单点定义于 lib.sh 的 T4_NOTE_TAGS。
+# 非 full ⇒ 仅计数 + 未登记 tag 给警告（不阻断，日常 `npm test` 不因旧式调用变红）；
+# full ⇒ 未登记 tag / 无 tag（`[NOTE] (untagged) ...`）一律 RESULT: FAIL + rc≠0，并点名 tag + 用例号。
 #
 # 退出码:
 #   0 = 汇总全部 PASS/SKIP（严格默认下不会出现 BLOCKED）
-#   1 = 有 FAIL / 参数错误 / 未识别状态（MISSING、NOT_RUN、未知值）/ (full) SKIP+DEGRADE>0
+#   1 = 有 FAIL / 参数错误 / 未识别状态（MISSING、NOT_RUN、未知值）/ (full) SKIP+DEGRADE>0 / (full) 非白名单 NOTE>0
 #   2 = 有 BLOCKED（仅宽松 T4_ALLOW_MISSING=1 下可能出现）
 set -uo pipefail
 
@@ -126,6 +130,8 @@ done
 
 printf '\n==================== T4 汇总 ====================\n'
 fail=0; blocked=0; skip_cases=0; degrade_lines=0; note_lines=0
+# NOTE 白名单聚合（T531 · BR1/BR2）：逐条解析行首 `[NOTE]` 后的首个 token，合法性判定只在此处。
+note_wl=(); note_bad=()
 for i in "${!CASE_IDS[@]}"; do
   id="${CASE_IDS[$i]}"
   if [ "$mode" = "case" ] && [ "$only" != "$id" ]; then continue; fi
@@ -141,6 +147,13 @@ for i in "${!CASE_IDS[@]}"; do
     sub_note="$(grep -cE '^[[:space:]]*\[NOTE\]' "$log" 2>/dev/null || true)"
   fi
   sub_skip="${sub_skip:-0}"; sub_degrade="${sub_degrade:-0}"; sub_note="${sub_note:-0}"
+  if [ -f "$log" ] && [ "$sub_note" -gt 0 ]; then
+    # 每行取 `[NOTE]` 后第一个非空 token（无 tag ⇒ 打印形态为 `(untagged)`，必不在白名单内）
+    while IFS= read -r tag; do
+      [ -n "$tag" ] || continue
+      if t4_note_tag_registered "$tag"; then note_wl+=("$id:$tag"); else note_bad+=("$id:$tag"); fi
+    done < <(sed -nE 's/^[[:space:]]*\[NOTE\][[:space:]]*([^[:space:]]*).*/\1/p' "$log" 2>/dev/null)
+  fi
   printf '  %s  %-12s %s\n' "$id" "$st" "${CASE_TITLES[$i]}"
   case "$st" in
     PASS|SKIP) ;;       # 白名单：仅 PASS/SKIP 视为通过
@@ -151,9 +164,21 @@ for i in "${!CASE_IDS[@]}"; do
   degrade_lines=$((degrade_lines + sub_degrade))
   note_lines=$((note_lines + sub_note))
 done
+join_by() { local sep="$1" out="" x; shift; for x in "$@"; do out="${out:+$out$sep}$x"; done; printf '%s' "$out"; }
 printf '  ---\n'
 printf '  SKIP=%d · DEGRADE=%d · NOTE=%d\n' "$skip_cases" "$degrade_lines" "$note_lines"
-printf '  （SKIP 含用例内 [SKIP]/SKIP: 行；DEGRADE=能力降级，默认豁免、full 计分；NOTE 允许）\n'
+printf '  （SKIP 含用例内 [SKIP]/SKIP: 行；DEGRADE=能力降级，默认豁免、full 计分；NOTE 按白名单分轴）\n'
+if [ "${#note_wl[@]}" -gt 0 ]; then
+  printf '  NOTE 白名单命中（%d 条）：%s\n' "${#note_wl[@]}" "$(join_by ' · ' "${note_wl[@]}")"
+else
+  printf '  NOTE 白名单命中（0 条）：无\n'
+fi
+if [ "${#note_bad[@]}" -gt 0 ]; then
+  printf '  NOTE 非白名单（%d 条）：%s\n' "${#note_bad[@]}" "$(join_by ' · ' "${note_bad[@]}")"
+  if [ "$T4_REQUIRE_FULL" != "1" ]; then
+    printf '  WARN: 非白名单 NOTE（非 full 仅警告，不阻断；T4_REQUIRE_FULL=1 时判 FAIL）\n'
+  fi
+fi
 
 # 最终 rc 与三态 disposition 先算好，保证打印与磁盘实况一致（BR6）：
 # 清理在 EXIT trap 内执行（BR5），此处预告 disposition，退出后即为实况。
@@ -161,6 +186,7 @@ final_rc=0
 if [ "$fail" = "1" ]; then final_rc=1
 elif [ "$blocked" = "1" ]; then final_rc=2
 elif [ "$T4_REQUIRE_FULL" = "1" ] && [ "$((skip_cases + degrade_lines))" -gt 0 ]; then final_rc=1
+elif [ "$T4_REQUIRE_FULL" = "1" ] && [ "${#note_bad[@]}" -gt 0 ]; then final_rc=1
 fi
 if [ "${T4_CACHE_OWNED:-0}" != "1" ]; then
   disposition="用户提供 · 不删"
@@ -176,8 +202,12 @@ printf '缓存目录: %s（%s）\n' "$T4_CACHE_DIR" "$disposition"
 if [ "$final_rc" = "1" ]; then
   if [ "$fail" = "1" ]; then
     printf 'RESULT: FAIL（存在 FAIL / MISSING / NOT_RUN / 未识别状态）\n'
-  else
+  elif [ "$((skip_cases + degrade_lines))" -gt 0 ]; then
     printf 'RESULT: FAIL（T4_REQUIRE_FULL=1 且 SKIP=%d + DEGRADE=%d >0 —— 发布前置要求两者均为 0）\n' "$skip_cases" "$degrade_lines"
+  else
+    printf 'RESULT: FAIL（T4_REQUIRE_FULL=1 且 NOTE 非白名单 %d 条 —— 发布前置要求非白名单 NOTE 为 0；点名: %s）\n' \
+      "${#note_bad[@]}" "$(join_by ' · ' "${note_bad[@]}")"
+    printf '  （登记新 tag 需同时改 lib.sh 的 T4_NOTE_TAGS + tests/README.md「NOTE 白名单」；或改用 t4_degrade/t4_skip 表达能力缺失）\n'
   fi
   exit 1
 fi
@@ -185,5 +215,6 @@ if [ "$final_rc" = "2" ]; then
   printf 'RESULT: BLOCKED（T2 产物缺失；仅宽松 T4_ALLOW_MISSING=1 下出现）\n'
   exit 2
 fi
-printf 'RESULT: PASS（SKIP=%d · DEGRADE=%d · NOTE=%d）\n' "$skip_cases" "$degrade_lines" "$note_lines"
+printf 'RESULT: PASS（SKIP=%d · DEGRADE=%d · NOTE=%d · NOTE白名单=%d）\n' \
+  "$skip_cases" "$degrade_lines" "$note_lines" "${#note_wl[@]}"
 exit 0

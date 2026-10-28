@@ -14,7 +14,7 @@ exact="1"
 if [ "$pubver" != "$PKG_VERSION" ]; then
   exact="0"
   pubver="$(timeout 40 npm view "$PKG_NAME" version 2>/dev/null | tail -1 | tr -d "'\"[:space:]")"
-  t4_note "pin 版本 $PKG_VERSION 未发布；改用已发布 latest=$pubver 做**布局**对照（内容差异不计）"
+  t4_note pin-fallback "pin 版本 $PKG_VERSION 未发布；改用已发布 latest=$pubver 做**布局**对照（内容差异不计）"
 fi
 [ -n "$pubver" ] || t4_skip "npm registry 不可达，无法做真实安装对照"
 t4_info "对照版本: pubver=$pubver · pin=$PKG_VERSION · 版本一致=$exact"

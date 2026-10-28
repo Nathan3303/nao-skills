@@ -48,7 +48,7 @@ while IFS= read -r r; do
 done <<< "$refs"
 t4_info "NAO_SKILLS 引用 $n 条 · 不可达:${bad:- 无}"
 t4_assert_eq "" "${bad# }" 'AC6: 全部 $NAO_SKILLS/.agents 引用在包内可达'
-t4_note "AC6 文档侧（README / ARCHITECTURE / 模板对齐）→ T3 关闭，本轮不判"
+t4_note static-contract "AC6 文档侧（README / ARCHITECTURE / 模板对齐）→ T3 关闭，本轮不判"
 
 # --- AC2（静态替代）：SKILL 入口可发现性与指引 ------------------------------
 sk="$T4_ROOT/.agents/skills/nao-fleet/SKILL.md"
@@ -60,7 +60,7 @@ for s in nao-fleet frontend-design; do
   nm="$(sed -n 's/^name:[[:space:]]*//p' "$T4_ROOT/.agents/skills/$s/SKILL.md" | head -1 | tr -d '\r')"
   t4_assert_eq "$s" "$nm" "AC2: $s 的 name == 父目录名"
 done
-t4_note "AC2 动态发现（真 pi 加载）见 T4-02；无凭据时以本条静态断言为替代证据"
+t4_note static-contract "AC2 动态发现（真 pi 加载）见 T4-02；无凭据时以本条静态断言为替代证据"
 
 # --- 门禁接线契约（T522 · PRD §三.1/2 · BR1/BR4/BR5）------------------------
 # 防「接线被后人摘掉无人报警」+ 封第三类假绿（用例脚本不以 t4_exit|t4_skip|exec 收尾时，

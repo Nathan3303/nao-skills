@@ -169,12 +169,14 @@
 | :--- | :--- | :--- | :--- |
 | T529-D3 | （backlog · 无会话） | **`MIN_PI_VERSION` 常量提炼**：`nao-fleet.sh:1225` 文案硬编码「< 1.4.0」与 `:311-316` 阈值 `c1/c2` 魔术数并存（负控抬到 9.9.9 时输出「1.4.0 < 1.4.0」自相矛盾）；不影响 AC3，可随时做 | QA D3 转办（本批不做）|
 | T529-D1 | （用户环境 · 不入舰队） | **到期重评** 下游三仓（nao-todo / nao-todo-server / nue-ui）旧 pin 仍跑旧行为（宿主阶梯已删）· 出口 = 接受 | 定时：**2026-11-27**（= v0.19.1 发布 +30 天） |
+| T531-qa | qa-T531 | 独立复核 AC1–AC8：白名单判定 + 双向负控翻红 + dual 两组皆绿 + PM 卡 v27 + 断言语义未变 + 门禁自跑 | 依赖 T531-rd 回执 |
 | M20261014-F1 | （用户环境 · 不入舰队） | **到期重评** `pi-ask-me` 旧 SDK 子树 12 high（已接受）· 台账 `docs/reports/M20261014-pi-ext-update-followups.md` | 定时：**2026-11-14** 或上游 `pi-ask-me` 升版时 |
 
 ## 进行中
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| T531 | qa-T531（复核中） | **实现已落地** `feb9e96`（+`c569500`）：`T4_NOTE_TAGS` 三 tag 单点枚举 + `t4_note <tag>` + full 下非白名单/untagged ⇒ FAIL 点名 `用例号:tag`（非 full 只计数+WARN）+ `run-dual.sh`（`test:t4:full:dual`，151s 两组皆绿）+ `github-flow` 阶段 7 改指向 dual + PM 卡 **v27**（§六 + §十 各 1 条根因纪律）+ `checklists/pm.md` 清单 41 + `tests/README` 白名单节 + 4 处 NOTE 补 tag（语义零变更） | 2026-10-28 | AC1–AC8 | `feb9e96` |
 
 ## 已回执待验收
 
@@ -184,6 +186,10 @@
 
 
 
+
+| T531-rd | done(full) `feb9e96`：见「进行中」行；**负控 5 组**（未知 tag ⇒ dual 两组 FAIL 点名 / 摘 `static-contract` ⇒ 红 / 摘 `pin-fallback` ⇒ 副本演练红 / 旧式无 tag：非 full 不红 + full 红 / `migrate-fallback` 副本演练命中）+ md5 还原 · AC7 差集干净 · **口径提醒**：白名单命中常态 **2 条**（`06:static-contract`×2；另两个 tag 仅在 pin 未发布 / CLI 缺 migrate 时命中） | `feb9e96` | ✅ **qa 复核通过（2026-10-28）** |
+
+| T531-qa | done(full)：**0 未过项**（AC1–AC8 逐项过）。自跑 `check` rc=0（roles=6 · files=50）· `npm test` rc=0（16/16 · SKIP=0/DEGRADE=0/NOTE=2）。关键实证：①单点成立（`t4_note` 无 exit，判定在 `run.sh` 聚合层）②4 处 diff 归一键后与基线**逐字相同** ③三项负控自做（未知 tag ⇒ 非 full 不红 / full 红 / **dual 两端皆红**·摘实命中 `static-contract` ⇒ 红·无 tag ⇒ 非 full 不红 / full 红）④**dual 170s · 两组皆绿**，且「失败归因演练」能标出「失败组: 组2」⑤发布条款/PM 卡 v27/清单 33·41（自数）⑥AC7 干净。**O1（文档口径，PM 认账）** PRD AC3② 措辞「摘 `pin-fallback`」在 pin 已发布态会空转 ⇒ 改为「摘**当前实命中的** tag」（PM 在发布提交订正）· **O2** dual 实测 139–170s（PRD 预算改 ~3 分钟）· **O3** 报告由 PM 代提交 | 报告 `docs/reports/2026-10-28-T531-qa-verify.md` | PM 终验 → PR → 合并 → v0.19.2 |
 
 ## 挂起（被抢占 / 降级）
 
