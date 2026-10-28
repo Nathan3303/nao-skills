@@ -15,7 +15,7 @@
 
 1. codegraph 以**可选增强**引入：`check` 四态**全 warn**（索引 pending 由 rc=1 降为 warn），插件缺失/失效永不进 rc 通道，含 `--strict`。
 2. 口径单源在技能：三段阶梯「`codegraph_explore` → CLI → `grep -rn` + 行段」；卡片只写场景句 + 指针，唯一硬编码工具名 = `codegraph_explore`。
-3. 舰队 `spawn` 注入 `CODEGRAPH_TELEMETRY=0`；索引按仓 opt-in（本批仅本仓），sidecar 资源受实测门约束（>1.2GB 或锁冲突 ⇒ 删索引降级）。
+3. 舰队 `spawn` 注入 `CODEGRAPH_TELEMETRY=0`；索引按仓 opt-in（本批仅本仓），sidecar 内存以**进程树全集 PSS** 计量并受实测门约束（>1.2GB 或锁错 ⇒ 删索引降级）。
 
 ## 理由
 
@@ -34,18 +34,20 @@
 ## 后果与风险
 
 - 正面：口径单源、门禁语义收敛、下游零成本；负面：`Pending` 不再拉红 ⇒ 索引过期只能靠人读 `-v`。
-- 风险：6 并发 sidecar 对单一 SQLite 索引未验证（回退 = 删 `.codegraph/`）；上游工具集合与 env 名漂移（只认 `codegraph_explore` + 文档手工兜底）。
+- 实测（CLI 1.6.2 / 本仓 6 会话）：全集 PSS 675.7MB、同仓边际 +70–90MB/会话、每仓 daemon 基线 +155MB；6 并发读锁通过。
+- 风险：成本按**仓数**叠加（而非会话数）；上游工具集合与 env 名漂移（只认 `codegraph_explore` + 文档手工兜底）。
 
 ## 限制与已知边界
 
 - 插件自带 system prompt 指引在舰队内不生效（`--append-system-prompt` 抑制 + fallback 在 pi 1.4.0 是死代码），**截至 pi 1.4.0 / pi-codegraph 0.1.0**；口径由 nao 技能承载。
-- `pi --help -e` 类非会话调用会永久残留 `.pi/APPEND_SYSTEM.md`：只做 ignore + 文档，**不代跑清理**（nao 不得写用户/插件产物）。
+- 已建索引仓内**任何加载扩展的 `pi` 调用**（`list` / `install` / `--help -e`）会重写 `.pi/APPEND_SYSTEM.md` 并留下**每仓至多 1 棵**孤儿 daemon（≈177MB RSS）；只做 ignore + 文档，**不代跑清理**（nao 不写不删插件产物、argv 无仓库身份 ⇒ `pkill` 会跨仓误杀）；规避靠非索引 cwd 执行（`( cd /tmp && pi … )`）。
+- `check` 默认路径不 fork 第三方 CLI（pending 只在 `-v`/`ensure` 可见）。
 - 不覆盖：自动安装/建索引、下游 pin 升级、`--tools` 级抑制、插件内部失败可观测性。
 
 ## 相关指针
 
 - 骨架/规范：`.agents/checklists/deliverable-docs.md` §四 · 模式对照：`.agents/skills/arch-patterns.md`
-- 实施口径与待实测项：`docs/reports/2026-10-28-T532-arch-review.md` §二/§三
+- 实施口径与实测闭合项：`docs/reports/2026-10-28-T532-arch-review.md` §二–§三/§七
 
 ## 参考来源
 
