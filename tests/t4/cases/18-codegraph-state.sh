@@ -8,7 +8,9 @@
 #
 # 断言分组：
 #   A 四态前缀（默认 `check`，full=0）：未声明 / 已声明但无 CLI / 无索引 / 齐备（含 -v 提示）
-#   B AC11 零调用：默认 `check` 的 codegraph 调用 = 0（实现上仍有 2 次 grep fork，判据只数 codegraph）；`check -v` = 1；`ensure` 调用点静态 = full=1
+#   B AC11 零调用：默认 `check` 的 codegraph 调用 = 0（实现上仍有 2 次 grep fork，判据只数 codegraph）；
+#     位置纪律：0 次在**两个现场**各断言一次（B1 = A4 那轮默认 run 之后，B2 = pending 态默认 run 之后），
+#     防「断言漂到不相关 run 之后 ⇒ 恒 0 的假绿」；`check -v` = 1（B3）；`ensure` 调用点静态 = full=1（B4）
 #   C full=1 文本契约：pending / up to date / 不可解析（三态各命中一次）+ `--strict` 不升级
 #   D 变异负控（AC7）：① 摘插件条目 ② 摘 `.codegraph` ⇒ 各命中新前缀且 `check` rc 不变；还原后 md5 一致
 #   E 单源与遥测（BR5/BR10）：包名等值断言（fleet 常量 ↔ `bin/nao-skill.js`）+ spawn_one 字面量
@@ -77,14 +79,16 @@ t4_info "夹具：repo=$FX · agent_dir=$AG · stub=$STUB"
 
 # 运行夹具内的 check：$1=stub|nostub  $2=mode  $3...=check 参数
 C18_RC=0; C18_OUT=""
+C18_EXTRA_ENV=()   # 逐轮额外 env（显式；用完即清，避免跨轮泄漏）
 run_cg_check() {
   local kind="$1" mode="$2"; shift 2
   : > "$LOG"
   local path="$TOOLS:$NO_CG_PATH"
   [ "$kind" = "stub" ] && path="$STUB:$TOOLS:$NO_CG_PATH"
   local of ef; of="$(mktemp)"; ef="$(mktemp)"
+  # C18_EXTRA_ENV：额外环境（显式传入，不依赖 `VAR=… func` 这种函数前缀赋值的隐式作用域）
   ( cd "$FX" && env PI_CODING_AGENT_DIR="$AG" PATH="$path" \
-      CG_STUB_MODE="$mode" CG_STUB_LOG="$LOG" \
+      CG_STUB_MODE="$mode" CG_STUB_LOG="$LOG" "${C18_EXTRA_ENV[@]}" \
       bash .agents/scripts/nao-fleet.sh check "$@" ) >"$of" 2>"$ef"
   C18_RC=$?
   C18_OUT="$(cat "$of"; cat "$ef")"
@@ -118,6 +122,9 @@ t4_assert_eq "0" "$C18_RC" "A4 齐备（默认）：check rc=0"
 t4_assert_contains "$C18_OUT" "✓ codegraph 齐备" "A4 齐备：命中契约前缀 ✓（默认亦有该行）"
 t4_assert_contains "$C18_OUT" "索引新鲜度用 -v 查" "A4 齐备：默认文案含「新鲜度用 -v 查」（BR9 不静默）"
 t4_assert_contains "$C18_OUT" "生效依赖插件未被过滤/禁用" "A4 齐备：文案自带「已声明 ≠ 生效」保留（D3）"
+# B1（AC11 主现场）：上面这轮就是**默认路径**且 CLI 在场、索引在场 ⇒ 必须 0 次调用。
+# 位置纪律：紧跟其核对的那一轮 run_cg_check（曾漂到 D2 的 -v/no-stub 之后 ⇒ 变成 trivially 0 的假绿）。
+t4_assert_eq "0" "$(cg_calls)" "B1 默认 check（CLI 在场 + 有索引）：codegraph 调用 0 次（AC11）"
 
 # D2 夹具自证：剥 codegraph 后 node 仍可用（否则 `✗ node 缺失 ⇒ rc=1` 会假红）
 t4_assert_eq "ok" "$(cd "$FX" && env PATH="$TOOLS:$NO_CG_PATH" sh -c 'command -v node >/dev/null && echo ok || echo missing')" \
@@ -131,13 +138,16 @@ t4_assert_not_contains "$C18_D2OUT" "node 缺失" "D2 夹具含 package.json 时
 t4_assert_contains "$C18_D2OUT" "pi.extensions 声明 1 条且文件存在" "D2 夹具：pi.extensions 校验实际走到 node 分支"
 t4_assert_eq "0" "$C18_RC" "D2 夹具补 package.json 后 check 仍 rc=0（D2 修复生效）"
 
-# ============================================================ B AC11 默认零 fork
-t4_assert_eq "0" "$(cg_calls)" "B1 默认 check：codegraph 调用 0 次（零外部进程）"
-run_cg_check stub up -v
-t4_assert_eq "1" "$(cg_calls)" "B2 check -v：codegraph 调用 1 次（每仓一次 status）"
-# B3 ensure 调用点静态：必须是 full=1（否则 ensure 看不到 pending）
+# ============================================================ B AC11 调用次数
+# B2 默认路径的第二现场：pending 态 + CLI 在场，默认模式仍不得调 CLI（只报「齐备」，新鲜度留 -v）
+run_cg_check stub pending
+t4_assert_eq "0" "$(cg_calls)" "B2 默认 check（pending 态 + CLI 在场）：仍 0 次调用"
+t4_assert_contains "$C18_OUT" "✓ codegraph 齐备" "B2 默认 check：pending 态默认只报齐备（freshness 留 -v）"
+run_cg_check stub pending -v
+t4_assert_eq "1" "$(cg_calls)" "B3 check -v：codegraph 调用 1 次（每仓一次 status）"
+# B4 ensure 调用点静态：必须是 full=1（否则 ensure 看不到 pending）
 t4_assert_match "$(grep -n 'codegraph_state "\$repo"' "$FLEET" | head -1)" 'codegraph_state "\$repo" 1' \
-  "B3 ensure 调用点用 full=1（静态）"
+  "B4 ensure 调用点用 full=1（静态）"
 
 # ============================================================ C full=1 文本契约三态
 run_cg_check stub pending -v
@@ -241,7 +251,9 @@ t4_assert_not_contains "$C18_OUT" "warn=" "I1 codegraph 的 ! 态不计入 warn�
 t4_assert_contains "$C18_OUT" "! codegraph 插件已声明但 CLI 不在 PATH" "I1 第 2 行四态行仍在（不因不计数而静默）"
 t4_assert_eq "0" "$C18_RC" "I1 codegraph ! 态：check rc=0"
 
-NAO_MODEL_WHITELIST='a,,b' run_cg_check nostub up
+C18_EXTRA_ENV=(NAO_MODEL_WHITELIST='a,,b')
+run_cg_check nostub up          # codegraph 保持 `!` 态（已声明但 CLI 不在 PATH）+ 一条真 warn
+C18_EXTRA_ENV=()
 t4_assert_contains "$C18_OUT" "warn=1" "I2 codegraph ! + 一条真 warn ⇒ warn=1（不掩蔽真警告）"
 t4_assert_contains "$C18_OUT" "! codegraph 插件已声明但 CLI 不在 PATH" "I2 两行并存：真 warn 计数 + codegraph 四态行"
 t4_assert_eq "0" "$C18_RC" "I2 check rc=0"
