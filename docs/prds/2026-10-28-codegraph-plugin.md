@@ -82,7 +82,7 @@
 
 - **性能**：`check` 增量 ≤ 0.2s（两份 json，~5ms 实测原理）；禁止用 `pi list`（0.92s）。
 - **幂等**：新用例连跑 2 次一致、无残留；`M` 任务重跑 `codegraph init` 无破坏性。
-- **资源门（arch A6 · 阻塞 AC5）**：建索引后 2 → 6 会话，`ps -o rss= -p $(pgrep -f 'codegraph serve')` 求和：≤600MB 接受；600MB–1.2GB 接受 + README「资源」一行；**>1.2GB 或出现 `database is locked` ⇒ 回退** `rm -rf .codegraph`，策略降为「仅在单会话维护时建索引」，ADR 状态改「已落地但降级」。另测：6 会话齐开时改一个已索引文件，6 次 `codegraph status` 全可读且无锁错误。
+- **资源门（原 A6 口径已证有缺陷 · 待 arch B1 复议）**：原命令 `ps -o rss= -p $(pgrep -f 'codegraph serve')` **漏采** daemon/worker/watchdog（cmdline 为 `codegraph.js serve …`）且 RSS 求和重复计共享页 ⇒ 实测三个数并存（launcher-only 303.1MB · 全集 RSS 1439.0MB · 全集 PSS 675.7MB）。重定义方向 = **进程树全集 + PSS**；阈值沿用 ≤600 / 600–1200（README 一行）/ >1200 回退。另：**孤儿 daemon 泄漏**（非会话 `pi` 调用 → ppid=systemd --user 常驻 ~150MB）入风险登记，处置（文档一行 vs 机制兜底）待 B2。
 - **无网络**：机制零网络；插件零网络；舰队会话由 `spawn_one` 注入 `CODEGRAPH_TELEMETRY=0`（A3），用户手工终端由文档一行提示。
 - **兼容**：未装插件时行为与今天完全一致；不改 `roles.yaml`、不新增角色。
 - **可维护**：四态文本集中定义（用例与 `check` 共用），新增态只改一处。
@@ -93,7 +93,7 @@
 - **AC2（门禁强度）**：Given 未声明插件，When 跑 `check` / `check --strict` / `ensure <角色>`，Then 皆 rc=0 且会话正常拉起，提示含可复制命令；Given 索引 pending，When 跑 `check --strict`，Then 亦 rc=0（不升级）。
 - **AC3（技能口径可测性 · arch A5 降级）**：Given 改写后的技能，When 读 + 跑静态断言，Then ① 含 `codegraph_explore` 且文档清单与用例断言**同源**（声明式清单）② 其余 8 个工具名**零硬编码**（只允许「若该版本 MCP 暴露」措辞）③ CLI 段保留为回退且命令真实（`codegraph init`，不带 `-i`）④ `grep` + 行段兜底 ⑤ 两句必备：「有插件无索引/无 CLI ⇒ 不生效」、「插件不供 system prompt 指引（截至 pi 1.4.0 / pi-codegraph 0.1.0）」⑥ 「禁 cat 全文」在位。**不断言**工具集合为 9 个。
 - **AC4（口径统一 · 完整范围）**：Given 6 卡 + 3 清单 + `skills/pm-operations.md` + `templates/AGENTS.md.example`，When `grep -rn codegraph`，Then 每处为三段式或单句指针、无纯 CLI 指令、卡内 `codegraph_(search|callers|callees|impact|node|context|files|status)` **零命中**（`explore` 除外）、「插件不供指引」只出现在技能一处；6 卡 `version` 各 +1 且 `updated` 已改；`check` 卡片校验仍绿。
-- **AC5（本仓自用 · 维护型闭环 + 资源门）**：Given `M20261028-codegraph`，When **先冻结 T1/T2 实测文案**再装 CLI + 装插件 + `codegraph init`，Then `codegraph status` 真实文案已入契约、`git status --short` 无插件副产物、`check -v` 落「齐备」态；**A6 门必跑**（RSS 求和 + 6 次并发 `status`）且结果入台账（≤600MB / 600MB–1.2GB 带 README 一行 / >1.2GB 或锁错 ⇒ 回退删 `.codegraph/` 并改 ADR 状态）；DoD 四类逐条结清；遥测 env 生效性实测或标未验证。
+- **AC5（本仓自用 · 维护型闭环 + 资源门）**：Given `M20261028-codegraph`（已完成：CLI 1.6.2 · 插件 0.1.0 · 索引 4 files / 118 nodes / 500K · init 1.086s · `git status` 干净），When 验收，Then ① 文案以实测原件为契约（T1 三态原文）② **A6 门按 arch B1 重定义后的口径判定**（原口径已证漏采 daemon/worker/watchdog 且 RSS 求和重复计共享页）③ `check -v` 落「齐备」态 ④ daemon 与 `.pi/APPEND_SYSTEM.md` 的处置结论已入 README/技能（B2/B4）⑤ 台账 F1–F6 逐条三出口（F6 必须在本批合并前关闭）。
 - **AC6（AGENTS.md 订正）**：Given `AGENTS.md`，When 读项目属性/命令段，Then 「本仓无 CodeGraph 索引」已替换为「已有索引 + 原生入口优先」+ 指针，不复制技能正文。
 - **AC7（回归护栏 + 负控）**：Given `tests/t4/cases/18`，When 跑 `npm test`，Then 全绿且新断言 ≥ 8；两条文本变异（摘插件条目 / 摘 `.codegraph`）各自使**对应断言失败**（不是 `check` 失败），还原后 md5 一致。
 - **AC8（副产物纪律 · arch A4/A7）**：Given 已建索引仓内一次真实 pi 会话退出，Then `.pi/APPEND_SYSTEM.md` 不存在；Given `pi --help -e` 类非会话调用，Then 该文件被 `.gitignore` 覆盖、**任何提交零命中**（不断言文件必不存在）；Given cleanup/close，Then 机制未删除/未写入该文件（行为断言 + 代码零命中）。
@@ -106,7 +106,7 @@
 - **发布前置**：`check` rc=0 · `npm test` rc=0 · `npm run test:t4:full:dual` rc=0。
 - **回滚**：`git revert` 单提交；本仓索引属本地环境（删 `.codegraph/` 即回旧态）；资源门未过时**回退优先于延期**（删索引即可，幂等无数据损失）。
 - **监控信号**：后续 3 批若出现「插件齐备但角色仍 grep」，说明三段阶梯措辞不足 → 升为卡片硬性项。
-- **风险登记**：6 会话 sidecar 内存 · 同索引并发 sync/watch · `.pi/APPEND_SYSTEM.md` 残留（`pi --help`）· 上游 v0.1.0 工具集合漂移 · CLI 遥测 · 插件英文段在舰队内不生效（口径由 nao 承载）。
+- **风险登记**：6 会话 sidecar 内存（口径已修正，见 §六）· **孤儿 daemon 泄漏**（非会话 `pi` 调用后常驻 150MB，仅交互式 `codegraph daemons` 可停）· 同索引并发 sync/watch（锁测试已过）· `.pi/APPEND_SYSTEM.md` 残留（`pi install`/`pi list` 也触发）· 上游 v0.1.0 工具集合漂移 · CLI 遥测（已关且 strace 证实）· 插件英文段在舰队内不生效（口径由 nao 承载）。
 
 ## 九、变更治理与优先级
 
@@ -131,7 +131,17 @@
 
 - **裁决**：A1 **降为 warn**（唯一选项，不许「保留+豁免」；`--strict` 不升级）· A2 **采纳四态 + 文本作契约前缀**（含 BR5 改为 fleet 常量 + 用例等值断言、顺修 `PI_AGENT_DIR` 硬编码）· A3 **注入 `CODEGRAPH_TELEMETRY=0`**（位置 = `spawn_one` inner 命令；不加 `DO_NOT_TRACK`）· A4 **ignore 单文件**（不 ignore 整个 `.pi/`）· A5 **只写 `codegraph_explore`**（「不供指引」只写技能一处 + 版本戳）· A6 **有条件可接受**（RSS 门 ≤600MB / 600–1.2GB 带 README 一行 / >1.2GB 或锁错 ⇒ 回退删索引；结构事实：无 per-session 开关，杠杆只有「哪仓建索引」）· A7 **已知限制 + ignore + 文档**，不代跑 cleanup。
 - **条件（必须同步，已入 PRD）**：① rc 放松在 PRD 显式豁免（已入 BR1/AC9）② 状态文本匹配串须**先实测校准**（见下 T1）③ A6 资源门先跑 ④ BR5 单源兑现 ⑤ AC3/AC8 改写（已完成）。
-- **待实测（阻塞文案冻结 · M 前置）**：T1 `codegraph status` 真实文案（现实现匹配 `Pending Changes`，上游 README 写 `### Pending sync:` ⇒ **pending 分支可能恒不命中**，疑现存缺陷）· T2 `init` 是否收 `-i`（机制文案一律不带 `-i`）· T3 6 并发 RSS/锁（= A6 门）· T4 下游是否隐性依赖 `Pending ⇒ rc=1`（本仓 grep 无命中，下游未知）· T5 `CODEGRAPH_TELEMETRY=0` 是否真被 CLI 读取。
+- **待实测（阻塞文案冻结 · M 前置）**：T1 `codegraph status` 真实文案 · T2 `init` 是否收 `-i` · T3 6 并发 RSS/锁（= A6 门）· T4 下游是否隐性依赖 `Pending ⇒ rc=1` · T5 `CODEGRAPH_TELEMETRY=0` 是否真被 CLI 读取。
 - **风险 Top 3**：① 6 并发 sidecar/watcher 对单 SQLite（未验证，可能推翻「本仓起索引」；回退 = 删索引）② rc 放松的隐性依赖（AC9 最易在此破）③ 四态「单源」被实现成跨语言抽取（静默假阴性）。
 
-- 修订：2026-10-28 v1 首稿（用户 6 项拍板后）· 同日 v2（QA 接缝回执订正：工具集合版本相关 / 注入前提推翻 / 计数与范围修正 / `init -i` 不存 / rc 冲突与 AC 可测性）· 同日 v3（arch 裁决 A1–A7 落地：rc 降 warn + 显式豁免 / 四态契约前缀 / BR5 改常量+等值断言 / 遥测注入 `spawn_one` / ignore 单文件 / 卡片只写 explore / A6 资源门入 AC5 / T1–T5 实测前置）
+## 十二、M20261028-codegraph 实测回执（2026-10-28 · T1–T5 全结）
+
+- **T1 status 文案（已证伪「恒不命中」担心）**：① `✓ Index is up to date`（rc=0）② 段标题 `Pending Changes:` + `  Modified:  1 files` + `ℹ Run "codegraph sync" to update the index`（rc=0）③ 空目录 `⚠ Not initialized` + `ℹ Run "codegraph init" to initialize`（rc=0）。现实现 `check_codegraph:287-295` 与 `cmd_check:1200-1215` 的三条匹配串**全中** ⇒ 本批只需删 `:1207` 的 `rc=1`，**文案不改**。三态 rc 恒 0 ⇒ rc 不可作状态信号（支持 A1）。
+- **T2 命令冻结**：`codegraph init --help` 原文 `-i, --index  Deprecated: indexing now runs by default` ⇒ `-i` **被接受但已废弃**，机制文案一律 `codegraph init`。其他已冻结：`sync` / `status [--json]` / `serve --mcp [-p] [--no-watch]` / `telemetry [status|on|off]`；关遥测真实命令 `codegraph telemetry off`。
+- **T3 资源（口径缺陷 ⇒ 待 arch B1 复议）**：A6 原命令只命中 launcher ⇒ **303.1MB**；全集 20 进程 RSS **1439.0MB** / PSS **675.7MB**（含 1 仓共享 daemon 288.1MB）；单会话 5 进程 RSS 468.1 / PSS 319.7 ⇒ 边际 **+194.2MB RSS**。并发锁：6 次 `status` rc 全 0，`database is locked`/`sqlite_busy` **0 命中**。
+- **T4 下游**：本仓 + 三仓 scripts/CI **0 命中**；nao-todo 曾做过同一放松（CHANGELOG `TASK-16`：索引警告不计退出码）⇒ 支持 A1。
+- **T5 遥测**：`telemetry off` 落 `~/.codegraph/telemetry.json`；`strace` 对照——无 env 时 `connect(:443)` 1 次，`CODEGRAPH_TELEMETRY=0` 时 **0 次** ⇒ A3 注入有效且不注入确有出网副作用。
+- **新发现（F6 同类风险 · 待 arch B2/B4）**：在本仓跑**非会话** `pi list` 会留下**孤儿 daemon** — 实测 pid 118097 **ppid=884（systemd --user）**、etimes 88s 仍活、**RSS 149012KB / PSS 127269KB**；`codegraph daemons` 只能交互式停止（无 `--stop`）。同理 `.pi/APPEND_SYSTEM.md`（2109 B）已被 `pi install` / `pi list` 触发 ⇒ **A7 触发面比「`pi --help -e`」宽**（任何加载扩展的非会话调用）。
+- **遗留（台账 `docs/reports/M20261028-codegraph-followups.md`）**：F1 关闭 · F2 接受至 2026-11-28（nao-todo-server 有 `.codegraph/.gitignore` ⇒ 目录在无索引，205.7MB/会话）· F3 随 F6 · F4 关闭 · F5 接受至 2026-12-28（插件 0.1.0 × CLI 1.6.2 版本耦合）· **F6 转办（本批合并前必须裁定）**。
+
+- 修订：2026-10-28 v1 首稿（用户 6 项拍板后）· 同日 v2（QA 接缝回执订正）· 同日 v3（arch 裁决 A1–A7 落地）· 同日 v4（M 任务实测回执：T1–T5 全结 · F6 门口径缺陷 + daemon 泄漏登记 §十二 · AC5 待 arch B1 复议后定稿）
