@@ -29,5 +29,5 @@
 
 - 角色清单与别名：`.agents/roles.yaml`（唯一事实；卡片 frontmatter 与其一致，`check` 校验）。
 - 本文档构建与机制：本仓不复制任一机制条款到本文件——需要时引用 `.agents/` 内文件，勿双写。
-- 布局/宿主/句柄语义：`.agents/scripts/nao-fleet.sh` + `.agents/common/intercom-protocol.md`（tmux 布局三选一，窄列回退 `main-col → grid`）。
+- 布局/宿主/句柄语义：`.agents/scripts/nao-fleet.sh` + `.agents/common/intercom-protocol.md`（唯一运行前提 = tmux 会话内 + pi ≥1.4.0；布局三选一，窄列回退 `main-col → grid`）。
 - 文档规范：`.agents/checklists/deliverable-docs.md`（PRD/ADR/报告/调研统一骨架；默认不用表格）。

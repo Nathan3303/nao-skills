@@ -1,6 +1,6 @@
 # ADR：非 tmux 宿主的舰队派生（宿主阶梯 + 派生方式 + 句柄模型）
 
-- 状态：**已接受** · 日期：2026-10-12 · 出具：arch-designer（T513-A 终签）· 落地：rd-infra
+- 状态：**已废弃（被 2026-10-27-strict-tmux-pi 取代）** · 日期：2026-10-12 · 出具：arch-designer（T513-A 终签）· 落地：rd-infra
 - 指针：PRD `docs/prds/2026-10-12-non-tmux-host-spawn.md`（§5/§7/§9）· Issue #26 · 分支 `feat/26-non-tmux-host-spawn`
 ## 背景
 

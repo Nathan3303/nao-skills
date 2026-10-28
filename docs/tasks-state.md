@@ -8,6 +8,7 @@
 
 > 本区是 PM 的**悬空状态**（任务状态见下方五栏）；重开后逐行回读确认（当前阶段 · 未决决策 · 口头约束）。
 
+- 🔄 **T529 批次开工（2026-10-27 · Issue [#48](https://github.com/Nathan3303/nao-skills/issues/48)）**：**绑定 tmux + pi** —— 删净 5 档宿主阶梯（≈215/1947 行）+ `NAO_TERMINAL` 白名单 + `xdg-terminal-exec` + 四种窗口句柄查询 + screen 分支；非 tmux **rc=3 硬失败 + 一行提示**（不半启动）；`check` 增 `pi ≥ 1.4.0` 断言；删 T523「无法确认在线状态」护栏（**断言净减一次性豁免**，须报新旧基线）；新 ADR 取代 `2026-10-12-non-tmux-host-spawn`。PRD = `docs/prds/2026-10-27-strict-tmux-pi.md`（AC1–AC9）· 分支 `feat/48-strict-tmux-pi`（base `main` = `8b0d927`）· 用户拍板 7 项（最彻底 / pi 硬检查 / v0.19.0 一步到位 / 硬失败 / pi ≥1.4.0 / 删护栏允许净减 / 下游自然升级）+ 开工卡 D1–D4（现在开工 / **轻量 arch** / **rc=3** / 净减须报差额）。**下一步 = arch 轻量评审 → 派 rd-infra-T529**。
 - ✅ **T528 交付闭环（2026-10-27 · Issue #46 · PR [#47](https://github.com/Nathan3303/nao-skills/pull/47) squash `3e98f0d`）**：**任务完成协议**落地 —— 新技能 `.agents/skills/task-completion.md`（49 行五节：任务单元 / DoD 四类 / 维护型补充判据 / 遗留项三出口 / 分级复盘）+ `comm-templates.md` 两回执模板各加 `遗留：` 枚举 + PM 卡 **v26**（§六 任务完成闸门 · 红线 33 · 清单 40）+ rd-infra 卡 **v3**（维护型 DoD：audit 与 install-scripts 必须决策）+ `checklists/pm.md` +2/红线 +1 + `AGENTS.md` 1 行 · 首个实例 = `docs/reports/M20261014-pi-ext-update-followups.md`。**验收 = 通过（AC1–AC9）**：QA 独立复核 GO（`check` rc=0 roles=6 **files 49→50** · `npm test` rc=0 17/17 · SKIP=0/DEGRADE=0）→ QA 提 D1–D4，**PM 裁定全部合并前修**（`608a941` 净 9+/8-）→ **QA 点检 4/4 修好**（附 3 条 P3 观察，PM 裁定不改：F3「—（已关闭）」占位 / 「上线闭环」映射 `github-flow §发布（阶段 7）` / 行数口径偏差）→ PM 终验 + 验收评论 issuecomment-6445928184 = 授权合并 → RD squash **`3e98f0d`**（main 恰 1 条 · 无 `wip()` · 分支删净）。**交付**：tag `v0.18.6` + Release 已发（`8e90f34` · name 严格 = `v0.18.6`）· **npm 已核验**（`latest` = 0.18.6 · integrity 与本地 tarball 逐字节一致）· 派生会话已回收。**发布前置** `test:t4:full`（PM 空载）rc=0 · SKIP=0/DEGRADE=0 · 17/17。**E0 纪律条款**（未加脚本闸门；E1 升级门槛 = 连续 2 批「遗留项失忆」）。**P3 观察（转办）**：「事故」阈值仅半句界定，边界事件依 PM 判断 —— 若后续出现判歧义，按 E1 门槛一并评估。
 - 📣 **角色卡广播待发（本批 2 条 + 下游）**：`card pm v26` / `card infra v3` —— 发时确认目标会话**在线且 idle** 并留痕；20:2x 实测本仓仅 PM 在线（常驻 rd-infra 已退出），故本仓与下游三仓一并待补发。触发条件 = 目标会话唤醒。
 - ✅ **T527 已合并 + 已发布（2026-10-27 · PR #45 · squash `fb4c106`）**：验收 **通过（AC2–AC8 全过）** —— QA 独立复核 GO（`check` rc=0 ×2 roles=6 **files=49** · `npm test` rc=0 99s · **17/17 PASS · PASS 449**（449−45=404 基线）· 空载 `test:t4:full` rc=0）× PM 独立重跑 `check` rc=0/files=49 + 读实现核对 AC2–AC8（命名/锚点单点/manifest/逃生阀）+ **AC8 口径订正 48→50 ⇒ 48→49**（QA R2）· 报告入库 `3ba2d5e` · PR #45 ready + 验收评论 issuecomment-6444421262 = 授权合并 · RD 执行 squash **`fb4c106`**（main 恰 1 条 · 无 `wip()` · 远端/本地分支删净）· 发布前置 `test:t4:full`（PM 空载）**rc=0 · SKIP=0 / DEGRADE=0 / 17 例全 PASS**。**R1（中 · 发布闭环硬条件）**：npm 注册表 → `pi.extensions` 未直接观测，发布后必做冒烟（`pi install -l --approve npm:@nathan33/nao-skill@0.18.5` → `subagent list` 见 6 个 `nao-*`）。**发布期发现并已在发布提交修正的缺陷**：合并后 `package.json` 仍为 `0.18.4`（需求 PR 未升版，本仓惯例 = PM 在发布提交里 pin 升）⇒ `60319c7` 升 **0.18.5** · 本地 tarball `/tmp/nathan33-nao-skill-0.18.5.tgz`（138,414 B · `sha512-KaiKq2xPlJ0cRAI2fqRhuR1wBo3bybRvnpkE1a3MYPsqK/ZH3Ny8VnGHLqXrOIZe8vlwpSrEDO3cHbBmhM+6Mw==`）· tag `v0.18.5` + Release 已发（`gh release view` name = `v0.18.5` ✓ 裸版本号，target `60319c7`）· **npm 重发已核验**（用户执行 · `latest` = **0.18.5**，`dist.integrity` = `sha512-KaiKq2xPlJ0cRAI2fqRhuR1wBo3bybRvnpkE1a3MYPsqK/ZH3Ny8VnGHLqXrOIZe8vlwpSrEDO3cHbBmhM+6Mw==` **与本地 tarball 逐字节一致**）· **R1 已闭环（2026-10-27 实测）**：夹具 `pi install -l --approve npm:@nathan33/nao-skill@0.18.5` → 装到 **0.18.5** → `subagent list` 输出 `Runtime agents` **6 条**（`nao-arch-designer / nao-pm / nao-qa / nao-rd-be / nao-rd-fe / nao-rd-infra`，description 取自各角色卡）⇒ 注册表路线确认可行，无需回退。合并期 anomalies（RD 已闭环）：gh squash 服务端成功但本地善后 rc=1（因 PM 在 tasks-state 有未提交改动）· 分支由 RD 补删 · `pull --ff-only` rc=128（`pull.rebase=true` 相冲，等价 `merge --ff-only` rc=0）。
@@ -155,18 +156,28 @@
 
 | 任务编号 | 目标会话 | 概要 | 排队原因 |
 | :--- | :--- | :--- | :--- |
+| T529-rd | rd-infra-T529 | 删宿主阶梯 + 非 tmux rc=3 硬失败（fail-fast 无副作用）+ `check` pi ≥1.4.0 断言 + close 收窄（删 T523 段）+ 新 ADR/旧 ADR 废弃 + 文档收窄 + `docs/releases/v0.19.0.md`（AC1–AC7） | 依赖 arch 回执 |
+| T529-qa | qa-T529 | 独立复核 AC1–AC9：删除面 grep 归零 · 行数对照 · 非 tmux 四命令 rc=3 且无 session/pane/lock · tmux 内三命令行为等价 · pi 版本断言正负控 · **新旧断言基线对照** · ADR 结构 | 依赖 T529-rd 回执 |
+| T529-D3 | （backlog · 无会话） | **`MIN_PI_VERSION` 常量提炼**：`nao-fleet.sh:1225` 文案硬编码「< 1.4.0」与 `:311-316` 阈值 `c1/c2` 魔术数并存（负控抬到 9.9.9 时输出「1.4.0 < 1.4.0」自相矛盾）；不影响 AC3，可随时做 | QA D3 转办（本批不做）|
 | M20261014-F1 | （用户环境 · 不入舰队） | **到期重评** `pi-ask-me` 旧 SDK 子树 12 high（已接受）· 台账 `docs/reports/M20261014-pi-ext-update-followups.md` | 定时：**2026-11-14** 或上游 `pi-ask-me` 升版时 |
 
 ## 进行中
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| T529 | rd-infra-T529（已回执）→ qa-T529（复核中） | **实现已落地** `da50fcc`：`nao-fleet.sh` 1947→**1591**（净减 356）· 非 tmux rc=3 单行（`cleanup` 豁免 rc=2）· `check` 增 tmux+pi≥1.4.0（失败 rc=1 聚合不早退）· close 收窄（`无法确认在线`=0）· `cases/11` 退役 + `cases/13` 改写 · 新 ADR 54 行 + 旧 ADR 标废弃（正文零改）+ derived 零 diff · `v0.19.0` notes。**断言差额（QA 独立重算 · 双口径 · RD 原报 438→280 不可复现已作废）**：调用点 **261→252（-9）** / 运行期 PASS 行 **483→391（-92；全绿口径 485→391 = -94）**；去处 = `cases/11` **-85** · `cases/13` -8 · `cases/15` -1，其余 14 例零漂移 | 2026-10-28 | AC1–AC7 | `da50fcc` |
 
 ## 已回执待验收
 
 | 任务编号 | 回执摘要（≤150字） | 详情路径 | 待办 |
 | :--- | :--- | :--- | :--- |
 
+
+| T529-arch | done(lite)：**可行无阻塞** · 14 项三态（可删 12 / 成组连带 2 / **必须保留 0**）· `screen_token_for`/`screen_present` 被 `status`/`close` 硬依赖（`running():654` / `close:1713`）⇒ 成组连删 6 处 · **10 项清单外漏项**（app-id 三函数+close 分支 ≈45 行 · pid pipe ≈20 行 · `TMUX_ENV_SCRUB` · `NAO_TERMINAL_LIST` · `offline_verifiable` · `visible_session_names` · `--background` · `spawn_tmux` else 分支 · `check` 宿主阶梯段 · 头注释）⇒ 净减 ≈240 · ADR 够格 + 3 条硬要求 · **11/12 仅内部 return 码，无外部可见退出码消失** · 两处待确认（cleanup 豁免 / cases 11 实体退役）→ **PM 已拍板并入 PRD（D5–D9）** | `docs/reports/48-arch-review.md`（96 行）+ `5cb78b5` | 已转 RD 实施 |
+
+| T529-rd | done(full) `da50fcc`：见上「进行中」行；DoD 四类齐（产物 / 验证含 AC1·AC3·AC8 实测 / 遗留 1 项 / 交接）· 遗留 = 下游三仓旧 pin（接受，到期 = v0.19.0 发布 +30 天）· **需 PM 定 3 事**：ADR 状态改「已落地」时机 · `package.json` pin 升（发布时）· 报错文案不带 `DEGRADED:` 前缀（PM 裁定：**接受**，rc=3 已区分语义，该词属旧降级语义遗留） | commit `da50fcc` | 等 qa-T529 独立复核 |
+
+| T529-qa | done(full) `9333159`：**9 项全查通过**（AC1 三命令 rc=3 且各恰 1 行、panes/sessions/clients/tmp 哈希前后一致无 lock；AC2 名单 grep=0（base 82）；AC3 1.3.9⇒✗+rc=1 且体检照跑、beta⇒rc=1、1.4.0⇒rc=0；AC4 cases/11 删净 + run.sh 无 11 + T513 实体 numstat=1/0 + cases/13 11 条全 PASS；ADR 54 行 5 节 4 字段合规、旧 ADR 仅状态行、derived 零 diff；release notes 首屏破坏性 + 两句迁移、0 表格）+ 双向负控翻红 md5 还原。**缺陷 D1（一般）**：RD 断言数字不可复现 → **PM 已按双口径更正台账**（见「进行中」行）+ PR 同步；**D2（轻微）** `tests/README` 的 13 行 DEGRADE 编号 ③④→**⑥⑦** → 已回派 RD 随批修；**D3（轻微）** `MIN_PI_VERSION` 常量提炼 → **转办 backlog**。报告 `docs/reports/48-qa-verify.md`（53 行） | `9333159` | D2 回执后 → PM 终验 → PR |
 
 ## 挂起（被抢占 / 降级）
 

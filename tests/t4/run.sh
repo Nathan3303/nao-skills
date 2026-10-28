@@ -18,7 +18,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 
-CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12" "13" "14" "15" "16" "17")
+CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "12" "13" "14" "15" "16" "17")
 CASE_TITLES=(
   "主路径足迹 + check exit=0（AC1）"
   "设计一致性：注册 skill 数==2 且无 collision（AC1/AC6）"
@@ -30,9 +30,8 @@ CASE_TITLES=(
   "评审修复回归：F1 lock 保缩进 + F2 init --force 走 migrate 防混装"
   "T509 别名解析 / check 守卫 / close 跨仓回收（#19）"
   "T510 migrate 收尾：shim 判定式 / 开关 / 单行 lock 去重 / B2（#21）"
-  "宿主阶梯 / 失败语义 / 非 tmux 句柄（#26）"
   "派生会话 tmux 落点：宿主窗口显式寻址（T517 · AC1–AC7）"
-  "close 末段在线判定护栏：不可验证 ⇒ 非静默失败（T523 · AC2–AC8）"
+  "close 前提与末段：非 tmux ⇒ exit 3 单行提示；tmux 内名册离线 ⇒ 「未运行」rc=0（T529 · AC1/AC4）"
   "夹具缓存生命周期：成功清理 / 失败保留 / 用户目录永不删（T524 · BR3–BR10）"
   "子代理会话（subagent-*）在 status/close 的显式识别与排除（T525 · AC2–AC8）"
   "子代理桥口径：模板 G1–G3 + 协议条款 + 配置 schema（T526 · AC2–AC7）"
@@ -65,7 +64,7 @@ fi
 
 if [ -n "$arg_err" ]; then
   printf '参数错误: %s\n' "$arg_err" >&2
-  printf '用法: bash tests/t4/run.sh [--list | --preflight | --case <01-17>]\n' >&2
+  printf '用法: bash tests/t4/run.sh [--list | --preflight | --case <用例编号>]\n' >&2
   exit 1
 fi
 

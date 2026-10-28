@@ -14,8 +14,12 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 t4_require_cmd node
 
 FIX_SESS="t4c09-$$"
+# T529：真回收组用**隔离 socket**（不碰生产默认 server；T516 纪律），并以其作 $TMUX 过入口闸门。
+C09_SOCK="$T4_CACHE_DIR/c09-sock/tmux-$(id -u)/default"
+C09_TMUX_REAL="$C09_SOCK,$$,0"
+t09() { tmux -S "$C09_SOCK" "$@"; }
 cleanup_c09() {
-  command -v tmux >/dev/null 2>&1 && tmux kill-session -t "$FIX_SESS" 2>/dev/null || true
+  command -v tmux >/dev/null 2>&1 && t09 kill-server >/dev/null 2>&1 || true
   t4_cache_cleanup   # BR10：本 trap 会覆盖 lib.sh 的 EXIT trap，串一次清理（仅影响单跑 09；经 run.sh 时 OWNED=0，无害）
 }
 trap cleanup_c09 EXIT
@@ -56,9 +60,14 @@ JS
   printf '%s' "$d"
 }
 
+# T529：ensure/status/close 只接受「tmux 内」——探针用**不存在的假 socket** 过闸门（不接触真 server）；
+#   本机若真在 tmux 内则沿用真 $TMUX（真回收组需要真 server）。
+C09_TMUX_FAKE="/tmp/nao-t4-c09-$$,1,0"
+C09_TMUX="${TMUX:-$C09_TMUX_FAKE}"
+
 fx_fleet() { # $1=夹具根；其余 = fleet 参数（可前置 KEY=VAL 环境变量）
   local d="$1"; shift
-  t4_run_in_dir "$d" env NAO_SKILLS="$d" NAO_TASKS_STATE="$d/.none.md" \
+  t4_run_in_dir "$d" env TMUX="$C09_TMUX" NAO_SKILLS="$d" NAO_TASKS_STATE="$d/.none.md" \
     bash "$d/.agents/scripts/nao-fleet.sh" "$@"
 }
 
@@ -127,42 +136,43 @@ ROSS="[{\"name\":\"qa-T508\",\"id\":\"qa-T508\",\"status\":\"idle\",\"cwd\":\"$O
 
 # 名册报在线（cwd=另一仓）但无存活 pane ⇒ 必须非静默（非 0 且不报「未运行（无需回收）」）
 T4_OUT=""; T4_ERR=""; T4_RC=0
-t4_run_in_dir "$FX_N" env NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$ROSS" \
+t4_run_in_dir "$FX_N" env TMUX="$C09_TMUX" NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$ROSS" \
   bash "$FX_N/.agents/scripts/nao-fleet.sh" close --task T508 qa
 t4_assert_ne "0" "$T4_RC" "AC3: 跨仓 qa-T508 未定位到句柄 ⇒ 非 0"
 t4_assert_not_contains "$T4_OUT" "未运行（无需回收）" "AC3: 不得报「未运行（无需回收）」而 pane 未回收"
 
 # 派生会话名（无 --task）不得静默 no-op
 T4_OUT=""; T4_ERR=""; T4_RC=0
-t4_run_in_dir "$FX_N" env NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$ROSS" \
+t4_run_in_dir "$FX_N" env TMUX="$C09_TMUX" NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$ROSS" \
   bash "$FX_N/.agents/scripts/nao-fleet.sh" close qa-T508
 t4_assert_ne "0" "$T4_RC" "AC3: close qa-T508（无 --task）不得 rc=0 静默 no-op"
 t4_assert_not_contains "$T4_OUT" "未运行（无需回收）" "AC3: close qa-T508 不得静默报「未运行」"
 
 # 回归：确实不在线仍应 rc=0 + 「未运行（无需回收）」（不过度矫正为恒失败）
 T4_OUT=""; T4_ERR=""; T4_RC=0
-t4_run_in_dir "$FX_N" env NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER='[]' \
+t4_run_in_dir "$FX_N" env TMUX="$C09_TMUX" NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER='[]' \
   bash "$FX_N/.agents/scripts/nao-fleet.sh" close --task T508 qa
 t4_assert_eq "0" "$T4_RC" "AC3 回归: 名册无记录且无句柄 ⇒ 未运行 rc=0"
 t4_assert_contains "$T4_OUT" "未运行（无需回收）" "AC3 回归: 输出「未运行（无需回收）」"
 
 # 真回收（tmux 可用时）：自建跨仓 pane（标题契约 + 名册 tmuxPane），验「真的关掉」
 if command -v tmux >/dev/null 2>&1; then
-  tmux kill-session -t "$FIX_SESS" 2>/dev/null || true
-  if tmux new-session -d -s "$FIX_SESS" -c "$OTHER" 2>/dev/null; then
-    pane="$(tmux list-panes -t "$FIX_SESS" -F '#{pane_id}' 2>/dev/null | head -1)"
-    tmux select-pane -t "$pane" -T "π - qa-T509R - $(basename "$OTHER")" 2>/dev/null || true
-    tmux send-keys -t "$pane" 'sleep 300' Enter 2>/dev/null || true
+  mkdir -p "$(dirname "$C09_SOCK")"; chmod 700 "$(dirname "$C09_SOCK")"
+  t09 kill-server >/dev/null 2>&1 || true
+  if t09 new-session -d -s "$FIX_SESS" -c "$OTHER" 2>/dev/null; then
+    pane="$(t09 list-panes -t "$FIX_SESS" -F '#{pane_id}' 2>/dev/null | head -1)"
+    t09 select-pane -t "$pane" -T "π - qa-T509R - $(basename "$OTHER")" 2>/dev/null || true
+    t09 send-keys -t "$pane" 'sleep 300' Enter 2>/dev/null || true
     ROSS2="[{\"name\":\"qa-T509R\",\"id\":\"qa-T509R\",\"status\":\"idle\",\"cwd\":\"$OTHER\",\"tmuxPane\":\"$pane\"}]"
     T4_OUT=""; T4_ERR=""; T4_RC=0
-    t4_run_in_dir "$FX_N" env NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$ROSS2" \
+    t4_run_in_dir "$FX_N" env TMUX="$C09_TMUX_REAL" NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$ROSS2" \
       bash "$FX_N/.agents/scripts/nao-fleet.sh" close --task T509R qa
-    if tmux list-panes -t "$FIX_SESS" -F '#{pane_id}' 2>/dev/null | grep -qxF "$pane"; then
+    if t09 list-panes -t "$FIX_SESS" -F '#{pane_id}' 2>/dev/null | grep -qxF "$pane"; then
       t4_bad "AC3: 真回收失败——跨仓 pane $pane 仍存活（rc=$T4_RC）"
     else
       t4_ok "AC3: 真回收跨仓 pane $pane（已关闭）"
     fi
-    tmux kill-session -t "$FIX_SESS" 2>/dev/null || true
+    t09 kill-server >/dev/null 2>&1 || true
   else
     t4_note "AC3: tmux 夹具会话创建失败（环境限制），真回收断言跳过"
   fi
