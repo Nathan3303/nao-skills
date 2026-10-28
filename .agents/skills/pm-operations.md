@@ -12,7 +12,7 @@ description: 按需技能——PM 运行手册（调度细则 / 开工确认卡 
 - **准入判定**：先 `intercom status` + `list`；不可用立即降级不重试。
 - **会话登记**：用户提供名称**及角色标注**（`fe-dev`/`be-dev`/`qa`/`infra`）；**未标注禁止猜测**，必须补问。
 - **舰队启动**：不在线先拉起再 `list` 验证（`ask` 仅对在线会话）：`bash .agents/scripts/nao-fleet.sh ensure <别名>[@<repo目录>]`；项目独立于 nao-skills 仓库时用 `bash "$NAO_SKILLS/.agents/scripts/nao-fleet.sh" ...`。
-- **环境自检（开工确认后、派发前）**：`bash .agents/scripts/nao-fleet.sh check`——默认单行摘要（完整报告不进 PM 上下文），`warn>0` 或失败加 `-v`；**exit code 非 0（硬错误）→ 停止派发**（白名单 / CodeGraph 处置见 intercom-protocol「开工前自检」）。
+- **环境自检（开工确认后、派发前）**：`bash .agents/scripts/nao-fleet.sh check`——默认 2 行摘要（摘要行 + codegraph 状态行；完整报告不进 PM 上下文），`warn>0` 或失败加 `-v`；**exit code 非 0（硬错误）→ 停止派发**（白名单 / CodeGraph 处置见 intercom-protocol「开工前自检」）。
 - **架构评审闸门**：PRD 涉及架构/NFR/选型时，开工确认后、派发前 `send` arch-designer 评审。纯 CRUD 跳过。
 - **派发协议（省 token）**：一条消息给 `编号 + 范围 + 引用路径（docs/...md#section）+ AC 编号 + 回执级别 + 需求分支（feat/<issue-id>-<slug>）`；**不贴 PRD/方案全文、不用 `attachments` 传全文**（worker 自己读文件，PM 上下文不留副本）；worker `ask` → PM `reply`。
 - **忙闲闸门**：`list` 见目标在线**且 `idle`** 才派完整任务；忙碌（`thinking`/`tool:*`）→ **不投递任务内容**，记入待派发队列（`docs/tasks-state.md`），转 `idle` 再派；**紧急**才抢占（交互会话可 steer 注入并注明 `紧急抢占：…回执须报告挂起任务状态`；非交互会话只能排队）。

@@ -9,7 +9,7 @@
 #
 # 用法
 #   nao-fleet.sh check [--strict] [-v]            静态体检：roles.yaml/缩进/EOL/角色卡/交叉引用/PR 模板/白名单/布局/tmux+pi 前提
-#                                                 默认单行摘要（含 warn 计数）；-v 展开完整报告；失败始终展开
+#                                                 默认摘要 2 行：摘要行 + codegraph 状态行（四态之一）；-v 展开完整报告（六态全展开）；失败始终展开
 #   nao-fleet.sh status                           角色会话在线状态（按 tmux 终端标题/名册判定；权威名单见 intercom list）
 #   nao-fleet.sh ensure <别名>[@<repo>] [更多...]  拉起角色窗口（默认工作区=roles.yaml workspace）
 #   nao-fleet.sh ensure -m <model> <别名>...       显式指定模型（须命中白名单）
@@ -90,7 +90,7 @@ TMUX_MIN_PANE_WIDTH_DEFAULT=30
 TMUX_MIN_PANE_WIDTH="${NAO_TMUX_MIN_PANE_WIDTH:-$TMUX_MIN_PANE_WIDTH_DEFAULT}"
 # T517：派生宿主窗口 ID（归一化 @<window_id>；空 = 定位失败 ⇒ 该角色 pane warn+skip，禁无 -t 续建）
 HOST_WINDOW=""
-# check 输出契约：默认单行摘要（省 PM 上下文），-v 展开完整报告；失败始终展开
+# check 输出契约：默认摘要 2 行（摘要行 + codegraph 状态行，四态之一），-v 展开完整报告（六态全展开）；失败始终展开
 VERBOSE=false
 # close 的在跑 turn 判定（pi 默认状态行：Working (esc to interrupt) / Thinking... / Retrying / Compacting）
 CLOSE_BUSY_PATTERN="${NAO_CLOSE_BUSY_PATTERN:-Working \(|Thinking\.\.\.|to interrupt|to cancel|Retrying \(|Compacting|Summarizing branch}"
@@ -1630,7 +1630,9 @@ fi
 
 case "$CMD" in
   check)
-    # 默认单行摘要（派发前自检只需 exit code + 计数；完整报告 30+ 行不进 PM 上下文）；-v 或失败时展开
+    # 默认摘要 2 行（派发前自检只需 exit code + 计数 + codegraph 态；完整报告 30+ 行不进 PM 上下文）；-v 或失败时展开
+    # warn 计数口径：报告里所有 `  ! ` 行（含 codegraph 的四类 `!` 态：CLI 不在 PATH / 无索引 / pending / 不可解析）
+    #   都计入摘要的 warn=N，但 codegraph 的任何状态**都不进 rc**（BR1：codegraph 永不计入退出码）。
     # 子 shell 隔离：cmd_check 内部 die/exit 不得吞掉报告（计数从报告解析，不靠子 shell 内变量）
     REPFILE="$(mktemp)"
     set +e

@@ -54,7 +54,7 @@ npm run test:t4:full:dual                      # 发布前置**双环境** gate�
 | 15 | 子代理会话（`subagent-*`）在 `status`/`close` 的显式识别与排除（汇总计数 / 显式拒绝且父 pane 存活 / E2 孤儿 pane 告警回归 / 前缀边界 / `check` 守卫） | AC2–AC8 · T525 | `tmux`（缺则 SKIP）· `tsx`（名册注入，缺则 T1–T9 DEGRADE）；T10 纯 bash |
 | 16 | 子代理桥口径：模板 G1–G3 契约 + 无目标占位符 + 安装说明 + 协议小节四条 + pi-subagents 配置 schema 接受/拒绝 | AC2–AC7 · T526 | `pi-subagents`（缺则 SKIP）；纯 Node 只读探针，不依赖 tmux/tsx/网络 |
 | 17 | 角色→子代理 agent 单一事实：装配字节比对（卡正文去 frontmatter）· 锚点 cross-assert · 命名双向 · 假总线注册 ×6 + 幂等 + 逃生阀 + 三态负控 | AC2–AC7 · T527 | `pi-subagents`（缺则 SKIP）；纯 Node 只读探针 + 夹具副本，零 LLM/零网络，不依赖 tmux/tsx |
-| 18 | codegraph 四态检测（默认 4 行 / `-v` 6 行）：四态前缀 + 默认零 fork（AC11）+ `--strict` 不升级 + 两条变异负控（摘插件条目 / 摘 `.codegraph`，md5 还原）+ 包名等值 + 遥测字面量 + 副产物静态面 + 技能/卡口径 | AC1/AC2/AC3/AC4/AC7/AC8/AC11 · T532 | 无（纯 bash + 夹具 stub，零 daemon）；真 CLI 原文缺能力 ⇒ `[NOTE] static-contract` |
+| 18 | codegraph 四态检测（四态：默认取其一回显 / `-v` 六态全展开）：四态前缀 + 默认零 fork（AC11）+ `--strict` 不升级 + 两条变异负控（摘插件条目 / 摘 `.codegraph`，md5 还原）+ 包名等值 + 遥测字面量 + 副产物静态面 + 技能/卡口径 | AC1/AC2/AC3/AC4/AC7/AC8/AC11 · T532 | 无（纯 bash + 夹具 stub，零 daemon）；真 CLI 原文缺能力 ⇒ `[NOTE] static-contract` |
 
 ## NOTE 白名单（T531 · `t4_note <tag> <msg>`）
 

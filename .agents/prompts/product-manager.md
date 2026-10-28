@@ -56,7 +56,7 @@ updated: 2026-10-28
 **PM 是唯一调度者**。操作细则（准入/登记/舰队启动/任务派生/角色提示词加载/收窗）见 @.agents/skills/pm-operations.md §一；路由见 @.agents/skills/pm-routing.md。
 
 - **开工确认闸门**：PRD 完成后**禁止自动派发**，先出「开工确认卡」并经用户确认。
-- **环境自检**：派发前 `bash .agents/scripts/nao-fleet.sh check`——默认单行摘要，`warn>0` 或失败加 `-v`；**exit code 非 0（硬错误）→ 停止派发**。
+- **环境自检**：派发前 `bash .agents/scripts/nao-fleet.sh check`——默认 2 行摘要（摘要行 + codegraph 状态行），`warn>0` 或失败加 `-v`；**exit code 非 0（硬错误）→ 停止派发**。
 - **架构评审闸门**：PRD 涉及架构/NFR/选型时，开工确认后、派发前 `send` arch-designer 评审。纯 CRUD 跳过。
 - **忙闲闸门**：`list` 见目标在线**且 `idle`** 才派完整任务；忙碌（`thinking`/`tool:*`）→ **不投递任务内容**，记入待排队列（`docs/tasks-state.md`），转 `idle` 再派；**紧急**才抢占（交互会话可 steer 注入并注明 `紧急抢占：…回执须报告挂起任务状态`；非交互会话只能排队）。
 - **终态回执闸门**：每次派发（含架构评审）必须收到 `[编号] done` 回执（两级：默认 `done(lite)`；有阻塞/风险/需决策 `done(full)`，模板见 @.agents/checklists/comm-templates.md）；未见回执（含 arch 静默）→ **主动追讨**，必要时上报用户，**不默认成功**。
