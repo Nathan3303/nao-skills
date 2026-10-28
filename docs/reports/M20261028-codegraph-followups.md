@@ -48,11 +48,27 @@
 
 测法：6 个真实 `codegraph serve --mcp` 进程（不是 6 个空进程），每个完成 **MCP `initialize` + `notifications/initialized` + `tools/list` + `tools/call codegraph_explore`**，随后测 RSS；期间改一个已索引文件并起 6 个并发 `codegraph status`。
 
-- **6 进程全部握手成功**，`tools/list` = **`["codegraph_explore"]`**（唯一工具，与 PRD S1 一致），每次 `explore` 返回 12061 B。
-- **RSS 求和 = 310252 KB = 303.1 MB**（单进程 50.5–50.6 MB，pid 各不相同、`alive=True`）；并发测试后再测仍 **303.1 MB**（无爬升）。
-- **锁测试**：6 次并发 `codegraph status` **rc 全 0**，`database is locked` / `sqlite_busy` 命中 **0 次**；其中 1 次读到 `Pending Changes`、其余 `up to date`（watcher 已自动同步），3 秒后复查 `✓ Index is up to date` ⇒ 单库 6 读 + 6 watcher 并发**未观察到锁冲突**。
-- **门判定**：303.1 MB ≤ 600 MB ⇒ **接受，不需要 README 加「资源」一行**（该项仅为 600MB–1.2GB 档要求；实际值比 QA 估算 100–250MB/**实例** 低一个档，6 会话约 0.30 GB）。
-- 测完进程已杀净：`pgrep -af 'codegraph serve'` 无残留，`alive_after_kill=0`。
+- 每个会话的 `serve --mcp` 均握手成功，`tools/list` = **`["codegraph_explore"]`**（唯一工具，与 PRD S1 一致），每次 `explore` 返回 12061 B。
+
+**测量口径缺陷（必须先读）**：arch A6 给的采样命令 `ps -o rss= -p $(pgrep -f 'codegraph serve')` **会系统性低估** —— 插件一次会话实际拉起 **3 个进程**（`launcher`=`node …/bin/codegraph serve --mcp` / `worker`=其 re-exec 的子进程 / `watchdog`=内联 `-e` 守护），再加**每仓 1 个共享 daemon**（cmdline 是 `… codegraph.js serve --mcp --path <repo>`，**不含字面 `codegraph serve`，pgrep 匹配不到**）。故按 A6 原命令只采到 6 个 launcher，而真实成本是 20 个进程。
+
+**A. 按 A6 原命令（6 个 launcher）**：RSS 求和 = **310252 KB = 303.1 MB**；并发后再测同值（无爬升）。
+
+**B. 完整 codegraph 进程集（faithful，与插件实际 spawn 完全一致）**：
+
+- 6 会话 = **20 进程**：6 launcher（51.7 MB/个）+ 6 worker（90.2 MB/个）+ 6 watchdog（47.7 MB/个）+ 1 共享 daemon（288.1 MB）+ 1 daemon watchdog（47.8 MB）。
+- **RSS 求和 = 1439.0 MB**；**PSS（`smaps_rollup`，扣共享页）= 675.7 MB**。
+- **单会话**（同法）：5 进程 · **RSS 468.1 MB · PSS 319.7 MB**；边际成本 = 每多一会话 **≈ +194.2 MB RSS**（共享 daemon 固定 ≈ 336 MB RSS / 254 MB PSS）。
+- 实测比 QA 估算（100–250 MB/**实例**）的**单实例**量级对得上（daemon 288 MB），但**每会话还要再叠 189.6 MB**（launcher+worker+watchdog）—— 估算遗漏了这部分。
+
+**门判定（按 A6 三档，两种口径给出，待裁决）**：
+
+- 口径 A（A6 原命令 303.1 MB）⇒ ≤600 MB 档「接受」。
+- 口径 B-RSS（1439.0 MB）⇒ **>1.2 GB ⇒ 按协议应「回退删索引」**。
+- 口径 B-PSS（675.7 MB）⇒ 落在 **600 MB–1.2 GB 档 ⇒ 接受 + README 加一行「资源」**。
+- **诚实结论**：门**不能按原样宣称通过**，因为判据取决于用哪个口径；A6 的采样命令与阈值不是同一量纲（RSS 求和含大量共享只读页，且漏采 daemon/worker/watchdog）。⇒ 已按「需 PM/arch 拍板」上报，本单**未替 PM 决定保留或回退**；索引仍在位（回退只需一条 `rm -rf .codegraph`）。
+- **锁测试（与口径无关，独立结论）**：6 次并发 `codegraph status` **rc 全 0**，`database is locked` / `sqlite_busy` 命中 **0 次**（两轮测量均 0）；期间读到 2 次 `Pending Changes`、其余 `up to date`（watcher 已自动同步），随后复查 `✓ Index is up to date` ⇒ 单库 6 读 + 6 worker + 1 daemon 并发**未观察到锁冲突**。
+- 测完进程已杀净：代码侧按 pid 列表 TERM/KILL，复查 `ps -eo args | grep codegraph` 无残留。
 
 ### T4 下游隐性依赖 —— **结论：本仓 + 下游三仓均无命中**
 
@@ -77,10 +93,11 @@
 > 字段固定顺序：编号 / 来源 / 严重度 / 出口 / 到期（@.agents/skills/task-completion.md §三）。
 
 - `F1`｜来源 = 上游 README 与本机 CLI 文案/命令不一致（README 写 `### Pending sync:` 与 `init -i`；实测为 `Pending Changes:` 与 `-i` **已废弃**）｜严重度 = 低（会误导文案冻结）｜出口 = **关闭**（已实测冻结并记入本台账 §二 T1/T2；BR4「以实测为准」成立，机制不抄 README）｜到期 = —（已关闭 2026-10-28）。
-- `F2`｜来源 = `~/Projects/nao-todo-server` **入库** `.codegraph/.gitignore`（`git ls-files` 可见）⇒ 目录存在但无索引（`codegraph status` = `⚠ Not initialized`）；插件激活条件是 **cwd 存在 `.codegraph/`**（`extensions/codegraph.ts:132` `existsSync`），故该仓每个舰队会话都会起一个 ~50 MB sidecar 且无可用索引｜严重度 = 低（内存 50 MB/会话 + 静默不可用）｜出口 = **接受**（本批范围外、不改下游；T532 的「已就绪但当前仓无索引」检测文案正好覆盖该态，届时可见）｜到期 = **2026-11-28**（重评触发：T532 检测落地 / 该仓建索引 / 插件改激活条件）。
-- `F3`｜来源 = 6 会话 sidecar 本机常态内存 303.1 MB（本机 15 GB / 可用 8 GB）｜严重度 = 低（门内）｜出口 = **接受**（实测入台账；扩容 = 给更多仓建索引时按 50.5 MB/会话线性估算）｜到期 = **2027-01-28**（重评触发：新增仓库建索引 / 上游 serve 内存变化）。
+- `F2`｜来源 = `~/Projects/nao-todo-server` **入库** `.codegraph/.gitignore`（`git ls-files` 可见）⇒ 目录存在但无索引（`codegraph status` = `⚠ Not initialized`）；插件激活条件是 **cwd 存在 `.codegraph/`**（`extensions/codegraph.ts:132` `existsSync`），故该仓每个舰队会话都会拉起 sidecar 且无可读索引｜严重度 = 中（**实测该仓 1 会话 = 3 进程 · RSS 205.7 MB / PSS 143.7 MB**，且 `explore` 无可用索引）｜出口 = **接受**（本批范围外、不改下游；T532 的「已就绪但当前仓无索引」检测文案正好覆盖该态，届时可见）｜到期 = **2026-11-28**（重评触发：T532 检测落地 / 该仓建索引 / 插件改激活条件）。
+- `F3`｜来源 = 6 会话 sidecar 本机常态内存：**RSS 1439.0 MB / PSS 675.7 MB**（本机 15 GB / 可用 8 GB）｜严重度 = 中（阈值档位取决于口径，见 F6）｜出口 = **转办**（随 F6 的 A6 口径裁决一并定；本单不替 PM 决定）｜到期 = 随裁决（不迟于 T532 合并）。
 - `F4`｜来源 = `pi install` 报 `removed 206 packages`（用户级 npm 根剪枝）｜严重度 = —｜出口 = **关闭**（复核 5 个包版本完好：`pi-intercom@0.18.1`/`pi-ask-me@0.1.1`/`pi-subagents@0.83.0`/`pi-web-access@0.45.0`/`@sean_pedersen/pi-codegraph@0.1.0`；`pi --version` = 1.4.0 正常）｜到期 = —（已关闭 2026-10-28）。
 - `F5`｜来源 = 插件 `0.1.0` 与 CLI `1.6.2` 的版本耦合无声明（插件 `spawn("codegraph", ["serve","--mcp"])`，依赖 CLI 的 `serve --mcp`/`tools/list` 契约）｜严重度 = 低｜出口 = **接受**（watch 上游；本单已实测该组合可用）｜到期 = **2026-12-28**（重评触发：任一组件升级）。
+- `F6`｜来源 = **arch A6 的门判据与采样命令不同量纲**：`ps -o rss= -p $(pgrep -f 'codegraph serve')` 只命中每会话的 launcher（6 × 51.7 MB = 303.1 MB），漏掉 worker、watchdog 与**每仓 1 个共享 daemon**（其 cmdline 为 `codegraph.js serve --mcp --path …`，不含字面 `codegraph serve`）；真实全集 = 20 进程 / **RSS 1439.0 MB / PSS 675.7 MB**（RSS 和又含重复计入的共享页）｜严重度 = 高（**直接决定「保留索引 / 回退」**，且会让未来同类门禁永久低估）｜出口 = **转办**（请 PM/arch 裁定：① 以 A6 原命令为准则 303.1 MB ⇒ 接受；② 以全集 PSS 675.7 MB ⇒ 600–1200 MB 档（README 加「资源」一行 + 台账）；③ 以全集 RSS 1439.0 MB ⇒ >1.2 GB ⇒ 回退 `rm -rf .codegraph` + ADR 改「已落地但降级」；④ 重定义口（改 `pgrep -f 'codegraph'`/父链遍历 + 改 PSS）后重跑）｜到期 = **随 T532 合并前**（未裁决不得官宣 AC5 完成）。
 
 ## 四、回滚
 
@@ -94,7 +111,7 @@
 1. **文案冻结可直接引用 §二 T1 的三行原文**（版本戳 `codegraph 1.6.2`）；机制内匹配串**无需改**，本批只需删 `cmd_check` 的 `rc=1` + 落 arch A2 的六态契约。
 2. **`init` 命令写 `codegraph init`**（不带 `-i`）；`-i` 虽被接受但已废弃（F1）。
 3. **遥测注入已验证有效**（T5 三重证据），`spawn_one` 的 `export CODEGRAPH_TELEMETRY=0` 按 A3 落。
-4. **资源门已过（303.1 MB）** ⇒ AC5 的 A6 门可直接引用本台账数字，README 不需加「资源」一行。
+4. **资源门：不能照原样宣称通过 —— 需 PM/arch 裁决口径（F6）**。三种口径给出三个结论：A6 原命令 303.1 MB（接受）/ 全集 PSS 675.7 MB（600–1200 档 ⇒ README 加一行）/ 全集 RSS 1439.0 MB（>1.2 GB ⇒ 回退）。本单**未替 PM 决定**，索引仍在位，回退只需一条 `rm -rf .codegraph`。锁测试独立通过（0 次 locked）。
 5. **T4 无下游耦合** ⇒ BR1 的豁免条款不必点名下游代码影响，可只引用 nao-todo 两条历史同向记录（§二 T4）。
 6. **`status --json` 是更稳的契约候选**（§二 T1 建议），若 arch 采纳需在 NFR 里补一次 fork 的耗时预算。
 7. **副产物触发面比 QA 结论更宽**（§二「副产物现场实测」）：`pi install` / `pi list` 也会留 `.pi/APPEND_SYSTEM.md`；A4 的 ignore 单文件是必需项而非可选项，且 `check` 不该断言该文件存在性（A7 口径不变）。
