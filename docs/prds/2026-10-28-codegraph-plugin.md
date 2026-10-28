@@ -164,7 +164,7 @@
 - **合并**：PR [#54](https://github.com/Nathan3303/nao-skills/pull/54) squash `f230440`（main 恰好 1 条、无 `wip()`、分支删净）· 验收评论 issuecomment-6475549562。
 - **验收**：AC1–AC9、AC11 全过；AC10 于发布完成。门禁 = `check` rc=0（roles=6 · files=50）· `npm test` PASS（SKIP=0/DEGRADE=0/NOTE=2）· `test:t4:full:dual` 两组 rc=0 · `cases/18` 64 断言 ×2。
 - **T3 资源（真实舰队 · 本 PRD §六 唯一未闭合项）**：关闭并重拉 5 个角色会话后实测 —— 17 进程 RSS 1128.0MB / **PSS 479.7MB**；全部关闭后 daemon 基线 PSS 131.6MB；**边际 69.6MB/会话**；外推 6 会话 **549.3MB ≤600MB ⇒ 接受**。
-- **发布**：v0.20.0（MINOR）· tag + Release（标题裸 `v0.20.0`）· `docs/releases/v0.20.0.md` · npm 重发待用户执行（判据 = latest = 0.20.0 且 integrity 与本地 tarball 逐字节一致）。
+- **发布**：v0.20.0（MINOR）· tag + Release（标题裸 `v0.20.0`）· `docs/releases/v0.20.0.md` · **npm 已重发并核验**（`latest` = 0.20.0 · `dist.integrity` = `sha512-yyq4EiBn3UjHy2moWkUYA0KTaA8kpwn…` 与本地 tarball（140,912 B）逐字节一致）。
 - **遗留**：插件 0.1.0 × CLI 1.6.2 版本耦合（2026-12-28 重评）· `nao-todo-server` 空 `.codegraph/` 目录（2026-11-28）· 无其他。
 
 

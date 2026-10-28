@@ -38,7 +38,7 @@
 - ✅ **T521 交付闭环（2026-10-14 · v0.17.3）**：GitHub Release 标题口径 = 裸 `vX.Y.Z` —— 权威单处 `common/release-notes.md` §一.5 硬约束 + §四清单 + §五红线 · 两处引用收敛（`github-flow.md:56` / PM 卡 :121）并指回单处 · PM 卡 **v24→v25** · 模板注释 1 行（6 分段标题未动）· 一次性只读探针 `PASS=28 FAIL=0` + 负控 2/2 · QA 独立复跑 **GO** · squash `eff44ec` · tag + Release 已发（发布提交 `4d97f00` · **AC9 自证：标题严格 = `v0.17.3`**）· **npm 重发 0.17.3 已核验**（`latest` + integrity 逐字节）。
 - ✅ **T520 交付闭环（2026-10-14 · v0.17.2）**：ADR 文档契约 —— 必写 5 节 + 可选 3 节（参考来源恒末）· 头部恰 4 字段 · 状态值域 4 值 · 禁写/下沉清单 · 新增 `templates/adr.md.example` + `adr-index.md.example` · `arch-designer` 卡 v11→v12 · QA 探针 `PASS=53 FAIL=0` + 负控 2/2 · squash `160cc60` · tag + Release 已发（`9833344`）· **npm 不重发**。
 
-- 当前阶段：**T532 已合并 + 已发布 v0.20.0（tag/Release 已发并核验标题 · npm 重发待用户执行）= 批次待收尾**——合并 `f230440`（PR #54 squash）· 发布前置 `check` rc=0 / `npm test` rc=0 / `test:t4:full:dual` 两组 rc=0 · T3 真实舰队复测 5 会话 PSS 479.7MB（外推 6 会话 549.3MB ≤600MB 接受）。
+- 当前阶段：**T532 批次终态**（main `e8ecb7c` · 合并 `f230440` · tag/Release `v0.20.0` · **npm 已核验**：`latest` = 0.20.0、integrity 与本地 tarball 逐字节一致）· 待命，等用户下批需求
 - 当前 PRD：`docs/prds/2026-10-28-codegraph-plugin.md`（T532 · 草稿 · 待 QA 接缝回执后定稿 → Issue → arch 完整评审 → 开工确认卡）
 - 未决决策点：无（用户 2026-10-28 ask-me 6 项已拍板：warn 门禁 / 只检测+文档指引 / 原生优先+CLI 回退 / 本仓起索引 / v0.20.0 MINOR+重发 / arch 完整评审）
 - 待用户回答：开工确认卡（PRD 定稿后出）；以及 M20261028-codegraph 环境动作的执行授权（装 CLI + 插件 + `codegraph init -i`）
@@ -56,7 +56,7 @@
 - PRD：`docs/prds/2026-10-28-codegraph-plugin.md`（v7 归档 · 含 §十三 QA 回执 / §十四 交付记录）
 - Issue：[#53](https://github.com/Nathan3303/nao-skills/issues/53) · 需求分支：`feat/53-codegraph-plugin`（**已 squash 合并 `f230440` 并删净**）
 - PR：[#54](https://github.com/Nathan3303/nao-skills/pull/54)（验收评论 issuecomment-6475549562 = 授权合并）· PR owner / Reviewer：rd-infra / qa · arch 三轮（评审 / 复议 B1–B4 / D4 warn 隔离）
-- 版本 / Tag：**v0.20.0（MINOR）** —— tag + Release 已发（`gh release view` name = `v0.20.0` ✓ 裸版本号 · 非 draft）· **npm 重发待用户执行**（本地 tarball 140,912 B · `sha512-yyq4EiBn3UjHy2moWkUYA0KTaA8kpwnbe+roanIZOlh+A9qoTwDOR+n0vOacVIDnNsxPfcUU8li0WWIUfpZIYQ==`；判据 = latest = 0.20.0 且 dist.integrity 逐字节一致）
+- 版本 / Tag：**v0.20.0（MINOR）** —— tag + Release 已发（`gh release view` name = `v0.20.0` ✓ 裸版本号 · 非 draft）· **npm 已重发并核验**（`latest` = 0.20.0 · `dist.integrity` = `sha512-yyq4EiBn…` 与本地 tarball（140,912 B）逐字节一致）
 - 关键数字：`cases/18` 64 断言 · 默认 check 2 行且零 codegraph 调用 · T3 5 会话 PSS 479.7MB / 边际 69.6MB
 - 遗留：插件 0.1.0 × CLI 1.6.2 耦合（2026-12-28）· nao-todo-server 空 `.codegraph/`（2026-11-28）
 
