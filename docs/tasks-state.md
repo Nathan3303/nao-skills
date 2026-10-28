@@ -156,7 +156,6 @@
 
 | 任务编号 | 目标会话 | 概要 | 排队原因 |
 | :--- | :--- | :--- | :--- |
-| T529-arch | arch-designer-T529 | **轻量评审**：删除面完备性（12 个函数/常量是否都是「为宿主选择而存在」）+ ADR 取代关系（新 ADR 5 必写节 + 旧 ADR 废弃状态值域）+ rc=3 语义是否需入 ADR | 开工卡 D2：**派发前**必过 |
 | T529-rd | rd-infra-T529 | 删宿主阶梯 + 非 tmux rc=3 硬失败（fail-fast 无副作用）+ `check` pi ≥1.4.0 断言 + close 收窄（删 T523 段）+ 新 ADR/旧 ADR 废弃 + 文档收窄 + `docs/releases/v0.19.0.md`（AC1–AC7） | 依赖 arch 回执 |
 | T529-qa | qa-T529 | 独立复核 AC1–AC9：删除面 grep 归零 · 行数对照 · 非 tmux 四命令 rc=3 且无 session/pane/lock · tmux 内三命令行为等价 · pi 版本断言正负控 · **新旧断言基线对照** · ADR 结构 | 依赖 T529-rd 回执 |
 | M20261014-F1 | （用户环境 · 不入舰队） | **到期重评** `pi-ask-me` 旧 SDK 子树 12 high（已接受）· 台账 `docs/reports/M20261014-pi-ext-update-followups.md` | 定时：**2026-11-14** 或上游 `pi-ask-me` 升版时 |
@@ -165,13 +164,15 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T529 | arch-designer-T529 | **轻量 arch 评审**（删除面完备性 / ADR 取代关系 / rc=3 语义）→ 回执后转 rd-infra-T529 实现 | 2026-10-27 | 开工卡 D2 | — |
+| T529 | rd-infra-T529 | **实现**：删宿主阶梯（14 项 + 10 漏项 · 净减 ≈240 行）+ 非 tmux rc=3 硬失败（cleanup 豁免）+ `check` pi ≥1.4.0（rc=1 聚合）+ close 收窄 + `cases/11` 退役 + 新 ADR/旧 ADR 废弃 + 文档 + `v0.19.0` notes（AC1–AC7） | 2026-10-27 | AC1–AC7 | 待起 |
 
 ## 已回执待验收
 
 | 任务编号 | 回执摘要（≤150字） | 详情路径 | 待办 |
 | :--- | :--- | :--- | :--- |
 
+
+| T529-arch | done(lite)：**可行无阻塞** · 14 项三态（可删 12 / 成组连带 2 / **必须保留 0**）· `screen_token_for`/`screen_present` 被 `status`/`close` 硬依赖（`running():654` / `close:1713`）⇒ 成组连删 6 处 · **10 项清单外漏项**（app-id 三函数+close 分支 ≈45 行 · pid pipe ≈20 行 · `TMUX_ENV_SCRUB` · `NAO_TERMINAL_LIST` · `offline_verifiable` · `visible_session_names` · `--background` · `spawn_tmux` else 分支 · `check` 宿主阶梯段 · 头注释）⇒ 净减 ≈240 · ADR 够格 + 3 条硬要求 · **11/12 仅内部 return 码，无外部可见退出码消失** · 两处待确认（cleanup 豁免 / cases 11 实体退役）→ **PM 已拍板并入 PRD（D5–D9）** | `docs/reports/48-arch-review.md`（96 行）+ `5cb78b5` | 已转 RD 实施 |
 
 ## 挂起（被抢占 / 降级）
 
