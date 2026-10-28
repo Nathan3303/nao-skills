@@ -37,7 +37,7 @@
 - ✅ **T521 交付闭环（2026-10-14 · v0.17.3）**：GitHub Release 标题口径 = 裸 `vX.Y.Z` —— 权威单处 `common/release-notes.md` §一.5 硬约束 + §四清单 + §五红线 · 两处引用收敛（`github-flow.md:56` / PM 卡 :121）并指回单处 · PM 卡 **v24→v25** · 模板注释 1 行（6 分段标题未动）· 一次性只读探针 `PASS=28 FAIL=0` + 负控 2/2 · QA 独立复跑 **GO** · squash `eff44ec` · tag + Release 已发（发布提交 `4d97f00` · **AC9 自证：标题严格 = `v0.17.3`**）· **npm 重发 0.17.3 已核验**（`latest` + integrity 逐字节）。
 - ✅ **T520 交付闭环（2026-10-14 · v0.17.2）**：ADR 文档契约 —— 必写 5 节 + 可选 3 节（参考来源恒末）· 头部恰 4 字段 · 状态值域 4 值 · 禁写/下沉清单 · 新增 `templates/adr.md.example` + `adr-index.md.example` · `arch-designer` 卡 v11→v12 · QA 探针 `PASS=53 FAIL=0` + 负控 2/2 · squash `160cc60` · tag + Release 已发（`9833344`）· **npm 不重发**。
 
-- 当前阶段：**T532 QA 复核 GO · D1–D4 合并前修在飞**（D1 措辞 / D2 夹具 node 保底 / D3 声明文案 / D4 arch B5 warn 隔离）· 修完 QA 点检 ⇒ 验收评论授权合并 ⇒ RD squash ⇒ v0.20.0 发布——head `a3bc344`（分支 `feat/53-codegraph-plugin` · Draft PR **#54**）· PRD **v5** · RD 自报 check rc=0（roles=6 files=50）/ npm test rc=0（NOTE=2 白名单）/ dual 两组 rc=0 / cases/18 49 断言 · 默认 check **2 行**（摘要行 + 四态之一，PM 裁定）。下一步 = QA `[T532-qa]` GO ⇒ PM 验收评论 ⇒ RD squash 合并 ⇒ v0.20.0 发布。
+- 当前阶段：**T532 已合并 + 已发布 v0.20.0（tag/Release 已发 · npm 重发待用户执行）= 批次待收尾**——合并 `f230440`（PR #54 squash）· 发布前置 `check` rc=0 / `npm test` rc=0 / `test:t4:full:dual` 两组 rc=0 · T3 真实舰队复测 5 会话 PSS 479.7MB（外推 6 会话 549.3MB ≤600MB 接受）。
 - 当前 PRD：`docs/prds/2026-10-28-codegraph-plugin.md`（T532 · 草稿 · 待 QA 接缝回执后定稿 → Issue → arch 完整评审 → 开工确认卡）
 - 未决决策点：无（用户 2026-10-28 ask-me 6 项已拍板：warn 门禁 / 只检测+文档指引 / 原生优先+CLI 回退 / 本仓起索引 / v0.20.0 MINOR+重发 / arch 完整评审）
 - 待用户回答：开工确认卡（PRD 定稿后出）；以及 M20261028-codegraph 环境动作的执行授权（装 CLI + 插件 + `codegraph init -i`）
@@ -50,14 +50,14 @@
 
 ## 需求分支 / PR / 发布（PM 维护）
 
-### 本批 T532（codegraph 插件引入 · 已开工 · Issue #53）
+### 本批 T532（codegraph 插件引入 · 已合并 · 发布 v0.20.0）
 
-- PRD：`docs/prds/2026-10-28-codegraph-plugin.md`（v3 · 含 §十 QA 接缝、§十一 arch 裁决）
-- Issue：[#53](https://github.com/Nathan3303/nao-skills/issues/53) · 需求分支：`feat/53-codegraph-plugin`（base `fb0c36d`）
-- 版本 / Tag：v0.20.0（MINOR）+ npm 重发（用户执行）
-- PR owner / Reviewer：rd-infra / qa · arch 完整评审已过（`docs/reports/2026-10-28-T532-arch-review.md` · ADR `docs/adr/2026-10-28-codegraph-plugin-adoption.md`）
-- **开工卡拍板（2026-10-28 · 6/6）**：① 现在开工（先实测再落文案）② **批准 M 任务全部环境动作**（全局装 CLI + 用户级装插件 + 本仓建索引，可回退）③ nao-fleet.sh 单行 `TMUX_MAIN_WIDTH_DEFAULT 35→33` **随批带走**（已单独 `wip(T532)` 提交，非本批 AC）④ 接受 rc 降 warn（arch A1 + PRD 显式豁免）⑤ rd-infra 实现 + QA 独立复核 ⑥ 资源门按 arch 阈值（≤600MB / 600MB–1.2GB 带一行 / >1.2GB 或锁错 ⇒ 删索引回退）
-- 任务单元：`M20261028-codegraph`（前置：实测 + 环境 + 资源门）→ T532 实现 → QA 复核 → 合并/发布
+- PRD：`docs/prds/2026-10-28-codegraph-plugin.md`（v7 归档 · 含 §十三 QA 回执 / §十四 交付记录）
+- Issue：[#53](https://github.com/Nathan3303/nao-skills/issues/53) · 需求分支：`feat/53-codegraph-plugin`（**已 squash 合并 `f230440` 并删净**）
+- PR：[#54](https://github.com/Nathan3303/nao-skills/pull/54)（验收评论 issuecomment-6475549562 = 授权合并）· PR owner / Reviewer：rd-infra / qa · arch 三轮（评审 / 复议 B1–B4 / D4 warn 隔离）
+- 版本 / Tag：**v0.20.0（MINOR）** —— tag + Release 已发 · npm 重发待用户执行（判据 latest + integrity 逐字节）
+- 关键数字：`cases/18` 64 断言 · 默认 check 2 行且零 codegraph 调用 · T3 5 会话 PSS 479.7MB / 边际 69.6MB
+- 遗留：插件 0.1.0 × CLI 1.6.2 耦合（2026-12-28）· nao-todo-server 空 `.codegraph/`（2026-11-28）
 
 ### 上批 T531（三条防线 · Issue #51 · 已合并 · 发布 v0.19.2）
 

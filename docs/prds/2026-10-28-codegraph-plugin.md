@@ -1,6 +1,6 @@
 # codegraph 插件引入舰队机制：四态检测 + 原生入口口径 + 本仓自建索引
 
-- 状态：**草稿 v5（QA 接缝 + arch 评审/复议全过；Issue #53 已建 · 实现任务待派）** · Owner：PM · 更新：2026-10-28
+- 状态：**已交付并发布（v0.20.0 · PR #54 squash `f230440` · 归档 2026-10-28）** · Owner：PM · 更新：2026-10-28
 - 指针：候选批次 T532 · 接缝报告 `docs/reports/2026-10-28-T532-qa-recon.md` · **arch 评审 `docs/reports/2026-10-28-T532-arch-review.md`（裁决 A1–A7）** · **ADR `docs/adr/2026-10-28-codegraph-plugin-adoption.md`** · 现行资产 `.agents/skills/codegraph.md`（52 行 CLI 口径）· `bin/nao-skill.js:101`（`PI_PLUGINS.codegraph`）· `.agents/scripts/nao-fleet.sh:279`（`check_codegraph`，仅探 CLI）· `:1200-1215`（CodeGraph 段，`Pending Changes ⇒ rc=1`）
 - 用户拍板 6 项（2026-10-28）：warn 门禁 / 只检测 + 文档指引 / 原生优先 + CLI 回退 / 本仓起索引 / v0.20.0 MINOR + npm 重发 / arch 完整评审
 
@@ -158,4 +158,15 @@
 - **遗留**：T3 6 会话 PSS 复测（舰队重启后，PM 执行，发布前入台账）。
 
 
+## 十四、交付与发布记录（2026-10-28）
+
+- **派发链**：`M20261028-codegraph`（rd-infra：环境 + T1–T5 实测）→ `[T532-impl]`（rd-infra 实现，4 轮：首版 → 字面订正 → D1–D4 → P4-1/P4-2）→ `[T532-qa]`（三轮独立复核：接缝 / GO / 窄点检）→ `[T532-arch]` + `[T532-arch-amend]` + `[T532-d4]`（arch 三轮裁决）。
+- **合并**：PR [#54](https://github.com/Nathan3303/nao-skills/pull/54) squash `f230440`（main 恰好 1 条、无 `wip()`、分支删净）· 验收评论 issuecomment-6475549562。
+- **验收**：AC1–AC9、AC11 全过；AC10 于发布完成。门禁 = `check` rc=0（roles=6 · files=50）· `npm test` PASS（SKIP=0/DEGRADE=0/NOTE=2）· `test:t4:full:dual` 两组 rc=0 · `cases/18` 64 断言 ×2。
+- **T3 资源（真实舰队 · 本 PRD §六 唯一未闭合项）**：关闭并重拉 5 个角色会话后实测 —— 17 进程 RSS 1128.0MB / **PSS 479.7MB**；全部关闭后 daemon 基线 PSS 131.6MB；**边际 69.6MB/会话**；外推 6 会话 **549.3MB ≤600MB ⇒ 接受**。
+- **发布**：v0.20.0（MINOR）· tag + Release（标题裸 `v0.20.0`）· `docs/releases/v0.20.0.md` · npm 重发待用户执行（判据 = latest = 0.20.0 且 integrity 与本地 tarball 逐字节一致）。
+- **遗留**：插件 0.1.0 × CLI 1.6.2 版本耦合（2026-12-28 重评）· `nao-todo-server` 空 `.codegraph/` 目录（2026-11-28）· 无其他。
+
+
 - 修订：2026-10-28 v1 首稿（用户 6 项拍板后）· 同日 v2（QA 接缝回执订正）· 同日 v3（arch 裁决 A1–A7 落地）· 同日 v4（M 任务实测回执 T1–T5 + F6 登记）· 同日 v5（arch 复议 B1–B4：PSS 口径 / daemon 不代杀 + BR11 / 文本契约 + 默认零 codegraph 调用 / 索引保留 / 新增 AC11）· 同日 v6（QA 复核 GO + D1–D5 订正：零 codegraph 调用措辞 / 7 条文本契约 / 标签可按场景 / BR2b warn 隔离（arch B5）+ AC7 双断言）
+- 修订：2026-10-28 v7（交付归档：合并 `f230440` · QA 三轮 · T3 真实舰队复测 · 发布 v0.20.0）
