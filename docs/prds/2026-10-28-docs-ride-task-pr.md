@@ -1,6 +1,6 @@
 # PRD：文档与台账随任务 PR（一个任务 = 一条 PR 全量改动）
 
-- 状态：待开工确认 · Owner：PM · 更新：2026-10-28
+- 状态：已开工（T533 · 降级批次 `nao/pr-scope`）· Owner：PM · 更新：2026-10-28
 - 指针：上游 = 用户 2026-10-28 口头约束（四项 ask-me 拍板，见附录 D1–D4）· 实测取证 = main 近 25 条提交 + `gh pr list`
 - 优先级：高（流程口径 · 低成本高杠杆）· RICE 结论 ≈ 32（附录）
 
@@ -81,7 +81,7 @@
 
 ## 九、变更治理
 
-- **流程**：降级批次 `nao/pr-scope`（**无 Issue**；理由：机制维护批次，且本批目的正是取消「文档独立落 main」通道，立项摘要例外在此无意义）→ 分支内提交（PM `docs(nao-pr-scope):` / RD `wip(nao-pr-scope):`，路径级暂存）→ PM 验收 → RD squash（`--subject` 用户可读）→ tag `v0.20.1` + Release。
+- **流程**：**T533**（降级批次 `nao/pr-scope` · **无 Issue**；理由：机制维护批次，且本批目的正是取消「文档独立落 main」通道，立项摘要例外在此无意义）→ 分支内提交（PM `docs(T533):` / RD `wip(T533):`，路径级暂存）→ PM 验收 → RD squash（`--subject` 用户可读）→ tag `v0.20.1` + Release。
 - **立项载体**：**本 PR 的首提交**（自我示范 BR1/BR4：PRD 与台账登记不再独立落 main）。
 - **本批文件归属**：`github-flow.md` / `product-manager.md` / `checklists/pm.md` / 探针 = rd-infra；`AGENTS.md` / 本 PRD / `tasks-state.md` / PR 验收评论 = PM。
 - **版本记录**：v0.20.1 = 本批（文档随任务 PR 口径）。

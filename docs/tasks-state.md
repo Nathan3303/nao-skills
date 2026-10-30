@@ -8,7 +8,7 @@
 
 > 本区是 PM 的**悬空状态**（任务状态见下方五栏）；重开后逐行回读确认（当前阶段 · 未决决策 · 口头约束）。
 
-- 🔄 **本批开工（2026-10-28 · 降级 `nao/pr-scope` · v0.20.1 PATCH · 无 Issue）**：**文档与台账随任务 PR**（用户 2026-10-28 口头约束 · 四项拍板见 PRD 附录 D1–D4）。PRD = `docs/prds/2026-10-28-docs-ride-task-pr.md`（**本 PR 首提交**，不再独立落 main —— 本批自我示范）。范围 = `github-flow.md`（新节 + 八阶段载体 + 红线）· PM 卡 §六/§十三 + 红线（v28→**v29**）· `checklists/pm.md`（清单 +1 / 红线 34）· `AGENTS.md` 1 条指针 · 一次性探针 `docs/reports/2026-10-28-docs-ride-pr-probe.sh`。**待办**：出开工确认卡（D2 npm 重发 / arch 跳过 待拍板）→ 派 rd-infra → PM 验收 → RD squash → tag `v0.20.1`。
+- 🔄 **T533 开工（2026-10-28 · 降级 `nao/pr-scope` · v0.20.1 PATCH · 无 Issue）**：**文档与台账随任务 PR**（用户 2026-10-28 口头约束 · 四项拍板见 PRD 附录 D1–D4）。PRD = `docs/prds/2026-10-28-docs-ride-task-pr.md`（**本 PR 首提交** `a1c7f1a`，不再独立落 main —— 本批自我示范）。范围 = `github-flow.md`（新节 + 八阶段载体 + 红线）· PM 卡 §六/§十三 + 红线（v28→**v29**）· `checklists/pm.md`（清单 +1 / 红线 34）· `AGENTS.md` 1 条指针 · 一次性探针 `docs/reports/2026-10-28-docs-ride-pr-probe.sh`。**开工卡已拍定**：开工 / **npm 重发 0.20.1** / **arch 跳过** / **QA 派生复核**。
 - ✅ **批次终态（2026-10-28 · T532 codegraph 插件引入 · v0.20.0）**：合并 `f230440`（PR #54 squash `feat/53-codegraph-plugin`）· 发布提交 `18e847b` · tag/Release `v0.20.0`（`gh release view` name = 裸版本号已核验）· **npm 已核验**（`latest` = 0.20.0 · `dist.integrity` 与本地 tarball（140,912 B）逐字节一致）· 收尾 `74e922d`。关键结论：四态检测全 warn（默认零 codegraph 调用 + `warn` 通道隔离）· 三段阶梯（唯一硬编码 `codegraph_explore`）· 本仓索引 4 files / 118 nodes · **T3 真实舰队**：5 会话 PSS 479.7MB / daemon 基线 131.6MB / 边际 69.6MB / 外推 6 会话 549.3MB ≤600MB 接受。QA 三轮 + arch 三轮；D1–D6、P4-1/P4-2 全关闭。
 - 🚧 **无在飞任务、无未决决策**（架构/取舍都已在 PRD/ADR 落定）。**6 卡广播待发**：`card arch-designer v13` / `card rd-be v12` / `card rd-fe v12` / `card rd-infra v4` / `card pm v28` / `card qa v15` —— 目标会话当前**全部关闭**（T3 复测后已回收）⇒ 唤醒时补发，下游三仓同。
 - ⚙️ **环境现状（离开会话也必须知道）**：`codegraph 1.6.2` 全局 · `@sean_pedersen/pi-codegraph 0.1.0` 用户级 · 本仓 `.codegraph/` 在位（536K，已 ignore）· 遥测 off + 舰队 `spawn_one` 注入 `CODEGRAPH_TELEMETRY=0` · **会话外跑 `pi` 用 `( cd /tmp && pi … )`**（否则每仓留一个 ~130–150MB daemon + 副产物文件；nao 不代杀，BR11）。
@@ -41,10 +41,10 @@
 - ✅ **T521 交付闭环（2026-10-14 · v0.17.3）**：GitHub Release 标题口径 = 裸 `vX.Y.Z` —— 权威单处 `common/release-notes.md` §一.5 硬约束 + §四清单 + §五红线 · 两处引用收敛（`github-flow.md:56` / PM 卡 :121）并指回单处 · PM 卡 **v24→v25** · 模板注释 1 行（6 分段标题未动）· 一次性只读探针 `PASS=28 FAIL=0` + 负控 2/2 · QA 独立复跑 **GO** · squash `eff44ec` · tag + Release 已发（发布提交 `4d97f00` · **AC9 自证：标题严格 = `v0.17.3`**）· **npm 重发 0.17.3 已核验**（`latest` + integrity 逐字节）。
 - ✅ **T520 交付闭环（2026-10-14 · v0.17.2）**：ADR 文档契约 —— 必写 5 节 + 可选 3 节（参考来源恒末）· 头部恰 4 字段 · 状态值域 4 值 · 禁写/下沉清单 · 新增 `templates/adr.md.example` + `adr-index.md.example` · `arch-designer` 卡 v11→v12 · QA 探针 `PASS=53 FAIL=0` + 负控 2/2 · squash `160cc60` · tag + Release 已发（`9833344`）· **npm 不重发**。
 
-- 当前阶段：**`nao/pr-scope` 开工中**（PRD 已定稿 · 待开工确认卡拍板）· 上一批 T532 已终态（main `74e922d` · v0.20.0 · npm 已核验）
-- 当前 PRD：`docs/prds/2026-10-28-docs-ride-task-pr.md`（`nao/pr-scope` · 已定稿待开工 · **本 PR 首提交**）
-- 未决决策点：无（用户 2026-10-28 四项已拍板：全部文档随 PR / 批间收尾随发布提交 / PM 路径级提交 / 立即小批）
-- 待用户回答：开工确认卡（**npm 是否重发 0.20.1** · arch 是否跳过）
+- 当前阶段：**T533 在飞**（`nao/pr-scope` · 已开工 · 派 rd-infra-T533 + qa-T533）· 上一批 T532 已终态（main `74e922d` · v0.20.0 · npm 已核验）
+- 当前 PRD：`docs/prds/2026-10-28-docs-ride-task-pr.md`（T533 · `nao/pr-scope` · 已开工 · **本 PR 首提交** `a1c7f1a`）
+- 未决决策点：无（用户 2026-10-28 已拍定：全部文档随 PR / 批间收尾随发布提交 / PM 路径级提交 / 立即小批 / npm 重发 0.20.1 / arch 跳过 / QA 派生复核）
+- 待用户回答：无（下一步 = rd-infra 回执 → PM 验收 → 授权合并 → 发布 v0.20.1）
 - 旧口径残留（本批正在修）：main 上 13 条 `docs(T5xx)` 独立提交把台账/报告绕过了 PR ⇒ 本批后新批次文档一律随任务 PR
 - 旧当前阶段（T532 已终态）：main `e8ecb7c`/`74e922d` · 合并 `f230440` · tag/Release `v0.20.0` · **npm 已核验**（`latest` = 0.20.0）
 - 未派发队列：见下方「待派发队列」（仅 1 项：`M20261014-F1` 到期重评 2026-11-14）
