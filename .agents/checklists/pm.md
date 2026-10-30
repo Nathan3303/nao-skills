@@ -25,7 +25,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 
 > 写作要求（首屏 TL;DR、每格 ≤3 句、不适用项写法、长度上限 150 行）：@.agents/checklists/deliverable-docs.md §三（写 PRD 前读）。
 
-## 硬性红线（完整 33 项）
+## 硬性红线（完整 34 项）
 
 - [ ] 无目标指标/假设就进开发？
 - [ ] 边界不清晰（未写不做什么）？
@@ -54,6 +54,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] PM 亲自合并 PR / `push` main？（合并由 RD 执行，PM 只验收授权）
 - [ ] PM 改了**源码/测试/构建配置**，或手改冲突内容？（应转 worker；PM 只做仓库治理与发布）
 - [ ] main 上出现多条本需求提交，或出现 `wip()` 提交（未 squash）？
+- [ ] 为文档 / 台账**单开 PR**，或任务期文档作为**独立提交直落 main**？（应随任务 PR；唯一例外 = BR3 立项摘要，降级批次无例外；见 `github-flow.md`）
 - [ ] PR 标题 / 提交信息不可读（纯编号/类名/函数名/文件路径）？
 - [ ] Issue 与 `docs/` 双源（正文抄进 Issue，或状态只留平台）？
 - [ ] 未过验收 / 门禁未绿就打 tag 或 release，或 tag 指向非 main 合并提交？（见 `github-flow.md`）
@@ -62,7 +63,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 输出里有 `warn`/`error`/`pending approval`/`N vulnerabilities` 却判完成，或遗留项未走三出口（「先放着」不算出口）？（见 @.agents/skills/task-completion.md）
 - [ ] 降级（无 `gh` / 无远端）未在 `tasks-state` 与回执中标注？
 
-## 交付检查清单（完整 41 项）
+## 交付检查清单（完整 42 项）
 
 - [ ] 目标/边界/验收三件事齐备
 - [ ] 证据 + 5 Whys 已产出
@@ -97,6 +98,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 业界调研（若有）已落盘 `docs/research/`，每条含「适用条件 + 本项目差异（采纳/改造/不采纳）」；引用带访问日期，查不到已写「未检索到」
 - [ ] 派发消息已给出**需求分支** `feat/<issue-id>-<slug>`（或降级 `nao/<批次-slug>`）、PR owner、Reviewer
 - [ ] 工作期无 WIP 提交落在 main；暂存为路径级（无 `git add -A` 卷走他人改动）
+- [ ] **文档随任务 PR**：本任务文档与台账（PRD 定稿 / 报告 / ADR / `docs/tasks-state.md` / 索引 / release notes）已在本需求分支提交并随同一 PR 进 main；main 上无 `docs(<编号>):` 独立提交、无文档-only PR（立项摘要例外仅 1 条且单一文件）
 - [ ] Issue 已建（或降级已标注）：body 为摘要 + 指针，正文在 `docs/prds/`；同步仅 5 个节点
 - [ ] 验收在 PR 上完成：AC 逐条评论核对 + QA 门禁数字；**UI 呈现类已交用户验收清单并获回填**（QA 产出 → PM 审 → 用户执行）；**验收通过后才授权合并**
 - [ ] 合并由 RD 执行（`--squash`）；main 上本需求恰好 1 条提交且无 `wip()`；需求分支已删除

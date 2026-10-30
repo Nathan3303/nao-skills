@@ -8,6 +8,9 @@
 
 > 本区是 PM 的**悬空状态**（任务状态见下方五栏）；重开后逐行回读确认（当前阶段 · 未决决策 · 口头约束）。
 
+- ✅ **T533 rd-infra 交付回执 `done(full)`（2026-10-30 · HEAD `1559a3f` · PR #55 Draft）**：4 处机制文本 + 1 次性探针落地；探针 `PASS=24 FAIL=0` · 负控 2/2 · 失败演练（删小节 + 红线 34→33 ⇒ `PASS=22 FAIL=2`）· `check` rc=0 roles=6 **files 50→50**（探针落 `docs/reports/`，`files` 只计 `.agents/**`）· `npm test` rc=0 17/17 · 工作区干净 · 禁改区零改动 · 遗留：无。**PM 已读 diff 核 AC1/AC2/AC3 通过**；AGENTS.md 1 条指针已由 PM 提交（随本 PR）；QA 独立复核进行中。
+- 🚀 **T533 派发（2026-10-28）**：`rd-infra-T533`（`ensure --task T533` 已拉起 · idle）负责 4 处机制文本 + 一次性探针 + push 分支 + 开 Draft PR；`qa-T533` 已拉起待 rd 回执后派独立复核（**不复用 rd 夹具**）。回执级别 `done(full)`。
+- 🔄 **T533 开工（2026-10-28 · 降级 `nao/pr-scope` · v0.20.1 PATCH · 无 Issue）**：**文档与台账随任务 PR**（用户 2026-10-28 口头约束 · 四项拍板见 PRD 附录 D1–D4）。PRD = `docs/prds/2026-10-28-docs-ride-task-pr.md`（**本 PR 首提交** `a1c7f1a`，不再独立落 main —— 本批自我示范）。范围 = `github-flow.md`（新节 + 八阶段载体 + 红线）· PM 卡 §六/§十三 + 红线（v28→**v29**）· `checklists/pm.md`（清单 +1 / 红线 34）· `AGENTS.md` 1 条指针 · 一次性探针 `docs/reports/2026-10-28-docs-ride-pr-probe.sh`。**开工卡已拍定**：开工 / **npm 重发 0.20.1** / **arch 跳过** / **QA 派生复核**。
 - ✅ **批次终态（2026-10-28 · T532 codegraph 插件引入 · v0.20.0）**：合并 `f230440`（PR #54 squash `feat/53-codegraph-plugin`）· 发布提交 `18e847b` · tag/Release `v0.20.0`（`gh release view` name = 裸版本号已核验）· **npm 已核验**（`latest` = 0.20.0 · `dist.integrity` 与本地 tarball（140,912 B）逐字节一致）· 收尾 `74e922d`。关键结论：四态检测全 warn（默认零 codegraph 调用 + `warn` 通道隔离）· 三段阶梯（唯一硬编码 `codegraph_explore`）· 本仓索引 4 files / 118 nodes · **T3 真实舰队**：5 会话 PSS 479.7MB / daemon 基线 131.6MB / 边际 69.6MB / 外推 6 会话 549.3MB ≤600MB 接受。QA 三轮 + arch 三轮；D1–D6、P4-1/P4-2 全关闭。
 - 🚧 **无在飞任务、无未决决策**（架构/取舍都已在 PRD/ADR 落定）。**6 卡广播待发**：`card arch-designer v13` / `card rd-be v12` / `card rd-fe v12` / `card rd-infra v4` / `card pm v28` / `card qa v15` —— 目标会话当前**全部关闭**（T3 复测后已回收）⇒ 唤醒时补发，下游三仓同。
 - ⚙️ **环境现状（离开会话也必须知道）**：`codegraph 1.6.2` 全局 · `@sean_pedersen/pi-codegraph 0.1.0` 用户级 · 本仓 `.codegraph/` 在位（536K，已 ignore）· 遥测 off + 舰队 `spawn_one` 注入 `CODEGRAPH_TELEMETRY=0` · **会话外跑 `pi` 用 `( cd /tmp && pi … )`**（否则每仓留一个 ~130–150MB daemon + 副产物文件；nao 不代杀，BR11）。
@@ -40,13 +43,15 @@
 - ✅ **T521 交付闭环（2026-10-14 · v0.17.3）**：GitHub Release 标题口径 = 裸 `vX.Y.Z` —— 权威单处 `common/release-notes.md` §一.5 硬约束 + §四清单 + §五红线 · 两处引用收敛（`github-flow.md:56` / PM 卡 :121）并指回单处 · PM 卡 **v24→v25** · 模板注释 1 行（6 分段标题未动）· 一次性只读探针 `PASS=28 FAIL=0` + 负控 2/2 · QA 独立复跑 **GO** · squash `eff44ec` · tag + Release 已发（发布提交 `4d97f00` · **AC9 自证：标题严格 = `v0.17.3`**）· **npm 重发 0.17.3 已核验**（`latest` + integrity 逐字节）。
 - ✅ **T520 交付闭环（2026-10-14 · v0.17.2）**：ADR 文档契约 —— 必写 5 节 + 可选 3 节（参考来源恒末）· 头部恰 4 字段 · 状态值域 4 值 · 禁写/下沉清单 · 新增 `templates/adr.md.example` + `adr-index.md.example` · `arch-designer` 卡 v11→v12 · QA 探针 `PASS=53 FAIL=0` + 负控 2/2 · squash `160cc60` · tag + Release 已发（`9833344`）· **npm 不重发**。
 
-- 当前阶段：**T532 批次终态**（main `e8ecb7c` · 合并 `f230440` · tag/Release `v0.20.0` · **npm 已核验**：`latest` = 0.20.0、integrity 与本地 tarball 逐字节一致）· 待命，等用户下批需求
-- 当前 PRD：`docs/prds/2026-10-28-codegraph-plugin.md`（T532 · 草稿 · 待 QA 接缝回执后定稿 → Issue → arch 完整评审 → 开工确认卡）
-- 未决决策点：无（用户 2026-10-28 ask-me 6 项已拍板：warn 门禁 / 只检测+文档指引 / 原生优先+CLI 回退 / 本仓起索引 / v0.20.0 MINOR+重发 / arch 完整评审）
-- 待用户回答：开工确认卡（PRD 定稿后出）；以及 M20261028-codegraph 环境动作的执行授权（装 CLI + 插件 + `codegraph init -i`）
+- 当前阶段：**T533 在飞**（`nao/pr-scope` · rd-infra 已回执 · qa-T533 独立复核中 · PM 待验收）· 上一批 T532 已终态（main `74e922d` · v0.20.0 · npm 已核验）
+- 当前 PRD：`docs/prds/2026-10-28-docs-ride-task-pr.md`（T533 · `nao/pr-scope` · 已开工 · **本 PR 首提交** `a1c7f1a`）
+- 未决决策点：无（用户 2026-10-28 已拍定：全部文档随 PR / 批间收尾随发布提交 / PM 路径级提交 / 立即小批 / npm 重发 0.20.1 / arch 跳过 / QA 派生复核）
+- 待用户回答：无（下一步 = rd-infra 回执 → PM 验收 → 授权合并 → 发布 v0.20.1）
+- 旧口径残留（本批正在修）：main 上 13 条 `docs(T5xx)` 独立提交把台账/报告绕过了 PR ⇒ 本批后新批次文档一律随任务 PR
+- 旧当前阶段（T532 已终态）：main `e8ecb7c`/`74e922d` · 合并 `f230440` · tag/Release `v0.20.0` · **npm 已核验**（`latest` = 0.20.0）
 - 未派发队列：见下方「待派发队列」（仅 1 项：`M20261014-F1` 到期重评 2026-11-14）
 - 下批需求候选（**已评估 · 全部未立项**）：① CodeReview 是否新增角色 → 结论「不新增常驻第 7 角色，走 A+B+C 最小改动包」（见 `docs/research/2026-10-14-code-review-role.md`）② E1 升级（`check` 结构校验「归档时遗留项未收口 → warn」），门槛 = 连续 2 批「遗留项失忆」③ T512 余项（台账 ⑨/⑫后半）、R1/R2 探针健壮性、O-1/O-2 负载偶发、T512 §4.5 model 白名单缺口
-- 下次唤醒条件：**T532 QA 接缝回执到达 / 用户授意 / 目标会话唤醒补发角色卡广播 / `M20261014-F1` 到期（2026-11-14）**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = PM + QA（`qa` 2026-10-28 为 T532 recon 拉起；arch/rd-infra/rd-fe/rd-be 未运行）
+- 下次唤醒条件：**用户确认开工卡 / 目标会话唤醒补发角色卡广播 / `M20261014-F1` 到期（2026-11-14）**；先读本快照 + `docs/prds/README.md` 索引；舰队现状 = PM（arch/rd-infra/rd-fe/rd-be/qa 未运行）
 - 口头约束已落盘：项目 `AGENTS.md` 项目约束（ask-me 提问）· PRD §5 BR6 格式禁令 + §9 R5/R6（T519）· ADR 字段口径 = `deliverable-docs.md` §四（T520 · 状态值域 4 值 / 头部 4 字段 / 60 行上限）
 - 需求分支 / PR：见下方「需求分支 / PR / 发布」（本批 `feat/46-task-completion-protocol`——**已 squash 合并 `3e98f0d` 并删净**）
 - 会话体检：本 PM 会话 `01a18314`（pane %3）跨 T532 全程，闭批 ctx **22%（225k/1000k · 无压缩）**；按用户拍板于批次终态**重开 PM**；本快照 = 接续唯一事实源（main = `74e922d`）

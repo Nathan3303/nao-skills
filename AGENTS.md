@@ -20,7 +20,7 @@
 - **幂等**：脚本/迁移/安装器连跑 2 次 effect = 0 且 rc = 0；守卫改动带失败演练。
 - **维护型闭环口径**：外部命令 / 依赖 / 环境类动作 = 维护型任务（`M<YYYYMMDD>-<slug>`），**`exit 0` 不算完成** —— `audit` / `install-scripts` / 每条 `warn`/`error`/`pending approval` 逐条归口，遗留项走三出口（关闭 / 接受含到期 / 转办），台账落 `docs/reports/<编号>-followups.md`（协议 `.agents/skills/task-completion.md`；首个实例 `M20261014-pi-ext-update`）。
 - **角色卡版本纪律**：改 `.agents/prompts/<card>.md` 必须 bump `version` + 更新 `updated`（version 是唯一事实，roles.yaml 不重复维护），并经 intercom 广播 `card <role> v<N+1>` 摘要。
-- **Git 流程（GitHub Flow）**：一个需求一条分支 `feat/<issue-id>-<slug>`（机制维护批次用降级 `nao/<批次-slug>`）；工作期 `wip(<编号>):` 小步提交 + 路径级暂存（禁 `git add -A`）；**PM 验收通过后由 RD 在 PR 上 squash 合并**（main = 1 条/需求）；**禁直推 main、禁 PM 亲自合并**。
+- **Git 流程（GitHub Flow）**：一个需求一条分支 `feat/<issue-id>-<slug>`（机制维护批次用降级 `nao/<批次-slug>`）；工作期 `wip(<编号>):` 小步提交 + 路径级暂存（禁 `git add -A`）；**PM 验收通过后由 RD 在 PR 上 squash 合并**（main = 1 条/需求）；**禁直推 main、禁 PM 亲自合并**。**文档/台账随任务 PR**：一个任务 PR 含该任务全部改动（含 PRD/报告/ADR/`tasks-state`/索引/notes），**禁为文档单开 PR 或独立落 main**（细则 `.agents/skills/github-flow.md`「文档与台账载体」）。
 - **发布与仓库治理**：PM 负责 Issue / PR 验收评论 / tag / release / `.github/` 模板（优先 `gh`，不可用降级 `git`）；**发版说明写法遵循 `.agents/common/release-notes.md`**（面向用户「本次更新」置顶、内部信息下沉、正文不用表格）；已 push 的 tag 不删（改发下一个 PATCH，用户明确要求才删）。
 - **npm 发布成功判据（本机三次同型，2026-10-14 精确化）**：`npm publish` 的 `PUT 202 + exit 0`（"being processed"）**不可作成功判据** —— 既可能是**假成功**（token 无 Publish 权限，registry 永无该版本），也可能**延迟落地**（本次约 2 分钟后才出现）。唯一判据 = **直连 registry 实测**：`dist-tags.latest` 已是该版本 + `dist.integrity` 与本地 `npm pack` tarball **逐字节一致**。
 - **需求确认方式（用户 2026-10-14 口头约束）**：凡需用户确认 / 拍板的问题**一律用 ask-me 提问**，不用正文追问替代。

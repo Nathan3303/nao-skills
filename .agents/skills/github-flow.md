@@ -14,19 +14,33 @@ PM 在**立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 PR / 合�
 - **短生命周期分支**：一个需求一条分支，存活 ≤ 一个批次；跨天过长就拆需求。
 - **边界对齐**：一个批次 ≡ 一个需求 ≡ 一个父 Issue ≡ 一条分支 ≡ 一个 PR（前后端分离则每仓库一条）。
 - **合并权在 RD，闸门在 PM**：PM **验收通过前不得合并**；合并由 RD 在 PR 上执行，**PM 不亲自合并**。
+- **一个任务 PR = 全量改动**：实现 / 测试 / 文档（PRD 定稿 · 验收报告 · ADR · `tasks-state` 台账 · 报告 · 索引 · release notes）同属**一条** PR；**文档不单开 PR、不独立落 main**（唯一例外 = 立项摘要，细则见「文档与台账载体（一任务一 PR）」）。
 
 ## 八阶段
 
 | # | 阶段 | 主责 | 动作 | 产出 |
 | :--- | :--- | :--- | :--- | :--- |
-| 1 | 立项 | PM | 建 Issue（用户故事 / AC / 优先级 / 里程碑）+ PRD 正文落 `docs/prds` | 可追踪 Issue |
-| 2 | 拆分排期 | PM | 拆任务、定 PR owner / Reviewer / 分支名 | 开工确认卡 |
-| 3 | 起分支 | RD | 从 main 拉 `feat/<issue-id>-<slug>`，开 **Draft PR** | Draft PR + CI |
-| 4 | 开发提交 | RD | 小步 `wip(<编号>):` 提交，push 触发 CI | 增量代码 + CI 结果 |
-| 5 | 评审测试 | RD / QA / Reviewer | 填 PR 模板、QA 跑全量门禁、预览环境验证 | Review 通过 |
-| 6 | 验收合并 | PM → RD | PM 逐条核 AC 并在 PR 评论；**通过后由 RD squash 合并、删分支** | main 上 1 条提交 |
-| 7 | 发布 | PM | 版本号 + tag + Release notes（优先 `gh`） | Release 记录 |
-| 8 | 复盘 | PM | 监控指标、关 Issue、归档 PRD | 复盘 + 归档 |
+| 1 | 立项 | PM | 建 Issue（用户故事 / AC / 优先级 / 里程碑）+ PRD 正文落 `docs/prds` | 可追踪 Issue + **PRD 定稿（随本 PR）** |
+| 2 | 拆分排期 | PM | 拆任务、定 PR owner / Reviewer / 分支名 | 开工确认卡 + **`docs/tasks-state.md` 登记（随本 PR）** |
+| 3 | 起分支 | RD | 从 main 拉 `feat/<issue-id>-<slug>`，开 **Draft PR** | Draft PR + CI（+ 立项摘要，唯一例外） |
+| 4 | 开发提交 | RD | 小步 `wip(<编号>):` 提交，push 触发 CI | 增量代码 + CI 结果 + 阶段文档（ADR / 报告，**随本 PR**） |
+| 5 | 评审测试 | RD / QA / Reviewer | 填 PR 模板、QA 跑全量门禁、预览环境验证 | Review 通过 + QA 报告 / 用户验收清单（`docs/reports/`，**随本 PR**） |
+| 6 | 验收合并 | PM → RD | PM 逐条核 AC 并在 PR 评论；**通过后由 RD squash 合并、删分支** | main 上 1 条提交（**含该任务全部文档改动**） |
+| 7 | 发布 | PM | 版本号 + tag + Release notes（优先 `gh`） | Release 记录 + notes 落 `docs/releases/`，批间收尾事实随发布提交带走 |
+| 8 | 复盘 | PM | 监控指标、关 Issue、归档 PRD | 复盘 + 归档（随发布提交或**下一任务 PR**） |
+
+## 文档与台账载体（一任务一 PR）
+
+**一个任务 PR = 该任务全量改动**（BR1）：文档与台账不另立载体，`docs/` 改动一律随该任务的 PR 进 main。
+
+- **BR1 全量（一 PR 含全部改动）**：任务 PR 必须包含该任务**全部文件改动** —— 实现 / 测试 / PRD 定稿 / 验收报告 / ADR / `docs/tasks-state.md` / `docs/reports/*-followups.md` / `docs/prds/README.md` 索引 / `docs/releases/<v>.md`。验收读 PR diff 即见文档变化；回滚 `git revert` 单条即整需求。
+- **BR2 禁令**：① 禁止为文档 / 台账**单开 PR**；② 禁止任务期文档作为**独立提交直落 main**（唯一例外见 BR3）。发布提交（阶段 7）承载批间收尾事实，不计入本禁令。
+- **BR3 立项例外（三条件同时满足才可用）**：① **仅用于**建 Issue / 定分支名所需的最小摘要；② 内容上限 = **最小摘要三要素**（TL;DR + AC 编号 + PRD 路径指针），正文仍留 `docs/`，**禁抄正文**；③ **单条** `docs(<编号>):` 提交、只含该摘要文件、**不与其它改动混提**。**降级批次（无 Issue）无此例外**。
+- **BR4 谁提交**：PM 在需求分支做**路径级**提交（`git add <具体路径>`，`docs(<编号>):` 前缀，**禁 `-A`**、禁 push main）；RD 最终 squash 时一并带入。同 worktree 并行时，提交方**只暂存自己的路径**。
+- **BR5 批间收尾**：合并后产生的事实（npm 核验结果 / Release 标题核验 / 角色卡广播登记 / 会话交接快照）随**发布提交一次带走**；发布提交之后才产生的事实，登记进**下一个任务 PR** 或下一次发布提交，**不得单独提交 main**。
+- **BR6 可读性不变**：PR 标题与 `gh pr merge --squash --subject` 仍须用户可读（禁纯编号 / 类名 / 路径）；文档改动不降低该要求。
+- **自查三条（可执行）**：main 上本任务提交数（`git log --oneline main | grep -c '(<编号>)'`）· 本 PR diff 是否含 `docs/` 路径（`git diff --name-only main...HEAD | grep '^docs/'`）· 工作区干净（`git status --porcelain` 为空）。
+- **验证接缝**：文本口径由一次性只读探针核（如 `docs/reports/<日期>-*-probe.sh`），不进 `tests/`。
 
 ## 分支与提交
 
@@ -69,6 +83,7 @@ PM 在**立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 PR / 合�
 | 分支 | `feat/<issue-id>-<slug>` | `nao/<批次-slug>` |
 | 评审 | PR + CI + 预览环境 | 本地全量门禁 + PM 读 diff |
 | 合并 | PR squash merge | PM 验收通过后，RD 本地 `git merge --squash feat/… && git commit` + 删分支 |
+| 文档载体 | 随任务 PR（PR diff 含 `docs/`） | 同样在本地分支提交并由 `merge --squash` 带入 main，**不另开文档提交** |
 | 发布 | `gh release create` | `git tag -a` + notes 落 `docs/releases/` |
 
 降级须在 `tasks-state` 与回执中标注「降级」。
@@ -77,6 +92,7 @@ PM 在**立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 PR / 合�
 
 - [ ] 未过 PM 验收就合并 PR，或直推 main？
 - [ ] main 上出现多条本需求提交，或出现 `wip()` 提交（未 squash）？
+- [ ] 为文档 / 台账**单开 PR**，或任务期文档作为**独立提交直落 main**（立项摘要例外见 BR3）？
 - [ ] PM 亲自执行合并 / `push` main？
 - [ ] Issue 与 `docs/` 双源（正文抄进 Issue，或状态只留平台）？
 - [ ] 未过验收 / 门禁未绿就打 tag，或 tag 指向非 main 提交？
