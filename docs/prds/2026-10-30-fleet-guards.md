@@ -1,6 +1,6 @@
 # PRD：舰队闸门小批（跨仓残留误报 + 合并前 push 核对 + 探针识别放宽）
 
-- 状态：开工卡已定稿（D1–D4 已拍板）· Owner：PM · 更新：2026-10-30
+- 状态：arch 定稿已采纳（D1–D8）· Owner：PM · 更新：2026-10-31
 - 指针：Issue [#56](https://github.com/Nathan3303/nao-skills/issues/56) · 来源 = T533 收尾实测（O5/O4/O2 转办）· L1 复盘 `docs/reports/2026-10-30-T533-retro.md`
 - 优先级：高（A 项安全类）· RICE 结论 ≈ 30（附录）
 
@@ -69,6 +69,8 @@
 - **AC2（负向闭环 · 零误杀）**：① 他仓会话在 A 项改动后**进程/pane 存活**（改动只读，不触任何 pane）；② 负控：把归属判据反转为「恒真（全部算本仓）」⇒ AC1 首句 FAIL；反转为「恒假（全部算他仓）」⇒ 本仓残留检测失效，`close --task` 闸门用例 FAIL（须点名）；③ `tests/t4` 全量 rc=0（含 `cases/09`、`cases/13`、`cases/15` 相关残留/回收用例）。
 - **AC3（边界 · B 项闸门文本）**：`checklists/pm.md` 合并项含三条命令 + 判据（`rev-list --count` = 0 · `status --porcelain` 空 · `HEAD == @{u}`），PM 卡 §六 仅指针（BR5）；文本明确适用「在分支上提交过的任何角色」。
 - **AC4（异常 · C 项探针口径）**：探针对 `docs(T1):` / `docs（T1）：` / `docs:` / `Docs(T1):` 四种写法均判为**文档提交**（与他仓/独立 PR 的组合负例仍 FAIL）；输出含「未覆盖：任务提交完全无 docs」一行；自证 = 变异 2 次（收窄正则 ⇒ 四种写法里至少 2 种翻为漏判；删未覆盖声明行 ⇒ 专项断言 FAIL）。
+- **AC6（设计一致性 · 文档单源与 ADR）**：新增 ADR `docs/adr/2026-10-31-fleet-status-repo-attribution.md`（≤60 行 · 必写 5 节 · 含「三段判据 / 优先级 / fail-closed」决策 + 三个不采纳备选及理由）· 评审报告 `docs/reports/2026-10-31-T534-arch-review.md` 入库 · `pm-operations.md` 残留自检条目加半句「他仓会话单列、勿在本仓回收」（**单源**：`checklists/pm.md` 只给指针，不双写）· `AGENTS.md` 零改动。
+- **AC7（边界 · 逐字等价与路径陷阱，arch ⑤⑦⑧）**：① **兼容机械证明**：以 `git show main:.agents/scripts/nao-fleet.sh` 存旧版，在同一「仅本仓 pane」夹具下，改前/改后 `status` 输出**逐字相同**（diff 为空）；② **组件级前缀**：pane cwd = `<夹具根>-sibling` 必判**他仓**（裸 string prefix 会误判本仓）；③ **子目录锚**：在 `<夹具根>/.agents` 内跑 `status`，本仓 pane 仍判本仓（`rev-parse --show-toplevel` 并入锚集）；④ **软链归一**：经 symlink 指向夹具根的 pane cwd 判本仓；⑤ 判据抽为单行谓词 `repo_contains_path <root> <cwd>`，供 AC2 单行变异。
 - **AC5（设计一致性 · 版本与门禁）**：`nao-fleet.sh` 改动后 `check` rc=0（roles=6 · files 精确数字须报旧→新）· `npm test` rc=0 · `tests/t4/run.sh` 全量 `PASS/FAIL/SKIP/DEGRADE` 精确数字；PM 卡若因 B 项 bump 则 `version` 递增且 `updated` 更新 + 广播登记；`AGENTS.md` 仅在有项目级需要时加 1 条指针（否则零改动并说明）。
 
 ## 八、上线闭环
@@ -94,3 +96,9 @@
 - **D2（用户 2026-10-30）**：**走轻量 arch 评审**（A 项触及 `ensure`/`status`/`close` 三处语义）。
 - **D3（用户 2026-10-30）**：**npm 重发 0.20.2**（判据 = registry 实测 `latest` + `dist.integrity` 与本地 tarball 逐字节一致）。
 - **D4（用户 2026-10-30）**：**开工**（rd-infra 实施 A/B/C + qa 独立复核；分支 `feat/56-fleet-guards`）。
+- **D5（PM 2026-10-31 · 采纳 arch ①）**：他仓会话**列出并标注**（`~ <名>（他仓 @ <仓名>）他仓会话，勿在本仓回收`，整行不含可执行 `close` 命令），**不静默隐藏**；归属不可判定 ⇒ `? <名>（归属不可判定）→ 人工核对`（fail-closed，T530 对偶）。
+- **D6（PM 2026-10-31 · 采纳 arch ②）**：**不给 `close` 加「跨仓需 `--force`」硬闸**（BR3；会破坏 `cases/09` 跨仓真回收契约）。
+- **D7（PM 2026-10-31 · 采纳 arch ③）**：`pm-operations.md` 残留自检半句文案**随本批 PR** 由 rd-infra 改，**单源在 `pm-operations.md`**，`checklists/pm.md` 只给指针。
+- **D8（PM 2026-10-31 · 采纳 arch ⑥）**：**出 ADR**（`docs/adr/2026-10-31-fleet-status-repo-attribution.md`）+ 评审报告入库；两份文档由 **arch 落盘并路径级提交到本需求分支**（`docs(T534):`），rd-infra 只写实现与探针。
+- **必进验收（arch 条件）**：④ 不可判定 fail-closed；⑤ 变异与逐字等价两条机械证明（已并入 AC1/AC2/AC7）。
+- **arch 已定稿要点（实现须照此，勿另立）**：本仓锚 = `pwd -P` + `git rev-parse --show-toplevel`（当 cwd 的严格祖先时并入；**不用** `roles.yaml` workspace）；pane cwd 取 **一次** `tmux list-panes -a -F '#{pane_id}\t#{pane_title}\t#{pane_current_path}'` 快照建 name→(pane,cwd)（禁逐名 `find_pane_for` 的 O(N) tmux 调用）；兜底名册 `intercom_roster` 的 name→cwd（优先级 pane > 名册，冲突取 pane 不 warn）；物理归一（`pwd -P` → `readlink -f` → 原串）+ **组件级**前缀；同名多 pane：本仓 ≥1 ⇒ 本仓，本仓 0 且他仓 ≥1 ⇒ 他仓，两侧皆无 ⇒ 不可判定；`status` **先定归属再查本仓台账**（本仓行 cls tag 逐字不变）；`close` 与 `ensure` **零改动**。
