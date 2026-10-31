@@ -1,6 +1,6 @@
 # PRD：归属判定补常态回归 + BR5 摩擦修正
 
-- 状态：rd 已交付 · 范围增补已裁定（D4）· Owner：PM · 更新：2026-10-31
+- 状态：验收通过（待发布 v0.20.3）· Owner：PM · 更新：2026-10-31
 - 指针：Issue [#58](https://github.com/Nathan3303/nao-skills/issues/58) · 上游 = T534 QA 结论（`docs/reports/2026-10-31-T534-qa-verify.md` O1）+ T533/T534 收尾实测（`pull` 被工作区脏改阻挡）· ADR `docs/adr/2026-10-31-fleet-status-repo-attribution.md`
 - 优先级：高（安全判据缺护栏）· RICE 结论 ≈ 26（附录）
 
@@ -99,3 +99,5 @@
 - **D2（用户 2026-10-31）**：**跳过 arch 评审**（归属判据已由 arch 定稿并落地 ADR；本批不改判定逻辑，只补测试与文本）。
 - **D4（PM 裁定 2026-10-31 · rd 上报范围外增补）**：**接受并入本批**（不拆单）—— 理由：① 它是 `T534-O2`（`case 16` 一次性 flake）的**根因**，不修则该 flake 会随发布带到用户侧；② 改动面 = 3 个 helper 单行、语义等价，回归面由 `tests/t4` 全量承载；③ 已有「2/20 → 0/20 + 5/5 绿」实测。**代价与约束**：本批 AC 增加 AC6（必须给修前/修后对照 + 语义等价正反证明），QA 须独立复现，不得只信回执数字。
 - **D3（用户 2026-10-31）**：**npm 重发 0.20.3**（`tests/` 与 `.agents/**` 均在包内；判据 = registry 实测 `latest` + `dist.integrity` 与本地 tarball 逐字节一致）。
+
+- **修订：2026-10-31 验收通过** —— PR [#59](https://github.com/Nathan3303/nao-skills/pull/59) · QA `done(full)` **GO**（报告 `docs/reports/2026-10-31-T535-qa-verify.md`）· AC1–AC6 全过 · `tests/t4` **19/19** · 断言 437→475 · SKIP=0/DEGRADE=0 · 变异两方向在**全量套件**层面必红（恒真 8 FAIL / 恒假 9 FAIL，唯一红点 = `case 19`）· **AC6 数字订正**（QA 实测）：假 FAIL 为**负载相关** —— 空载 0/100、重负载旧 2/40 → 新 0/40；helper 级 16.5KB 旧 55/200 → 新 0/200。遗留：`T535-O2`（`lib.sh:199` 低危同型管道，转办）· `T534-O1` 已关闭（本批 AC1 交付）。
