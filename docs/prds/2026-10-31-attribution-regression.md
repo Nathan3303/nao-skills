@@ -1,6 +1,6 @@
 # PRD：归属判定补常态回归 + BR5 摩擦修正
 
-- 状态：待开工确认 · Owner：PM · 更新：2026-10-31
+- 状态：开工卡已定稿（D1–D3 已拍板）· Owner：PM · 更新：2026-10-31
 - 指针：Issue [#58](https://github.com/Nathan3303/nao-skills/issues/58) · 上游 = T534 QA 结论（`docs/reports/2026-10-31-T534-qa-verify.md` O1）+ T533/T534 收尾实测（`pull` 被工作区脏改阻挡）· ADR `docs/adr/2026-10-31-fleet-status-repo-attribution.md`
 - 优先级：高（安全判据缺护栏）· RICE 结论 ≈ 26（附录）
 
@@ -91,4 +91,6 @@
 
 - **战略筛子**：命中（安全判据的护栏 + 日常操作摩擦）；不做则 T534 的安全修正可能被后续改动静默回退。
 - **RICE**：Reach 5（机制维护者）× Impact 3（安全护栏）× Confidence 0.8 ÷ Effort 0.5 人日 ≈ **24**（取整 26）⇒ 中高优先。
-- **待拍板（开工确认卡）**：① 是否派 arch（PM 建议**跳过**：判据已由 arch 定稿、本批只补测试与文本）② npm 是否重发 0.20.3 ③ QA 复核是否派生会话。
+- **D1（用户 2026-10-31）**：**开工**（rd-infra 实施 A/B + qa 派生复核；分支 `feat/58-attribution-regression`）。
+- **D2（用户 2026-10-31）**：**跳过 arch 评审**（归属判据已由 arch 定稿并落地 ADR；本批不改判定逻辑，只补测试与文本）。
+- **D3（用户 2026-10-31）**：**npm 重发 0.20.3**（`tests/` 与 `.agents/**` 均在包内；判据 = registry 实测 `latest` + `dist.integrity` 与本地 tarball 逐字节一致）。
