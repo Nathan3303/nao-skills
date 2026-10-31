@@ -1325,6 +1325,101 @@ cmd_check() {
 }
 
 # ---------------------------------------------------------------------------
+# T534（A · ADR 2026-10-31-fleet-status-repo-attribution）：派生会话归属加「仓」维度
+#   北极星 = 本仓 status 的残留提示**永不**指向他仓会话（BR2「提示即可执行」）；
+#   close / ensure **零改动**（BR3），本批只收紧 status 的判定与提示。
+# 物理归一：pwd -P → readlink -f → 原串（目录已删/不可读时不猜，交给组件级前缀判否）
+nao_phys_path() {
+  local p="$1" out=""
+  [[ -n "$p" ]] || return 0
+  out="$(cd "$p" 2>/dev/null && pwd -P)" || out=""
+  [[ -n "$out" ]] || out="$(readlink -f -- "$p" 2>/dev/null || true)"
+  [[ -n "$out" ]] || out="$p"
+  printf '%s\n' "$out"
+}
+
+# 单行谓词（AC7⑤，同时是 AC2 的单行变异点）：cwd 是否落在 root 子树内。
+#   组件级前缀：`/a/b` **不**命中 `/a/bc`（裸字符串前缀的经典陷阱 ⇒ AC7②）。
+repo_contains_path() { [[ -n "$1" && -n "$2" && ( "$2" == "$1" || "$2" == "${1%/}"/* ) ]]; }
+
+# 本仓锚集（每 run 一次）：主锚 pwd -P；git toplevel 是 cwd **严格祖先**时并入
+#   （覆盖在 `.agents/` 等子目录跑 status ⇒ AC7③）。不用 roles.yaml workspace（常为 `.`/子目录，且 ensure 支持 @repo）。
+repo_anchor_roots() {
+  local cwd top
+  cwd="$(nao_phys_path "$PWD")"
+  [[ -n "$cwd" ]] && printf '%s\n' "$cwd"
+  command -v git >/dev/null 2>&1 || return 0
+  top="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || true)"
+  [[ -n "$top" ]] || return 0
+  top="$(nao_phys_path "$top")"
+  [[ -n "$top" && "$top" != "$cwd" ]] || return 0
+  repo_contains_path "$top" "$cwd" || return 0
+  printf '%s\n' "$top"
+}
+
+# pane cwd 一次快照（**禁**逐名 find_pane_for：O(N) 次 tmux 调用违 NFR「不引入额外 I/O 循环」）
+#   输出：name<TAB>pane_id<TAB>pane_current_path；标题契约 `π - <会话名> - <任意>`（会话名字符集同 visible_session_names）
+pane_cwd_snapshot() {
+  command -v tmux >/dev/null 2>&1 || return 0
+  tmux list-panes -a -F "#{pane_id}"$'\t'"#{pane_title}"$'\t'"#{pane_current_path}" 2>/dev/null \
+    | awk -F'\t' -v p="$PI_TITLE" '
+        { pre = p " - "
+          if (index($2, pre) != 1) next
+          rest = substr($2, length(pre) + 1)
+          i = index(rest, " - ")
+          if (i <= 1) next
+          name = substr(rest, 1, i - 1)
+          if (name !~ /^[A-Za-z0-9_-]+$/) next
+          print name "\t" $1 "\t" $3
+        }' || true
+}
+
+# 归属三态：local（本仓）/ other（他仓）/ unknown（不可判定 ⇒ fail-closed，只标注不给命令）
+#   $1=本仓锚集（换行分隔）· $2=pane cwd 集（换行分隔；空 = 无 pane）· $3=名册 cwd（可空）
+#   优先级 pane > 名册；同名多 pane：本仓 ≥1 ⇒ local · 本仓 0 且他仓 ≥1 ⇒ other · 两侧皆无 ⇒ unknown
+#   输出：`<verdict><TAB><他仓仓名 basename>`
+session_repo_verdict() {
+  local roots="$1" cwds="$2" rcwd="$3"
+  local c r hit local_n=0 other_n=0 obase="" verdict=""
+  if [[ -n "$cwds" ]]; then
+    while IFS= read -r c; do
+      [[ -n "$c" ]] || continue
+      c="$(nao_phys_path "$c")"
+      hit=0
+      while IFS= read -r r; do
+        [[ -n "$r" ]] || continue
+        if repo_contains_path "$r" "$c"; then hit=1; break; fi
+      done <<< "$roots"
+      if (( hit )); then
+        local_n=$((local_n + 1))
+      else
+        other_n=$((other_n + 1))
+        if [[ -z "$obase" ]]; then obase="${c%/}"; obase="${obase##*/}"; fi
+      fi
+    done <<< "$cwds"
+    if (( local_n > 0 )); then verdict=local
+    elif (( other_n > 0 )); then verdict=other
+    fi
+  fi
+  if [[ -z "$verdict" && -n "$rcwd" ]]; then
+    c="$(nao_phys_path "$rcwd")"
+    hit=0
+    while IFS= read -r r; do
+      [[ -n "$r" ]] || continue
+      if repo_contains_path "$r" "$c"; then hit=1; break; fi
+    done <<< "$roots"
+    if (( hit )); then
+      verdict=local
+    else
+      verdict=other
+      obase="${c%/}"; obase="${obase##*/}"
+    fi
+  fi
+  [[ -n "$verdict" ]] || verdict=unknown
+  printf '%s\t%s\n' "$verdict" "$obase"
+}
+
+# ---------------------------------------------------------------------------
 cmd_status() {
   local a
   intercom_list_json >/dev/null 2>&1 || true   # 预热名册缓存（后续子 shell 复用）
@@ -1337,12 +1432,35 @@ cmd_status() {
     fi
   done
   echo "== 任务派生会话（--task 拉起，如 rd-be-T1 / rd-infra-T1）=="
-  local found=0 dname role id cls tag
+  # T534：先建归属快照（本仓锚 / pane cwd / 名册 cwd），再逐会话**先定归属、后判本仓台账**
+  #   （他仓不查本仓 tasks-state，杜绝误读；本仓行 cls tag 逐字不变）
+  local roots_blob="" rl
+  while IFS= read -r rl; do [[ -n "$rl" ]] && roots_blob+="$rl"$'\n'; done < <(repo_anchor_roots)
+  local -A pane_cwds=() roster_cwds=()
+  local pn pname pcwd rn rcwd prev
+  while IFS=$'\t' read -r pn pname pcwd; do
+    [[ -n "$pname" ]] || continue
+    prev="${pane_cwds[$pname]:-}"
+    pane_cwds["$pname"]="$prev$pcwd"$'\n'
+  done < <(pane_cwd_snapshot)
+  while IFS=$'\t' read -r rn rcwd; do
+    [[ -n "$rn" ]] || continue
+    [[ -n "${roster_cwds[$rn]:-}" ]] || roster_cwds["$rn"]="$rcwd"
+  done < <(intercom_roster 2>/dev/null || true)
+
+  local found=0 dname role id cls tag verdict obase
   while IFS= read -r dname; do
     [[ -n "$dname" ]] || continue
     id=""
     for role in "${ROLE_ORDER[@]}"; do [[ "$dname" == "$role-"* ]] && { id="${dname#"$role"-}"; break; }; done
     [[ -n "$id" ]] || continue
+    IFS=$'\t' read -r verdict obase <<< "$(session_repo_verdict "$roots_blob" "${pane_cwds[$dname]:-}" "${roster_cwds[$dname]:-}")"
+    case "$verdict" in
+      # D5：他仓会话**列出并标注**（不静默隐藏），整行不含任何可执行 close 命令（BR2）
+      other)   printf '  ~ %s（他仓 @ %s）他仓会话，勿在本仓回收\n' "$dname" "${obase:-?}"; found=1; continue ;;
+      # fail-closed（T530 对偶）：不可判定时不得声称「是本仓残留」，只标注不给命令
+      unknown) printf '  ? %s（归属不可判定）→ 人工核对（勿在本仓回收）\n' "$dname"; found=1; continue ;;
+    esac
     cls="$(task_state_class "$id")"
     tag=""
     case "$cls" in
