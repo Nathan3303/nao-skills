@@ -115,4 +115,4 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] `status` 残留节按**仓归属**读：本仓行才可 `close`；他仓 / 归属不可判定行的处置见 @.agents/skills/pm-operations.md「残留自检」（单源，本清单不重复文案）
 - [ ] 常驻会话**不回收**（保留复用）；上下文变长时 `ensure --force` 重开
 - [ ] 手工关窗（tmux `kill-pane`）前：该会话已回**终态回执**（**未回执不得关**）+ `tmux capture-pane -p -t <pane>` 末 5 行无 `Working`/spinner + 产物已落盘（`git log` 有提交且**落在需求分支**、工作区干净、无 WIP 提交泄漏到 main、dev server/探针已停）
-- [ ] 残留已核对：`nao-fleet.sh status` 无 `! 残留` 提示（有则 `close --task` 或补登 tasks-state）
+- [ ] 残留已核对：`nao-fleet.sh status` **本仓**无 `! 残留` 提示（有则 `close --task` 或补登 tasks-state）；`~`（他仓）/ `?`（归属不可判定）行按上一条指针处置，**不得**在本仓 `close`
