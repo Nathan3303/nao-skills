@@ -1,6 +1,6 @@
 # PRD：舰队闸门小批（跨仓残留误报 + 合并前 push 核对 + 探针识别放宽）
 
-- 状态：arch 定稿已采纳（D1–D8）· Owner：PM · 更新：2026-10-31
+- 状态：已交付并发布（v0.20.2）· Owner：PM · 更新：2026-10-31
 - 指针：Issue [#56](https://github.com/Nathan3303/nao-skills/issues/56) · 来源 = T533 收尾实测（O5/O4/O2 转办）· L1 复盘 `docs/reports/2026-10-30-T533-retro.md`
 - 优先级：高（A 项安全类）· RICE 结论 ≈ 30（附录）
 
@@ -102,3 +102,5 @@
 - **D8（PM 2026-10-31 · 采纳 arch ⑥）**：**出 ADR**（`docs/adr/2026-10-31-fleet-status-repo-attribution.md`）+ 评审报告入库；两份文档由 **arch 落盘并路径级提交到本需求分支**（`docs(T534):`），rd-infra 只写实现与探针。
 - **必进验收（arch 条件）**：④ 不可判定 fail-closed；⑤ 变异与逐字等价两条机械证明（已并入 AC1/AC2/AC7）。
 - **arch 已定稿要点（实现须照此，勿另立）**：本仓锚 = `pwd -P` + `git rev-parse --show-toplevel`（当 cwd 的严格祖先时并入；**不用** `roles.yaml` workspace）；pane cwd 取 **一次** `tmux list-panes -a -F '#{pane_id}\t#{pane_title}\t#{pane_current_path}'` 快照建 name→(pane,cwd)（禁逐名 `find_pane_for` 的 O(N) tmux 调用）；兜底名册 `intercom_roster` 的 name→cwd（优先级 pane > 名册，冲突取 pane 不 warn）；物理归一（`pwd -P` → `readlink -f` → 原串）+ **组件级**前缀；同名多 pane：本仓 ≥1 ⇒ 本仓，本仓 0 且他仓 ≥1 ⇒ 他仓，两侧皆无 ⇒ 不可判定；`status` **先定归属再查本仓台账**（本仓行 cls tag 逐字不变）；`close` 与 `ensure` **零改动**。
+
+- **修订：2026-10-31 交付闭环** —— Issue [#56](https://github.com/Nathan3303/nao-skills/issues/56) · PR [#57](https://github.com/Nathan3303/nao-skills/pull/57) squash `df3f2cb`（main 恰 1 条 · 无 `wip()` · 分支删净）· arch 轻量评审 `done(full)`（有条件可行 → D5–D8 采纳） · QA `done(full)` **GO**（报告 `docs/reports/2026-10-31-T534-qa-verify.md`）· AC1–AC7 全过 · 探针 `PASS=42 FAIL=0` · `check` files 50（50→50）· `tests/t4` 17/17 SKIP=0/DEGRADE=0 · PM 卡 **v30**（红线 34 / 清单 43） · tag `v0.20.2` + Release 已发 · npm 0.20.2 已重发并核验。遗留：`T534-O1`（t4 常态覆盖）/`T534-O2`（case16 flake），到期 2026-12-31。

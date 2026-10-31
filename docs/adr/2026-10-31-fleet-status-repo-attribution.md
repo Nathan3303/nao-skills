@@ -1,6 +1,6 @@
 # ADR：status 残留判定加仓维度（按 pane 实际工作目录归属）
 
-- 状态：已接受（待落地）
+- 状态：已接受（已落地 v0.20.2）
 - 更新：2026-10-31
 - Owner：arch-designer
 - 指针：PRD `docs/prds/2026-10-30-fleet-guards.md`（§五 BR1–BR3 · §七 AC1/AC2/AC6/AC7）· 评审报告 `docs/reports/2026-10-31-T534-arch-review.md` · Issue #56

@@ -8,6 +8,7 @@
 
 > 本区是 PM 的**悬空状态**（任务状态见下方五栏）；重开后逐行回读确认（当前阶段 · 未决决策 · 口头约束）。
 
+- ✅ **批次终态（2026-10-31 · T534 舰队闸门小批 · v0.20.2）**：合并 `df3f2cb`（PR #57 squash `feat/56-fleet-guards`）· 发布提交（本提交）· tag/Release `v0.20.2`。结论：**A 安全** `status` 残留判定加仓维度（三态 local/other/unknown · 他仓行无可执行 close · fail-closed 不谎报）· **B** 合并闸门 +1 条「分支无未推送提交」三条命令（PM 卡 v30 / 清单 43）· **C** 探针识别放宽 + 未覆盖声明。门禁：探针 `PASS=42 FAIL=0` · `check` files 50→50 · `npm test` `[PASS]`=437 · `tests/t4` 17/17 SKIP=0/DEGRADE=0 · 旧版 vs 新版 `status` **逐字等价** · `close`/`ensure`/`task_state_class` 零改动。**真实环境旁证**：本仓 `status` 对 nao-todo 的 `rd-fe-T597` 已正确标注「他仓」。**过程自证**：新闸门首次生效（验收前核未推送提交 = 0）。
 - 🔄 **T534 立项（2026-10-30 · Issue [#56](https://github.com/Nathan3303/nao-skills/issues/56) · `feat/56-fleet-guards` · v0.20.2 PATCH）**：**舰队闸门小批**（T533 转办三合一）—— A 安全：`status` 残留判定跨仓误报（实测他仓 `qa-T596`/`qa-T580` 被报本仓残留，提示的 `close --task` 会误杀他仓会话）· B 闸门：合并前 push 核对三条命令（T533 漏闸防线）· C 探针：文档提交识别放宽。PRD = `docs/prds/2026-10-30-fleet-guards.md`（AC1–AC5）· **本批首提交含 T533 遗留的 npm 核验事实**（BR5：发布后事实进下一任务 PR）。**arch 回执已到**（`done(full)` · 有条件可行）：D5 他仓列出并标注 / D6 不给 close 加硬闸 / D7 `pm-operations.md` 半句随本批 / D8 出 ADR（arch 落盘）+ 两条必进验收（fail-closed · 变异与逐字等价）。**rd-infra 进度（2026-10-31）**：4 条 `wip(T534)` 已 push（`6fc1963` status 仓维度 / `388e9f5` pm-operations 单源 / `5727616` 闸门清单 43 项 + 卡 v30 / `1d7a733` 两探针）· Draft PR [#57](https://github.com/Nathan3303/nao-skills/pull/57) · 未推送提交 = 0 · 禁改区零改动。**PM 现场抽查（真实环境，非夹具）**：本仓 `status` 现输出 `~ rd-fe-T597（他仓 @ nao-todo）他仓会话，勿在本仓回收`（**无**可执行 close 命令），本仓 T534 两个派生会话显示 `· T534 进行态` ⇒ A 项主路径在真实多仓场景生效。**rd 终态 `done(full)`（2026-10-31 · HEAD `f00e7b0`）**：`check` rc=0 roles=6 **files 50→50** · `npm test` rc=0（`[PASS]`=437/`[FAIL]`=0）· `tests/t4/run.sh` 发布口径 17/17 **SKIP=0 DEGRADE=0** NOTE=2（白名单）· 探针 T534 **PASS=42/FAIL=0** · docs-ride-pr 探针 **PASS=28/FAIL=0** · 变异双向命中（恒真⇒AC1 首句 FAIL / 恒假⇒本仓残留消失）· AC7 四项机械证明全过（旧版 diff 为空 · `-sibling` 判他仓 · 子目录锚 · symlink）· AC1–AC7 自查全过 · 清单实计数 34/43 与卡尾一致 · 禁改区零改动（6 文件 +591/−18）。**遗留**：`T534-O1` 常态回归缺跨仓场景（转办）· `T534-O2` case16 偶发一次性 FAIL（转办 QA 复核）· 两仓 basename 同名可互串（接受 · 到期 2026-12-31）。**PM 读码已核**：三态 verdict + 单行谓词 + 组件级前缀 + 他仓/不可判定短路于 `task_state_class` 之前（他仓不查本仓台账）· `close`/`ensure` 零改动。**待办** = qa-T534 独立复核 → PM 验收。
 - ✅ **批次终态（2026-10-30 · T533 文档与台账随任务 PR · v0.20.1 · npm 已核验）**：npm `latest` = **0.20.1** · `dist.integrity` = `sha512-i9zgCdwsVITNN3OO8ynWIWbP8riNl4sk1cnjuOZb9blm+D2iNonKNOWR1Xz95aoQP91XLUPpAdDRNKijtihKYA==` 与本地 tarball（142,554 B）**逐字节一致** · Release 标题 = 裸 `v0.20.1` 已核验 · 派生会话 `rd-infra-T533` / `qa-T533` 已回收。
 - ⚠️ **本条事实未提交 main（BR1/BR5 新规则首例）**：npm 核验发生在发布提交 `546eb1b` 之后 ⇒ 按 BR5 登进**下一任务 PR**，本文件当前处于「工作区未提交」状态（接手者第一步：新批次起分支时一并带入，**不要**为它单独提交 main）。
@@ -49,10 +50,10 @@
 - ✅ **T521 交付闭环（2026-10-14 · v0.17.3）**：GitHub Release 标题口径 = 裸 `vX.Y.Z` —— 权威单处 `common/release-notes.md` §一.5 硬约束 + §四清单 + §五红线 · 两处引用收敛（`github-flow.md:56` / PM 卡 :121）并指回单处 · PM 卡 **v24→v25** · 模板注释 1 行（6 分段标题未动）· 一次性只读探针 `PASS=28 FAIL=0` + 负控 2/2 · QA 独立复跑 **GO** · squash `eff44ec` · tag + Release 已发（发布提交 `4d97f00` · **AC9 自证：标题严格 = `v0.17.3`**）· **npm 重发 0.17.3 已核验**（`latest` + integrity 逐字节）。
 - ✅ **T520 交付闭环（2026-10-14 · v0.17.2）**：ADR 文档契约 —— 必写 5 节 + 可选 3 节（参考来源恒末）· 头部恰 4 字段 · 状态值域 4 值 · 禁写/下沉清单 · 新增 `templates/adr.md.example` + `adr-index.md.example` · `arch-designer` 卡 v11→v12 · QA 探针 `PASS=53 FAIL=0` + 负控 2/2 · squash `160cc60` · tag + Release 已发（`9833344`）· **npm 不重发**。
 
-- 当前阶段：**T534 在飞**（`feat/56-fleet-guards` · Issue #56 · v0.20.2 · 开工卡 D1–D4 已拍定 → arch 轻量评审 → 派 rd-infra/qa）· 上一批 T533 已终态（main `546eb1b` · npm 0.20.1 已核验）· 上一批 T532 已终态（main `74e922d` · v0.20.0 · npm 已核验）
-- 当前 PRD：`docs/prds/2026-10-30-fleet-guards.md`（T534 · 待开工确认 · 本 PR 首提交）
+- 当前阶段：**T534 批次终态**（main `df3f2cb` · tag/Release `v0.20.2` · **npm 0.20.2 重发待核验登记**）· 待命，等用户下批需求· 上一批 T533 已终态（main `546eb1b` · npm 0.20.1 已核验）· 上一批 T532 已终态（main `74e922d` · v0.20.0 · npm 已核验）
+- 当前 PRD：无（T534 已归档 `docs/prds/2026-10-30-fleet-guards.md` · 索引已 +1 行）
 - 未决决策点：无（用户 2026-10-28 已拍定：全部文档随 PR / 批间收尾随发布提交 / PM 路径级提交 / 立即小批 / npm 重发 0.20.1 / arch 跳过 / QA 派生复核）
-- 待用户回答：无（D1 pane cwd 判仓 / D2 轻量 arch / D3 npm 重发 0.20.2 / D4 开工 已拍定）
+- 待用户回答：**npm 0.20.2 需用户执行 `npm publish`**（发布提交 + tag/Release 已由 PM 完成）
 - 旧口径残留（本批正在修）：main 上 13 条 `docs(T5xx)` 独立提交把台账/报告绕过了 PR ⇒ 本批后新批次文档一律随任务 PR
 - 旧当前阶段（T532 已终态）：main `e8ecb7c`/`74e922d` · 合并 `f230440` · tag/Release `v0.20.0` · **npm 已核验**（`latest` = 0.20.0）
 - 未派发队列：见下方「待派发队列」（仅 1 项：`M20261014-F1` 到期重评 2026-11-14）
@@ -64,11 +65,12 @@
 
 ## 需求分支 / PR / 发布（PM 维护）
 
-### 本批 T534（舰队闸门小批 · 立项 · Issue #56）
+### 本批 T534（舰队闸门小批 · 已合并 · 发布 v0.20.2）
 
-- PRD：`docs/prds/2026-10-30-fleet-guards.md` · Issue [#56](https://github.com/Nathan3303/nao-skills/issues/56) · 分支 `feat/56-fleet-guards`（已建）
+- PRD：`docs/prds/2026-10-30-fleet-guards.md`（已归档）· Issue [#56](https://github.com/Nathan3303/nao-skills/issues/56) · 分支 `feat/56-fleet-guards`（**已 squash 合并 `df3f2cb` 并删净**）· PR [#57](https://github.com/Nathan3303/nao-skills/pull/57)（验收评论 issuecomment-6542796129 = 授权合并）
 - 范围：A `status` 跨仓残留误报（安全）· B 合并前 push 核对入闸门 · C 探针文档提交识别放宽
-- PR owner / Reviewer：rd-infra / qa · arch：PM 建议轻量评审（归属判据属结构决策，待拍板）
+- PR owner / Reviewer：rd-infra / qa · arch：轻量评审（`done(full)` 有条件可行 → D5–D8 采纳）· 派生会话 `arch-designer-T534` / `rd-infra-T534` / `qa-T534` 待回收
+- 产物：`nao-fleet.sh` +119/−1 · ADR `2026-10-31-fleet-status-repo-attribution.md`（51 行 · 已落地 v0.20.2）· arch 评审 49 行 · QA 报告 58 行 · T534 探针 · PM 卡 v30 · 清单 43
 
 ### 本批 T533（文档与台账随任务 PR · 已合并 · 发布 v0.20.1）
 
@@ -215,6 +217,8 @@
 
 | 任务编号 | 目标会话 | 概要 | 排队原因 |
 | :--- | :--- | :--- | :--- |
+| T534-O1 | rd-infra（下批 · 到期 2026-12-31） | **归属判定的 t4 常态覆盖**：补 `tests/t4` 用例（跨仓残留 / 归属不可判定两场景）+ 单行谓词变异 harness —— 实证：`repo_contains_path` 恒假时全量 17/17 **无一翻红**（T534 QA 独立确认） | QA/rd 转办（PRD 非范围不动 tests/t4） |
+| T534-O2 | qa/infra（观察 · 到期 2026-12-31） | **`case 16` 一次性 flake 观察**：`tests/t4` 3 次 full 中出现 1 次 `E 协议小节标题存在` FAIL（同 run 相邻 awk 断言 PASS；连跑 15 次全 PASS；本批对其输入零 diff ⇒ 非本批引入）；复现即抓具体断言 | QA 转办 |
 | T533-O5 | rd-infra（下批） | **`status` 残留判定跨仓误报**：`nao-fleet.sh status` 按 tmux 标题全机匹配派生会话，再用**本仓** `tasks-state` 判归属 ⇒ 他仓会话（实测 `qa-T580` @ nao-todo，tmux `%8`）在本仓被报「! 残留」并提示 `close --task T580 qa`；而 `close` 支持跨仓定位 ⇒ **照提示操作会回收他仓会话**。期望 = 残留判定加仓维度（cwd 或 `NAO_SKILLS`/repo 匹配）或提示改为「他仓会话，勿在此仓回收」 | PM 实测（T533 收尾 · 2026-10-30）；安全类，建议优先 |
 | T533-O4 | rd-infra（下批） | **合并前 push 核对入闸门**：`checklists/pm.md` 合并项 + PM 卡 §六 各 +1 条「授权合并前 `git rev-list --count origin/<branch>..HEAD` = 0 且 `git status --porcelain` 空」（T533 漏闸根因：本地收口提交未 push 即成孤儿） | PM 自曝缺陷转办（L1 复盘 `docs/reports/2026-10-30-T533-retro.md`） |
 | T533-O2 | rd-infra（下批） | **探针 docs 提交识别口径放宽**：`docs/reports/2026-10-28-docs-ride-pr-probe.sh` 只认半角 `(`+半角 `:` 的 `docs(<编号>):` ⇒ 全角括号/全角冒号/无编号 `docs:`/大写 `Docs(` 漏判；`github-flow.md` 自查三条的 `grep -c '(<编号>)'` 同源限制 | QA 观察转办（一次性探针，本批不阻塞） |
@@ -250,6 +254,7 @@
 
 | 任务编号 | 结论 | 详情路径 | 备注 |
 | :--- | :--- | :--- | :--- |
+| **T534** | **验收通过（AC1–AC7 · 0 未过项）· 已 squash 合并 `df3f2cb` · 发布 v0.20.2**：A `status` 残留判定加仓维度（物理归一 + 单行谓词 `repo_contains_path` + 锚集 toplevel + pane cwd 单次快照 + 三态 fail-closed；他仓行无可执行 close；`close`/`ensure` 零改动） · B 合并闸门 +1 条三条命令（PM 卡 v30 / 清单 43，卡内仅指针）· C 探针识别放宽 + 未覆盖声明 · ADR 51 行已落地。**QA 独立复核 GO**：探针 `PASS=42 FAIL=0` · 变异双向（恒真/恒假）· 旧版 vs 新版 `status` 逐字等价 · `-sibling`/子目录/symlink 三边界 · 跨仓 `close` 真跑 rc=0 且 pane 消失 · 6 pane `pane_pid` 全等 · `check` files 50→50 · `npm test` `[PASS]`=437 · `tests/t4` 17/17 SKIP=0/DEGRADE=0 NOTE=2 白名单 | PR [#57](https://github.com/Nathan3303/nao-skills/pull/57) · Issue [#56](https://github.com/Nathan3303/nao-skills/issues/56) · PRD `docs/prds/2026-10-30-fleet-guards.md` · ADR `docs/adr/2026-10-31-fleet-status-repo-attribution.md` · QA `docs/reports/2026-10-31-T534-qa-verify.md` | 遗留 `T534-O1`（归属判定缺 t4 常态覆盖 · 恒假变异全量无翻红为实证）· `T534-O2`（case16 一次性 flake · 连跑 15 次全 PASS）均到期 2026-12-31 · 归一化边界与两仓同名互串接受（ADR 已记） |
 | **T533** | **验收通过（AC1–AC5 · 0 未过项）· 已 squash 合并 `2499157` · 发布 v0.20.1**：文档与台账随任务 PR —— `github-flow.md` 新节（BR1 全量 / BR2 双禁令 / BR3 立项例外三条件 / BR4 路径级提交 / BR5 批间收尾 / BR6 可读性 + 自查三条）· 八阶段产出列 8 行 · 红线 +1 · 离线降级「文档载体」行 · PM 卡 v29（§六/§十三 各 1 条 + 红线 34）· `checklists/pm.md` 34/42 · `AGENTS.md` 1 条指针 · 探针 `PASS=24 FAIL=0` + QA 自建夹具 7/7 负判 4/4 正判 + 变异 4 次点名 · `check` rc=0 files 50→50（`find .agents` 实证）· `npm test` 17/17 · D1 已修（广播 v29）· O3 关闭 · **O2/O4 转办** | PR [#55](https://github.com/Nathan3303/nao-skills/pull/55) · 降级批次（无 Issue） · PRD `docs/prds/2026-10-28-docs-ride-task-pr.md` · QA `docs/reports/2026-10-30-T533-qa-verify.md` · 探针 `docs/reports/2026-10-28-docs-ride-pr-probe.sh` | **首例实测**：文档/台账/报告全随任务 PR（main 恰 1 条含 8 文件）· **PM 漏闸已自曝**（未 push 即授权合并 ⇒ 发布提交补齐） |
 | **T531** | **验收通过（AC1–AC8 · 0 未过项）· 已 squash 合并 `ccff198` · 发布 v0.19.2**：三条防线 —— NOTE 白名单制（三 tag 单点枚举 · full 下非白名单/untagged ⇒ FAIL 点名 · 非 full 只 WARN）· `test:t4:full:dual` 双环境 gate（复用 `test:t4:full` 口径 · 失败标组别）· PM 卡 v27 根因纪律 + 清单 41。**QA** 自跑 `check`/`npm test`/`dual`（170s 两组绿）+ 三向负控 + 失败归因演练；**PM** 发布前置 dual 自证 rc=0。**遗留**：dual 耗时 ≈2.3×（接受）· 新增 tag 需同步 README（BR1）· 白名单常态命中 2 条 | PR [#52](https://github.com/Nathan3303/nao-skills/pull/52) · Issue [#51](https://github.com/Nathan3303/nao-skills/issues/51) · PRD `docs/prds/2026-10-28-t531-guardrails.md` · QA `docs/reports/2026-10-28-T531-qa-verify.md` | 来源 = L1 复盘 `docs/reports/2026-10-28-T529-retro.md` §四（三条防线） |
 | **T529 + T530** | **验收通过（AC1–AC7）· 已 squash 合并 `f83cc6f` + `ac5cc4c` · 发布 v0.19.1**：绑定 tmux + pi（删宿主阶梯 1947→1591 · 非 tmux rc=3 · pi ≥1.4.0 断言 · close 收窄 · cases/11 退役 · 新 ADR + 旧 ADR 废弃）。**发布阻断与修复**：PM 前置 gate 抓到 `cases/09` 真回收 FAIL；根因 = 自面板守卫跨 server **pane id 撞号**致**误拒**（PM 初判「88 处打默认 server」错，QA 实测推翻）；修复 = `pane_hosts_caller` 进程归属（`pane_pid` 祖先链）+ **三态 fail-closed**（D-1：不可判定且撞号也拒，堵 QA 实证的 SELF_KILLED）+ 「已关闭」判据改 server 可达且 pane 不在 + NOTE 掩盖清零。**QA**：红/绿 1:1 复现 · 三态真值表 16/16 · 三向破坏演练翻红 · `--case 09` 45 PASS 0 SKIP/0 NOTE · 点检 5/5。**门禁**：`check` rc=0（roles=6 · files=50）· `npm test` 16/16 · `test:t4:full` 空载 rc=0（SKIP=0/DEGRADE=0）。**遗留**：下游三仓 pin（到期 2026-11-27）· D3 `MIN_PI_VERSION` 常量（backlog）· 嵌套 tmux 端到端未覆盖（接受） | PR [#49](https://github.com/Nathan3303/nao-skills/pull/49) / [#50](https://github.com/Nathan3303/nao-skills/pull/50) · Issue [#48](https://github.com/Nathan3303/nao-skills/issues/48) · PRD `docs/prds/2026-10-27-strict-tmux-pi.md` · arch `docs/reports/48-arch-review.md` · QA `docs/reports/48-qa-verify.md` / `2026-10-28-T530-qa-verify.md` | ADR `docs/adr/2026-10-27-strict-tmux-pi.md`（状态 = 已接受（已落地 v0.19.1）） |
