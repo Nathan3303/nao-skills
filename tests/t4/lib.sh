@@ -142,9 +142,11 @@ t4_blocked() {
 t4_assert_eq()   { [ "$1" = "$2" ] && t4_ok "$3" || t4_bad "$3（期望=$1 实际=$2）"; }
 t4_assert_ne()   { [ "$1" != "$2" ] && t4_ok "$3" || t4_bad "$3（不应等于 $1）"; }
 t4_assert_ge()   { [ "$2" -ge "$1" ] 2>/dev/null && t4_ok "$3" || t4_bad "$3（期望>= $1 实际=$2）"; }
-t4_assert_contains()     { printf '%s' "$1" | grep -qF -- "$2" && t4_ok "$3" || t4_bad "$3（未包含: $2）"; }
-t4_assert_not_contains() { printf '%s' "$1" | grep -qF -- "$2" && t4_bad "$3（不应包含: $2）" || t4_ok "$3"; }
-t4_assert_match()        { printf '%s' "$1" | grep -qE -- "$2" && t4_ok "$3" || t4_bad "$3（不匹配正则: $2）"; }
+# 断言实现注意：`printf … | grep -q` 在大输入 + 早退时会触发 SIGPIPE，pipefail 下把**命中**判成 FAIL
+# （实测 case16 读 16KB 协议文件 ~10% 假 FAIL = T534-O2 根因）。改用 here-string：grep 读临时文件，无上游写者被中断。
+t4_assert_contains()     { grep -qF -- "$2" <<< "$1" && t4_ok "$3" || t4_bad "$3（未包含: $2）"; }
+t4_assert_not_contains() { grep -qF -- "$2" <<< "$1" && t4_bad "$3（不应包含: $2）" || t4_ok "$3"; }
+t4_assert_match()        { grep -qE -- "$2" <<< "$1" && t4_ok "$3" || t4_bad "$3（不匹配正则: $2）"; }
 t4_assert_file()   { [ -f "$1" ] && t4_ok "$2" || t4_bad "$2（文件不存在: $1）"; }
 t4_assert_dir()    { [ -d "$1" ] && t4_ok "$2" || t4_bad "$2（目录不存在: $1）"; }
 t4_assert_absent() { [ ! -e "$1" ] && t4_ok "$2" || t4_bad "$2（不应存在: $1）"; }

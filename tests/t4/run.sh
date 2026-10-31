@@ -22,7 +22,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 
-CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "12" "13" "14" "15" "16" "17" "18")
+CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "12" "13" "14" "15" "16" "17" "18" "19")
 CASE_TITLES=(
   "主路径足迹 + check exit=0（AC1）"
   "设计一致性：注册 skill 数==2 且无 collision（AC1/AC6）"
@@ -41,6 +41,7 @@ CASE_TITLES=(
   "子代理桥口径：模板 G1–G3 + 协议条款 + 配置 schema（T526 · AC2–AC7）"
   "角色→子代理 agent 单一事实：装配字节比对 + 锚点 cross-assert + 命名双向 + 幂等 + 三态负控（T527 · AC2–AC7）"
   "codegraph 四态检测 / 默认零 codegraph 调用 / warn 口径 / 遥测注入 / 契约文案 + 变异负控（T532 · AC1/AC2/AC7/AC11）"
+  "派生会话归属三态（本仓/他仓/不可判定）+ 单行谓词双向变异必红（T535 · AC1/AC2）"
 )
 
 mode="run"; only=""; arg_err=""
