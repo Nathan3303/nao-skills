@@ -1,6 +1,6 @@
 # PRD：归属判定补常态回归 + BR5 摩擦修正
 
-- 状态：验收通过（待发布 v0.20.3）· Owner：PM · 更新：2026-10-31
+- 状态：已交付并发布（v0.20.3）· Owner：PM · 更新：2026-10-31
 - 指针：Issue [#58](https://github.com/Nathan3303/nao-skills/issues/58) · 上游 = T534 QA 结论（`docs/reports/2026-10-31-T534-qa-verify.md` O1）+ T533/T534 收尾实测（`pull` 被工作区脏改阻挡）· ADR `docs/adr/2026-10-31-fleet-status-repo-attribution.md`
 - 优先级：高（安全判据缺护栏）· RICE 结论 ≈ 26（附录）
 
@@ -101,3 +101,5 @@
 - **D3（用户 2026-10-31）**：**npm 重发 0.20.3**（`tests/` 与 `.agents/**` 均在包内；判据 = registry 实测 `latest` + `dist.integrity` 与本地 tarball 逐字节一致）。
 
 - **修订：2026-10-31 验收通过** —— PR [#59](https://github.com/Nathan3303/nao-skills/pull/59) · QA `done(full)` **GO**（报告 `docs/reports/2026-10-31-T535-qa-verify.md`）· AC1–AC6 全过 · `tests/t4` **19/19** · 断言 437→475 · SKIP=0/DEGRADE=0 · 变异两方向在**全量套件**层面必红（恒真 8 FAIL / 恒假 9 FAIL，唯一红点 = `case 19`）· **AC6 数字订正**（QA 实测）：假 FAIL 为**负载相关** —— 空载 0/100、重负载旧 2/40 → 新 0/40；helper 级 16.5KB 旧 55/200 → 新 0/200。遗留：`T535-O2`（`lib.sh:199` 低危同型管道，转办）· `T534-O1` 已关闭（本批 AC1 交付）。
+
+- **修订：2026-10-31 交付闭环** —— PR [#59](https://github.com/Nathan3303/nao-skills/pull/59) squash `dfdc68d`（main 恰 1 条 · 无 `wip()` · 分支删净） · Issue [#58](https://github.com/Nathan3303/nao-skills/issues/58) 已关闭 · QA `done(full)` **GO** · AC1–AC6 全过 · `tests/t4` 19/19 · 断言 437→475 · 变异双向在全量套件层面必红（恒真 8 FAIL / 恒假 9 FAIL）· tag `v0.20.3` + Release 已发 · npm 0.20.3 已重发并核验 · `T534-O1`/`T534-O2`/`T533-O2`/`T535-O3` 关闭 · `T535-O2` 转办。
