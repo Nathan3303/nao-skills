@@ -49,10 +49,10 @@
 - ✅ **T521 交付闭环（2026-10-14 · v0.17.3）**：GitHub Release 标题口径 = 裸 `vX.Y.Z` —— 权威单处 `common/release-notes.md` §一.5 硬约束 + §四清单 + §五红线 · 两处引用收敛（`github-flow.md:56` / PM 卡 :121）并指回单处 · PM 卡 **v24→v25** · 模板注释 1 行（6 分段标题未动）· 一次性只读探针 `PASS=28 FAIL=0` + 负控 2/2 · QA 独立复跑 **GO** · squash `eff44ec` · tag + Release 已发（发布提交 `4d97f00` · **AC9 自证：标题严格 = `v0.17.3`**）· **npm 重发 0.17.3 已核验**（`latest` + integrity 逐字节）。
 - ✅ **T520 交付闭环（2026-10-14 · v0.17.2）**：ADR 文档契约 —— 必写 5 节 + 可选 3 节（参考来源恒末）· 头部恰 4 字段 · 状态值域 4 值 · 禁写/下沉清单 · 新增 `templates/adr.md.example` + `adr-index.md.example` · `arch-designer` 卡 v11→v12 · QA 探针 `PASS=53 FAIL=0` + 负控 2/2 · squash `160cc60` · tag + Release 已发（`9833344`）· **npm 不重发**。
 
-- 当前阶段：**T534 立项完成 · 待开工确认卡**（`feat/56-fleet-guards` · Issue #56 · v0.20.2）· 上一批 T533 已终态（main `546eb1b` · npm 0.20.1 已核验）· 上一批 T532 已终态（main `74e922d` · v0.20.0 · npm 已核验）
+- 当前阶段：**T534 在飞**（`feat/56-fleet-guards` · Issue #56 · v0.20.2 · 开工卡 D1–D4 已拍定 → arch 轻量评审 → 派 rd-infra/qa）· 上一批 T533 已终态（main `546eb1b` · npm 0.20.1 已核验）· 上一批 T532 已终态（main `74e922d` · v0.20.0 · npm 已核验）
 - 当前 PRD：`docs/prds/2026-10-30-fleet-guards.md`（T534 · 待开工确认 · 本 PR 首提交）
 - 未决决策点：无（用户 2026-10-28 已拍定：全部文档随 PR / 批间收尾随发布提交 / PM 路径级提交 / 立即小批 / npm 重发 0.20.1 / arch 跳过 / QA 派生复核）
-- 待用户回答：**T534 开工确认卡**（A 项归属判据 · arch 轻量评审 · npm 重发 0.20.2）
+- 待用户回答：无（D1 pane cwd 判仓 / D2 轻量 arch / D3 npm 重发 0.20.2 / D4 开工 已拍定）
 - 旧口径残留（本批正在修）：main 上 13 条 `docs(T5xx)` 独立提交把台账/报告绕过了 PR ⇒ 本批后新批次文档一律随任务 PR
 - 旧当前阶段（T532 已终态）：main `e8ecb7c`/`74e922d` · 合并 `f230440` · tag/Release `v0.20.0` · **npm 已核验**（`latest` = 0.20.0）
 - 未派发队列：见下方「待派发队列」（仅 1 项：`M20261014-F1` 到期重评 2026-11-14）
