@@ -63,7 +63,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 输出里有 `warn`/`error`/`pending approval`/`N vulnerabilities` 却判完成，或遗留项未走三出口（「先放着」不算出口）？（见 @.agents/skills/task-completion.md）
 - [ ] 降级（无 `gh` / 无远端）未在 `tasks-state` 与回执中标注？
 
-## 交付检查清单（完整 42 项）
+## 交付检查清单（完整 43 项）
 
 - [ ] 目标/边界/验收三件事齐备
 - [ ] 证据 + 5 Whys 已产出
@@ -102,6 +102,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] Issue 已建（或降级已标注）：body 为摘要 + 指针，正文在 `docs/prds/`；同步仅 5 个节点
 - [ ] 验收在 PR 上完成：AC 逐条评论核对 + QA 门禁数字；**UI 呈现类已交用户验收清单并获回填**（QA 产出 → PM 审 → 用户执行）；**验收通过后才授权合并**
 - [ ] 合并由 RD 执行（`--squash`）；main 上本需求恰好 1 条提交且无 `wip()`；需求分支已删除
+- [ ] 合并前已核「分支无未推送提交」（适用：在分支上提交过的**任何角色**，含 PM 落的文档/台账）：`git rev-list --count origin/<branch>..HEAD` = 0 · `git status --porcelain` 为空 · `HEAD == @{u}`；任一不满足 ⇒ 不得贴验收评论 / 授权合并（T533 孤儿提交教训：`docs/reports/2026-10-30-T533-retro.md`）
 - [ ] 发布（若有）：版本号符合 SemVer/项目约定；tag 指向 main 合并提交；release notes 用户可读且落盘 `docs/releases/`（核 @.agents/common/release-notes.md）
 - [ ] `gh` 可用则已用 `gh`，降级已注明；发布后 `tasks-state` 版本/Tag 行已更新
 - [ ] 任务 DoD 四类已随**开工确认卡**逐任务实例化（产物路径 / 可执行验证判据 / 遗留项 / 交接），验收按同一份核
@@ -111,6 +112,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 ## 会话回收 / 收窗核对（验收通过后 / 手工关窗前）
 
 - [ ] 派生会话：`tasks-state` 已把任务推进到「已验收 / 已归档」→ `nao-fleet.sh close --task <编号> <别名>`（否则会被状态闸门拦下）
+- [ ] `status` 残留节按**仓归属**读：本仓行才可 `close`；他仓 / 归属不可判定行的处置见 @.agents/skills/pm-operations.md「残留自检」（单源，本清单不重复文案）
 - [ ] 常驻会话**不回收**（保留复用）；上下文变长时 `ensure --force` 重开
 - [ ] 手工关窗（tmux `kill-pane`）前：该会话已回**终态回执**（**未回执不得关**）+ `tmux capture-pane -p -t <pane>` 末 5 行无 `Working`/spinner + 产物已落盘（`git log` 有提交且**落在需求分支**、工作区干净、无 WIP 提交泄漏到 main、dev server/探针已停）
 - [ ] 残留已核对：`nao-fleet.sh status` 无 `! 残留` 提示（有则 `close --task` 或补登 tasks-state）
