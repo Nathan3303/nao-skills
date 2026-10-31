@@ -1,6 +1,6 @@
 # PRD：归属判定补常态回归 + BR5 摩擦修正
 
-- 状态：开工卡已定稿（D1–D3 已拍板）· Owner：PM · 更新：2026-10-31
+- 状态：rd 已交付 · 范围增补已裁定（D4）· Owner：PM · 更新：2026-10-31
 - 指针：Issue [#58](https://github.com/Nathan3303/nao-skills/issues/58) · 上游 = T534 QA 结论（`docs/reports/2026-10-31-T534-qa-verify.md` O1）+ T533/T534 收尾实测（`pull` 被工作区脏改阻挡）· ADR `docs/adr/2026-10-31-fleet-status-repo-attribution.md`
 - 优先级：高（安全判据缺护栏）· RICE 结论 ≈ 26（附录）
 
@@ -32,11 +32,13 @@
   2. **A · 变异 harness**：把 `repo_contains_path` 单行谓词纳入用例内变异自证（复制脚本到临时目录、改单行、断言恒真/恒假两方向各翻红并点名），**不得**在真仓库就地改文件（只读纪律）。
   3. **B · BR5 修正**：`github-flow.md` BR5 改为「发布后事实在**下一任务 PR 的首个文档提交**落地；其间不得留工作区脏改（需暂存用带标签 stash）」；`checklists/pm.md` 相应对齐（单源仍是 `github-flow.md`，清单只指针）。
   4. **C · 台账维护**：`docs/tasks-state.md` 关闭 `T533-O2`（写明已在 T534 C 项落地 + 证据路径），并确认全仓无残留引用。
+  5. **D · 断言 helper 的 SIGPIPE 假 FAIL（rd 上报 · PM 裁定并入 D4）**：`tests/t4/lib.sh` 的 `t4_assert_contains` / `t4_assert_not_contains` / `t4_assert_match` 用 `printf | grep -qF`，大输入早退触发 SIGPIPE，`pipefail` 下把**命中**判成 FAIL（实测 `case 16` 读 16KB 协议文件 2/20 假 FAIL = `T534-O2` 根因）。改 here-string（`grep … <<< "$1"`）；须给「修前 n/20 假 FAIL → 修后 0/20」与 `case 16` 连绿证据。
 - **非范围**（各带理由）
   - 不改 `status` 归属判定实现：理由 T534 已 arch 定稿 + QA 双向验证（ADR 已落地），本批只补护栏。
   - 不改 `close` / `ensure` / `task_state_class`：理由 与归属无关，改动面徒增回归风险（T534 已证零改动是安全选择）。
   - 不重复做探针识别口径：理由 T534 C 项已完成（`DOCS_SUBJECT_NORM` + 可选编号 + 大小写不敏感），本批只关闭台账行。
   - 不把一次性探针迁入 `tests/`：理由 探针含文本/结构断言与一次性夹具，常态化收益低；本批的常态护栏 = 新 t4 用例。
+  - 不扩大断言实现改造：理由 本批只修 SIGPIPE 这一个假 FAIL 根因（helper 保持等价语义）；若后续要重写断言层，另立批次带回归矩阵。
   - 不改 `docs/tasks-state.md` 的归档/分类结构：理由 与本批无关，触及 `task_state_class()` 契约。
 
 ## 四、用户场景
@@ -70,6 +72,7 @@
 - **AC2（负向闭环 · 双向必红）**：变异 harness 实测 **恒真 ⇒ FAIL 且点名**（用例号 + 断言）；**恒假 ⇒ FAIL 且点名**；两方向均**只在临时副本**发生（真仓库 `git status` 空、被改文件 md5 前后一致），还原后全绿。**且必须给出「T534 时全量 17/17 无一翻红」已被本批改变的证据**（变异后出现的 FAIL 条数）。
 - **AC3（边界 · BR5 单源新口径）**：`github-flow.md` BR5 含「下一任务 PR 首提交落地 / 不留工作区脏改 / 带标签 stash」三要素；`checklists/pm.md` 对应项为**指针**（不得复写命令细节）；两处不得出现互斥表述。
 - **AC4（异常 · 台账过期行关闭）**：`docs/tasks-state.md` 中 `T533-O2` 行标注**已关闭**并给出证据路径（`docs/reports/2026-10-28-docs-ride-pr-probe.sh` 的 `DOCS_SUBJECT_NORM` / 可选编号 / 大小写不敏感）；`grep -c 'T533-O2'` 在待派发队列区为 0；不得残留「待派发」语义。
+- **AC6（异常 · SIGPIPE 假 FAIL 根因修复）**：修改后 `t4_assert_*` 三 helper 不含 `printf … |` 管道写法（静态断言）；① **修前/修后对照**：在临时副本上还原旧实现，重复跑 `case 16` ≥20 次须复现假 FAIL（报 n/20），新实现同条件 **0/20**；② `case 16` 在新实现下连跑 ≥5 次全绿；③ **语义等价**：三个 helper 的命中/未命中两条路径各有一条正反断言证明未改变判定方向（不得把「应含」放宽成「总是通过」）。
 - **AC5（设计一致性 · 门禁与版本）**：`check` rc=0（roles=6 · **files 旧→新，预期不变并说明原因**）· `npm test` rc=0（例数）· `tests/t4/run.sh` 全量 PASS/FAIL/SKIP/DEGRADE 精确数字（发布口径 SKIP=0/DEGRADE=0/非白名单 NOTE=0）；如改 `checklists/pm.md` 计数须与标题/卡尾一致；`AGENTS.md` 零改动（本批无项目级新增）。
 
 ## 八、上线闭环
@@ -84,7 +87,8 @@
 - **流程**：Issue [#58](https://github.com/Nathan3303/nao-skills/issues/58) → 分支 `feat/58-attribution-regression`（**已建**）→ PM 文档提交（`docs(T535):`）→ RD `wip(T535):` → QA 独立复核 → PM 验收 → RD squash → 发布 v0.20.3。
 - **本批首提交夹带**：T533/T534 的「发布后事实」（npm 0.20.2 已核验 · 收尾登记）随**本 PR 首个文档提交**落地（BR5 现口径的首次执行），并在同一提交里改为新口径文本。
 - **文件归属**：`tests/t4/cases/19` + `run.sh` + `tests/README.md` + `github-flow.md` + `checklists/pm.md` = rd-infra；PRD / 台账 / PR 验收评论 = PM；QA 报告由 QA 落盘随 PR。
-- **版本记录**：v0.20.2 = T534；本批 v0.20.3 = 回归加固 + BR5 修正 + 台账清理。
+- **版本记录**：v0.20.2 = T534；本批 v0.20.3 = 回归加固 + BR5 修正 + 台账清理 + 断言 SIGPIPE 根因修复（D4 范围增补）。
+- **范围变更留痕（D4）**：原范围 A/B/C 三项 → 交付前增补 D（`lib.sh` SIGPIPE）；增补来自 rd 报「挡门禁」，PM 裁定并入而非拆单，同步补 AC6 与 QA 复现要求。
 - **Hotfix**：24h 内补单；已 push 的 tag 不删。
 
 ## 附录：战略筛子 / RICE / 待拍板
@@ -93,4 +97,5 @@
 - **RICE**：Reach 5（机制维护者）× Impact 3（安全护栏）× Confidence 0.8 ÷ Effort 0.5 人日 ≈ **24**（取整 26）⇒ 中高优先。
 - **D1（用户 2026-10-31）**：**开工**（rd-infra 实施 A/B + qa 派生复核；分支 `feat/58-attribution-regression`）。
 - **D2（用户 2026-10-31）**：**跳过 arch 评审**（归属判据已由 arch 定稿并落地 ADR；本批不改判定逻辑，只补测试与文本）。
+- **D4（PM 裁定 2026-10-31 · rd 上报范围外增补）**：**接受并入本批**（不拆单）—— 理由：① 它是 `T534-O2`（`case 16` 一次性 flake）的**根因**，不修则该 flake 会随发布带到用户侧；② 改动面 = 3 个 helper 单行、语义等价，回归面由 `tests/t4` 全量承载；③ 已有「2/20 → 0/20 + 5/5 绿」实测。**代价与约束**：本批 AC 增加 AC6（必须给修前/修后对照 + 语义等价正反证明），QA 须独立复现，不得只信回执数字。
 - **D3（用户 2026-10-31）**：**npm 重发 0.20.3**（`tests/` 与 `.agents/**` 均在包内；判据 = registry 实测 `latest` + `dist.integrity` 与本地 tarball 逐字节一致）。

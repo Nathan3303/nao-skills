@@ -8,6 +8,7 @@
 
 > 本区是 PM 的**悬空状态**（任务状态见下方五栏）；重开后逐行回读确认（当前阶段 · 未决决策 · 口头约束）。
 
+- 🔄 **T535 rd 交付 `done(full)`（2026-10-31 · HEAD `2fded95` · Draft PR [#59](https://github.com/Nathan3303/nao-skills/pull/59) · 未推送 0）**：A 新例 `cases/19`（三态 + 单仓 + 夹具根不在 git 仓内）+ 内置双向变异 harness（恒真 5 FAIL / 恒假 6 FAIL 均点名；只动临时副本）· B BR5 改口径（下一 PR 首提交 / 不留脏改 / 带标签 stash，单源）· **D4 范围增补**：`tests/t4/lib.sh` 三 helper 的 `printf|grep -q` SIGPIPE 假 FAIL 改 here-string（`case 16` 2/20 → 0/20 = `T534-O2` 根因）。门禁：`check` files 50→50 · `npm test` t4 `[PASS]` **437→475** · **19/19** 用例 · SKIP=0/DEGRADE=0/NOTE=2 白名单 · `--case 19` PASS=38 · `test:t4:full` rc=0。**待办** = QA 独立复核（修前/修后对照 + 双向变异自做 + 三态断言自建夹具）→ PM 验收。
 - 🔄 **T535 立项（2026-10-31 · Issue [#58](https://github.com/Nathan3303/nao-skills/issues/58) · `feat/58-attribution-regression` · v0.20.3 PATCH）**：**归属判定补常态回归**（A 主项：`tests/t4` 新例覆盖三态 + `repo_contains_path` 双向变异必红）· **BR5 摩擦修正**（B：发布后事实改在下一 PR 首提交落地，不留工作区脏改 —— 本次 `pull` 被挡的实测教训）· **台账清理**（C：关闭过期行 `T533-O2`，已在 T534 C 项落地）。PRD = `docs/prds/2026-10-31-attribution-regression.md`（AC1–AC5）。**已关闭 `T533-O2`**（证据：`docs/reports/2026-10-28-docs-ride-pr-probe.sh` 的 `DOCS_SUBJECT_NORM` 全角归一 + 可选编号 + 大小写不敏感）。
 - ✅ **T533/T534 发布后事实随本 PR 落地（BR5 · 首个执行实例）**：npm 0.20.2 已核验（`latest`=0.20.2 · integrity 与本地 tarball 145,194 B 逐字节一致）· Issue #46/#48/#51 已关闭 · T534 派生会话三个已回收 · 舰队实况 = 本仓无残留、他仓 `qa-T598`/`rd-fe-T597` 标 `~（他仓 @ nao-todo）`。
 - ✅ **批次终态（2026-10-31 · T534 舰队闸门小批 · v0.20.2 · 已收尾）**：发布提交 `607ce9f` 已 push（RD 执行 · 显式 sha 源）· Release 标题 = 裸 `v0.20.2` 已核验 · 发布前置 `test:t4:full:dual` **两组 rc=0**（SKIP=0/DEGRADE=0 · NOTE=3 全白名单） · Issue **#46 / #48 / #51 已关闭**（历史欠账清零；#56 随 PR 合并自动关闭）· 派生会话 `arch-designer-T534` / `rd-infra-T534` / `qa-T534` **已回收** · 舰队实况：本仓无残留，他仓 `qa-T598` / `rd-fe-T597` 显示 `~（他仓 @ nao-todo）`（**新功能自身在生产环境的首个真实样本**）。**npm 已核验（2026-10-31）**：`latest` = **0.20.2** · `dist.integrity` = `sha512-qMLSTvRrfyJjQAU1AyTR6FVIiIerDJUPl0nkw8JgL0pD7WlVmrVV/if+xHmyBLfBZKjUiaB8CwgCJYe+Rp9uPQ==` 与本地 tarball（145,194 B）**逐字节一致** ⇒ **T534 全闭环**。
@@ -53,10 +54,10 @@
 - ✅ **T521 交付闭环（2026-10-14 · v0.17.3）**：GitHub Release 标题口径 = 裸 `vX.Y.Z` —— 权威单处 `common/release-notes.md` §一.5 硬约束 + §四清单 + §五红线 · 两处引用收敛（`github-flow.md:56` / PM 卡 :121）并指回单处 · PM 卡 **v24→v25** · 模板注释 1 行（6 分段标题未动）· 一次性只读探针 `PASS=28 FAIL=0` + 负控 2/2 · QA 独立复跑 **GO** · squash `eff44ec` · tag + Release 已发（发布提交 `4d97f00` · **AC9 自证：标题严格 = `v0.17.3`**）· **npm 重发 0.17.3 已核验**（`latest` + integrity 逐字节）。
 - ✅ **T520 交付闭环（2026-10-14 · v0.17.2）**：ADR 文档契约 —— 必写 5 节 + 可选 3 节（参考来源恒末）· 头部恰 4 字段 · 状态值域 4 值 · 禁写/下沉清单 · 新增 `templates/adr.md.example` + `adr-index.md.example` · `arch-designer` 卡 v11→v12 · QA 探针 `PASS=53 FAIL=0` + 负控 2/2 · squash `160cc60` · tag + Release 已发（`9833344`）· **npm 不重发**。
 
-- 当前阶段：**T535 立项完成 · 待开工确认卡**（`feat/58-attribution-regression` · Issue #58 · v0.20.3）· 上一批 T534 已终态（main `607ce9f` · npm 0.20.2 已核验）· 上一批 T533 已终态（main `546eb1b` · npm 0.20.1 已核验）· 上一批 T532 已终态（main `74e922d` · v0.20.0 · npm 已核验）
+- 当前阶段：**T535 验收中**（`feat/58-attribution-regression` · Issue #58 · PR #59 · rd 已 `done(full)`，QA 独立复核中；范围经 D4 增补 `lib.sh` SIGPIPE 根因修复）· 上一批 T534 已终态（main `607ce9f` · npm 0.20.2 已核验）· 上一批 T533 已终态（main `546eb1b` · npm 0.20.1 已核验）· 上一批 T532 已终态（main `74e922d` · v0.20.0 · npm 已核验）
 - 当前 PRD：`docs/prds/2026-10-31-attribution-regression.md`（T535 · 待开工确认 · 本 PR 首提交）
 - 未决决策点：无（用户 2026-10-28 已拍定：全部文档随 PR / 批间收尾随发布提交 / PM 路径级提交 / 立即小批 / npm 重发 0.20.1 / arch 跳过 / QA 派生复核）
-- 待用户回答：**T535 开工确认卡**（arch 跳过？· npm 重发 0.20.3 · QA 派生复核？）
+- 待用户回答：无（D4 范围增补由 PM 裁定并入；npm 重发 0.20.3 已拍板）
 - 旧口径残留（本批正在修）：main 上 13 条 `docs(T5xx)` 独立提交把台账/报告绕过了 PR ⇒ 本批后新批次文档一律随任务 PR
 - 旧当前阶段（T532 已终态）：main `e8ecb7c`/`74e922d` · 合并 `f230440` · tag/Release `v0.20.0` · **npm 已核验**（`latest` = 0.20.0）
 - 未派发队列：见下方「待派发队列」（仅 1 项：`M20261014-F1` 到期重评 2026-11-14）
