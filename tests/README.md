@@ -27,6 +27,7 @@ npm run test:t4:full:dual                      # 发布前置**双环境** gate�
 - **用例 16 的能力与边界**：只读 **Node 探针**（动态 import pi-subagents 的 `validateIntercomBridgeConfig` / `resolveIntercomBridge` + 桩配置）；`pi-subagents` 缺失（或 `node` 缺失）⇒ 整例 `SKIP`（不 FAIL、不计 DEGRADE）。只断言 **nao 自身契约**（模板存在/含 G1–G3/不含目标占位符 · 安装说明 · 协议小节四条 · 配置 schema 接受与拒绝），**不断言 pi-subagents 自身文案**（防版本脆断）；零 LLM/零网络、不依赖 `pi-intercom`/`tmux`。
 - **用例 17 的能力与边界**：只读 **Node 探针**（动态 import pi-subagents 的 `registerRuntimeAgentEventListener` / `listRuntimeAgentConfigs`，桩 `pi.events` 假总线）；`pi-subagents` 缺失（或 `node` 缺失）⇒ 整例 `SKIP`（不 FAIL、不计 DEGRADE）。断言 **nao 自身契约**（6 条定义字节比对 / 锚点 cross-assert / 命名双向 / schema 与幂等 / 逃生阀 / 三态负控），**不断言 pi-subagents 内部文案**（仅判 ok/throw 与 `unknown fields` 形态，防版本脆断）；零 LLM/零网络、不真跑子代理、不依赖 `pi-intercom`/`tmux`。负控在 `$T4_CACHE_DIR` 夹具副本上做（不触碰仓库工作区）。
 - **「子代理不属舰队会话」口径**：由 pi-subagents 拉起的 `subagent-*` 会话（`subagent-<agent>-<id>` / `subagent-chat-<id>`）**不属**舰队会话身份模型 —— `status` 只对其汇总计数（不列名、不参与在线/判重），`close subagent-*` 显式拒绝（生命周期归 pi-subagents 的 stop/retention）。`subagentfoo` / `mysubagent-x` / 裸 `subagent` 不入此面；`qa-subagent-x` 仍是合法派生名。
+- **用例 19 的能力与夹具纪律**：需真 `tmux`（缺则整例 `SKIP`）；名册 cwd 镜像断言需 `tsx`（缺则 2 条夹具断言 `[DEGRADE]`，pane/会话名路径照跑）。夹具 = **隔离 socket** + 假名册探针 + 夹具根**不得落在任何 git 仓内**（否则 toplevel 锚会把「他仓」拉回本仓、用例假绿；开跑前硬断言）；收尾走机制 `cleanup -S`。变异 harness 只动 `$T4_CACHE_DIR` 的脚本副本（恒真/恒假各一次，子进程跑本用例必须翻红并点名），真仓库 `md5` 与 `git status` 前后一致，原脚本再跑一遍复绿。零网络、确定性（连跑两次同形）。
 - **DEGRADE 语义**：环境缺能力但**其余断言继续跑**（不同于 `t4_skip` 会终止用例）；默认模式豁免、`T4_REQUIRE_FULL=1` 时计分。
 - **计数可见**：汇总尾部打印 `SKIP=n · DEGRADE=m · NOTE=k` + **NOTE 白名单命中明细**（`用例号:tag` 列表，逐条可解释）；「绿 + N SKIP/DEGRADE」不得表述为「全量通过」。
 - **安装包内不适用**：`tests/` 不入 npm tarball，在消费者机器上 `npm test` 因缺 `tests/t4` 而 rc≠0，属预期（见 `docs/releases/v0.18.0.md`）。
@@ -55,6 +56,7 @@ npm run test:t4:full:dual                      # 发布前置**双环境** gate�
 | 16 | 子代理桥口径：模板 G1–G3 契约 + 无目标占位符 + 安装说明 + 协议小节四条 + pi-subagents 配置 schema 接受/拒绝 | AC2–AC7 · T526 | `pi-subagents`（缺则 SKIP）；纯 Node 只读探针，不依赖 tmux/tsx/网络 |
 | 17 | 角色→子代理 agent 单一事实：装配字节比对（卡正文去 frontmatter）· 锚点 cross-assert · 命名双向 · 假总线注册 ×6 + 幂等 + 逃生阀 + 三态负控 | AC2–AC7 · T527 | `pi-subagents`（缺则 SKIP）；纯 Node 只读探针 + 夹具副本，零 LLM/零网络，不依赖 tmux/tsx |
 | 18 | codegraph 四态检测（四态：默认取其一回显 / `-v` 六态全展开）：四态前缀 + 默认零 codegraph 调用（AC11）+ warn 口径（codegraph 任态不计入、真 warn 不掩蔽）+ `--strict` 不升级 + 两条变异负控（摘插件条目 / 摘 `.codegraph`，md5 还原）+ 包名等值 + 遥测字面量 + 副产物静态面 + 技能/卡口径 | AC1/AC2/AC3/AC4/AC7/AC8/AC11 · T532 | 无（纯 bash + 夹具 stub，零 daemon）；真 CLI 原文缺能力 ⇒ `[NOTE] static-contract` |
+| 19 | 派生会话归属三态常态回归：本仓行含可执行 `close --task`（`!`/`·` 分支）· 他仓行 `~` 且整行无可执行 `close --task` · 不可判定行 `?` 且无可执行 `close --task` · 单仓零 `~`/`?`；`repo_contains_path` 单行谓词**恒真/恒假双向变异必红并点名**（临时副本，真仓库 md5/git status 前后一致，还原复绿） | AC1/AC2 · BR1–BR3/BR5 · T535 | `tmux`（隔离 socket，缺则 SKIP）· `tsx`（名册 cwd 镜像，缺则 2 条夹具断言 DEGRADE） |
 
 ## NOTE 白名单（T531 · `t4_note <tag> <msg>`）
 
