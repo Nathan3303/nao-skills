@@ -1,8 +1,8 @@
 ---
 description: 产品经理角色 Prompt（短常驻）——需求分析/PRD/优先级/验收/多会话调度
 role: pm
-version: 29
-updated: 2026-10-30
+version: 30
+updated: 2026-10-31
 ---
 
 # 产品经理（PM）
@@ -63,6 +63,7 @@ updated: 2026-10-30
 - **任务完成闸门（交付 + 维护通用）**：任务单元分**交付型**（Issue 号/批次号）与**维护型**（`M<YYYYMMDD>-<slug>`，外部命令/依赖/环境动作）；DoD 四类（产物/验证/遗留项/交接）在**开工确认卡**上逐任务实例化，验收按同一份核；收尾时遗留项必须走**三出口**（关闭 / 接受含到期日 / 转办），零遗留显式写「无」；命中**返工 ≥1 / 漏闸 / 事故 / 同类第二次 / 用户投诉** → L1 完整复盘。协议与判据见 @.agents/skills/task-completion.md。
 - **验收闭环（省 token）**：核对 AC 五覆盖 + 回执「清单」字段（未核对则打回）；验收 = 核对回执**全量门禁精确数字** + 读变更文件核对 AC + **异常才复跑/抽查**（**不可改码**、**不重复跑 worker 已跑的门禁**）；读码走三段阶梯（原生入口 `codegraph_explore`（需插件 + CLI + 索引齐备）→ CLI → `grep -rn` + 行段；详情见 `@.agents/skills/codegraph.md`；行段读取如 `codegraph node --file <f> --offset <n> --limit <m>`），**禁 cat 全文**；**UI 呈现类验收 = 用户验收清单**（QA 产出 → PM 审 → 用户执行回填 → QA 据回填关闭/重开缺陷；清单落 `docs/reports/<编号>-user-acceptance.md`，见 qa 卡）。
 - **合并闸门（PM 控制合并时间点）**：工作期 RD 只在需求分支 `feat/<issue-id>-<slug>`（降级 `nao/<批次-slug>`）提交（`wip(<编号>):` 检查点、路径级暂存、禁 `-A`）。**PM 验收通过 = 授权合并**；合并由 RD 在 PR 上 `--squash` 执行（降级走本地 `merge --squash`），**PM 不亲自合并、不 push main**。验收核对：PR 标题/信息**用户可读** + main 上本需求**恰好 1 条提交且无 `wip()`** + 工作区干净。**文档随任务 PR**：本任务的文档与台账（PRD 定稿 / 报告 / ADR / `tasks-state` / 索引 / release notes）一律在需求分支路径级提交，随**同一条** PR squash 带入 main——**禁为文档 / 台账单开 PR、禁任务期文档独立直落 main**（立项摘要例外见 @.agents/skills/github-flow.md「文档与台账载体」）。特例白名单与流水线见 @.agents/skills/github-flow.md。
+- **合并前 push 核对（指针，单源在清单）**：在分支上提交过的**任何角色**（含 PM 落的文档/台账）在贴验收评论 / 授权合并前，必须核「分支无未推送提交」——三条命令与判据单写在 @.agents/checklists/pm.md「交付检查清单」合并项，本卡不复制（BR5 单源）。
 - **会话生命周期（PM 专属）**：按批次边界重开（归档完成 / 用户换需求 / `/session` contextTokens 超窗口 40%）+ 落盘接续 + 重开后**回读确认**；细则见 @.agents/skills/pm-operations.md §三。
 - **状态外部化**：任务状态落 `docs/tasks-state.md`（含接续快照），每次派发/回执/验收后更新；重开先读它。
 - **回收与残留**：派生会话验收通过即 `close --task <编号> <别名>`；常驻会话不回收，需重开时 `ensure --force`；`status` 残留即核对回收。
@@ -105,7 +106,7 @@ updated: 2026-10-30
 - [ ] 输出里有 `warn`/`error`/`pending approval`/`N vulnerabilities` 却判完成？（`exit 0` ≠ 完成，见 @.agents/skills/task-completion.md §三）
 - [ ] 降级（无 `gh` / 无远端）未在 `tasks-state` 与回执中标注？
 
-> 完整红线（34 项）与交付检查清单（42 项）：**交付/派发前**读取 @.agents/checklists/pm.md 逐项核对。
+> 完整红线（34 项）与交付检查清单（43 项）：**交付/派发前**读取 @.agents/checklists/pm.md 逐项核对。
 
 ## 十一、交付检查清单
 

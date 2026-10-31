@@ -86,8 +86,8 @@ need_region AC2-2-PM卡十三 "$PM" '^## 十三、' '' "文档随任务 PR" "不
 need_region AC2-3-PM卡红线 "$PM" '^## 十、硬性红线' '^## 十一、' "为文档 / 台账单开 PR" "独立提交直落 main"
 need_region AC2-4-清单红线 "$PMC" '^## 硬性红线' '^## 交付检查清单' "为文档 / 台账**单开 PR**" "独立提交直落 main"
 need_region AC2-5-清单项 "$PMC" '^## 交付检查清单' '' "**文档随任务 PR**" "无文档-only PR"
-need_all AC2-6-计数口径 "$PMC" "## 硬性红线（完整 34 项）" "## 交付检查清单（完整 42 项）"
-need_all AC2-7-卡计数对齐 "$PM" "完整红线（34 项）" "交付检查清单（42 项）"
+need_all AC2-6-计数口径 "$PMC" "## 硬性红线（完整 34 项）" "## 交付检查清单（完整 43 项）"
+need_all AC2-7-卡计数对齐 "$PM" "完整红线（34 项）" "交付检查清单（43 项）"
 
 # ── AC3 立项例外可判（BR3 三条件逐字在位 + 降级无例外）────────────────
 need_all AC3-1-BR3三条件 "$GF" \
@@ -120,30 +120,58 @@ cm() { # $1=dir $2=subject $3=path $4=content  （临时仓内提交，-A 仅限
 # judge <dir> <task> ⇒ 打印 PASS / FAIL:<reason>，rc 与判定一致
 # 判据（main 上，针对任务 T；对应 BR1/BR2/BR3）：
 #   R1 该任务提交数 ≥ 1 且 ≤ 2（1 条任务提交 + 最多 1 条立项摘要）
-#   R2 存在 ≥2 条 `docs(T):` 独立提交 ⇒ FAIL（违反 BR3「单条」）
-#   R3 单条 `docs(T):` 独立提交若非「立项摘要」（≠ 单一文件且落 docs/prds/）⇒ FAIL（BR2①）
-#   R4 任何 merge 提交的侧分支里含 `docs(T):` 提交 ⇒ FAIL（独立 PR 通道，BR2①）
+#   R2 存在 ≥2 条 docs 提交 ⇒ FAIL（违反 BR3「单条」）
+#   R3 单条 docs 提交若非「立项摘要」（≠ 单一文件且落 docs/prds/）⇒ FAIL（BR2①）
+#   R4 任何 merge 提交的侧分支里含 docs 提交 ⇒ FAIL（独立 PR 通道，BR2①）
+#
+# T534（C 项 · AC4）：docs 提交识别口径放宽 —— 全角 `（）`/`：`、无编号 `docs:`、大小写变体 `Docs(` 均算
+#   文档提交（旧口径 `^docs\(T\):` 会把它们漏判成「非 docs 提交」⇒ 假阴性）。
+#   is_docs_subject 是唯一判定点（T534 探针按此做「收窄正则」变异自证）。
+# 判定口径两处单点（T534 探针按这两个变量做「收窄正则 / 去归一」变异自证）：
+#   DOCS_SUBJECT_NORM = 全角 （） 与全角 ： 归一（旧口径的假阴来源之一）
+#   DOCS_ERE          = docs 前缀（大小写不敏感、括号编号可选 ⇒ 覆盖无编号 `docs:`）
+DOCS_SUBJECT_NORM='s/（/(/g; s/）/)/g; s/：/:/g'
+DOCS_ERE='^[Dd][Oo][Cc][Ss][[:space:]]*(\([^)]*\))?[[:space:]]*:'
+
+is_docs_subject() {  # <subject> <task-id>；subject 归一后匹配 docs 前缀，括号内编号（若有）须等于 task
+  local n="" id=""
+  n="$(printf '%s' "$1" | sed "$DOCS_SUBJECT_NORM")"
+  printf '%s' "$n" | grep -qE "$DOCS_ERE" || return 1
+  id="$(printf '%s' "$n" | sed -n 's/^[Dd][Oo][Cc][Ss][[:space:]]*(\([^)]*\))[[:space:]]*:.*/\1/p')"
+  [[ -z "$id" || "$id" == "$2" ]]
+}
+
+# 该任务的 docs 提交：<sha>\t<subject>（每行一条；$3=revspec，默认 main）
+docs_commits() {
+  local d="$1" t="$2" rev="${3:-main}" sha subj
+  while IFS=$'\t' read -r sha subj; do
+    [[ -n "$sha" ]] || continue
+    is_docs_subject "$subj" "$t" && printf '%s\t%s\n' "$sha" "$subj"
+  done < <(gitq "$d" log --format='%H%x09%s' "$rev" 2>/dev/null || true)
+}
+
 judge() {
-  local d="$1" t="$2" log_docs docs_cnt side_head side_log total
+  local d="$1" t="$2" docs_list docs_cnt side_head side_log subj total
   # 任务提交识别：兼容半角 `(T900)` 与全角 `（T900）`（真实 squash 主题可能用全角）
   total="$(gitq "$d" log --format='%s' main | grep -cE "\(${t}\)|（${t}）" || true)"
-  log_docs="$(gitq "$d" log --format='%s' main | grep -E "^docs\(${t}\):" || true)"
-  docs_cnt="$(printf '%s' "$log_docs" | grep -c . || true)"
+  docs_list="$(docs_commits "$d" "$t")"
+  docs_cnt="$(printf '%s\n' "$docs_list" | grep -c . || true)"
 
   # R4：main 上合并提交的侧分支（非 first-parent 链）里是否出现该任务的 docs 提交
   while IFS= read -r side_head; do
     [[ -n "$side_head" ]] || continue
     side_log="$(gitq "$d" log --format='%s' "$side_head" --not main~1 2>/dev/null || true)"
-    if printf '%s' "$side_log" | grep -qE "^docs\(${t}\):"; then
-      printf 'FAIL:docs-pr-separate\n'; return 1
-    fi
+    while IFS= read -r subj; do
+      [[ -n "$subj" ]] || continue
+      if is_docs_subject "$subj" "$t"; then printf 'FAIL:docs-pr-separate\n'; return 1; fi
+    done <<< "$side_log"
   done < <(gitq "$d" log --merges --format='%p' main | awk 'NF>1 { for (i=2;i<=NF;i++) print $i }')
 
   if (( total == 0 )); then printf 'FAIL:no-task-commit\n'; return 1; fi
   if (( docs_cnt >= 2 )); then printf 'FAIL:docs-only-multi\n'; return 1; fi
   if (( docs_cnt == 1 )); then
     local sha files
-    sha="$(gitq "$d" log --format='%H%x09%s' main | grep -E "^[0-9a-f]+	docs\(${t}\):" | head -1 | cut -f1)"
+    sha="$(printf '%s\n' "$docs_list" | head -1 | cut -f1)"
     files="$(gitq "$d" show --pretty=format: --name-only "$sha" | grep -c . || true)"
     if (( files != 1 )) || ! gitq "$d" show --pretty=format: --name-only "$sha" | grep -qE '^docs/prds/'; then
       printf 'FAIL:docs-only-standalone\n'; return 1
@@ -189,6 +217,24 @@ if [[ "$OUT3" == "PASS:one-squash-with-docs" ]]; then
 else
   bad "POS-TMP 期望 PASS:one-squash-with-docs，实得 $OUT3"
 fi
+
+# ── AC4（T534 · C 项）：识别口径放宽 —— 全角 （）/：、无编号 docs:、大小写变体 Docs( 均判「文档提交」
+# 观测方式：同一批「任务提交 + 单条 docs-only 提交（非 docs/prds/）」夹具，四种写法都必须被识别为 docs 提交
+#   ⇒ 判 FAIL:docs-only-standalone（未识别 ⇒ docs_cnt=0 ⇒ 假阴 PASS）。
+# 覆盖限制（BR6 诚实）：**任务提交完全无 docs** 不在本探针判定范围（不属本批缺陷，也不得让未覆盖看起来像通过）。
+printf '未覆盖：任务提交完全无 docs（本探针只判「有 docs 提交」的载体形态；无 docs 提交属未覆盖，不判 PASS 也不判 FAIL）\n'
+for spec in 'AC4-1|docs(T902):|T902' 'AC4-2|docs（T903）：|T903' 'AC4-3|docs:|T904' 'AC4-4|Docs(T905):|T905'; do
+  id="${spec%%|*}"; rest="${spec#*|}"; subj="${rest%|*}"; tno="${rest##*|}"
+  D="$TMP/spell-$id"; mk_repo "$D"
+  cm "$D" "feat: 识别口径夹具（$tno）" "src/x.sh" "echo x"
+  cm "$D" "$subj tasks-state 台账更新" "docs/tasks-state.md" "- $tno 收尾"
+  O="$(judge "$D" "$tno" || true)"
+  if [[ "$O" == "FAIL:docs-only-standalone" ]]; then
+    ok "$id 写法「$subj」被判为文档提交（docs-only-standalone）"
+  else
+    bad "$id 期望 FAIL:docs-only-standalone（写法「$subj」未被识别），实得 $O"
+  fi
+done
 
 # ── RO：真仓库零写入 ──────────────────────────────────────────────────
 RO_STATUS_AFTER="$(git -C "$ROOT" status --porcelain 2>/dev/null || true)"
