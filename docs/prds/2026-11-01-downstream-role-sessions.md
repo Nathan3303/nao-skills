@@ -57,12 +57,15 @@
 
 - **BR1 不登记清单**：全程不得读写 `roles.yaml` 以登记下游角色；`git diff .agents/roles.yaml` 必须为 0。
 - **BR2 反冒充**：卡推导出的 `role`（或 `--as`）**不得命中** `ROLE_ORDER` 的任何 id 或别名；命中即拒绝并提示改用 `--as`。理由 舰队身份靠名字前缀识别（`status` 派生区扫描 `:1461-1463`、`close` 派生名解析 `:1531`），同名会污染常驻语义与他人回执。
-- **BR3 限定目录 + 工作区内**：`--card` 只接受 `<repo>/.agents/prompts/<file>.md`（`<repo>` = `--repo` 或 `$PWD`）；须同时满足「realpath 落在 `<repo>` 之内」与「父目录为 `<repo>/.agents/prompts`」两条，任一不符即拒绝。理由 卡即系统提示，等价于「能写工作区文件即可定义角色」；固定目录让授权面可审计（谁在哪个目录写了什么）。
+- **BR3 限定目录 + 双校验（arch 定稿六条）**：① 边界基准取 **`--repo` 的 realpath**，判据 = 卡 realpath 的**父目录**与 `<realpath repo>/.agents/prompts` 组件级相等（复用 `nao_phys_path` / `repo_contains_path`，不用裸字符串前缀）；② 入参含 `..` 段、后缀非 `.md` ⇒ **显式 die**（不依赖 realpath 兜底），相对路径按 realpath(repo) 解析而非 `$PWD`；③ 解析后须为**常规文件**（fifo/设备/目录 ⇒ die —— `cat` 一个 fifo 会让拉起命令永久挂死）；④ 大小上限 **256 KiB**；⑤ 诊断文案必含「该怎么办」；⑥ 定性写明：这是**可审计边界，不是权限边界**（卡正文 = 完全可信输入，fleet 只做一致性校验）。理由 卡即系统提示；固定目录让授权面可审计，而挂死/越界/膨胀是可发生的事故面。
 - **BR4 锚点同源**：系统提示必须由既有 `build_system_prompt` 生成；**禁止**新增第二份锚点文案（否则与 `tests/t4/cases/17` 的 cross-assert 契约分叉）。
 - **BR5 一次性语义**：属派生/一次性会话 —— `close` 正常回收即可，**不得**触发「常驻会话…应 `ensure --force` 重开」警告（`:1541`）。
 - **BR6 零副作用**：卡校验失败（缺失/空/无法解出 role/越界/冒充）时必须**不建 pane、不写状态、不推送**，退出码非 0 + 单行原因（沿用 BR3 口径）。
 - **BR7 既有行为不变**：不带 `--card` 的所有分支（解析、判重、布局、输出行、退出码）逐字不变。
 - **BR8 卡内引用归包根**：下游卡的 `@.agents/...` 引用按机制包根解析（锚点行已声明），`check` 的校验口径同此。
+- **BR9 前缀不相交与字符集（arch 关键发现）**：卡 role ① 不得等于任何常驻 id/别名（BR2 保留）；② **不得以任何常驻 id/别名为 `<x>-` 前缀**（防 `qa-audit` 抢走 `qa-` 的 `status` 枚举）；③ 不得以 `subagent-` 或 `nao-` 开头（否则被 `subagent_in_field` 计为子代理、被 `close` 直接拒收 —— 拉起即失联）；④ 字符集 `^[a-z0-9][a-z0-9_-]*$`、不以 `-` 结尾、≤32 字符（标题契约与 `pane_cwd_snapshot` 正则只认此集，越界即「起得来但看不见」）。
+- **BR10 一次性判别显式化**：`close` 的目标类别由显式布尔 `IS_RESIDENT` 决定（命中清单 = 常驻；命中卡集 = 一次性），**禁**用「有没有 `--task`」推断（现 `:1540` 写法在卡会话裸名下必然误判）。一次性回收打印一次性标识、**不**打常驻警告；`tasks-state` active 闸门对卡会话跳过（只 log），**在跑 turn 闸门不放宽**。
+- **BR11 目标级绑定 + 两相执行**：`--card` / `--as` 为**目标级修饰符，绑定其后第一个 positional**；`--as` 仅在同目标的 `--card` 之后合法；命令末尾悬挂修饰符、或把 `--card` 传给 `check`/`status`/`close` ⇒ 用法错（照 `-S` 守卫先例）。`cmd_ensure` 须**先全量解析与校验、全部通过后再逐个 spawn** —— 否则混合批次里前项已起 pane 才发现后项卡非法，BR6 零副作用不可达。
 
 ## 六、NFRs（业务视角基线，技术指标待 arch 转译）
 
@@ -71,16 +74,20 @@
 - **安全**：卡路径限定工作区内；拒绝冒充常驻角色；不引入网络与凭证面。
 - **可维护**：改动集中在 `nao-fleet.sh` 单文件 + `check` 一节 + 测试用例；不新增生成物、不新增配置文件。
 - **可诊断**：失败必须单行可读原因（含「该怎么办」的提示），符合既有 die 文案风格。
+- **arch 转译口径（2026-11-01 定稿）**：`files=` 计数**不含**下游卡（否则 AC5① 的「变化有说明」变永久漂移）；`status` 每 run 新增一次 `glob + frontmatter 读`（锚根 ≤2、卡 ≤30，超限 warn 一行），**不新增 tmux/node 调用**；失败文案统一「原因 + 该怎么办」单行。
 - **不适用**：吞吐/并发压测（拉起为低频人工动作）· 多租户隔离。
 
 ## 七、AC
 
 - **验证接缝**：`tests/t4` 新增用例（`cases/2x`，编号由 rd 按序取）+ 既有全量用例 + `check` + `npm test`；一次性只读探针放 `docs/reports/2026-11-01-T537-*-probe.sh`（如需要）。
 - **AC1（主路径 · 拉起与身份）**：Given 下游夹具 `<repo>/.agents/prompts/code-reviewer.md`（frontmatter `role: code-reviewer` + `description`），When `ensure --card .agents/prompts/code-reviewer.md --task T537`，Then ① 新 pane 起于调用者宿主窗口；② 终端标题命中 `π - code-reviewer-T537 - <repo basename>`；③ 系统提示文件内容 = 卡正文逐字节 + `## 环境锚点` 行，且锚点行与 6 角色起出的文件**逐字相同**（`NAO_SKILLS` 指向机制包根）。
-- **AC2（异常 · 零副作用）**：六种失败输入（卡不存在 / 空文件 / frontmatter 无 `role` 且无可退化文件名 / 卡不在 `<repo>/.agents/prompts/` 内 / 卡经 symlink 逃逸到该目录外 / 缺少路径参数）逐个断言：退出码非 0 · stderr 单行含原因与「该怎么办」 · **pane 数不变** · tmux session 列表不变 · 无 prompt 临时文件残留。
+- **AC2（异常 · 零副作用）**：**八种**失败输入（卡不存在 / 空文件 / frontmatter 无 `role` 且无可退化文件名 / 卡不在 `<repo>/.agents/prompts/` 内 / 卡经 symlink 逃逸到该目录外 / 卡为 **fifo 或目录**（不得挂死，须立刻 die）/ 卡超 **256 KiB** / 缺少路径参数）逐个断言：退出码非 0 · stderr 单行含原因与「该怎么办」 · **pane 数不变** · tmux session 列表不变 · 无 prompt 临时文件残留。
 - **AC3（边界 · 冒充与命名）**：① `role: qa`（命中常驻 id）⇒ 拒绝且提示 `--as`；② `--as` 含非法字符（空格/`/`）⇒ 拒绝；③ `--as` 命中 `ROLE_ORDER` id ⇒ 拒绝；④ 默认名 `code-reviewer` 与 `--task` 组合后不与常驻名冲突（正控：同一批同时 `ensure qa --card …` 中 `qa` 走清单、卡走默认名，两者互不干扰）。
-- **AC4（负向闭环 · 托管三接线）**：① `status` 将该会话列在派生/一次性节，且**本仓**会话无「他仓」「不可判定」标注；② `close` 回收成功（rc=0、pane 消失、名册不再列出）；③ `close` 输出**不含**「应 `ensure --force` 重开」常驻警告（反例：对常驻角色执行 `close` 时该警告仍须出现 —— 双向断言）；④ 会话残留于 `tasks-state` 标记的用例：已归档 task ⇒ `status` 给出「残留」标注且给出可执行 `close` 命令；⑤ 回收后 `status` 与 intercom 名册双清。
-- **AC5（设计一致性 · 门禁与零回归）**：① `check` rc=0、`roles=6` 不变、`files=` 变化有说明、新增「下游角色卡」节在无卡时跳过且不影响 rc；② `npm test` rc=0、`tests/t4` 全量 PASS/FAIL/SKIP/DEGRADE 精确数字（发布口径 SKIP=0/DEGRADE=0/非白名单 NOTE=0）；③ **零回归探针**：不带 `--card` 的 6 角色 `ensure`/`status`/`close` 输出与旧版**逐字等价**（`git show main:.agents/scripts/nao-fleet.sh` 对照，允许新增节，不允许既有行改动）；④ `git diff --stat .agents/roles.yaml` = 0；⑤ 广告面（`--help`）含 `--card` 与一句用途说明。
+- **AC4（负向闭环 · 托管三接线）**：① `status` 将该会话列在派生/一次性节，且**本仓**会话无「他仓」「不可判定」标注；② `close` 回收成功（rc=0、pane 消失、名册不再列出）；③ **常驻/一次性分叉四段断言（A–D，断言固定前缀 + 子串，不断言整行）**：**A 正向**（`ensure qa` → `close qa` ⇒ rc=0、pane 消失、stderr 含固定前缀 `[fleet] 常驻会话 qa：任务闭环后应 ensure --force 重开`）· **B 反向**（`ensure --card …` → `close <role>` ⇒ rc=0、pane 消失、stderr **不匹配** `常驻会话 .*ensure --force` 且含新固定前缀「一次性会话 …（下游卡）」）· **C 正交**（A、B 同文件先后执行，断言 B 之后 A 的警告仍出现 —— 防「直接删掉 warn」蒙过 B）· **D 分叉不外溢**（`close --task T537 <card-role>` 在任务 active 时**成功**；反例 `close --task T537 qa` **仍被拒**，锁住「闸门放宽只对卡生效」）；④ 会话残留于 `tasks-state` 标记的用例：已归档 task ⇒ `status` 给出「残留」标注且给出可执行 `close` 命令；⑤ 回收后 `status` 与 intercom 名册双清。
+- **AC5（设计一致性 · 门禁与零回归）**：① `check` rc=0、`roles=6` 不变、`files=` 变化有说明、新增「下游角色卡」节在无卡时跳过且不影响 rc；② `npm test` rc=0、`tests/t4` 全量 PASS/FAIL/SKIP/DEGRADE 精确数字（发布口径 SKIP=0/DEGRADE=0/非白名单 NOTE=0）；③ **零回归探针**：不带 `--card` 的 6 角色 `ensure`/`status`/`close` 输出与旧版**逐字等价**（`git show main:.agents/scripts/nao-fleet.sh` 对照；**允许新增节**，不允许既有行改动 —— **唯一例外 D6**：含 `-` 的任务号（如 `M20261014-pi-ext-update`）下 `status` 三处命令构造由 `${dname%-*}` 修为 `${dname%-"$id"}`，该场景须给出「旧 → 新」对照输出，其余既有行仍逐字不变）；④ `git diff --stat .agents/roles.yaml` = 0；⑤ 广告面（`--help`）含 `--card` 与一句用途说明。
+- **AC6（反冒充 · 前缀与字符集，arch 关键发现）**：① `role: qa-audit`（命中常驻前缀）⇒ 拒绝并点名冲突前缀；② `role: subagent-review` ⇒ 拒绝；③ `role: nao-x` ⇒ 拒绝；④ `role: Qa_Audit`（大写）/ `role: qa-`（尾 `-`）/ 33 字符 ⇒ 拒绝；⑤ 正控：`role: code-reviewer` / `role: data-reviewer` 通过（证明拒绝不是「一律拒」）。
+- **AC7（语法绑定 + 两相执行）**：① `ensure qa --card .agents/prompts/cr.md` ⇒ `--card` **只**绑定其后的 `cr.md`（`qa` 走清单常驻），不得整批错绑；② 命令末尾悬挂 `--card` ⇒ 用法错（非 0 + 单行）；③ `status --card x.md` / `close --card x.md` / `check --card x.md` ⇒ 用法错；④ **两相执行**：`ensure <合法角色> --card <非法卡>` ⇒ **pane 数为 0**（前项也不得拉起），证明「先全量校验后 spawn」。
+- **AC8（诊断面 · `status` 未识别节与 `check` 分级）**：① 卡被删/改名后其会话仍**出现**在 `status` 新增节「角色未识别（疑似 fleet 遗留）」，带归属三态、**不给**可执行命令、给指路（卡被删/改名、他仓卡、overlay 改名）—— 不得静默消失；② `check` 分级：内容类问题（缺 `role`/`description`、CRLF、超限、含 `name:` 双用提示）⇒ **warn 不红 rc**；机制类问题（与 `ROLE_ORDER` 冲突、卡集前缀嵌套）⇒ **error（rc=1）**；③ **overlay 兼容**：下游卡扫描目录 realpath == `$PROMPTS_DIR` realpath 时该节**整体跳过**（否则常驻卡被 BR9 报冲突、`check` 恒红）；④ 卡集内部前缀嵌套（`a-b` 与 `a-b-c` 并存）⇒ `check` error 点名，`status`/`close` 用最长匹配不误杀。
 
 ## 八、上线闭环
 
@@ -110,6 +117,10 @@
 - **D2 arch 强度**：**完整评审**（信任边界 · `status` 识别口径 · `close` 语义分叉 · 与 subagent/overlay 划界）。
 - **D3 卡路径口径**：**限定目录** —— 只接受 `<repo>/.agents/prompts/<file>.md`（比「任意路径 + 工作区内」更严）；已写入 §三 A 与 BR3、AC2 增一条 symlink 逃逸用例。
 - **D4 待推送提交**：`main` 领先 `origin/main` 1 条（`a8a678a`，T536 发布收尾纯文档）→ **派 rd-infra-T537 首步按显式 sha push**（PM 授权），使本 PR diff 干净；PM 不 push main。
+- **D5（arch 五问·`status` 诊断面）**：**采纳**新增「角色未识别（疑似 fleet 遗留）」节 —— 替代方案（并入 `unattributed_pi_panes` warn）措辞失真（「标题不符契约」对合规标题是错的），且 T530「非静默」原则要求卡被删后的会话必须可见。
+- **D6（既有缺陷）**：**采纳修** `${dname%-*}` → `${dname%-"$id"}`（`status` 三处命令构造）—— 任务号含 `-`（`--task` 允许 `[A-Za-z0-9_-]+`）时现写法会把角色名截错、给出**错误的可执行 close 命令**；本需求会放大该缺陷（卡会话 + 批次号）。代价 = AC5③ 对该场景放宽（已写进 AC5③）。
+- **D7（`check` 分级）**：**采纳** —— 内容类 warn（不红 rc）/ 机制类 error（rc=1，因为运行期必拒，闸门必须提前红）。
+- **D8（闸门适用面）**：**采纳** —— 卡会话跳过 `tasks-state` active 闸门（只 log），**在跑 turn 闸门不放宽**。理由 不放宽会出现「必须先把任务归档才能关评审会话」的顺序倒置，日常必堵。
 
 ## 附录 C · 与既有能力的关系（防误用）
 
