@@ -44,7 +44,7 @@ npm run test:t4:full:dual                      # 发布前置**双环境** gate�
 | 03 | 未物化 exit 2 + `DEGRADED:` + 恢复命令；D7 防重入；D6 解析序 | AC3/NFR3 · D5/D6/D7 | `init` + shim |
 | 04 | 零网络 `check` exit=0 + strace 无 AF_INET | NFR2 · 闸门B | `init` + shim |
 | 05 | 迁移精准删除 + `.nao-obsolete` 备份 + 共享目录保留 | AC4 · §12-C/D | `migrate`（或 `init` 自动迁移） |
-| 06 | 契约守护：AC6 机制侧 + AC8 manifest/注入 + AC2 静态 | AC2/AC6/AC8 | 无（读 manifest + 机制脚本） |
+| 06 | 契约守护：AC6 机制侧 + AC8 manifest/注入 + AC2 静态 + 测试基建 helper 级正反断言（`t4_cli_supports` 命中/未命中）+ `lib.sh` 同型管道 0 处恒量护栏（T536） | AC2/AC6/AC8 · T536/BR4 | 无（读 manifest + 机制脚本） |
 | 07 | 真实 `pi install` 与 tarball 布局对照 | AC1/NFR2 | `pi` + npm registry |
 | 08 | 评审修复回归：F1 lock 保缩进 + F2 init --force 走 migrate 防混装 | AC4 · BR5 | `migrate` / `init` |
 | 09 | T509 别名解析 / check 守卫 / close 跨仓回收 | AC3 · #19 | `init` + shim |
