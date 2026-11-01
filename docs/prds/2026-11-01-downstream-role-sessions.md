@@ -32,7 +32,7 @@
 ## 三、范围 / 非范围
 
 - **范围**
-  1. **A · 调用入口**：`ensure --card <路径> [--as <会话名>]`，`--card` 可与非 `--card` 角色同批混用；`--task` / `--repo` / `--force` / `-m` 与本参数正交可用。
+  1. **A · 调用入口**：`ensure --card <路径> [--as <会话名>]`，`--card` 可与非 `--card` 角色同批混用；`--task` / `--repo` / `--force` / `-m` 与本参数正交可用。**卡路径口径（开工卡 D3 拍定）**：仅接受 `<repo>/.agents/prompts/<file>.md` —— 同时校验 realpath 前缀与目录归属，任一项不符即拒绝。
   2. **B · 会话命名与语义**：默认 `<role>-<task>`（有 `--task`）或 `<role>`（无 task），`role` 取自卡 frontmatter `role`，退化取文件名；`--as` 显式覆盖。属**派生/一次性会话线**（不是常驻）。
   3. **C · 系统提示**：复用既有 `build_system_prompt`（卡正文 + `## 环境锚点` 行）—— 锚点文案与 6 角色**同源同字**，不新增第二份。
   4. **D · 全托管三接线**：`status` 可见（含「本仓 / 他仓 / 不可判定」三态与残留标注）· `close` 可回收且**不**触发常驻警告 · 残留检测覆盖。
@@ -57,7 +57,7 @@
 
 - **BR1 不登记清单**：全程不得读写 `roles.yaml` 以登记下游角色；`git diff .agents/roles.yaml` 必须为 0。
 - **BR2 反冒充**：卡推导出的 `role`（或 `--as`）**不得命中** `ROLE_ORDER` 的任何 id 或别名；命中即拒绝并提示改用 `--as`。理由 舰队身份靠名字前缀识别（`status` 派生区扫描 `:1461-1463`、`close` 派生名解析 `:1531`），同名会污染常驻语义与他人回执。
-- **BR3 工作区内**：`--card` 的 realpath 必须落在 `--repo`（默认 `$PWD`）之内；越界即拒绝。理由 卡即系统提示，等价于「能写工作区文件即可定义角色」，边界必须显式。
+- **BR3 限定目录 + 工作区内**：`--card` 只接受 `<repo>/.agents/prompts/<file>.md`（`<repo>` = `--repo` 或 `$PWD`）；须同时满足「realpath 落在 `<repo>` 之内」与「父目录为 `<repo>/.agents/prompts`」两条，任一不符即拒绝。理由 卡即系统提示，等价于「能写工作区文件即可定义角色」；固定目录让授权面可审计（谁在哪个目录写了什么）。
 - **BR4 锚点同源**：系统提示必须由既有 `build_system_prompt` 生成；**禁止**新增第二份锚点文案（否则与 `tests/t4/cases/17` 的 cross-assert 契约分叉）。
 - **BR5 一次性语义**：属派生/一次性会话 —— `close` 正常回收即可，**不得**触发「常驻会话…应 `ensure --force` 重开」警告（`:1541`）。
 - **BR6 零副作用**：卡校验失败（缺失/空/无法解出 role/越界/冒充）时必须**不建 pane、不写状态、不推送**，退出码非 0 + 单行原因（沿用 BR3 口径）。
@@ -77,7 +77,7 @@
 
 - **验证接缝**：`tests/t4` 新增用例（`cases/2x`，编号由 rd 按序取）+ 既有全量用例 + `check` + `npm test`；一次性只读探针放 `docs/reports/2026-11-01-T537-*-probe.sh`（如需要）。
 - **AC1（主路径 · 拉起与身份）**：Given 下游夹具 `<repo>/.agents/prompts/code-reviewer.md`（frontmatter `role: code-reviewer` + `description`），When `ensure --card .agents/prompts/code-reviewer.md --task T537`，Then ① 新 pane 起于调用者宿主窗口；② 终端标题命中 `π - code-reviewer-T537 - <repo basename>`；③ 系统提示文件内容 = 卡正文逐字节 + `## 环境锚点` 行，且锚点行与 6 角色起出的文件**逐字相同**（`NAO_SKILLS` 指向机制包根）。
-- **AC2（异常 · 零副作用）**：五种失败输入（卡不存在 / 空文件 / frontmatter 无 `role` 且无可退化文件名 / 卡在 `--repo` 之外 / 缺少路径参数）逐个断言：退出码非 0 · stderr 单行含原因 · **pane 数不变** · tmux session 列表不变 · 无 prompt 临时文件残留。
+- **AC2（异常 · 零副作用）**：六种失败输入（卡不存在 / 空文件 / frontmatter 无 `role` 且无可退化文件名 / 卡不在 `<repo>/.agents/prompts/` 内 / 卡经 symlink 逃逸到该目录外 / 缺少路径参数）逐个断言：退出码非 0 · stderr 单行含原因与「该怎么办」 · **pane 数不变** · tmux session 列表不变 · 无 prompt 临时文件残留。
 - **AC3（边界 · 冒充与命名）**：① `role: qa`（命中常驻 id）⇒ 拒绝且提示 `--as`；② `--as` 含非法字符（空格/`/`）⇒ 拒绝；③ `--as` 命中 `ROLE_ORDER` id ⇒ 拒绝；④ 默认名 `code-reviewer` 与 `--task` 组合后不与常驻名冲突（正控：同一批同时 `ensure qa --card …` 中 `qa` 走清单、卡走默认名，两者互不干扰）。
 - **AC4（负向闭环 · 托管三接线）**：① `status` 将该会话列在派生/一次性节，且**本仓**会话无「他仓」「不可判定」标注；② `close` 回收成功（rc=0、pane 消失、名册不再列出）；③ `close` 输出**不含**「应 `ensure --force` 重开」常驻警告（反例：对常驻角色执行 `close` 时该警告仍须出现 —— 双向断言）；④ 会话残留于 `tasks-state` 标记的用例：已归档 task ⇒ `status` 给出「残留」标注且给出可执行 `close` 命令；⑤ 回收后 `status` 与 intercom 名册双清。
 - **AC5（设计一致性 · 门禁与零回归）**：① `check` rc=0、`roles=6` 不变、`files=` 变化有说明、新增「下游角色卡」节在无卡时跳过且不影响 rc；② `npm test` rc=0、`tests/t4` 全量 PASS/FAIL/SKIP/DEGRADE 精确数字（发布口径 SKIP=0/DEGRADE=0/非白名单 NOTE=0）；③ **零回归探针**：不带 `--card` 的 6 角色 `ensure`/`status`/`close` 输出与旧版**逐字等价**（`git show main:.agents/scripts/nao-fleet.sh` 对照，允许新增节，不允许既有行改动）；④ `git diff --stat .agents/roles.yaml` = 0；⑤ 广告面（`--help`）含 `--card` 与一句用途说明。
@@ -104,7 +104,14 @@
 - **RICE**：Reach **3**（当前 3 个下游仓 + 未来用户，属团队级工具）× Impact **3**（解锁「按需角色」整个档位）× Confidence **0.8**（拉起/锚点/回收语义已验证；未验证者仅 `status` 识别口径）× Effort **1.5**（单文件 + 用例 + 3 处文档）⇒ **RICE ≈ 4.8**。
 - **Kano**：**期望型**（做了满意度上升，不做不会立刻抱怨但会持续用错——手工拉起的会话游离在纪律之外）。
 
-## 附录 B · 与既有能力的关系（防误用）
+## 附录 B · 开工卡拍板（2026-11-01 · 用户 ask-me）
+
+- **D1 开工**：现在开工，按本开工卡。
+- **D2 arch 强度**：**完整评审**（信任边界 · `status` 识别口径 · `close` 语义分叉 · 与 subagent/overlay 划界）。
+- **D3 卡路径口径**：**限定目录** —— 只接受 `<repo>/.agents/prompts/<file>.md`（比「任意路径 + 工作区内」更严）；已写入 §三 A 与 BR3、AC2 增一条 symlink 逃逸用例。
+- **D4 待推送提交**：`main` 领先 `origin/main` 1 条（`a8a678a`，T536 发布收尾纯文档）→ **派 rd-infra-T537 首步按显式 sha push**（PM 授权），使本 PR diff 干净；PM 不 push main。
+
+## 附录 C · 与既有能力的关系（防误用）
 
 - **pi-subagents 项目 agent**：适合一次性并行调研/评审（省 token、无交互身份）；本需求适用于**需多轮质询 + 有回执身份 + 需进入舰队纪律**的会话。二者并存，卡可两用（加 `name` 字段即被 subagents 扫到），文档需说明差异。
 - **overlay 清单目录（`NAO_SKILLS` 指向下游清单）**：效果是把下游角色变成**常驻**；与本需求的按需语义互斥。同一项目不建议两法并用（名册/清单双源）。
