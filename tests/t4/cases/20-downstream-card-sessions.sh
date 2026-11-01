@@ -336,7 +336,7 @@ TX kill-pane -t "${P_OK:-$CALLER}" >/dev/null 2>&1 || true
 # ============================================================ AC3 ①–③ --as 边界
 run_fleet ensure --card .agents/prompts/role-qa.md --as audit
 t4_assert_ne "0" "$T4_RC" "AC3① role 撞常驻 id 时拒绝"
-t4_assert_contains "$T4_ERR" "改用 --as" "AC3① 拒绝文案提示改用 --as"
+t4_assert_contains "$T4_ERR" "--as" "AC3① 拒绝文案提到 --as（D9 后须同时说明只能改卡内 role）"
 for bad in 'bad name' 'a/b'; do
   before="$(pane_count)"
   run_fleet ensure --card .agents/prompts/data-reviewer.md --as "$bad"
@@ -347,6 +347,41 @@ done
 run_fleet ensure --card .agents/prompts/data-reviewer.md --as qa
 t4_assert_ne "0" "$T4_RC" "AC3③ --as 撞 ROLE_ORDER id（qa）⇒ 拒绝"
 t4_assert_contains "$T4_ERR" "与常驻角色/别名 qa 同名" "AC3③ 拒绝文案点名冲突角色"
+
+# ============================================================ AC3⑤（D9）--as 前缀约束
+# 负控：脱罻卡 role 前缀 ⇒ die（warn 不够：会起出 status/close 解析不到的会话）
+before="$(pane_count)"
+run_fleet ensure --card .agents/prompts/code-reviewer.md --as audit
+t4_assert_ne "0" "$T4_RC" "AC3⑤ 负控：--as audit（不以卡 role 为前缀）⇒ 拒绝（rc≠0）"
+t4_assert_eq "1" "$(printf '%s\n' "$T4_ERR" | grep -c .)" "AC3⑤ 负控 ⇒ stderr 恰单行"
+t4_assert_contains "$T4_ERR_ANSI" "不以卡 role（code-reviewer）为前缀" "AC3⑤ 负控 ⇒ 原因点名卡 role"
+t4_assert_contains "$T4_ERR_ANSI" "改名不得脱离卡 role 前缀（fleet 按前缀识别身份）" "AC3⑤ 负控 ⇒ 文案含固定说明"
+t4_assert_contains "$T4_ERR_ANSI" "<role>-<suffix>" "AC3⑤ 负控 ⇒ 指路 <role>-<suffix>"
+t4_assert_eq "$before" "$(pane_count)" "AC3⑤ 负控 ⇒ 零副作用（pane 数不变）"
+
+# 正控：`<卡 role>-<suffix>` ⇒ 接受，且 status 能按该名列出、close 能按该名回收（闭环）
+before="$(pane_ids)"
+run_fleet ensure --card .agents/prompts/code-reviewer.md --as code-reviewer-notes
+t4_assert_eq "0" "$T4_RC" "AC3⑤ 正控：--as code-reviewer-notes ⇒ 接受（rc=0）"
+P_NOTE="$(new_panes "$before" | head -1)"
+t4_assert_eq "code-reviewer-notes" "$(name_of "$P_NOTE")" "AC3⑤ 正控 ⇒ 会话名 = --as 值"
+set_title "$P_NOTE" "code-reviewer-notes"
+if [ "$TSX_OK" = "1" ]; then ROSTER_JSON="$(mk_roster code-reviewer-notes)"; fi
+run_fleet status
+L_NOTE="$(last_status_line "code-reviewer-notes")"
+if [ "$TSX_OK" = "1" ]; then
+  t4_assert_match "$L_NOTE" "^  · code-reviewer-notes" "AC3⑤ 正控 ⇒ status 按该名解析到卡会话"
+  t4_assert_contains "$L_NOTE" "下游卡 code-reviewer" "AC3⑤ 正控 ⇒ 该行仍归到卡 role（前缀识别）"
+fi
+run_fleet close code-reviewer-notes
+t4_assert_eq "0" "$T4_RC" "AC3⑤ 正控 ⇒ close 按该名回收（闭环）"
+t4_assert_contains "$T4_ERR_ANSI" "一次性会话 code-reviewer-notes（下游卡）" "AC3⑤ 正控 ⇒ close 走一次性语义"
+if TX list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qxF "${P_NOTE:-none}"; then
+  t4_bad "AC3⑤ 正控 ⇒ 回收后 pane 仍存在"
+else
+  t4_ok "AC3⑤ 正控 ⇒ 回收后 pane 已消失"
+fi
+ROSTER_JSON='[]'
 
 # ============================================================ AC7 语法绑定 + 两相执行
 before="$(pane_count)"

@@ -16,7 +16,8 @@
 #   nao-fleet.sh ensure --task <编号> <别名>[@<repo>]   任务派生会话：--name <别名>-<编号>（并行隔离，避免同名冲突）
 #   nao-fleet.sh ensure --card <卡路径> [--as <会话名>] [--task <编号>]
 #                                                 下游仓自定义角色会话（一次性）：卡须为 <repo>/.agents/prompts/<file>.md
-#                                                 （卡 role 与常驻 id/别名必须前缀不相交；不入 roles.yaml、不算常驻）
+#                                                 （卡 role 与常驻 id/别名必须前缀不相交；不入 roles.yaml、不算常驻；
+#                                                  --as 须等于卡 role 或以 <role>- 为前缀，否则拒绝 —— fleet 按前缀识别身份）
 #   nao-fleet.sh ensure --force <别名>...          忽略"已在运行"判重
 #   nao-fleet.sh close <别名|派生会话名> [--task <编号>] [--force]
 #                                                 回收已完成会话（派生名如 rd-be-T1；跨仓定位；定位失败/名册报在线但无句柄 ⇒ 非 0 + 诊断）
@@ -1461,11 +1462,11 @@ card_name_problem() {
     [[ "$n" != "$rp"* ]] || { echo "名字不得以保留前缀 $rp 开头（$rp 归 pi-subagents / nao 机制）"; return 1; }
   done
   if [[ -n "${ALIAS_ROLE[$n]:-}" ]]; then
-    echo "名字与常驻角色/别名 $n 同名（改用 --as <另一个名字>）"; return 1
+    echo "名字与常驻角色/别名 $n 同名（该怎么办：改卡内 frontmatter role —— fleet 按前缀识别身份，--as 也须保留卡 role 前缀，绕不过同名冲突）"; return 1
   fi
   for r in "${ROLE_ORDER[@]}" "${!ALIAS_ROLE[@]}"; do
     [[ "$n" != "$r"-* ]] \
-      || { echo "名字以常驻前缀 $r- 开头（会抢走 status/close 对 $r 的枚举；改用 --as <另一个名字>）"; return 1; }
+      || { echo "名字以常驻前缀 $r- 开头（会抢走 status/close 对 $r 的枚举；该怎么办：改卡内 role，使其不以任何常驻 id/别名为 <x>- 前缀）"; return 1; }
   done
   return 0
 }
@@ -2017,8 +2018,15 @@ cmd_ensure() {
       resolve_card "$role" "$repo"
       if [[ -n "$card_as" ]]; then
         local why
+        # 命名契约先判（字符集/保留前缀/撞常驻），再判 D9 前缀约束 —— 让「撞常驻 id」这类
+        #   更根本的问题先点名，避免被前缀提示掩盖。
         if ! why="$(card_name_problem "$card_as")"; then
           die "--as 不可用：$card_as —— $why（该怎么办：换一个不以常驻 id/别名开头、符合 ^[a-z0-9][a-z0-9_-]*$ 且 ≤ 32 字符的名字）"
+        fi
+        # D9（PM 拍板）：--as 必须等于卡 role 或以 `<卡 role>-` 为前缀 —— 否则会起出 status/close
+        #   解析不到的会话（等于把「起得来但管不到」合法化）；warn 不够，必须 die。
+        if [[ "$card_as" != "$CARD_ROLE" && "$card_as" != "$CARD_ROLE"-* ]]; then
+          die "--as 不可用：$card_as 不以卡 role（$CARD_ROLE）为前缀 —— 改名不得脱离卡 role 前缀（fleet 按前缀识别身份），用 <role>-<suffix>（如 $CARD_ROLE-notes）"
         fi
         disp="$card_as"
       else

@@ -101,7 +101,7 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 .agents/scripts/nao-fleet.sh close  --task T537 code-reviewer                             # 用完直接回收
 ```
 
-卡的要求很直白：必须在**当前仓**的 `.agents/prompts/` 里、是普通 `.md` 文件（≤256 KiB），frontmatter 有 `role`（缺省用文件名）和 `description`。`role` 是会话名的来源，所以不能与常驻角色撞名或抢前缀（`qa`、`qa-audit` 这类都会被拒，改用 `--as <别的名字>`），也不能用 `subagent-` / `nao-` 开头。写错了不用猜：失败信息都是**一行原因 + 该怎么办**，`check` 也会在「下游角色卡」节提前指出（内容类只提醒、机制类直接红）。
+卡的要求很直白：必须在**当前仓**的 `.agents/prompts/` 里、是普通 `.md` 文件（≤256 KiB），frontmatter 有 `role`（缺省用文件名）和 `description`。`role` 是会话名的来源，所以不能与常驻角色撞名或抢前缀（`qa`、`qa-audit` 这类都会被拒，只能改卡内 `role`），也不能用 `subagent-` / `nao-` 开头；`--as` 只能**在同一张卡内区分会话**，名字必须等于卡 `role` 或以 `<role>-` 为前缀（`--as code-reviewer-notes` ✓，`--as audit` ✗ —— 舰队按前缀识别身份，改名脱离前缀就等于「起得来但管不到」）。写错了不用猜：失败信息都是**一行原因 + 该怎么办**，`check` 也会在「下游角色卡」节提前指出（内容类只提醒、机制类直接红）。
 
 两点边界值得知道：
 
