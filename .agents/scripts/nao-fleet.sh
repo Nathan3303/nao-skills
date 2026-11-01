@@ -14,6 +14,9 @@
 #   nao-fleet.sh ensure <别名>[@<repo>] [更多...]  拉起角色窗口（默认工作区=roles.yaml workspace）
 #   nao-fleet.sh ensure -m <model> <别名>...       显式指定模型（须命中白名单）
 #   nao-fleet.sh ensure --task <编号> <别名>[@<repo>]   任务派生会话：--name <别名>-<编号>（并行隔离，避免同名冲突）
+#   nao-fleet.sh ensure --card <卡路径> [--as <会话名>] [--task <编号>]
+#                                                 下游仓自定义角色会话（一次性）：卡须为 <repo>/.agents/prompts/<file>.md
+#                                                 （卡 role 与常驻 id/别名必须前缀不相交；不入 roles.yaml、不算常驻）
 #   nao-fleet.sh ensure --force <别名>...          忽略"已在运行"判重
 #   nao-fleet.sh close <别名|派生会话名> [--task <编号>] [--force]
 #                                                 回收已完成会话（派生名如 rd-be-T1；跨仓定位；定位失败/名册报在线但无句柄 ⇒ 非 0 + 诊断）
@@ -78,7 +81,12 @@ SKILLS_SUB="$SKILLS_DIR/.agents/skills"
 
 MANIFEST="$SKILLS_DIR/.agents/roles.yaml"
 CARD_MAX_LINES=200
+# T537 · 下游仓自定义角色会话（ensure --card）：卡正文 = 系统提示，故有硬边界（BR3）与命名契约（BR9）
+CARD_MAX_BYTES=262144                    # 256 KiB：超限即拒（卡正文会整段塞进 system prompt）
+CARD_SET_MAX=30                          # 卡集上限（锚根 ≤2）：超出只 warn 一行，不拒
+CARD_RESERVED_PREFIXES="subagent- nao-"  # T525/T527 保留前缀（命中 ⇒ 会话拉起即失联）
 ROLE_ORDER=()
+NAME=""; PROMPT=""
 declare -A ROLE_CARDS ROLE_WS ALIAS_ROLE
 MODEL_WHITELIST="${NAO_MODEL_WHITELIST:-}"
 TMUX_LAYOUT="${NAO_TMUX_LAYOUT:-main-row2}"
@@ -1075,8 +1083,9 @@ build_system_prompt() {
 }
 
 spawn_one() {
-  local name="$1" repo="$2" model="$3" card prompt_file inner
-  card="$PROMPTS_DIR/$PROMPT"
+  local name="$1" repo="$2" model="$3" card_override="${4:-}" card prompt_file inner
+  # T537：卡路径可由调用方显式给出（下游仓卡）；未给出时仍走清单（PROMPTS_DIR/<card>）逐字不变
+  if [[ -n "$card_override" ]]; then card="$card_override"; else card="$PROMPTS_DIR/${PROMPT:-}"; fi
   [[ -f "$card" ]] || die "角色卡不存在: $card"
   [[ -d "$repo" ]] || die "工作区不存在: $repo"
 
@@ -1165,6 +1174,9 @@ cmd_check() {
   done
   shopt -u nullglob
   (( orphan )) || echo '  ✓ 无孤儿卡'
+
+  echo "== 下游角色卡（若存在）=="
+  check_downstream_cards || rc=1
 
   echo "== pi 扩展声明（T527：声明 + 文件存在，防「声明漏写 ⇒ 静默无 agent」）=="
   if [[ ! -f "$SKILLS_DIR/package.json" ]]; then
@@ -1428,6 +1440,201 @@ session_repo_verdict() {
 }
 
 # ---------------------------------------------------------------------------
+# T537 · 下游仓自定义角色会话（ensure --card）—— ADR 2026-11-01-downstream-card-sessions
+#   定位：卡（= 系统提示）来自**下游项目仓** <repo>/.agents/prompts/<file>.md；会话属派生/一次性
+#   语义（与常驻同等的 pane 托管 / status 可见 / close 可回收），但不登记 roles.yaml、不算常驻。
+#   三条机制不变量（BR9）：① 卡 role 与常驻 id/别名**相等或前缀相交**即拒（防抢 status 枚举）；
+#   ② 卡集内部前缀反链（check 报 error，status/close 用最长匹配兜底）；③ 字符集/长度契约。
+#   这三条是「status 能在既有 ROLE_ORDER 循环之后追加枚举而不改既有行」的前提（arch Q2）。
+#   定性：卡限定目录是**可审计边界，不是权限边界** —— 卡正文 = 完全可信输入（能写该仓者
+#   即定义角色）；这里只做一致性校验（目录/常规文件/大小/命名），不做也不该做内容安全校验。
+
+# 命名契约（BR9 · AC3②③ · AC6）：echo 单行原因并返回 1；合法返回 0（无输出）
+card_name_problem() {
+  local n="$1" r rp
+  [[ -n "$n" ]] || { echo "名字为空"; return 1; }
+  (( ${#n} <= 32 )) || { echo "名字过长（${#n} > 32 字符）"; return 1; }
+  [[ "$n" =~ ^[a-z0-9][a-z0-9_-]*$ ]] \
+    || { echo "名字含非法字符（只允许小写字母/数字/-/_，且首字符须为字母或数字）"; return 1; }
+  [[ "$n" != *- ]] || { echo "名字不得以 - 结尾"; return 1; }
+  for rp in $CARD_RESERVED_PREFIXES; do
+    [[ "$n" != "$rp"* ]] || { echo "名字不得以保留前缀 $rp 开头（$rp 归 pi-subagents / nao 机制）"; return 1; }
+  done
+  if [[ -n "${ALIAS_ROLE[$n]:-}" ]]; then
+    echo "名字与常驻角色/别名 $n 同名（改用 --as <另一个名字>）"; return 1
+  fi
+  for r in "${ROLE_ORDER[@]}" "${!ALIAS_ROLE[@]}"; do
+    [[ "$n" != "$r"-* ]] \
+      || { echo "名字以常驻前缀 $r- 开头（会抢走 status/close 对 $r 的枚举；改用 --as <另一个名字>）"; return 1; }
+  done
+  return 0
+}
+
+# 卡集（status/close 的识别集 · Q2）：锚根全集下 <root>/.agents/prompts/*.md 的 frontmatter role（退化文件名）。
+#   输出：role<TAB>卡路径<TAB>锚根。**只收合法且非常驻的 role** —— 安装副本/常驻卡不进卡集
+#   （BR9 保证二者不相交；非法卡 ensure 必拒，其历史会话落 status 的「角色未识别」节，不静默）。
+#   运行时读、不落状态文件（守「不新增配置」）；每 run 一次 glob + frontmatter 读，不新增 tmux/node 调用。
+card_role_set() {
+  local root f role phys n=0
+  local -a roots=() files=()
+  mapfile -t roots < <(repo_anchor_roots)
+  (( ${#roots[@]} )) || return 0
+  shopt -s nullglob
+  for root in "${roots[@]}"; do
+    # 非常规文件（fifo/目录/设备）不入卡集：否则每次 status/close 都要打开它（fifo 会挂死）
+    for f in "$root/.agents/prompts"/*.md; do [[ -f "$f" ]] && files+=("$f"); done
+  done
+  shopt -u nullglob
+  local -A seen=()
+  for f in "${files[@]}"; do
+    phys="$(nao_phys_path "$f")"
+    [[ -z "${seen[$phys]:-}" ]] || continue
+    seen["$phys"]=1
+    role="$(card_field "$f" role)"
+    [[ -n "$role" ]] || role="$(basename -- "$f" .md)"
+    [[ -z "$(card_name_problem "$role")" ]] || continue
+    n=$((n + 1))
+    printf '%s\t%s\t%s\n' "$role" "$f" "${f%/.agents/prompts/*}"
+  done
+  if (( n > CARD_SET_MAX )); then
+    warn "下游角色卡 $n 张 > 上限 $CARD_SET_MAX：status/close 只做名字匹配，建议精简本仓 .agents/prompts/"
+  fi
+  return 0
+}
+
+# 卡校验（BR3 六条 · AC2 八种失败输入）：通过则设 CARD_PATH / CARD_ROLE / CARD_REPO（均 realpath）。
+#   失败一律 die（单行「原因 + 该怎么办」），且**必在建 pane 之前**（cmd_ensure 两相执行 ⇒ BR6 零副作用）。
+#   ① 基准 = <repo> realpath；② 显式拒 `..` 与非 .md；③ 常规文件（fifo/目录会让 cat 挂死）；
+#   ④ 256 KiB 上限；⑤ 文案含「该怎么办」；⑥ 定性见上（可审计边界）。
+resolve_card() {  # $1=卡路径 · $2=仓（可空 ⇒ $PWD）
+  local arg="$1" repo_arg="${2:-}" repo cand card_phys parent_phys prompts_phys role bytes why
+  repo="${repo_arg:-$PWD}"
+  case "/$arg/" in
+    */../*) die "角色卡路径不得含 '..'：$arg（该怎么办：用 <repo>/.agents/prompts/<name>.md 的相对/绝对路径，不要用 .. 回退）" ;;
+  esac
+  case "$arg" in
+    *.md) ;;
+    *) die "角色卡须为 .md 文件：${arg:-<空>}（该怎么办：把卡放在 <repo>/.agents/prompts/<name>.md）" ;;
+  esac
+  [[ -d "$repo" ]] || die "工作区不存在：$repo（该怎么办：--card <卡>@<仓> 指定仓，或先 cd 到目标仓）"
+  local repo_phys
+  repo_phys="$(nao_phys_path "$repo")"
+  # BR3②：相对路径按 realpath(repo) 解析（不是 $PWD；否则 --card <卡>@<他仓> 时两者分歧）
+  case "$arg" in
+    /*) cand="$arg" ;;
+    *)  cand="$repo_phys/$arg" ;;
+  esac
+  [[ -e "$cand" ]] || die "角色卡不存在：$arg（期望 $repo_phys/.agents/prompts/；该怎么办：在目标仓 .agents/prompts/ 下创建该卡，或用 @<仓> 指向正确仓）"
+  # BR3③：常规文件 —— fifo/设备/目录会让 cat 永久挂死，必须**在打开之前**拒
+  [[ -f "$cand" ]] || die "角色卡不是常规文件（目录/fifo/设备）：$arg（该怎么办：换成 <repo>/.agents/prompts/<name>.md 常规文件）"
+  card_phys="$(nao_phys_path "$cand")"
+  prompts_phys="$(nao_phys_path "$repo_phys/.agents/prompts")"
+  parent_phys="$(nao_phys_path "$(dirname -- "$card_phys")")"
+  [[ "$parent_phys" == "$prompts_phys" ]] \
+    || die "角色卡不在 <repo>/.agents/prompts/ 内：$arg → $card_phys（符号链接逃逸也算越界；该怎么办：把卡放进 $repo_phys/.agents/prompts/）"
+  bytes="$(wc -c < "$card_phys" | tr -d '[:space:]')"
+  (( bytes <= CARD_MAX_BYTES )) \
+    || die "角色卡过大：$bytes 字节 > $CARD_MAX_BYTES（提示会整段塞进 system prompt；该怎么办：拆到 skills/ 或精简卡）"
+  [[ -s "$card_phys" ]] || die "角色卡为空：$arg（该怎么办：至少写 frontmatter role 与一段角色说明）"
+  role="$(card_field "$card_phys" role)"
+  role="$(printf '%s' "$role" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"//' -e 's/"$//')"
+  [[ -n "$role" ]] || role="$(basename -- "$card_phys" .md)"    # 退化：文件名（AC2「无 role 且无可退化文件名」由命名契约拦下）
+  if ! why="$(card_name_problem "$role")"; then
+    die "角色卡 role 不可用：$role —— $why（该怎么办：改卡内 frontmatter role，或在 ensure 时加 --as <合规名字>）"
+  fi
+  CARD_PATH="$card_phys"; CARD_ROLE="$role"; CARD_REPO="$repo_phys"
+}
+
+# check 新增节：下游角色卡（若存在）—— D7 分级
+#   内容类（缺 role/description、CRLF、超限、含 name: 双用）⇒ `  ! ` warn（不红 rc）
+#   机制类（与常驻 id/别名或前缀冲突、卡集前缀嵌套、命名契约越界）⇒ `  ✗ ` error（rc=1，运行期必拒）
+#   overlay 兼容（AC8③）：扫描目录 realpath == $PROMPTS_DIR realpath ⇒ 该根整体跳过（否则常驻卡被误报冲突）
+#   机制常驻卡的项目内副本（legacy 全量安装）按「同名卡文件」识别 ⇒ 跳过冲突检查（不红）；
+#   真正的下游卡（不同文件名）才纳入校验。
+check_downstream_cards() {
+  local rc=0 root f role desc bytes n=0 why base r
+  local -a roots=() scan=() files=() roles=()
+  local skipped=0
+  mapfile -t roots < <(repo_anchor_roots)
+  for root in "${roots[@]}"; do
+    [[ -d "$root/.agents/prompts" ]] || continue
+    if [[ "$(nao_phys_path "$root/.agents/prompts")" == "$(nao_phys_path "$PROMPTS_DIR")" ]]; then
+      skipped=$((skipped + 1)); continue
+    fi
+    scan+=("$root")
+  done
+  if (( ${#scan[@]} == 0 )); then
+    if (( skipped > 0 )); then
+      echo '  · 下游卡扫描目录即机制包 prompts（overlay 生效）：本节跳过'
+    else
+      echo '  · 未发现下游角色卡目录（<repo>/.agents/prompts/ 不存在）：跳过'
+    fi
+    return 0
+  fi
+  shopt -s nullglob
+  local -a nonreg=()
+  for root in "${scan[@]}"; do
+    for f in "$root/.agents/prompts"/*.md; do
+      if [[ -f "$f" ]]; then files+=("$f"); else nonreg+=("$f"); fi
+    done
+  done
+  shopt -u nullglob
+  # 非常规文件（fifo/目录/设备）：ensure --card 运行期必拒（且 cat 会挂死）⇒ 机制类 error
+  for f in "${nonreg[@]:-}"; do
+    [[ -n "$f" ]] || continue
+    printf '  ✗ %s 不是常规文件（fifo/目录/设备）：ensure --card 必拒，且读取会挂死\n' "$(basename -- "$f")"
+    rc=1
+  done
+  if (( ${#files[@]} == 0 )); then echo '  · 下游角色卡目录为空：跳过'; return 0; fi
+  for f in "${files[@]}"; do
+    base="$(basename -- "$f")"
+    role="$(card_field "$f" role)"
+    desc="$(card_field "$f" description)"
+    if [[ -z "$role" ]]; then
+      printf '  ! %s 缺 frontmatter role（退化用文件名 %s）\n' "$base" "$(basename -- "$f" .md)"
+      role="$(basename -- "$f" .md)"
+    fi
+    local resident=0
+    for r in "${ROLE_ORDER[@]}"; do
+      if [[ "$base" == "${ROLE_CARDS[$r]}" ]] && [[ "$role" == "$r" || "${ALIAS_ROLE[$role]:-}" == "$r" ]]; then
+        resident=1; break
+      fi
+    done
+    if (( resident )); then
+      printf '  · %s 机制常驻卡副本（role=%s）：跳过冲突检查\n' "$base" "$role"
+      continue
+    fi
+    n=$((n + 1))
+    roles+=("$role")
+    printf '  · %s role=%s\n' "$base" "$role"
+    [[ -n "$desc" ]] || printf '  ! %s 缺 frontmatter description（建议补一行用途说明）\n' "$base"
+    if grep -q $'\r' "$f" 2>/dev/null; then
+      printf '  ! %s 含 CRLF（须转 LF；CRLF 会破坏 frontmatter 解析）\n' "$base"
+    fi
+    bytes="$(wc -c < "$f" 2>/dev/null | tr -d '[:space:]')"; bytes="${bytes:-0}"
+    (( bytes <= CARD_MAX_BYTES )) \
+      || printf '  ! %s %s 字节 > %s（256 KiB；建议拆到 skills/）\n' "$base" "$bytes" "$CARD_MAX_BYTES"
+    [[ -z "$(card_field "$f" name)" ]] \
+      || printf '  ! %s 含 name: —— 同时被 pi-subagents 视作 agent（其路径无 ## 环境锚点，@.agents 引用不可解析）\n' "$base"
+    if ! why="$(card_name_problem "$role")"; then
+      printf '  ✗ %s role=%s 不可用：%s（运行期 ensure --card 必拒 ⇒ 闸门提前红）\n' "$base" "$role" "$why"
+      rc=1
+    fi
+  done
+  local i j
+  for i in "${!roles[@]}"; do
+    for j in "${!roles[@]}"; do
+      (( i == j )) && continue
+      [[ "${roles[$i]}" == "${roles[$j]}-"* ]] || continue
+      printf '  ✗ 卡集前缀嵌套：%s 与 %s（后者会抢走前者的 status/close 枚举；须改名）\n' "${roles[$j]}" "${roles[$i]}"
+      rc=1
+    done
+  done
+  (( rc != 0 )) || printf '  ✓ 下游角色卡 %d 张，无机制冲突\n' "$n"
+  return $rc
+}
+
+# ---------------------------------------------------------------------------
 cmd_status() {
   local a
   intercom_list_json >/dev/null 2>&1 || true   # 预热名册缓存（后续子 shell 复用）
@@ -1446,6 +1653,9 @@ cmd_status() {
   while IFS= read -r rl; do [[ -n "$rl" ]] && roots_blob+="$rl"$'\n'; done < <(repo_anchor_roots)
   local -A pane_cwds=() roster_cwds=()
   local pn pname pcwd rn rcwd prev
+  # 保留既有键口径（按 pane_id 建键）：T537 不改这里 —— AC5③ 要求不带 --card 时 status 逐字等价，
+  #   「pane cwd 权威」路径的键口径修正会改变无名册 cwd 场景的输出 ⇒ 已登记为遗留（见 T537 RD 报告），
+  #   本批一律走名册 cwd（T530 既有路径）。
   while IFS=$'\t' read -r pn pname pcwd; do
     [[ -n "$pname" ]] || continue
     prev="${pane_cwds[$pname]:-}"
@@ -1457,11 +1667,69 @@ cmd_status() {
   done < <(intercom_roster 2>/dev/null || true)
 
   local found=0 dname role id cls tag verdict obase
+  # T537：卡集（本仓锚下、非常驻的合法卡 role）—— 既有 ROLE_ORDER 循环**逐字不动**，卡角色在其后追加
+  #   （BR9 保证前缀不相交 ⇒ 两路不会抢同名字，零回归可证；无需 break 顺序敏感处理）
+  local -A card_path=()
+  local cr cp croot crowle suff
+  while IFS=$'\t' read -r cr cp croot; do
+    [[ -n "$cr" ]] || continue
+    card_path["$cr"]="$cp"
+  done < <(card_role_set)
+  local -a unrecognized=()
   while IFS= read -r dname; do
     [[ -n "$dname" ]] || continue
     id=""
     for role in "${ROLE_ORDER[@]}"; do [[ "$dname" == "$role-"* ]] && { id="${dname#"$role"-}"; break; }; done
-    [[ -n "$id" ]] || continue
+    if [[ -z "$id" ]]; then
+      # ---- 卡会话（最长前缀匹配）或 F3「角色未识别」----
+      crowle=""
+      for role in "${!card_path[@]}"; do
+        [[ "$dname" == "$role" || "$dname" == "$role-"* ]] || continue
+        if [[ -z "$crowle" || ${#role} -gt ${#crowle} ]]; then crowle="$role"; fi
+      done
+      if [[ -z "$crowle" ]]; then
+        # T525：子代理会话单列计数，不进本区
+        [[ "$dname" == subagent-* ]] && continue
+        # F3（D5）：后缀形状像 nao 任务号 ⇒ 单列「角色未识别」，不得静默（卡被删/改名后的孤儿）
+        if [[ "$dname" =~ (^|-)T[0-9]+$ || "$dname" =~ (^|-)M[0-9]{8}(-|$) ]]; then
+          IFS=$'\t' read -r verdict obase <<< "$(session_repo_verdict "$roots_blob" "${pane_cwds[$dname]:-}" "${roster_cwds[$dname]:-}")"
+          case "$verdict" in
+            other)   unrecognized+=("  ? $dname（他仓 @ ${obase:-?}）角色未识别（疑似 fleet 遗留）：卡被删除/改名、卡在他仓、或 overlay 改名？核对后人工处理（本行不给回收命令）") ;;
+            unknown) unrecognized+=("  ? $dname（归属不可判定）角色未识别（疑似 fleet 遗留）：卡被删除/改名、卡在他仓、或 overlay 改名？核对后人工处理（本行不给回收命令）") ;;
+            *)       unrecognized+=("  ? $dname（本仓）角色未识别（疑似 fleet 遗留）：卡被删除/改名、卡在他仓、或 overlay 改名？核对后人工处理（本行不给回收命令）") ;;
+          esac
+        fi
+        continue
+      fi
+      suff=""
+      [[ "$dname" == "$crowle" ]] || suff="${dname#"$crowle"-}"
+      IFS=$'\t' read -r verdict obase <<< "$(session_repo_verdict "$roots_blob" "${pane_cwds[$dname]:-}" "${roster_cwds[$dname]:-}")"
+      case "$verdict" in
+        # F2：他仓卡会话只标注（不读他仓 .agents/prompts）
+        other)   printf '  ~ %s（他仓 @ %s）他仓会话，勿在本仓回收\n' "$dname" "${obase:-?}"; found=1; continue ;;
+        unknown) printf '  ? %s（归属不可判定）→ 人工核对（勿在本仓回收）\n' "$dname"; found=1; continue ;;
+      esac
+      if [[ -z "$suff" ]]; then
+        printf '  · %s（一次性会话 · 下游卡 %s）→ close %s\n' "$dname" "$crowle" "$dname"
+        found=1; continue
+      fi
+      # F4：后缀非任务编号形状 ⇒ 列名但不给 tag/命令（此收紧只对新（卡）前缀生效）
+      if [[ ! "$suff" =~ ^(T[0-9]+|M[0-9]{8}(-.*)?)$ ]]; then
+        printf '  · %s（一次性会话 · 下游卡 %s）后缀非任务编号 → 不提供回收命令（核对后人工处理）\n' "$dname" "$crowle"
+        found=1; continue
+      fi
+      cls="$(task_state_class "$suff")"
+      tag=""
+      case "$cls" in
+        closed)    tag="  ! 残留（$suff 已归档）→ close --task $suff ${dname%-"$suff"}" ;;
+        active)    tag="  · $suff 进行态" ;;
+        mentioned) tag="  ? $suff 仅散文提及（非表内记录）→ 核对后 close --task $suff ${dname%-"$suff"}" ;;
+        absent)    tag="  ! 残留（tasks-state 无 $suff 记录）→ 核对后 close --task $suff ${dname%-"$suff"}" ;;
+      esac
+      printf '  · %s（一次性会话 · 下游卡 %s）%s\n' "$dname" "$crowle" "$tag"
+      found=1
+      continue
+    fi
     IFS=$'\t' read -r verdict obase <<< "$(session_repo_verdict "$roots_blob" "${pane_cwds[$dname]:-}" "${roster_cwds[$dname]:-}")"
     case "$verdict" in
       # D5：他仓会话**列出并标注**（不静默隐藏），整行不含任何可执行 close 命令（BR2）
@@ -1472,16 +1740,22 @@ cmd_status() {
     cls="$(task_state_class "$id")"
     tag=""
     case "$cls" in
-      closed)    tag="  ! 残留（$id 已归档）→ close --task $id ${dname%-*}" ;;
+      # D6（T537）：任务号可含 `-`（如 M20261014-pi-ext-update）⇒ 按 $id 剥后缀（旧 ${dname%-*} 会截错角色名）
+      closed)    tag="  ! 残留（$id 已归档）→ close --task $id ${dname%-"$id"}" ;;
       active)    tag="  · $id 进行态" ;;
-      mentioned) tag="  ? $id 仅散文提及（非表内记录）→ 核对后 close --task $id ${dname%-*}" ;;
-      absent)    tag="  ! 残留（tasks-state 无 $id 记录）→ 核对后 close --task $id ${dname%-*}" ;;
+      mentioned) tag="  ? $id 仅散文提及（非表内记录）→ 核对后 close --task $id ${dname%-"$id"}" ;;
+      absent)    tag="  ! 残留（tasks-state 无 $id 记录）→ 核对后 close --task $id ${dname%-"$id"}" ;;
     esac
     printf '  · %s%s\n' "$dname" "$tag"
     found=1
   done < <(visible_session_names)
   (( found )) || echo '  （无）'
   [[ -f "$TASKS_STATE" ]] || echo "  （$TASKS_STATE 不存在，残留判定已跳过）"
+  # D5：未识别节（F3）—— 单列，不给可执行命令（T530「非静默」对偶）
+  if (( ${#unrecognized[@]} > 0 )); then
+    echo '== 角色未识别（疑似 fleet 遗留）=='
+    printf '%s\n' "${unrecognized[@]}"
+  fi
   # T525：子代理会话（pi-subagents）不属舰队会话身份模型 —— 派生节后独立一行、只计数不列名、N=0 不打印（BR3/BR6）。
   local nsub
   nsub="$(subagent_in_field)"
@@ -1509,11 +1783,13 @@ cmd_close() {
   if [[ "$target" == subagent-* ]]; then
     die "拒绝回收 $target：这是 pi-subagents 子代理会话（subagent-*），其生命周期不归 nao 回收（请用 pi-subagents 的 stop / retention 管理）"
   fi
-  local name repo cls bus pane pids st tgt a best=""
+  local name repo cls bus pane pids st tgt a best="" bestc="" is_resident=1 card_role="" card_path="" cr cp croot k
   intercom_list_json >/dev/null 2>&1 || true   # 预热名册缓存
 
   # ---- 目标解析：别名/canonical id | 派生会话名 <角色>-<编号> ----
   # 派生名（如 qa-T508）可直接作目标；也兼容 close --task T508 qa 与 close --task T508 qa-T508。
+  # T537：解析顺序 ① ALIAS_ROLE 精确 → ② <别名>-<编号> → ③ 卡集最长前缀 + 任务号 → ④ 卡集裸名精确 → ⑤ die。
+  #   ①② 逐字不动；③④ 为新增分支（下游卡一次性会话）；类别由显式布尔 is_resident 决定（BR10，禁用 `-z task` 推断）。
   tgt=""
   if [[ -n "${ALIAS_ROLE[$target]:-}" ]]; then
     tgt="$target"
@@ -1528,16 +1804,61 @@ cmd_close() {
     if [[ -n "$best" ]]; then tgt="$best"; task="${target#"$best"-}"; fi
   fi
   if [[ -z "$tgt" ]]; then
-    die "未知角色或派生会话名: $target（可用角色: ${ROLE_ORDER[*]}；派生名形如 rd-be-T1 / qa-T1，亦可用 close --task <编号> <角色>）"
+    # ③④ 下游卡（一次性）：最长前缀匹配（纵深防御：卡集前缀嵌套由 check 报 error）
+    local -A cset=()
+    while IFS=$'\t' read -r cr cp croot; do
+      [[ -n "$cr" ]] || continue
+      cset["$cr"]="$cp"
+    done < <(card_role_set)
+    for k in "${!cset[@]}"; do
+      [[ "$target" == "$k" || "$target" == "$k"-* ]] || continue
+      if [[ -z "$bestc" || ${#k} -gt ${#bestc} ]]; then bestc="$k"; fi
+    done
+    if [[ -n "$bestc" ]]; then
+      card_role="$bestc"
+      card_path="${cset[$bestc]}"
+      is_resident=0
+      if [[ "$target" != "$bestc" ]]; then
+        local tsuff="${target#"$bestc"-}"
+        if [[ -n "$task" && "$task" != "$tsuff" ]]; then
+          die "目标名后缀与 --task 不一致：$target（后缀 $tsuff，--task $task；该怎么办：二选一，如 close --task $tsuff $bestc）"
+        fi
+        task="$tsuff"
+      fi
+    fi
   fi
-  resolve_role "$tgt"
-  name="$NAME"
-  [[ -n "$task" ]] && name="${NAME}-${task}"
-  # 目标仓：名册 cwd 优先（跨仓会话真实仓），否则回退 roles.yaml workspace / 当前目录
-  repo="$(intercom_cwd_for "$name")"
-  [[ -n "$repo" ]] || repo="${ROLE_WS[$NAME]:-$PWD}"
+  if [[ -z "$tgt" && "$is_resident" == "1" ]]; then
+    die "未知角色或派生会话名: $target（可用角色: ${ROLE_ORDER[*]}；派生名形如 rd-be-T1 / qa-T1，亦可用 close --task <编号> <角色>；下游卡角色需在本仓锚下存在 .agents/prompts/<role>.md）"
+  fi
+  if [[ "$is_resident" == "1" ]]; then
+    resolve_role "$tgt"
+    name="$NAME"
+    [[ -n "$task" ]] && name="${NAME}-${task}"
+    # 目标仓：名册 cwd 优先（跨仓会话真实仓），否则回退 roles.yaml workspace / 当前目录
+    repo="$(intercom_cwd_for "$name")"
+    [[ -n "$repo" ]] || repo="${ROLE_WS[$NAME]:-$PWD}"
+  else
+    name="$card_role"
+    [[ -n "$task" ]] && name="${card_role}-${task}"
+    repo="$(intercom_cwd_for "$name")"
+    [[ -n "$repo" ]] || repo="${card_path%/.agents/prompts/*}"
+    [[ -n "$repo" ]] || repo="$PWD"
+  fi
 
-  if [[ -z "$task" ]]; then
+  if [[ "$is_resident" != "1" ]]; then
+    # BR5/BR10：一次性（下游卡）会话 —— 不弹常驻警告、不提示 ensure --force 重开；AC4③B 固定前缀在 stderr
+    warn "一次性会话 $name（下游卡）$card_path：回收后不重开（如需重开：ensure --card <卡>）"
+    if [[ -n "$task" ]]; then
+      # D8：tasks-state active 闸门对卡会话**跳过**（只 log）；在跑 turn 闸门**不放宽**（下面依然生效）
+      cls="$(task_state_class "$task")"
+      case "$cls" in
+        active)    log "跳过 tasks-state active 闸门（下游卡一次性会话）：$task（产物以回执/报告为准）" ;;
+        absent)    log "tasks-state 全文无 $task 记录（下游卡一次性会话，不阻塞回收）" ;;
+        mentioned) log "tasks-state 仅散文提及 $task（下游卡一次性会话，不阻塞回收）" ;;
+        nofile)    log "未启用 $TASKS_STATE（跳过状态闸门）" ;;
+      esac
+    fi
+  elif [[ -z "$task" ]]; then
     warn "常驻会话 $name：任务闭环后应 ensure --force 重开，而非回收（仅在本批不再需要该角色时回收）"
   else
     # 闸门①：tasks-state 未推进 → 拒绝（验收未过需原会话返工，回收会丢上下文）
@@ -1677,24 +1998,49 @@ cmd_cleanup() {
 
 # ---------------------------------------------------------------------------
 cmd_ensure() {
-  local force="$1" model="$2" task="$3"; shift 3
-  local spec role repo key seen k
-  local -a cg_done=()
-  [[ $# -eq 0 ]] && die "ensure 需要至少一个角色，如: nao-fleet.sh ensure arch rd-fe rd-infra"
-  # T517：入口一次性解析派生宿主窗口（仅 $TMUX 分支）；定位失败 ⇒ 解析处 warn 一次，各角色 pane 跳过
-  HOST_WINDOW=""
-  if [[ -n "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1; then resolve_host_window; fi
-  for spec in "$@"; do
+  local force="$1" model="$2" task="$3"
+  local i spec role repo key seen k card_arg card_as disp
+  local -a cg_done=() t_names=() t_repos=() t_cards=()
+  [[ ${#TARGETS[@]} -gt 0 ]] || die "ensure 需要至少一个角色，如: nao-fleet.sh ensure arch rd-fe rd-infra"
+  # ==== 相位 1：全量解析 + 校验（BR11 两相执行）====
+  #   卡、role、BR9、--as 全过才进相位 2；任一项失败都在**建 pane 之前** die ⇒ BR6「零副作用」可达
+  for i in "${!TARGETS[@]}"; do
+    spec="${TARGETS[$i]}"; card_arg="${TARGET_CARD[$i]:-}"; card_as="${TARGET_AS[$i]:-}"
+    role=""; repo=""
     if [[ "$spec" == *"@"* ]]; then
       role="${spec%%@*}"; repo="${spec#*@}"
     else
-      role="$spec"; repo=""
+      role="$spec"
     fi
-    resolve_role "$role"
-    [[ -n "$repo" ]] || repo="${ROLE_WS[$NAME]:-$PWD}"
+    if [[ -n "$card_arg" ]]; then
+      # 下游卡目标：目标 positional 即卡路径（BR11 目标级绑定）
+      resolve_card "$role" "$repo"
+      if [[ -n "$card_as" ]]; then
+        local why
+        if ! why="$(card_name_problem "$card_as")"; then
+          die "--as 不可用：$card_as —— $why（该怎么办：换一个不以常驻 id/别名开头、符合 ^[a-z0-9][a-z0-9_-]*$ 且 ≤ 32 字符的名字）"
+        fi
+        disp="$card_as"
+      else
+        disp="$CARD_ROLE"
+      fi
+      t_names+=("$disp"); t_repos+=("$CARD_REPO"); t_cards+=("$CARD_PATH")
+    else
+      [[ -z "$card_as" ]] || die "--as 只能用于同一目标的 --card 之后（如 ensure --card <卡> --as <会话名>）"
+      resolve_role "$role"
+      [[ -n "$repo" ]] || repo="${ROLE_WS[$NAME]:-$PWD}"
+      t_names+=("$NAME"); t_repos+=("$repo"); t_cards+=("")
+    fi
+  done
+  # ==== 相位 2：拉起（宿主窗口解析、判重、codegraph 状态、spawn 逐目标不变）====
+  # T517：入口一次性解析派生宿主窗口（仅 $TMUX 分支）；定位失败 ⇒ 解析处 warn 一次，各角色 pane 跳过
+  HOST_WINDOW=""
+  if [[ -n "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1; then resolve_host_window; fi
+  for i in "${!t_names[@]}"; do
+    repo="${t_repos[$i]}"
     # 任务派生：会话名 = <角色>-<任务编号>，独立 intercom 身份（并行隔离，避免同名冲突）
-    local disp="$NAME"
-    [[ -n "$task" ]] && disp="${NAME}-${task}"
+    disp="${t_names[$i]}"
+    [[ -n "$task" ]] && disp="${t_names[$i]}-${task}"
     # CodeGraph 索引健康（同 repo 只查一次，不阻塞拉起）
     key="$repo"; seen=0
     for k in "${cg_done[@]:-}"; do [[ "$k" == "$key" ]] && seen=1; done
@@ -1703,7 +2049,11 @@ cmd_ensure() {
       warn "$disp 已在运行（终端标题/名册命中），跳过；确需重开请加 --force"
       continue
     fi
-    spawn_one "$disp" "$repo" "$model"
+    if [[ -n "${t_cards[$i]}" ]]; then
+      spawn_one "$disp" "$repo" "$model" "${t_cards[$i]}"
+    else
+      spawn_one "$disp" "$repo" "$model"
+    fi
   done
   # T536/BR3/AC4：仅当本轮真拉起过 pane 才打印**恰一行**就绪提示；
   #   跳过（已在运行）/失败（无宿主窗口、分屏失败）分支不打印；既有行内容与顺序不变（只追加末尾一行）。
@@ -1723,6 +2073,9 @@ usage() {
 
 # ---- 入口 ----
 CMD=""; FORCE=false; STRICT=false; MODEL=""; TASK=""; CLEANUP_SOCK=""; TARGETS=()
+# T537：目标级修饰符（--card / --as）的绑定状态 —— 只作用于**其后第一个 positional**（BR11）
+TARGET_CARD=(); TARGET_AS=(); PEND_CARD=false; PEND_AS=""; LAST_CARD_IDX=-1
+_need_ensure() { [[ "$CMD" == "ensure" ]] || die "$1 仅用于 ensure 子命令：nao-fleet.sh ensure --card <卡路径>[@<repo>] [--task <编号>] [--as <会话名>]"; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
     check)  CMD="check";  shift ;;
@@ -1731,6 +2084,25 @@ while [[ $# -gt 0 ]]; do
     cleanup) CMD="cleanup"; shift ;;
     -S) CLEANUP_SOCK="${2:-}"; [[ -n "$CLEANUP_SOCK" ]] || die "-S 需要socket路径参数"; shift 2 ;;
     ensure) CMD="ensure"; shift ;;
+    # T537 · --card：目标级修饰符，**绑定其后第一个 positional**（该 positional 即卡路径）
+    --card)
+      _need_ensure "--card"
+      $PEND_CARD && die "--card 不能连写：每个 --card 只绑定其后的第一个目标（卡路径）"
+      PEND_CARD=true; PEND_AS=""; shift ;;
+    # T537 · --as：仅在同目标的 --card 之后合法（卡路径前或后皆可；重复即用法错）
+    --as)
+      _need_ensure "--as"
+      [[ -z "$PEND_AS" ]] || die "--as 重复：每个目标只能指定一个会话名"
+      PEND_AS="${2:-}"
+      [[ -n "$PEND_AS" ]] || die "--as 需要会话名参数"
+      if $PEND_CARD; then
+        :   # 卡路径尚未到来：挂在同目标上
+      elif (( LAST_CARD_IDX >= 0 )) && [[ -z "${TARGET_AS[$LAST_CARD_IDX]:-}" ]]; then
+        TARGET_AS[$LAST_CARD_IDX]="$PEND_AS"; PEND_AS=""
+      else
+        die "--as 只能紧跟同一目标的 --card（如 ensure --card <卡路径> --as <会话名>）"
+      fi
+      shift 2 ;;
     -m|--model)
       MODEL="${2:-}"
       [[ -n "$MODEL" ]] || die "-m 需要模型参数"
@@ -1741,9 +2113,19 @@ while [[ $# -gt 0 ]]; do
     --strict) STRICT=true; shift ;;
     -v|--verbose) VERBOSE=true; shift ;;
     -h|--help) usage ;;
-    *) TARGETS+=("$1"); shift ;;
+    *)
+      if $PEND_CARD; then
+        TARGETS+=("$1"); TARGET_CARD+=("$1"); TARGET_AS+=("$PEND_AS")
+        LAST_CARD_IDX=$(( ${#TARGETS[@]} - 1 )); PEND_CARD=false; PEND_AS=""
+      else
+        TARGETS+=("$1"); TARGET_CARD+=(""); TARGET_AS+=(""); LAST_CARD_IDX=-1
+      fi
+      shift ;;
   esac
 done
+# 悬挂修饰符：命令末尾缺目标 ⇒ 用法错（非 0 + 单行，照 -S 守卫先例；AC7②）
+if $PEND_CARD; then die "--card 后缺少卡路径参数（该怎么办：ensure --card .agents/prompts/<name>.md）"; fi
+if [[ -n "$PEND_AS" ]]; then die "--as 缺少同目标的 --card 与卡路径（该怎么办：ensure --card <卡路径> --as <会话名>）"; fi
 
 # 唯一运行前提闸门（BR1/BR3）：先于 load_manifest 与任何副作用；不满足 ⇒ exit 3（命令未执行）。
 # cleanup 豁免：其正常场景就是非 tmux 的隔离实验场（env -u TMUX ... -S <socket>）。
@@ -1797,6 +2179,6 @@ case "$CMD" in
   status) cmd_status ;;
   close)  cmd_close "$FORCE" "$TASK" "${TARGETS[0]:-}" ;;
   cleanup) cmd_cleanup ;;
-  ensure) cmd_ensure "$FORCE" "$MODEL" "$TASK" "${TARGETS[@]}" ;;
+  ensure) cmd_ensure "$FORCE" "$MODEL" "$TASK" ;;
   *) usage ;;
 esac

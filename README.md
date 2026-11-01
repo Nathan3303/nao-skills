@@ -91,6 +91,23 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 
 不想要哪个角色，删掉对应文件即可；只留 PM + 一个研发角色也能跑。
 
+## 按需角色会话（用你自己仓里的角色卡）
+
+常驻的 6 个角色不用改清单就能再加一个**按需角色**（Code Review、数据核对之类）：把卡放进你的项目仓 `.agents/prompts/<名字>.md`，一条命令拉起，它就和常驻角色一样被管起来——分屏托管、`status` 看得到、`close` 收得回——但**不写进 `roles.yaml`，也不算常驻**。
+
+```bash
+.agents/scripts/nao-fleet.sh ensure --card .agents/prompts/code-reviewer.md --task T537   # 拉起一次性 Code Review 会话
+.agents/scripts/nao-fleet.sh status                                                      # 派生节里能看到 code-reviewer-T537
+.agents/scripts/nao-fleet.sh close  --task T537 code-reviewer                             # 用完直接回收
+```
+
+卡的要求很直白：必须在**当前仓**的 `.agents/prompts/` 里、是普通 `.md` 文件（≤256 KiB），frontmatter 有 `role`（缺省用文件名）和 `description`。`role` 是会话名的来源，所以不能与常驻角色撞名或抢前缀（`qa`、`qa-audit` 这类都会被拒，改用 `--as <别的名字>`），也不能用 `subagent-` / `nao-` 开头。写错了不用猜：失败信息都是**一行原因 + 该怎么办**，`check` 也会在「下游角色卡」节提前指出（内容类只提醒、机制类直接红）。
+
+两点边界值得知道：
+
+- **`--card` 只作用于紧跟它的那个目标**：`ensure qa --card x.md` 是「常驻 `qa`」+「卡 `x.md`」两个会话，不会整批串味；命令末尾悬挂 `--card`、或把它递给 `check`/`status`/`close`，都按用法错误处理。
+- **卡正文就是系统提示**，所以它是**完全可信输入**（能写你仓库的人本来就能定义角色）；fleet 只校验目录、文件类型、大小与命名的一致性，不做内容安全审查。卡同样可以被 pi-subagents 当项目 agent 用（加 `name:` 即可），但那条路径没有「环境锚点」行，卡正文别依赖 `@.agents/...` 引用才自洽。若你已经在用 overlay 清单（`NAO_SKILLS` 指向自己的清单目录），同一仓别两法并用。
+
 ## 为什么它省 token（这是本项目的核心追求）
 
 和 AI 聊天，钱花在「它每轮要读多少字」。所以：
