@@ -21,3 +21,4 @@
 | 2026-10-27 | [舰队绑死 tmux + pi ≥1.4.0（删净宿主阶梯）](2026-10-27-strict-tmux-pi.md) | 绑死 tmux + pi 前提 | 已接受（待落地） |
 | 2026-10-28 | [引入 codegraph 插件为可选增强（warn-only + rc 收敛）](2026-10-28-codegraph-plugin-adoption.md) | 插件仅增强，不进 rc | 已接受（待落地 v0.20.0） |
 | 2026-10-31 | [status 残留判定加仓维度（按 pane 工作目录）](2026-10-31-fleet-status-repo-attribution.md) | 残留判定按 pane cwd 归属 | 已接受（待落地） |
+| 2026-11-01 | [下游仓自定义角色会话（`ensure --card`）](2026-11-01-downstream-card-sessions.md) | 卡参数线 + 前缀不相交 | 已接受（待落地 v0.21.0） |
