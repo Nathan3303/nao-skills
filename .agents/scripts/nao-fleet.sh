@@ -90,6 +90,8 @@ TMUX_MIN_PANE_WIDTH_DEFAULT=30
 TMUX_MIN_PANE_WIDTH="${NAO_TMUX_MIN_PANE_WIDTH:-$TMUX_MIN_PANE_WIDTH_DEFAULT}"
 # T517：派生宿主窗口 ID（归一化 @<window_id>；空 = 定位失败 ⇒ 该角色 pane warn+skip，禁无 -t 续建）
 HOST_WINDOW=""
+# T536：本轮真正创建成功的 pane 数（>0 ⇒ ensure 收尾打印**恰一行**就绪提示；跳过/失败分支恒 0，BR3/AC4）
+SPAWN_OK=0
 # check 输出契约：默认摘要 2 行（摘要行 + codegraph 状态行，四态之一），-v 展开完整报告（六态全展开）；失败始终展开
 VERBOSE=false
 # close 的在跑 turn 判定（pi 默认状态行：Working (esc to interrupt) / Thinking... / Retrying / Compacting）
@@ -1057,6 +1059,7 @@ spawn_tmux() {
     warn "  已跳过该 pane，其余角色继续拉起；可放大窗口后重跑 ensure"
     return 0
   fi
+  SPAWN_OK=$((SPAWN_OK + 1))   # T536：真创建成功才计数（就绪提示的唯一开关）
   apply_tmux_layout
 }
 
@@ -1082,7 +1085,12 @@ spawn_one() {
   inner="cd $(printf %q "$repo") && export CODEGRAPH_TELEMETRY=0 && exec pi --name $(printf %q "$name")"
   [[ -n "$model" ]] && inner+=" --model $(printf %q "$model")"
   inner+=" --append-system-prompt $(printf %q "$prompt_file")"
-  ( sleep 60; rm -f -- "$prompt_file" ) & disown 2>/dev/null || true
+  # T536/BR2：后台清理必须**完全脱离调用方 fd**。原写法 `( sleep 60; … ) &` 让子 shell 继承调用方
+  #   stdout/stderr ⇒ 输出被 `| cat` / CI 捕获时调用方要等 EOF 到 60s 才返回（实测 60.3s vs 0.3s）。
+  #   `disown` 只脱离作业表，不关继承而来的 fd。⇒ ① 三路重定向到 /dev/null；② 改用独立 argv 的
+  #   `bash -c`（清理进程不再顶着本脚本 argv，`pgrep -f nao-fleet.sh` 无残留命中）。
+  #   不用 setsid：macOS 无该 bin，`… || true` 会静默跳过清理（BR1 缩水）。清理窗口 60s 不缩短。
+  bash -c 'sleep 60; rm -f -- "$1"' _ "$prompt_file" >/dev/null 2>&1 </dev/null & disown 2>/dev/null || true
 
   # 拉起（pane 级失败 = warn + 跳过该角色，D-A）；成功后打印「已拉起」
   spawn_tmux "$name" "$inner"
@@ -1697,6 +1705,11 @@ cmd_ensure() {
     fi
     spawn_one "$disp" "$repo" "$model"
   done
+  # T536/BR3/AC4：仅当本轮真拉起过 pane 才打印**恰一行**就绪提示；
+  #   跳过（已在运行）/失败（无宿主窗口、分屏失败）分支不打印；既有行内容与顺序不变（只追加末尾一行）。
+  if (( SPAWN_OK > 0 )); then
+    log "已拉起 ${SPAWN_OK} 个会话；就绪后在线状态用 nao-fleet.sh status 查看"
+  fi
 }
 
 # ---------------------------------------------------------------------------
