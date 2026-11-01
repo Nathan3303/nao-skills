@@ -107,4 +107,21 @@ for c in "$T4_ROOT"/tests/t4/cases/*.sh; do
 done
 t4_assert_eq "" "${bad_tail# }" "T522: 全部用例（$n_case 例）以 t4_exit|t4_skip|exec 收尾"
 
+# --- 测试基建 helper 级断言（T536 · BR4/AC3）--------------------------------
+# t4_cli_supports 是整批用例的能力门（决定 SKIP/BLOCKED）——它自身必须有正反两条断言，
+# 否则改写（管道→here-string）若有偏差会以「全批静默 SKIP」的形式假绿。
+if t4_cli_supports init; then
+  t4_ok "T536: helper 正向 —— t4_cli_supports init 命中 nao-skill 已有子命令"
+else
+  t4_bad "T536: helper 正向 —— t4_cli_supports init 未命中已有子命令（help 解析或判定回归）"
+fi
+if t4_cli_supports __t536_no_such_subcommand; then
+  t4_bad "T536: helper 负向 —— t4_cli_supports 命中不存在的子命令（判定过宽）"
+else
+  t4_ok "T536: helper 负向 —— 不存在的子命令不命中"
+fi
+# BR4 常量护栏：lib.sh 内不留 `printf … | grep` 同型管道（SIGPIPE 隐患源头）
+lib_pipes="$(grep -cE 'printf[^|]*\|[[:space:]]*grep' "$T4_ROOT/tests/t4/lib.sh" 2>/dev/null || true)"
+t4_assert_eq "0" "${lib_pipes:-0}" "T536 BR4: lib.sh 内 printf…| grep 同型管道 0 处"
+
 t4_exit

@@ -29,7 +29,7 @@ npm run test:t4:full:dual                      # 发布前置**双环境** gate�
 - **「子代理不属舰队会话」口径**：由 pi-subagents 拉起的 `subagent-*` 会话（`subagent-<agent>-<id>` / `subagent-chat-<id>`）**不属**舰队会话身份模型 —— `status` 只对其汇总计数（不列名、不参与在线/判重），`close subagent-*` 显式拒绝（生命周期归 pi-subagents 的 stop/retention）。`subagentfoo` / `mysubagent-x` / 裸 `subagent` 不入此面；`qa-subagent-x` 仍是合法派生名。
 - **用例 19 的能力与夹具纪律**：需真 `tmux`（缺则整例 `SKIP`）；名册 cwd 镜像断言需 `tsx`（缺则 2 条夹具断言 `[DEGRADE]`，pane/会话名路径照跑）。夹具 = **隔离 socket** + 假名册探针 + 夹具根**不得落在任何 git 仓内**（否则 toplevel 锚会把「他仓」拉回本仓、用例假绿；开跑前硬断言）；收尾走机制 `cleanup -S`。变异 harness 只动 `$T4_CACHE_DIR` 的脚本副本（恒真/恒假各一次，子进程跑本用例必须翻红并点名），真仓库 `md5` 与 `git status` 前后一致，原脚本再跑一遍复绿。零网络、确定性（连跑两次同形）。
 - **DEGRADE 语义**：环境缺能力但**其余断言继续跑**（不同于 `t4_skip` 会终止用例）；默认模式豁免、`T4_REQUIRE_FULL=1` 时计分。
-- **计数可见**：汇总尾部打印 `SKIP=n · DEGRADE=m · NOTE=k` + **NOTE 白名单命中明细**（`用例号:tag` 列表，逐条可解释）；「绿 + N SKIP/DEGRADE」不得表述为「全量通过」。
+- **计数可见**：汇总尾部打印 `SKIP=n · DEGRADE=m · NOTE=k` + **NOTE 白名单命中明细**（`用例号:tag` 列表，逐条可解释）；「绿 + N SKIP/DEGRADE」不得表述为「全量通过」。**例数口径 = `bash tests/t4/run.sh --list | tail -n +2 | wc -l`**（注册项数；`--list` 首行是表头，裸 `wc -l` 会多算 1）；用例编号不连续（`11` 已于 T529 退役）属正常，**不得以最大编号推断例数**（T536 教训：`19` 曾被误当 19 例）。
 - **安装包内不适用**：`tests/` 不入 npm tarball，在消费者机器上 `npm test` 因缺 `tests/t4` 而 rc≠0，属预期（见 `docs/releases/v0.18.0.md`）。
 
 退出码：`0` 全 PASS/SKIP（DEGRADE 默认豁免）· `1` 有 FAIL / 参数错误 / 未识别状态（MISSING、NOT_RUN） / (full) 有 SKIP 或 DEGRADE · `2` 有 BLOCKED（仅宽松模式）。
@@ -44,7 +44,7 @@ npm run test:t4:full:dual                      # 发布前置**双环境** gate�
 | 03 | 未物化 exit 2 + `DEGRADED:` + 恢复命令；D7 防重入；D6 解析序 | AC3/NFR3 · D5/D6/D7 | `init` + shim |
 | 04 | 零网络 `check` exit=0 + strace 无 AF_INET | NFR2 · 闸门B | `init` + shim |
 | 05 | 迁移精准删除 + `.nao-obsolete` 备份 + 共享目录保留 | AC4 · §12-C/D | `migrate`（或 `init` 自动迁移） |
-| 06 | 契约守护：AC6 机制侧 + AC8 manifest/注入 + AC2 静态 | AC2/AC6/AC8 | 无（读 manifest + 机制脚本） |
+| 06 | 契约守护：AC6 机制侧 + AC8 manifest/注入 + AC2 静态 + 测试基建 helper 级正反断言（`t4_cli_supports` 命中/未命中）+ `lib.sh` 同型管道 0 处恒量护栏（T536） | AC2/AC6/AC8 · T536/BR4 | 无（读 manifest + 机制脚本） |
 | 07 | 真实 `pi install` 与 tarball 布局对照 | AC1/NFR2 | `pi` + npm registry |
 | 08 | 评审修复回归：F1 lock 保缩进 + F2 init --force 走 migrate 防混装 | AC4 · BR5 | `migrate` / `init` |
 | 09 | T509 别名解析 / check 守卫 / close 跨仓回收 | AC3 · #19 | `init` + shim |

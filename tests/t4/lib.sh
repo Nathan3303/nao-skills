@@ -142,7 +142,7 @@ t4_blocked() {
 t4_assert_eq()   { [ "$1" = "$2" ] && t4_ok "$3" || t4_bad "$3（期望=$1 实际=$2）"; }
 t4_assert_ne()   { [ "$1" != "$2" ] && t4_ok "$3" || t4_bad "$3（不应等于 $1）"; }
 t4_assert_ge()   { [ "$2" -ge "$1" ] 2>/dev/null && t4_ok "$3" || t4_bad "$3（期望>= $1 实际=$2）"; }
-# 断言实现注意：`printf … | grep -q` 在大输入 + 早退时会触发 SIGPIPE，pipefail 下把**命中**判成 FAIL
+# 断言实现注意：printf 经**管道**送给 grep -q 在大输入 + 早退时会触发 SIGPIPE，pipefail 下把**命中**判成 FAIL
 # （实测 case16 读 16KB 协议文件 ~10% 假 FAIL = T534-O2 根因）。改用 here-string：grep 读临时文件，无上游写者被中断。
 t4_assert_contains()     { grep -qF -- "$2" <<< "$1" && t4_ok "$3" || t4_bad "$3（未包含: $2）"; }
 t4_assert_not_contains() { grep -qF -- "$2" <<< "$1" && t4_bad "$3（不应包含: $2）" || t4_ok "$3"; }
@@ -193,10 +193,12 @@ t4_pkg_bin()  { printf '%s/bin/nao-skill.js' "$(t4_pkg_dir "$1")"; }
 t4_shim()     { printf '%s/.agents/scripts/nao-fleet.sh' "$1"; }
 
 # T2 CLI 子命令是否已交付（读仓库 bin 的 --help；不修改任何文件）
+# T536/BR4：here-string 而非「printf 经**管道**送给 grep -q」（与 T535 修掉的三处断言同口径：大输入 + grep 早退会
+#   SIGPIPE，pipefail 下把**命中**误判为未命中 ⇒ 本函数误报「子命令未交付」，整批用例静默 SKIP/BLOCKED）。
 t4_cli_supports() {
   local sub="$1" h
   h="$(node "$T4_ROOT/bin/nao-skill.js" --help 2>&1 || true)"
-  printf '%s' "$h" | grep -qE "(^|[^[:alnum:]_])${sub}([^[:alnum:]_]|$)"
+  grep -qE -- "(^|[^[:alnum:]_])${sub}([^[:alnum:]_]|$)" <<< "$h"
 }
 
 t4_require_cli() { t4_cli_supports "$1" || t4_blocked "CLI 子命令未交付: nao-skill $1（T2 bin/）"; }

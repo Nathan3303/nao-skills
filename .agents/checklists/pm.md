@@ -63,7 +63,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 输出里有 `warn`/`error`/`pending approval`/`N vulnerabilities` 却判完成，或遗留项未走三出口（「先放着」不算出口）？（见 @.agents/skills/task-completion.md）
 - [ ] 降级（无 `gh` / 无远端）未在 `tasks-state` 与回执中标注？
 
-## 交付检查清单（完整 43 项）
+## 交付检查清单（完整 44 项）
 
 - [ ] 目标/边界/验收三件事齐备
 - [ ] 证据 + 5 Whys 已产出
@@ -107,6 +107,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] `gh` 可用则已用 `gh`，降级已注明；发布后事实（含 `tasks-state` 版本/Tag 行）的**落地时机与工作区纪律见 `github-flow.md` BR5**（单源指针，本清单不复写命令细节）
 - [ ] 任务 DoD 四类已随**开工确认卡**逐任务实例化（产物路径 / 可执行验证判据 / 遗留项 / 交接），验收按同一份核
 - [ ] 回执含 `遗留：` 字段且遗留项已**三出口**收口（关闭 / 接受含到期日 / 转办；零遗留显式「无」，可执行项已进 `tasks-state` 待派发队列）
+- [ ] **计数类数字必须 PM 自证一条命令** —— 用例数 `bash tests/t4/run.sh --list | tail -n +2 | wc -l`（**`--list` 首行是表头**，裸 `wc -l` = 19 会多算 1 —— 这条命令本身也已实测校准）· 断言数（run.sh 汇总 PASS 数或 `grep -c '\[PASS\]'`）· `files=` 口径（`check` 输出 vs `find "$NAO_SKILLS/.agents" -type f | wc -l`）；**回执与命令输出不一致时以命令为准**，并当场订正回执/文档（来源：L1 复盘 `docs/reports/2026-11-01-T536-retro.md`）
 - [ ] 通过上面全部红线
 
 ## 会话回收 / 收窗核对（验收通过后 / 手工关窗前）

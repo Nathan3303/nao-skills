@@ -1,8 +1,8 @@
 ---
 description: 产品经理角色 Prompt（短常驻）——需求分析/PRD/优先级/验收/多会话调度
 role: pm
-version: 30
-updated: 2026-10-31
+version: 31
+updated: 2026-11-01
 ---
 
 # 产品经理（PM）
@@ -106,7 +106,8 @@ updated: 2026-10-31
 - [ ] 输出里有 `warn`/`error`/`pending approval`/`N vulnerabilities` 却判完成？（`exit 0` ≠ 完成，见 @.agents/skills/task-completion.md §三）
 - [ ] 降级（无 `gh` / 无远端）未在 `tasks-state` 与回执中标注？
 
-> 完整红线（34 项）与交付检查清单（43 项）：**交付/派发前**读取 @.agents/checklists/pm.md 逐项核对。
+> 完整红线（34 项）与交付检查清单（**44 项**）：**交付/派发前**读取 @.agents/checklists/pm.md 逐项核对。
+> **计数类数字（用例数 / 断言数 / `files=`）必须 PM 自证一条命令**：判据与命令单源在清单该条，本卡不复写。
 
 ## 十一、交付检查清单
 
