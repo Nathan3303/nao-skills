@@ -26,6 +26,7 @@ description: pi-intercom 多会话协作协议（常驻引用）
 拉起：`bash .agents/scripts/nao-fleet.sh ensure <别名>[@<repo>]`
 
 - **任务派生**：`ensure --task <编号> <别名>[@<repo>]` 创建 `<角色>-<编号>` 独立会话（如 `rd-be-T1`），并行隔离、互不排队/打断，避免多任务同名冲突；任务闭环即**回收**：`nao-fleet.sh close --task <编号> <别名>`（内置在跑 turn / tasks-state 闸门）。
+- **按需角色会话（`ensure --card`，T537）不入上表**：卡来自**下游项目仓** `.agents/prompts/<role>.md`，会话名 `<role>` / `<role>-<编号>`，属**派生/一次性**语义 —— `status` 在派生节标注「一次性会话 · 下游卡」，`close` 回收时**不弹常驻警告**、且跳过 `tasks-state` active 闸门（在跑 turn 闸门不放宽）。它们不登记 `roles.yaml`，故**不在本表内**；卡即系统提示（完全可信输入），命名与目录约束见 `nao-fleet.sh --help` 与 `README.md`「按需角色会话」一节。
 - **子代理会话不属舰队会话身份模型**：由 pi-subagents 拉起的子代理会话以 `subagent-<agent>-<id>`（无名时 `subagent-chat-<id>`）进入 intercom 名册，但**不属**舰队会话 —— `status` 只对其汇总计数（不列名、不参与在线/turn 判重），`close subagent-*` 显式拒绝（生命周期归 pi-subagents 的 stop/retention，nao 不接管）。
 
 - **判重 / 在线判定**：脚本按 pi 自设的**终端标题**（`π - <会话名> - <仓库名>`）+ `pi-intercom` 名册判在线（**不用 `pgrep --name`**：pi 启动后 argv 被改写为 `pi`，会恒失配）；已运行则跳过并 warn。确需重开加 `--force`。
