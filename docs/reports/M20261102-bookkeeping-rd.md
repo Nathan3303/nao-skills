@@ -25,12 +25,12 @@
 ## 三、门禁（精确数字）
 
 - `bash .agents/scripts/nao-fleet.sh check`：**rc=0** · `roles=6` · `files=50` · `layout=main-row2` · codegraph 齐备。
-- `npm test`：**rc=0** · 断言全绿 · `SKIP=0 · DEGRADE=0 · NOTE=2`（NOTE 白名单 2 条 = `06:static-contract` ×2）。
+- `npm test`：**rc=0** · **PASS=20**（用例数口径同下）· `SKIP=0 · DEGRADE=0 · NOTE=2`（NOTE 白名单 2 条 = `06:static-contract` ×2）。
 - `tests/t4` 全量 20 例：**PASS=20** · SKIP=0 · DEGRADE=0 · NOTE=2（白名单）。
   - 用例数口径 = `bash tests/t4/run.sh --list | tail -n +2 | wc -l`（首行是表头；最大编号 ≠ 例数，编号 `11` 已退役）。
 - `npm run test:t4:full`：**rc=0** · `RESULT: PASS` · 非白名单 NOTE=0。
 - `roles.yaml` diff：**0** 行 · 未提交改动（除本报告）0 · 未推送 0。
-- 文本自检：两文件 CRLF=0（全 LF）· 未新增表格 · 未新增绝对家目录 / token 类字面。
+- 文本自检：三文件 CRLF=0（全 LF）· 未新增表格 · 未新增绝对家目录 / token 类字面。
 
 ## 四、风险 / 遗留
 
