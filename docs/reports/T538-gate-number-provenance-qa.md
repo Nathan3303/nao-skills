@@ -61,7 +61,7 @@
 - **项 2 协议一致 = 过**：`intercom-protocol.md:90` = 「旧枚举 + 三件套三项命名 + 双指针」，全文复写 **0**（`porcelain` 0 处、命令串 0 处），与 `output-format.md:33-36` 无冲突。
 - **项 3 P3-a = 到位**：`tests/README.md:34` 写明复核范围 = `.agents/**` + 本文件、`docs/**` 历史引用不计违规；抽样 `docs/releases/v0.20.4.md:28` 的旧命令串 ⇒ 按新句**不算违规**（全仓 `grep -r` 已明确不作判据）。
 - **项 3 P3-c = 与实测一致**：`env -u NAO_SKILLS … find … | wc -l` → `0`、`pipe_rc=0`、stderr `find: “/.agents”: 没有那个文件或目录`；README 新句「计数静默得 0、报错不静默」相符（引号字形随 locale，无实质差异）。
-- **项 4 回归 = 过**：四条命令串 `.agents/**` + `tests/README.md` 各 **1** 次、三份清单命中 **0**；条数 pm 94 / qa 32 / rd-infra 22（= `main`）；`check` rc=0 roles=6 files=50；`npm test` rc=0；20 例；`test:t4:full` 非白名单 NOTE=0；未推送 0（数字见回执，HEAD 同）。
+- **项 4 回归 = 过**（记录 1 次 flake）：`npm test` 第 1 跑 `RESULT: PASS（SKIP=1 · DEGRADE=0 · NOTE=2 · NOTE白名单=2）`，SKIP 命中**用例 02**（`pi 未成功启动或无输出（rc=124，stdout=60690B）`）；第 2 跑同 HEAD 同工作区 `SKIP=0` ⇒ 复现既有抖动 `M20261102-F2`（此前 QA 7 跑 0 次，本次为首次命中），**非本批引入**（本批机制文件仅文本改动）。四条命令串 `.agents/**` + `tests/README.md` 各 **1** 次、三份清单命中 **0**；条数 pm 94 / qa 32 / rd-infra 22（= `main`）；`check` rc=0 roles=6 files=50；20 例 / 694 断言；`test:t4:full` 非白名单 NOTE=0；未推送 0（数字见回执，门禁 HEAD 与之同）。
 
 ### 新发现（不改变 AC1 改判）
 
