@@ -3,6 +3,12 @@
 #
 # 用途：机械核验 PRD docs/prds/2026-10-14-release-title-bare-version.md §七 AC2–AC7。
 #
+# ⚠️ 时点快照（M20261102 标注）：本探针的 AC4 断言钉死当期 PM 卡 `version` / `updated`，AC7 钉死
+#   `github-flow.md` 的**行号**。后续任何卡版本 bump 或该文件行位移都会让它 FAIL —— 那是**时间流逝**
+#   而非缺陷（M20261102 实测：基线 `42dce3f` 上改动前即 FAIL=3，与本批改动无关）。
+#   故本文件按「T521 时点证据」留存，**不作为缺陷判据、不进任何门禁**；若需可复跑，应改为按内容断言
+#   （弃行号与钉死版本号）或重生成。登记见 `docs/tasks-state.md` → `M20261102-F3`。
+#
 # 用法：
 #   bash docs/reports/2026-10-14-T521-release-title-probe.sh           # 全量（结构 + 门禁 check/npm test + 收尾工作区）
 #   bash docs/reports/2026-10-14-T521-release-title-probe.sh --fast    # 仅结构断言（跳过门禁与工作区）
