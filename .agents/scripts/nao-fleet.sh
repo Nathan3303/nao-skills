@@ -100,7 +100,15 @@ TMUX_MIN_PANE_WIDTH="${NAO_TMUX_MIN_PANE_WIDTH:-$TMUX_MIN_PANE_WIDTH_DEFAULT}"
 # T517：派生宿主窗口 ID（归一化 @<window_id>；空 = 定位失败 ⇒ 该角色 pane warn+skip，禁无 -t 续建）
 HOST_WINDOW=""
 # T536：本轮真正创建成功的 pane 数（>0 ⇒ ensure 收尾打印**恰一行**就绪提示；跳过/失败分支恒 0，BR3/AC4）
+# T539：三态计数（成功 / 跳过 / 失败）—— 每个 ensure 目标恰落一类，合计 = 目标数（BR3 计数守恒）
 SPAWN_OK=0
+SPAWN_SKIP=0
+SPAWN_FAIL=0
+# T539/BR2：spawn_tmux 的**显式**结果契约（返回值；调用方禁用「没打印就是成功」这类隐式约定）：
+#   0 = 成功（pane 已创建）· 2 = 跳过（宿主窗口未解析，未创建）· 3 = 失败（split-window 非 0，未创建）
+SPAWN_RC_OK=0
+SPAWN_RC_SKIP=2
+SPAWN_RC_FAIL=3
 # check 输出契约：默认摘要 2 行（摘要行 + codegraph 状态行，四态之一），-v 展开完整报告（六态全展开）；失败始终展开
 VERBOSE=false
 # close 的在跑 turn 判定（pi 默认状态行：Working (esc to interrupt) / Thinking... / Retrying / Compacting）
@@ -1059,17 +1067,20 @@ spawn_tmux() {
   local wrapped="bash -lc $(printf %q "$inner")"
   # T517：目标显式化——HOST_WINDOW 解析失败时此处已由解析处 warn（每 run 一次），
   #   跳过该 pane；禁止无 -t 续建（tmux 会落「当前窗口」= 用户视图，即缺陷根因）。
-  [[ -n "$HOST_WINDOW" ]] || return 0
+  # T539：显式回报「跳过」（不再用 return 0 冒充成功）。
+  [[ -n "$HOST_WINDOW" ]] || return "$SPAWN_RC_SKIP"
   # 窄窗口/宿主上限会让 split-window 失败（no space for new pane，含宿主窗已关竞态）；
   # 捕获后 warn 并继续，不因单个 pane 失败中断整轮 ensure。
+  # T539：显式回报「失败」；两条 warn 是诊断信息，保留不合并。
   local serr
   if ! serr=$(tmux split-window -h -t "$HOST_WINDOW" "$wrapped" 2>&1); then
     warn "pane 创建失败（宿主窗口 $HOST_WINDOW 过窄/已关或已达上限）：${serr:-<no message>}"
     warn "  已跳过该 pane，其余角色继续拉起；可放大窗口后重跑 ensure"
-    return 0
+    return "$SPAWN_RC_FAIL"
   fi
-  SPAWN_OK=$((SPAWN_OK + 1))   # T536：真创建成功才计数（就绪提示的唯一开关）
-  apply_tmux_layout
+  # 布局是尽力而为（内部各 tmux 调用已 || true）；布局成败不影响「pane 已创建」这一结果。
+  apply_tmux_layout || true
+  return "$SPAWN_RC_OK"
 }
 
 # 组装系统提示文件：角色卡 + 环境锚点（本机绝对路径，供跨仓库会话解析 @ 引用失败时兜底）
@@ -1102,9 +1113,17 @@ spawn_one() {
   #   不用 setsid：macOS 无该 bin，`… || true` 会静默跳过清理（BR1 缩水）。清理窗口 60s 不缩短。
   bash -c 'sleep 60; rm -f -- "$1"' _ "$prompt_file" >/dev/null 2>&1 </dev/null & disown 2>/dev/null || true
 
-  # 拉起（pane 级失败 = warn + 跳过该角色，D-A）；成功后打印「已拉起」
-  spawn_tmux "$name" "$inner"
-  log "[tmux] 已拉起 $name @ $repo${model:+（model=$model）}（layout=$TMUX_LAYOUT）"
+  # 拉起：spawn_tmux 以**显式三态**回报（T539/BR2）；每目标恰一行结果行：
+  #   成功 → 唯一一条 `[tmux] 已拉起 …`（内容逐字不变，BR1）· 跳过/失败 → 不打印成功行（BR2）。
+  #   `|| rc=$?` 是 set -e 下的必需写法（|| 列表豁免 errexit）；函数返回值即结果契约。
+  local rc=0
+  spawn_tmux "$name" "$inner" || rc=$?
+  case "$rc" in
+    "$SPAWN_RC_OK")   SPAWN_OK=$((SPAWN_OK + 1))
+                      log "[tmux] 已拉起 $name @ $repo${model:+（model=$model）}（layout=$TMUX_LAYOUT）" ;;
+    "$SPAWN_RC_SKIP") SPAWN_SKIP=$((SPAWN_SKIP + 1)) ;;
+    *)                SPAWN_FAIL=$((SPAWN_FAIL + 1)) ;;   # 3 = fail；未知值按失败处理（宁可少报成功）
+  esac
 }
 
 # ---------------------------------------------------------------------------
@@ -2055,6 +2074,7 @@ cmd_ensure() {
     if (( ! seen )); then codegraph_state "$repo" 1 "$(basename "$repo")"; cg_done+=("$key"); fi
     if [[ "$force" != "true" ]] && running "$disp" "$repo"; then
       warn "$disp 已在运行（终端标题/名册命中），跳过；确需重开请加 --force"
+      SPAWN_SKIP=$((SPAWN_SKIP + 1))   # T539/BR3：跳过也计入摘要（且不加成功行）
       continue
     fi
     if [[ -n "${t_cards[$i]}" ]]; then
@@ -2063,10 +2083,10 @@ cmd_ensure() {
       spawn_one "$disp" "$repo" "$model"
     fi
   done
-  # T536/BR3/AC4：仅当本轮真拉起过 pane 才打印**恰一行**就绪提示；
-  #   跳过（已在运行）/失败（无宿主窗口、分屏失败）分支不打印；既有行内容与顺序不变（只追加末尾一行）。
-  if (( SPAWN_OK > 0 )); then
-    log "已拉起 ${SPAWN_OK} 个会话；就绪后在线状态用 nao-fleet.sh status 查看"
+  # T536/BR3/AC4 + T539/BR3：**恰一行**摘要，三类计数（成功/跳过/失败）；三类全 0 不打印（与现状一致）。
+  #   前缀「已拉起 N 个会话」保留（既有断言与用户习惯依赖），计数细化追加在括号内（BR6 旧→新对照见 T539 报告）。
+  if (( SPAWN_OK + SPAWN_SKIP + SPAWN_FAIL > 0 )); then
+    log "已拉起 ${SPAWN_OK} 个会话（成功 ${SPAWN_OK} / 跳过 ${SPAWN_SKIP} / 失败 ${SPAWN_FAIL}）；就绪后在线状态用 nao-fleet.sh status 查看"
   fi
 }
 
