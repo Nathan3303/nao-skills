@@ -10,13 +10,15 @@
 - 边界：只改文本，脚本与门禁实现零改动；本批**只合并不发版**（合并后 main 机制文本领先 npm 0.21.2）。
 - 待办：QA 确认改判 AC1 → PM 验收 → squash 合并 → 随下次发布进 release notes。
 
-## 变更清单（8 文件）
+## 变更清单（7 个机制文件 + 本报告 = 8）
 
 - `.agents/common/output-format.md`「回执硬性」第 3 条：三件套三条（静默工作区 = `git status --porcelain` 空 + 同 worktree 无并行会话跑门禁；HEAD sha；命令 + 输出，禁「我数了 N」）+ 一条**不合格回执反例**写明「据此打回」。
 - `tests/README.md`：新增「取数命令四条（全仓单源）」——用例数 / 断言数 / `files=` / 变更行数与文件数，各带「何时用 + 易错点」，并写明正文只在本处、三侧只留指针、不符即打回。
 - `.agents/checklists/pm.md`:110 改指针（删内嵌命令串）；`qa.md`:23、`rd-infra.md`:19 在**既有条目内**补同源指针（不新增条目）。
 - `.agents/checklists/comm-templates.md`：`lite`/`full` 两份模板 `测试：` 段补 `HEAD=`（跑门禁时短 sha）· `工作区=<静默|非静默(原因)>` · 每个计数数字后跟「命令 → 输出」；`commit=` 标注「交付提交（**≠ 门禁 HEAD**）」+ 一条指向 `output-format.md`「回执硬性」第 3 条的指针（不复写三件套）。
 - `.agents/common/intercom-protocol.md` 终态回执硬性条：同步三件套 + 同源指针（该处原为旧口径）。
+
+> 口径订正（PM 2026-11-02）：原标题「8 文件」未声明是否含本报告；实测机制文件 **7**（output-format / tests-README / pm / qa / rd-infra / comm-templates / intercom-protocol）+ 本报告 **1** = 8。QA 的「tests/README.md 重复计入」判断不成立（清单内该文件仅出现 1 次）。
 
 ## QA CONDITIONAL 补丁（`0f24293` · P1-a / P3-a / P3-c）
 
