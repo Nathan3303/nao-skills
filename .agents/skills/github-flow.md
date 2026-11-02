@@ -69,6 +69,7 @@ PM 在**立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 PR / 合�
 - 门禁：AC 全过 + 验收闭环 + main 门禁全绿 + 工作区干净 + PR 已合并。
 - **发布前置（严格闸门 · 双环境）**：若仓库提供 `test:t4:full:dual` 脚本，发布前须先 `npm run test:t4:full:dual` **rc=0**（**两组**= `$TMUX_PANE` 已设 / `env -u TMUX_PANE`；判据 = **两组 SKIP 计数与 DEGRADE 计数均为 0，且非白名单 NOTE 计数为 0**，`SKIP`/`DEGRADE`/非白名单 `NOTE` 即 FAIL）。仅有 `test:t4:full`（单环境）的仓库退用 `npm run test:t4:full` rc=0；双环境 gate 误红时可临时回落单环境并记台账。
 - **优先 `gh`**：`gh release create <tag> --title "vX.Y.Z" --notes-file docs/releases/<version>.md`（**标题口径（强约束）：@.agents/common/release-notes.md** —— 标题仅裸版本号，描述进正文首段）。
+- **`gh release create <tag> --target <短 sha>` 不可用（两次实测：v0.21.0 / v0.21.1）**：会报 `tag_name is not a valid tag` / `target_commitish is invalid`。正确路径 = 先 `git tag -a <tag> -m "<说明>"` → `git push origin <tag>` → `gh release create <tag> --title <裸版本号> --notes-file <file> --verify-tag`（**不要**用 `--target` 指向未 push 的短 sha）。
 - 探测：`gh auth status` 按 **exit code** 判定（`keyring` 警告但 exit 0 **仍可用**，可 `gh api user` 复核）；**不自动 `gh auth login`**（涉用户凭证）。
 - release notes 落盘 `docs/releases/<version>.md`（**写作规范（强约束）：@.agents/common/release-notes.md** —— 面向用户「本次更新」置顶、内部编号 / 文件名 / 属性名一律下沉「技术细节」、正文不用表格；骨架见 @.agents/templates/release-notes.md.example）。
 - 回滚：未 push → `git tag -d`；已 push → **不删远端 tag**，改发下一个 PATCH 修正（用户明确要求才删）。
