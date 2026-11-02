@@ -30,7 +30,13 @@ npm run test:t4:full:dual                      # 发布前置**双环境** gate�
 - **用例 19 的能力与夹具纪律**：需真 `tmux`（缺则整例 `SKIP`）；名册 cwd 镜像断言需 `tsx`（缺则 2 条夹具断言 `[DEGRADE]`，pane/会话名路径照跑）。夹具 = **隔离 socket** + 假名册探针 + 夹具根**不得落在任何 git 仓内**（否则 toplevel 锚会把「他仓」拉回本仓、用例假绿；开跑前硬断言）；收尾走机制 `cleanup -S`。变异 harness 只动 `$T4_CACHE_DIR` 的脚本副本（恒真/恒假各一次，子进程跑本用例必须翻红并点名），真仓库 `md5` 与 `git status` 前后一致，原脚本再跑一遍复绿。零网络、确定性（连跑两次同形）。
 - **用例 20/21 的能力与夹具纪律**：都需真 `tmux`（缺则整例 `SKIP`）。夹具 = **隔离 socket**（≠ 生产默认候选）+ `env -u TMUX -u TMUX_PANE` + 桩 `pi`（20：记录 argv 后长驻，**不拉起真 pi 会话**；21：`--version` 固定输出满足 `check` 前提）+ `PI_CODING_AGENT_DIR` 指向空目录（tsx 缺失 ⇒ 名册离线），因此**不依赖 `tsx`/网络/真会话**；pane 标题由用例直接 `select-pane -T` 注入（不依赖 pi 自身设标题）。夹具根**不得落在任何 git 仓内**（否则锚根判定被污染；开跑前硬断言），收尾走机制 `cleanup -S`。用例 21 的卡夹具（fifo/目录/超大文件）放在**项目侧** `.agents/prompts/`，机制包侧保持干净（避免 `check` 的交叉引用扫描去 grep fifo 而阻塞）。
 - **DEGRADE 语义**：环境缺能力但**其余断言继续跑**（不同于 `t4_skip` 会终止用例）；默认模式豁免、`T4_REQUIRE_FULL=1` 时计分。
-- **计数可见**：汇总尾部打印 `SKIP=n · DEGRADE=m · NOTE=k` + **NOTE 白名单命中明细**（`用例号:tag` 列表，逐条可解释）；「绿 + N SKIP/DEGRADE」不得表述为「全量通过」。**例数口径 = `bash tests/t4/run.sh --list | tail -n +2 | wc -l`**（注册项数；`--list` 首行是表头，裸 `wc -l` 会多算 1）；用例编号不连续（`11` 已于 T529 退役）属正常，**不得以最大编号推断例数**（T536 教训：`19` 曾被误当 19 例）。**门禁回执的用例数一律用 `bash tests/t4/run.sh --list | tail -n +2 | wc -l`，不得用最大编号**（`11` 已退役；PM / QA / RD 三侧同一口径）。
+- **计数可见**：汇总尾部打印 `SKIP=n · DEGRADE=m · NOTE=k` + **NOTE 白名单命中明细**（`用例号:tag` 列表，逐条可解释）；「绿 + N SKIP/DEGRADE」不得表述为「全量通过」。
+- **取数命令四条（全仓单源）**：下列四条命令的**正文只在本处**；PM / QA / RD 三侧（`checklists/pm.md`、`checklists/qa.md`、`checklists/rd-infra.md`）**只留指针，不复写命令**。**复核范围 = `.agents/**` + 本文件**；`docs/**` 下的历史文档（PRD / 报告 / 发布说明 / 台账）引用命令串**不计「正文唯一」违规**（PRD BR1 已许作证据）—— 全仓 `grep -r` 会命中这些历史引用，不作判据。
+  - **用例数** = `bash tests/t4/run.sh --list | tail -n +2 | wc -l`。何时用：回执「例数」。易错点：`--list` 首行是**表头**，裸 `wc -l` 会多算 1；用例编号不连续（`11` 已于 T529 退役）属正常，**不得以最大编号推断例数**（T536 教训：`19` 曾被误当例数）。
+  - **断言数** = `bash tests/t4/run.sh 2>&1 | grep -c '\[PASS\]'`。何时用：回执要「断言数 / 绿数」。易错点：与**例数不同轴**（例数 = 注册项，断言数 = PASS 行），二者不可互替；单跑 `--case` 得到的不是全量断言数。
+  - **`files=` 口径** = `check` 输出里的 `files=`；交叉核对用 `find "$NAO_SKILLS/.agents" -type f | wc -l`。易错点：两者**不等须在回执写明原因**（如新增/删除机制文件）；改动前后比 `files=` 必须同口径；`NAO_SKILLS` 未设置时该 `find` 会向 **stderr** 报 `find: "/.agents": 没有那个文件或目录`、而**管道 rc 仍为 0** ⇒ 属于「**计数静默得 0、报错不静默**」（只看数字/退出码的人会被骗）；必先 `export NAO_SKILLS=<包根>`，或同时看 stderr。
+  - **变更行数 / 文件数** = `git show --shortstat --oneline <sha>`。何时用：报告里的 `+N −M` 与「k 文件」。易错点：**禁止手数或凭记忆**（`+7 −1` 实为 `+5 −1`、「1 文件」实为 2 文件，两次都是这么错的）；行数与文件数必须取自**同一行输出**。
+- **不符即打回**：计数类数字一律「**命令 + 输出**」，**禁「我数了 N」**；与命令输出不一致时以命令为准并当场订正；缺命令 / 缺输出 / 缺 HEAD 任一 ⇒ 打回重报（三件套见 @.agents/common/output-format.md「回执硬性」）。
 - **安装包内不适用**：`tests/` 不入 npm tarball，在消费者机器上 `npm test` 因缺 `tests/t4` 而 rc≠0，属预期（见 `docs/releases/v0.18.0.md`）。
 
 退出码：`0` 全 PASS/SKIP（DEGRADE 默认豁免）· `1` 有 FAIL / 参数错误 / 未识别状态（MISSING、NOT_RUN） / (full) 有 SKIP 或 DEGRADE · `2` 有 BLOCKED（仅宽松模式）。

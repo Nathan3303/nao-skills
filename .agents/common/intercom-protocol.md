@@ -87,7 +87,7 @@ bash .agents/scripts/nao-fleet.sh check
 - **两级回执**（模板见 @.agents/checklists/comm-templates.md，回执前读取）：默认 `done(lite)` 单行（含门禁精确数字）；**出现阻塞/风险/需决策或 PM 指定时用 `done(full)`**。前缀 `[编号] done` 不变（PM 追讨/红线均按 `done` 匹配）。
 - 每次派发的任务（含架构评审）**必须以终态回执结束**：按 @.agents/checklists/comm-templates.md `[编号] done(lite|full) | <role>`，经 intercom `send` 回 PM。
 - **回执 = 已核对清单**：回执须声明已读 `checklists/<role>.md` 并逐项核对（未过项必须列出）；未核对不回执。
-- **回执「测试」字段 = 全量门禁精确数字（硬性）**：必须给 `命令 + exit code + 文件数/例数/红数（或错误数）`；**只跑子目录、或只写「pass」不算回执** → PM 打回。**跑子目录不算验收**：全范围口径见项目 `AGENTS.md`。
+- **回执「测试」字段 = 全量门禁精确数字（硬性）**：必须给 `命令 + exit code + 文件数/例数/红数（或错误数）`，并含**三件套**（**静默工作区** / **HEAD sha** / **命令 + 输出** —— 口径单源见 @.agents/common/output-format.md「回执硬性」第 3 条，本处不复写；可复制形态见 @.agents/checklists/comm-templates.md）；**只跑子目录、或只写「pass」不算回执** → PM 打回。**跑子目录不算验收**：全范围口径见项目 `AGENTS.md`。
 - 短消息（≤150 字摘要 + 结论/决策点 + 详情落盘路径）；**禁止**把长报告全文 `send` 污染线程（output-format「反模式」）。
 - arch 评审回执至少含：可行性结论、ADR 路径、待 PM 拍板决策点。
 - `send` 失败（目标离线 / 会话不存在）→ 尝试 `ask`；仍失败 → 降级交付并注明，见「降级」。
