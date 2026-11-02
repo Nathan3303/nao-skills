@@ -42,7 +42,7 @@
 - `npm test`：rc=0（scripts 含 `check` + `tsc` + t4）。
 - `test:t4:full` ×2：20 用例 · PASS=20 · FAIL=0 · SKIP=0 · DEGRADE=0 · NOTE=2（`06:static-contract` ×2，非白名单 NOTE=0）· rc=0。
 - `--case 19` ×2：各 **62** 断言 · FAIL=0 · SKIP=0 · DEGRADE=0 · NOTE=0 · rc=0（修前 38 ⇒ +24）。
-- `git diff --stat .agents/roles.yaml` = 空（diff 0 字节）；分支无未推送提交（远端 ref = `5fb0fe4`）。
+- `git diff --stat .agents/roles.yaml` = 空（diff 0 字节）；未推送 0（复核基线 `5fb0fe4` 与远端一致；本报告随分支追加提交）。
 
 ## 四、禁改区（`git diff main...HEAD` 逐文件核）
 
