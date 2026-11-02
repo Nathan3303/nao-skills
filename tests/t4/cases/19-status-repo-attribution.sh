@@ -15,6 +15,13 @@
 #   M 双向变异（BR1/BR2）：`repo_contains_path` 恒真 / 恒假各跑一遍本用例（临时副本上的子进程）⇒ 必须 FAIL 且点名；
 #     真仓库零改动（脚本 md5 前后一致 + `git status` 前后一致）；还原（原脚本）后复绿
 #
+# M20261101（PRD docs/prds/2026-11-01-status-pane-cwd-key.md · AC1–AC5）追加：
+#   ⑤ pane-only（名册不可用：agent-dir 无 tsx）⇒ 本仓 pane 判 `·` + 可执行 close（AC1）/ 他仓 pane 仍 `~`（AC2）
+#   ⑥ 两路 cwd 皆无 ⇒ 仍 `?（归属不可判定）` 且不给命令（AC4 · fail-closed 未退化）
+#   ⑦ 名册正常路径：新版输出与 `git show main:` 旧版 md5 逐字等价（AC5①）
+#   ⑧ 冲突：名册本仓 cwd vs pane 他仓 cwd ⇒ pane 优先（AC3）
+#   ⑨ 键口径变异负控：把 `pane_cwds` 建键改回 pane_id（复原缺陷）⇒ AC1 断言必须点名 FAIL（AC5②）
+#
 # 夹具纪律（BR5/NFR）：
 #   · 夹具根（$T4_CACHE_DIR/lab19-*）**不得落在任何 git 仓内** —— 否则 `repo_anchor_roots` 的 toplevel 锚
 #     会把「他仓」目录拉回本仓，② 假绿（T534 arch 已警示）；开跑前硬断言。
@@ -112,14 +119,14 @@ UNK_NAME="rd-infra-T9003"
 
 # ---- 调用 / 观察封装 ----
 RC=0; OUT=""
-run_status() {  # <roster-json>；$TMUX 指向隔离 server
-  local roster="$1" of="$LAB/out.$$"
+run_status() {  # [roster-json] [agent-dir] [被测脚本]；$TMUX 指向隔离 server
+  local roster="${1:-"[]"}" agent="${2:-$PI_AGENT_DIR}" script="${3:-$LAB/.agents/scripts/nao-fleet.sh}" of="$LAB/out.$$"
   ( cd "$LAB" && timeout 90 env -u TMUX -u TMUX_PANE TMUX="$FTMUX" \
       TMUX_TMPDIR="$SOCKDIR" \
       NAO_SKILLS="$LAB" NAO_TASKS_STATE="$TASKS_FIX" \
-      PI_CODING_AGENT_DIR="$PI_AGENT_DIR" NAO_QA_FAKE_ROSTER="$roster" \
+      PI_CODING_AGENT_DIR="$agent" NAO_QA_FAKE_ROSTER="$roster" \
       PATH="$REAL_PATH" \
-      "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" status ) >"$of" 2>&1
+      "$BASH_BIN" "$script" status ) >"$of" 2>&1
   RC=$?
   OUT="$(cat "$of")"; rm -f "$of"
 }
@@ -191,6 +198,71 @@ t4_assert_not_contains "$L_UNK" "close --task" "③ 归属不可判定整行不�
 # 单仓断言在混合场景的对照（~/? 行只应来自他仓/不可判定两态，恰 2 行）
 t4_assert_eq "2" "$(printf '%s\n' "$OUT" | grep -cE '^  [~?] ' || true)" \
   "②③ 混合场景恰有 2 条 ~/? 行（他仓 + 不可判定，各 1）"
+OUT_MIXED="$OUT"   # AC5① 基线对照（此时夹具仅 3 个 pane，旧版/新版应逐字一致）
+
+# ============================================================ AC1/AC2/AC4 pane-only（名册不可用）
+# 名册不可用 = PI_CODING_AGENT_DIR 指向**无 tsx** 的目录 ⇒ `intercom_list_json` 首步即失败
+#   （≡ pi-intercom 未装 / 探针与 CLI 均失败），零接触真实 pi-intercom 名册。
+# 此时唯一的 cwd 来源 = pane 标题契约 + pane_current_path ⇒ 直接验证「pane cwd 权威」层。
+NOAGENT="$LAB/noagent"
+run_status "[]" "$NOAGENT"
+t4_assert_eq "0" "$RC" "AC1 名册不可用 status rc=0"
+L_LOCAL_NO="$(line_of "$LOCAL_NAME")"
+t4_assert_match "$L_LOCAL_NO" "^  · $LOCAL_NAME( |\$)" \
+  "AC1 名册不可用 pane cwd 在本仓 ⇒ 判本仓（不是 ?）"
+t4_assert_contains "$L_LOCAL_NO" "! 残留" "AC1 pane-only 本仓行 tag 走 ! 分支（归档态）"
+t4_assert_contains "$L_LOCAL_NO" "close --task T9001 rd-infra" \
+  "AC1 pane-only 本仓行给可执行 close --task <编号> <别名>"
+L_OTHER_NO="$(line_of "$OTHER_NAME")"
+t4_assert_match "$L_OTHER_NO" "^  ~ $OTHER_NAME" "AC2 名册不可用 pane cwd 在他仓 ⇒ 仍判他仓"
+t4_assert_contains "$L_OTHER_NO" "$OTHER_BASE" "AC2 他仓行点名他仓仓名（$OTHER_BASE）"
+t4_assert_not_contains "$L_OTHER_NO" "close --task" "AC2 他仓 pane 整行不含可执行 close --task"
+L_UNK_NO="$(line_of "$UNK_NAME")"
+t4_assert_match "$L_UNK_NO" "^  \? $UNK_NAME" "AC4 两路 cwd 皆无 ⇒ 仍走 ?（fail-closed 未退化）"
+t4_assert_contains "$L_UNK_NO" "归属不可判定" "AC4 不可判定行含「归属不可判定」"
+t4_assert_not_contains "$L_UNK_NO" "close --task" "AC4 不可判定整行不给可执行 close --task"
+
+# ============================================================ AC5① 名册正常路径零回归（逐字等价）
+# 只比**名册可用且 pane/名册一致**的场景（冲突/无名册场景正是本批要改的行为，不入零回归对照）。
+BASE_REF="${T519_BASE_REF:-main}"
+BASE_SCRIPT="$LAB/base-fleet.sh"
+: > "$BASE_SCRIPT"
+if git -C "$T4_ROOT" rev-parse --verify --quiet "$BASE_REF^{commit}" >/dev/null 2>&1; then
+  git -C "$T4_ROOT" show "$BASE_REF:.agents/scripts/nao-fleet.sh" > "$BASE_SCRIPT" 2>/dev/null \
+    || : > "$BASE_SCRIPT"
+fi
+BASE_MD5="$(md5sum < "$BASE_SCRIPT" | awk '{print $1}')"
+SUBJ_MD5="$(md5sum < "$SUBJECT" | awk '{print $1}')"
+if [ "$TSX_OK" = "1" ] && [ -s "$BASE_SCRIPT" ] && [ "$BASE_MD5" != "$SUBJ_MD5" ]; then
+  run_status "$R_MULTI" "$PI_AGENT_DIR" "$BASE_SCRIPT"
+  t4_assert_eq "0" "$RC" "AC5① 基线（$BASE_REF 旧版）status rc=0"
+  t4_assert_eq "$(printf '%s' "$OUT_MIXED" | md5sum | awk '{print $1}')" \
+    "$(printf '%s' "$OUT" | md5sum | awk '{print $1}')" \
+    "AC5① 名册正常路径：新版 status 输出与 $BASE_REF 旧版逐字等价（md5 相同）"
+else
+  t4_info "AC5① 基线脚本不可取或与当前一致（$BASE_REF · tsx=$TSX_OK）⇒ 逐字等价对照跳过（合并后恒等，符合预期）"
+fi
+
+# ============================================================ AC3 冲突优先级（pane 优先于名册）
+CONFLICT_NAME="qa-T9004"
+P_CONFLICT="$(start_pane fxconflict "$OTHER" "π - $CONFLICT_NAME - $OTHER_BASE")"
+t4_assert_ne "" "$P_CONFLICT" "AC3 夹具：冲突 pane 建立（pane cwd = 他仓 $OTHER_BASE）"
+if [ "$TSX_OK" = "1" ]; then
+  R_CONFLICT="$(roster "$(mk_session "$LOCAL_NAME" "$LAB")" \
+                       "$(mk_session "$OTHER_NAME" "$OTHER")" \
+                       "$(mk_session "$UNK_NAME" "")" \
+                       "$(mk_session "$CONFLICT_NAME" "$LAB")")"
+  t4_assert_contains "$R_CONFLICT" "\"name\":\"$CONFLICT_NAME\",\"cwd\":\"$LAB\"" \
+    "AC3 夹具：名册把冲突会话登记在**本仓**（与 pane cwd 相反）"
+  run_status "$R_CONFLICT"
+  t4_assert_eq "0" "$RC" "AC3 冲突场景 status rc=0"
+  L_CONFLICT="$(line_of "$CONFLICT_NAME")"
+  t4_assert_match "$L_CONFLICT" "^  ~ $CONFLICT_NAME" "AC3 pane cwd 优先 ⇒ 判他仓（名册本仓 cwd 未反超）"
+  t4_assert_contains "$L_CONFLICT" "$OTHER_BASE" "AC3 冲突行点名 pane 的他仓仓名（$OTHER_BASE）"
+  t4_assert_not_contains "$L_CONFLICT" "close --task" "AC3 冲突行不含可执行 close --task（pane 优先不放宽 fail-closed）"
+else
+  t4_degrade "缺 tsx/node（$PI_AGENT_DIR/npm/node_modules/tsx）⇒ AC3「pane 优先于名册」冲突夹具降级"
+fi
 
 # ============================================================ M 双向变异（BR1/BR2）
 # 子进程模式：只跑上面的断言（不再嵌套变异），父进程据其 rc / FAIL 点名判定。
@@ -236,6 +308,28 @@ if [ "$MUTATION_CHILD" != "1" ]; then
   # 恒假：所有 pane 都判他仓 ⇒ 本仓会话行失去 close，单仓场景出现 ~ 行
   run_mutation "always-false" 'repo_contains_path() { return 1; }' \
     "① 本仓会话行走 ·" "④ 单仓场景零 ~/? 行"
+
+  # AC5② 键口径变异负控：把 `pane_cwds` 建键改回 pane_id（复原缺陷）⇒ AC1 断言必须点名 FAIL。
+  #   与上面的单行谓词变异互补：谓词没坏，坏的是「键口径」，若只被谓词变异覆盖则本缺陷仍可静默复发。
+  KEY_MUT="$MUT_DIR/key-pane-id.sh"
+  if cp "$SUBJECT" "$KEY_MUT"; then
+    sed -i 's/read -r pname pn pcwd/read -r pn pname pcwd/' "$KEY_MUT"
+    t4_assert_eq "1" "$(grep -cF 'read -r pn pname pcwd' "$KEY_MUT" || true)" \
+      "AC5② 变异已写入副本（键口径回退为 pane_id，单处）"
+    t4_assert_eq "0" "$(grep -cF 'read -r pname pn pcwd' "$KEY_MUT" || true)" \
+      "AC5② 副本已无修复后的读序（变异确实生效）"
+    t4_assert_ne "$MD5_BEFORE" "$(md5sum "$KEY_MUT" | awk '{print $1}')" \
+      "AC5② 副本 md5 ≠ 真仓库（确在副本上变异）"
+    run_child "$KEY_MUT"
+    t4_assert_ne "0" "$CHILD_RC" "AC5② 键回退 ⇒ 用例翻红（rc≠0，不静默通过）"
+    t4_assert_contains "$CHILD_OUT" "RESULT: FAIL" "AC5② 键回退 ⇒ 输出 RESULT: FAIL"
+    t4_assert_contains "$CHILD_OUT" "AC1 名册不可用 pane cwd 在本仓 ⇒ 判本仓（不是 ?）" \
+      "AC5② 键回退 ⇒ AC1 断言点名 FAIL"
+    printf '%s\n' "$CHILD_OUT" | grep '^  \[FAIL\]' | sed 's/^  \[FAIL\] /    · /' \
+      | while IFS= read -r l; do t4_info "AC5② FAIL $l"; done
+  else
+    t4_bad "AC5② 变异副本创建失败（$KEY_MUT）"
+  fi
 
   t4_assert_eq "$MD5_BEFORE" "$(md5sum "$SUBJECT" | awk '{print $1}')" \
     "M 真仓库脚本 md5 前后一致（变异只在副本，BR1 只读纪律）"
