@@ -1654,10 +1654,10 @@ cmd_status() {
   while IFS= read -r rl; do [[ -n "$rl" ]] && roots_blob+="$rl"$'\n'; done < <(repo_anchor_roots)
   local -A pane_cwds=() roster_cwds=()
   local pn pname pcwd rn rcwd prev
-  # 保留既有键口径（按 pane_id 建键）：T537 不改这里 —— AC5③ 要求不带 --card 时 status 逐字等价，
-  #   「pane cwd 权威」路径的键口径修正会改变无名册 cwd 场景的输出 ⇒ 已登记为遗留（见 T537 RD 报告），
-  #   本批一律走名册 cwd（T530 既有路径）。
-  while IFS=$'\t' read -r pn pname pcwd; do
+  # M20261101：pane_cwd_snapshot 字段序 = `会话名<TAB>pane_id<TAB>cwd` ⇒ 必须按**会话名**建键
+  #   （与下面 pane_cwds["$dname"] 的查询口径一致）。此前误读成 `pane_id<TAB>…`，键成了 pane_id
+  #   ⇒ 查询恒空、「pane cwd 优先」层从未生效。同名多 pane（分屏）仍拼接多行后再判定（BR5）。
+  while IFS=$'\t' read -r pname pn pcwd; do
     [[ -n "$pname" ]] || continue
     prev="${pane_cwds[$pname]:-}"
     pane_cwds["$pname"]="$prev$pcwd"$'\n'
