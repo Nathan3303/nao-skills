@@ -12,7 +12,7 @@
 
 ## 一、环境与命令（三件套自证）
 
-- HEAD `2ab2e9c`（门禁跑于此）；`git status --porcelain` 跑前跑后均为**空**；同 worktree 无其他会话跑门禁（本会话独占）。
+- 门禁在 `2ab2e9c`（机制最终态）与本报告所在 HEAD 各跑一轮，数字完全相同；两轮 `git status --porcelain` 均为**空**；同 worktree 无其他会话跑门禁（本会话独占）。
 - `bash .agents/scripts/nao-fleet.sh check` → `check: OK · roles=6 · files=50 · layout=main-row2`，rc=0。
 - `npm test` → `RESULT: PASS（SKIP=0 · DEGRADE=0 · NOTE=2 · NOTE白名单=2）`，rc=0（日志内 20 条 `RESULT: PASS`）。
 - `bash tests/t4/run.sh --list | tail -n +2 | wc -l` → `20`。
