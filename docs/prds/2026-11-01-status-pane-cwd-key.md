@@ -86,3 +86,11 @@
 - **首提交夹带（BR5 口径）**：T537 的**发布后事实**随本任务 PR 首提交落地 —— ① npm 0.21.0 已核验（`latest` = 0.21.0 · `dist.integrity` = `sha512-ymY6bicO…4cmVSQ==` 与本地 tarball **155,621 B** 逐字节一致）；② `gh release create --target <短 sha>` 报 `tag_name is not a valid tag` ⇒ 实际走 `git tag -a` + `git push origin <tag>` + `--verify-tag` 降级路径；③ 发布日 AC1② 真 pi 标题实测（`π - review-helper - t537-ac1` + `status` 显示「一次性会话 · 下游卡 …」）；④ 台账里的 M 任务编号笔误订正（`M20261018` → `M20261101`）。
 - **文件归属**：`nao-fleet.sh` + `tests/t4/cases/19` = rd-infra；PRD/台账/发布说明/验收评论 = PM；QA 报告 = QA 随分支提交。
 - **批次边界**：不夹带 `T537-O3`/`O4`（到期 2026-12-31）与下游三仓接入指针（另批）。
+
+## 附录 · 开工卡拍板（2026-11-01 · 用户 ask-me）
+
+- **D1 开工**：现在开工。
+- **D2 arch**：**跳过** —— 本批只修数据通路（键口径），三态判定语义与 fail-closed 已在 T530 ADR 定稿；零回归由 AC5① 与 QA 独立复核兜住，不另开评审。
+- **D3 QA**：**独立复核**（自建夹具 + 变异负控，须证「不修则红」）。
+- **D4 发布**：**v0.21.1（PATCH）+ npm 重发 + Release**。
+
