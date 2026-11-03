@@ -19,6 +19,8 @@
 #                                                 （卡 role 与常驻 id/别名必须前缀不相交；不入 roles.yaml、不算常驻；
 #                                                  --as 须等于卡 role 或以 <role>- 为前缀，否则拒绝 —— fleet 按前缀识别身份）
 #   nao-fleet.sh ensure --force <别名>...          忽略"已在运行"判重
+#                                                 （目标解析为 pm 时追加一条固定首条用户消息：机制包版本自检，
+#                                                  仅提示不自动升级；关闭用 NAO_UPDATE_ON_ENSURE=0）
 #   nao-fleet.sh close <别名|派生会话名> [--task <编号>] [--force]
 #                                                 回收已完成会话（派生名如 rd-be-T1；跨仓定位；定位失败/名册报在线但无句柄 ⇒ 非 0 + 诊断）
 #                                                 （闸门：在跑 turn / tasks-state 未推进 → 拒绝，--force 跳过；
@@ -44,6 +46,7 @@
 #   NAO_MODEL_WHITELIST=<glob,...>            -m 白名单（默认空=不校验，支持 glob）
 #   NAO_CLOSE_BUSY_PATTERN=<ERE>             close 的在跑 turn 判定正则（默认内置 pi 状态行标记）
 #   NAO_TASKS_STATE=<path>                   任务状态文件（默认 docs/tasks-state.md，供残留检测/回收闸门）
+#   NAO_UPDATE_ON_ENSURE=0|false             ensure pm 的下游版本自检注入开关（默认开；0/false ⇒ 与本批之前逐字等价）
 #
 # 在线判定与 pane 定位（status / close / ensure 判重共用）
 #   ⚠️ pane id（%N）是 **server 局部**命名空间（每个 server 首块 pane 都是 %0）⇒ 任何「跨 server 比较
@@ -120,6 +123,33 @@ TASKS_STATE="${NAO_TASKS_STATE:-docs/tasks-state.md}"
 # 包名单源（BR5）：与 bin/nao-skill.js 的 PI_PLUGINS.codegraph 各一处，由 tests/t4/cases/18 等值断言兜住。
 # 运行时**不**跨语言抽取（sed 抽空 ⇒ 静默假「未声明」，且 shim-only 安装可能无 bin/）。
 CODEGRAPH_PKG="@sean_pedersen/pi-codegraph"
+
+# ---- ensure pm：下游机制包版本自检（M20261103 · PRD 2026-11-03-ensure-pm-update-check R1–R6）----
+# 注入文本是**常量**（R3 六要素齐备，grep 可自证）：fleet 进程内零外部命令、零网络（NFR），
+#   实际检查由 PM 会话自己按文本执行；未获用户同意前不得改文件/升级（R5）。
+# 开关（R6）：NAO_UPDATE_ON_ENSURE=0/false ⇒ 不注入（命令行与本批之前逐字等价）。
+NAO_UPDATE_MSG='【nao 机制包版本自检 · ensure pm 注入 · 仅提示，不自动升级】
+这条自检是本回合唯一额外动作；一行汇报后立即回到用户原来的消息，不要展开其它话题。
+1) 本地 pin：读 .pi/settings.json 里 @nathan33/nao-skill 的版本（X）；本仓若无该文件或无此 pin ⇒ 直接走 4 的情形 ④（不要说成必然有 pin）。
+2) 远端最新版：npm view @nathan33/nao-skill version --fetch-timeout=5000（内置 5s 超时；不要用外部 timeout 命令，macOS 原生没有；超时/报错 ⇒ 情形 ③）。
+3) 仅当有新版（Y 大于 X）才取要点：gh release view v<Y>（要点压成不超过两句，不要贴全文）；无 gh 或取不到 ⇒ 情形 ⑤。
+4) 只输出以下**恰好一行**（按 ①–⑤ 顺序命中即止，不解释、不追加）：
+   ① 有新版：当前 X → 可升 Y（要点）。要升吗？
+   ② 已最新：版本检查：已是最新 X。
+   ③ 离线或超时：版本检查：离线或超时，跳过（可稍后手动 npx @nathan33/nao-skill --version 核对）。
+   ④ 未检测到下游 pin：版本检查：未检测到下游 pin（本仓为机制源），跳过。
+   ⑤ 无 gh 只报版本号：版本检查：当前 X → 可升 Y（要点取不到，见 https://github.com/Nathan3303/nao-skills/releases）。要升吗？
+5) 硬约束：检查阶段只读；**未获我同意前不要改任何文件、不要升级**（不改 .pi/settings.json、不跑 pi install / pi update）。
+6) 只有我明确同意后才按序执行：pi install -l npm:@nathan33/nao-skill@<Y>（若提示安装脚本授权，停下来交给我确认，不要自行放行）→ pi update --extensions → 提醒我「本轮会话仍是旧角色卡，建议重开」。
+7) 我未表态或说稍后：原样待命，不要重试、不要轮询、不要后台检查。'
+
+# R1/R6：开关判定（默认开；仅显式 0/false 关闭）
+update_check_enabled() {
+  case "${NAO_UPDATE_ON_ENSURE:-1}" in
+    0|[Ff][Aa][Ll][Ss][Ee]) return 1 ;;
+  esac
+  return 0
+}
 # 状态文案单点（CG_MSG_*）：用例断言只认**固定前缀 + 命令子串**，不断言整行（防文案微调误伤）。
 CG_MSG_UNDECLARED='codegraph 插件未声明（装法：pi install npm:@sean_pedersen/pi-codegraph；定位回退 grep）'
 CG_MSG_NO_CLI='codegraph 插件已声明但 CLI 不在 PATH（装：npm i -g @colbymchenry/codegraph；回退 grep -rn + 行段）'
@@ -1095,7 +1125,7 @@ build_system_prompt() {
 }
 
 spawn_one() {
-  local name="$1" repo="$2" model="$3" card_override="${4:-}" card prompt_file inner
+  local name="$1" repo="$2" model="$3" card_override="${4:-}" role_id="${5:-}" card prompt_file inner
   # T537：卡路径可由调用方显式给出（下游仓卡）；未给出时仍走清单（PROMPTS_DIR/<card>）逐字不变
   if [[ -n "$card_override" ]]; then card="$card_override"; else card="$PROMPTS_DIR/${PROMPT:-}"; fi
   [[ -f "$card" ]] || die "角色卡不存在: $card"
@@ -1106,6 +1136,12 @@ spawn_one() {
   inner="cd $(printf %q "$repo") && export CODEGRAPH_TELEMETRY=0 && exec pi --name $(printf %q "$name")"
   [[ -n "$model" ]] && inner+=" --model $(printf %q "$model")"
   inner+=" --append-system-prompt $(printf %q "$prompt_file")"
+  # M20261103/R2/R4：pm 目标在 `--append-system-prompt` **之后**以 `--` 分隔追加一条固定首条用户消息
+  #   （版本自检提示）；文本整体 printf %q 转义（禁拼接未转义文本）⇒ 不会被当成 @file 或选项。
+  #   纯字符串拼接，不跑任何外部命令（零网络）；非 pm / 开关关闭 ⇒ 本段不执行（命令行逐字不变）。
+  if [[ "$role_id" == "pm" ]] && update_check_enabled; then
+    inner+=" -- $(printf %q "$NAO_UPDATE_MSG")"
+  fi
   # T536/BR2：后台清理必须**完全脱离调用方 fd**。原写法 `( sleep 60; … ) &` 让子 shell 继承调用方
   #   stdout/stderr ⇒ 输出被 `| cat` / CI 捕获时调用方要等 EOF 到 60s 才返回（实测 60.3s vs 0.3s）。
   #   `disown` 只脱离作业表，不关继承而来的 fd。⇒ ① 三路重定向到 /dev/null；② 改用独立 argv 的
@@ -2019,8 +2055,8 @@ cmd_cleanup() {
 # ---------------------------------------------------------------------------
 cmd_ensure() {
   local force="$1" model="$2" task="$3"
-  local i spec role repo key seen k card_arg card_as disp
-  local -a cg_done=() t_names=() t_repos=() t_cards=()
+  local i spec role repo key seen k card_arg card_as disp role_id
+  local -a cg_done=() t_names=() t_repos=() t_cards=() t_roles=()
   [[ ${#TARGETS[@]} -gt 0 ]] || die "ensure 需要至少一个角色，如: nao-fleet.sh ensure arch rd-fe rd-infra"
   # ==== 相位 1：全量解析 + 校验（BR11 两相执行）====
   #   卡、role、BR9、--as 全过才进相位 2；任一项失败都在**建 pane 之前** die ⇒ BR6「零副作用」可达
@@ -2051,12 +2087,12 @@ cmd_ensure() {
       else
         disp="$CARD_ROLE"
       fi
-      t_names+=("$disp"); t_repos+=("$CARD_REPO"); t_cards+=("$CARD_PATH")
+      t_names+=("$disp"); t_repos+=("$CARD_REPO"); t_cards+=("$CARD_PATH"); t_roles+=("${CARD_ROLE:-}")
     else
       [[ -z "$card_as" ]] || die "--as 只能用于同一目标的 --card 之后（如 ensure --card <卡> --as <会话名>）"
       resolve_role "$role"
       [[ -n "$repo" ]] || repo="${ROLE_WS[$NAME]:-$PWD}"
-      t_names+=("$NAME"); t_repos+=("$repo"); t_cards+=("")
+      t_names+=("$NAME"); t_repos+=("$repo"); t_cards+=(""); t_roles+=("$NAME")
     fi
   done
   # ==== 相位 2：拉起（宿主窗口解析、判重、codegraph 状态、spawn 逐目标不变）====
@@ -2078,9 +2114,9 @@ cmd_ensure() {
       continue
     fi
     if [[ -n "${t_cards[$i]}" ]]; then
-      spawn_one "$disp" "$repo" "$model" "${t_cards[$i]}"
+      spawn_one "$disp" "$repo" "$model" "${t_cards[$i]}" "${t_roles[$i]:-}"
     else
-      spawn_one "$disp" "$repo" "$model"
+      spawn_one "$disp" "$repo" "$model" "" "${t_roles[$i]:-}"
     fi
   done
   # T536/BR3/AC4 + T539/BR3：**恰一行**摘要，三类计数（成功/跳过/失败）；三类全 0 不打印（与现状一致）。
