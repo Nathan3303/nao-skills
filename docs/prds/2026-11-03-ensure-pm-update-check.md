@@ -6,7 +6,7 @@
 
 - **用户需求（2026-11-03）**：下游项目装好机制后，升级要靠人记得去改 `.pi/settings.json` 的 pin 再 `pi update --extensions`；希望 **`ensure pm` 的时候**顺手做一次「作为下游，更新 nao-skills 版本（如果有）」。
 - **用户补充口径（同日）**：**仅提示**——提示要说清「更新了什么 / 会更新什么」，由用户决定；用户同意后由 PM 会话执行升级动作（**不由 fleet 自动升级**）。默认开启；触发范围**仅 `ensure pm`**。
-- **机制现状取证**：`nao-fleet.sh` 中 spawn 的唯一入口是 `build_inner` 的 `exec pi --name <name> --append-system-prompt <card>`（`.agents/scripts/nao-fleet.sh:1106`）；`pi` 的 CLI 形如 `pi [options] [--] [files...] [messages...]`，**支持启动时传入首条用户消息**，因此「PM 起来先做一件事」无需新机制。
+- **机制现状取证**：`nao-fleet.sh` 中 spawn 的实现在 `spawn_one`（`exec pi --name <name> --append-system-prompt <card>` 拼在 `inner` 里）；注入点见本批实测 `:1142`（常量块 `:131–144`、开关函数 `:147`）；`pi` 的 CLI 形如 `pi [options] [--] [files...] [messages...]`，**支持启动时传入首条用户消息**，因此「PM 起来先做一件事」无需新机制。
 - **零网络红线**：机制自身（转发入口 / fleet / CLI / `check`）零网络调用（`grep` 无 `npm view` / registry 引用）。版本查询必须发生在**PM 会话内**，不能由 fleet 执行。
 
 ## 二、目标指标
@@ -18,7 +18,7 @@
 
 **范围**
 
-- `.agents/scripts/nao-fleet.sh`：`build_inner` 在目标为 `pm` 且开关开启时，于 `--append-system-prompt` 之后追加一条**固定文本**的首条用户消息（用 `--` 与其余 options 分隔）。
+- `.agents/scripts/nao-fleet.sh`：`spawn_one` 在目标为 `pm` 且开关开启时，于 `--append-system-prompt` 之后追加一条**固定文本**的首条用户消息（用 `--` 与其余 options 分隔）。
 - `.agents/skills/pm-operations.md`（或 `product-manager.md` 对应小节）：写清 PM 侧行为契约（检查顺序、五种降级情形的输出、**未获同意前零文件改动**、同意后的动作序列与「请重开会话」提醒）。
 - `tests/t4/`：新增用例覆盖「含 pm 注入 / 不含 pm 不注入 / 开关关闭不注入 / 非 pm 目标命令行逐字不变」。
 - `docs/tasks-state.md`：登记本批（随本 PR）。
