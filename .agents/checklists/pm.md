@@ -63,52 +63,68 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 输出里有 `warn`/`error`/`pending approval`/`N vulnerabilities` 却判完成，或遗留项未走三出口（「先放着」不算出口）？（见 @.agents/skills/task-completion.md）
 - [ ] 降级（无 `gh` / 无远端）未在 `tasks-state` 与回执中标注？
 
-## 交付检查清单（完整 44 项）
+## 交付检查清单（完整 44 项 · 仅 feat）
 
-- [ ] 目标/边界/验收三件事齐备
-- [ ] 证据 + 5 Whys 已产出
-- [ ] 战略筛子已过，RICE 可追溯
-- [ ] PRD 含 9 模块
-- [ ] 接缝候选已列并经 qa 确认（不适用注明理由）
-- [ ] 路径无关判据已核（@.agents/skills/pm-to-spec.md §六 逐条）
-- [ ] 场景模块含画像+场景卡+关键路径+页面状态清单
-- [ ] AC 五覆盖
-- [ ] 变更记录完整（含 Hotfix）
-- [ ] AC 可测 + NFRs 验收方式与研发/测试/架构对齐
-- [ ] 数据口径/埋点/指标清晰
-- [ ] 模糊需求已 `grill-me`
-- [ ] 环境判定已执行；开工确认卡获确认；派发前 `list` 验在线；**开工自检 · 本地 `main` 无领先提交**：`git rev-list --count origin/main..main` = 0（≠0 则先处置：发布收尾类由 RD 按显式 sha 推，任务期文档一律落分支。来源：arch `O1` / `docs/reports/2026-11-01-T537-arch.md` §Q5）
-- [ ] worker 离线已检测并处理（`ensure --force` 重拉 + 恢复/重派）
-- [ ] 降级交付已回流登记（tasks-state + 归档，标注「降级回流」）
-- [ ] 派发前已核对目标在线且 `idle`（忙则排队/紧急抢占注明）
-- [ ] 路由已核对：工程基座类（CI/构建/发布/脚本守卫/依赖安全/仓库治理）未误派 `rd-be`（应派 `rd-infra`）
-- [ ] 无匹配角色时：显式声明 + 选最接近专精角色 + 临时附加清单 + 台账登记（不许默默兜底）
-- [ ] `docs/tasks-state.md` 已随派发/回执/验收同步更新（状态外部化，可恢复）
-- [ ] 需新开的会话已 `ensure` 并经 `list` 验证
-- [ ] 派生会话已回收（验收通过后 `close --task <编号> <别名>`；常驻会话**不回收**，需重开时 `ensure --force`）
-- [ ] 全程 PM 未触碰代码
-- [ ] PRD 已归档 `docs/prds/` 并同步 README 索引
-- [ ] 项目 `AGENTS.md` 已建立/同步（项目级属性与约束，见 @.agents/skills/pm-operations.md §四）
-- [ ] worker 回执含**全量**门禁精确数字（命令 + exit code + 文件数/例数/红数）；PM 仅核对数字 + 读变更文件 + 异常才抽查（未重复跑）
-- [ ] 派发消息只给引用路径（`docs/...md#section`），无 PRD/方案全文或附件传全文
-- [ ] 派发含「根因 + 修复方向」的指令已附**一条已执行的实测命令与输出**（无实测只能派「诊断/复现任务」，不得先给方向）
-- [ ] 派发时已声明回执级别（未声明默认 `done(lite)`；有阻塞/风险/需决策已要求 `done(full)`）；模板已按需读取 `@.agents/checklists/comm-templates.md`
-- [ ] 用户口头约束已**当场落盘**（`AGENTS.md` 项目级 / PRD「变更治理」），未等归档
-- [ ] 归档前已更新接续快照 + 记录会话体检（归档后按 @.agents/skills/pm-operations.md §三 重开会话）
-- [ ] 业界调研（若有）已落盘 `docs/research/`，每条含「适用条件 + 本项目差异（采纳/改造/不采纳）」；引用带访问日期，查不到已写「未检索到」
-- [ ] 派发消息已给出**需求分支** `feat/<issue-id>-<slug>`（或降级 `nao/<批次-slug>`）、PR owner、Reviewer
-- [ ] 工作期无 WIP 提交落在 main；暂存为路径级（无 `git add -A` 卷走他人改动）
-- [ ] **文档随任务 PR**：本任务文档与台账（PRD 定稿 / 报告 / ADR / `docs/tasks-state.md` / 索引 / release notes）已在本需求分支提交并随同一 PR 进 main；main 上无 `docs(<编号>):` 独立提交、无文档-only PR（立项摘要例外仅 1 条且单一文件）
-- [ ] Issue 已建（或降级已标注）：body 为摘要 + 指针，正文在 `docs/prds/`；同步仅 5 个节点
-- [ ] 验收在 PR 上完成：AC 逐条评论核对 + QA 门禁数字；**UI 呈现类已交用户验收清单并获回填**（QA 产出 → PM 审 → 用户执行）；**验收通过后才授权合并**
-- [ ] 合并由 RD 执行（`--squash`）；main 上本需求恰好 1 条提交且无 `wip()`；需求分支已删除
-- [ ] 合并前已核「分支无未推送提交」（适用：在分支上提交过的**任何角色**，含 PM 落的文档/台账）：`git rev-list --count origin/<branch>..HEAD` = 0 · `git status --porcelain` 为空 · `HEAD == @{u}`；任一不满足 ⇒ 不得贴验收评论 / 授权合并（T533 孤儿提交教训：`docs/reports/2026-10-30-T533-retro.md`）
-- [ ] 发布（若有）：版本号符合 SemVer/项目约定；tag 指向 main 合并提交；release notes 用户可读且落盘 `docs/releases/`（核 @.agents/common/release-notes.md）
-- [ ] `gh` 可用则已用 `gh`，降级已注明；发布后事实（含 `tasks-state` 版本/Tag 行）的**落地时机与工作区纪律见 `github-flow.md` BR5**（单源指针，本清单不复写命令细节）
-- [ ] 任务 DoD 四类已随**开工确认卡**逐任务实例化（产物路径 / 可执行验证判据 / 遗留项 / 交接），验收按同一份核
-- [ ] 回执含 `遗留：` 字段且遗留项已**三出口**收口（关闭 / 接受含到期日 / 转办；零遗留显式「无」，可执行项已进 `tasks-state` 待派发队列）
-- [ ] **计数类数字必须自证一条命令** —— 用例数 / 断言数 / `files=` / 行数的**取数命令单源见 `tests/README.md`「取数命令四条」**（本清单**不复写命令**；PM / QA / RD 三侧同源）；回执须同时给 **命令 + 输出 + HEAD sha + 静默工作区状态**（三件套见 @.agents/common/output-format.md「回执硬性」第 3 条）；**回执与命令输出不一致时以命令为准**，并当场订正回执/文档（来源：L1 复盘 `docs/reports/2026-11-01-T536-retro.md`）
-- [ ] 通过上面全部红线
+> 通道标注：本节 44 项**仅 `feat` 通道**核对（逐项标 `【仅 feat】`）；`fix` 通道只核下一节 8 条。分流判据（能写出「期望 vs 实际」且可复现）唯一出处：@.agents/skills/github-flow.md。
+> **例外（两通道中立，非 feat 专属）**：文档 / 台账随任务 PR、工作期不落 main —— 见下节第 8 条。
+
+- [ ] 【仅 feat】目标/边界/验收三件事齐备
+- [ ] 【仅 feat】证据 + 5 Whys 已产出
+- [ ] 【仅 feat】战略筛子已过，RICE 可追溯
+- [ ] 【仅 feat】PRD 含 9 模块
+- [ ] 【仅 feat】接缝候选已列并经 qa 确认（不适用注明理由）
+- [ ] 【仅 feat】路径无关判据已核（@.agents/skills/pm-to-spec.md §六 逐条）
+- [ ] 【仅 feat】场景模块含画像+场景卡+关键路径+页面状态清单
+- [ ] 【仅 feat】AC 五覆盖
+- [ ] 【仅 feat】变更记录完整（含 Hotfix）
+- [ ] 【仅 feat】AC 可测 + NFRs 验收方式与研发/测试/架构对齐
+- [ ] 【仅 feat】数据口径/埋点/指标清晰
+- [ ] 【仅 feat】模糊需求已 `grill-me`
+- [ ] 【仅 feat】环境判定已执行；开工确认卡获确认；派发前 `list` 验在线；**开工自检 · 本地 `main` 无领先提交**：`git rev-list --count origin/main..main` = 0（≠0 则先处置：发布收尾类由 RD 按显式 sha 推，任务期文档一律落分支。来源：arch `O1` / `docs/reports/2026-11-01-T537-arch.md` §Q5）
+- [ ] 【仅 feat】worker 离线已检测并处理（`ensure --force` 重拉 + 恢复/重派）
+- [ ] 【仅 feat】降级交付已回流登记（tasks-state + 归档，标注「降级回流」）
+- [ ] 【仅 feat】派发前已核对目标在线且 `idle`（忙则排队/紧急抢占注明）
+- [ ] 【仅 feat】路由已核对：工程基座类（CI/构建/发布/脚本守卫/依赖安全/仓库治理）未误派 `rd-be`（应派 `rd-infra`）
+- [ ] 【仅 feat】无匹配角色时：显式声明 + 选最接近专精角色 + 临时附加清单 + 台账登记（不许默默兜底）
+- [ ] 【仅 feat】`docs/tasks-state.md` 已随派发/回执/验收同步更新（状态外部化，可恢复）
+- [ ] 【仅 feat】需新开的会话已 `ensure` 并经 `list` 验证
+- [ ] 【仅 feat】派生会话已回收（验收通过后 `close --task <编号> <别名>`；常驻会话**不回收**，需重开时 `ensure --force`）
+- [ ] 【仅 feat】全程 PM 未触碰代码
+- [ ] 【仅 feat】PRD 已归档 `docs/prds/` 并同步 README 索引
+- [ ] 【仅 feat】项目 `AGENTS.md` 已建立/同步（项目级属性与约束，见 @.agents/skills/pm-operations.md §四）
+- [ ] 【仅 feat】worker 回执含**全量**门禁精确数字（命令 + exit code + 文件数/例数/红数）；PM 仅核对数字 + 读变更文件 + 异常才抽查（未重复跑）
+- [ ] 【仅 feat】派发消息只给引用路径（`docs/...md#section`），无 PRD/方案全文或附件传全文
+- [ ] 【仅 feat】派发含「根因 + 修复方向」的指令已附**一条已执行的实测命令与输出**（无实测只能派「诊断/复现任务」，不得先给方向）
+- [ ] 【仅 feat】派发时已声明回执级别（未声明默认 `done(lite)`；有阻塞/风险/需决策已要求 `done(full)`）；模板已按需读取 `@.agents/checklists/comm-templates.md`
+- [ ] 【仅 feat】用户口头约束已**当场落盘**（`AGENTS.md` 项目级 / PRD「变更治理」），未等归档
+- [ ] 【仅 feat】归档前已更新接续快照 + 记录会话体检（归档后按 @.agents/skills/pm-operations.md §三 重开会话）
+- [ ] 【仅 feat】业界调研（若有）已落盘 `docs/research/`，每条含「适用条件 + 本项目差异（采纳/改造/不采纳）」；引用带访问日期，查不到已写「未检索到」
+- [ ] 【仅 feat】派发消息已给出**需求分支** `feat/<issue-id>-<slug>`（或降级 `nao/<批次-slug>`）、PR owner、Reviewer
+- [ ] 【仅 feat】工作期无 WIP 提交落在 main；暂存为路径级（无 `git add -A` 卷走他人改动）
+- [ ] 【仅 feat】**文档随任务 PR**：本任务文档与台账（PRD 定稿 / 报告 / ADR / `docs/tasks-state.md` / 索引 / release notes）已在本需求分支提交并随同一 PR 进 main；main 上无 `docs(<编号>):` 独立提交、无文档-only PR（立项摘要例外仅 1 条且单一文件）
+- [ ] 【仅 feat】Issue 已建（或降级已标注）：body 为摘要 + 指针，正文在 `docs/prds/`；同步仅 5 个节点
+- [ ] 【仅 feat】验收在 PR 上完成：AC 逐条评论核对 + QA 门禁数字；**UI 呈现类已交用户验收清单并获回填**（QA 产出 → PM 审 → 用户执行）；**验收通过后才授权合并**
+- [ ] 【仅 feat】合并由 RD 执行（`--squash`）；main 上本需求恰好 1 条提交且无 `wip()`；需求分支已删除
+- [ ] 【仅 feat】合并前已核「分支无未推送提交」（适用：在分支上提交过的**任何角色**，含 PM 落的文档/台账）：`git rev-list --count origin/<branch>..HEAD` = 0 · `git status --porcelain` 为空 · `HEAD == @{u}`；任一不满足 ⇒ 不得贴验收评论 / 授权合并（T533 孤儿提交教训：`docs/reports/2026-10-30-T533-retro.md`）
+- [ ] 【仅 feat】发布（若有）：版本号符合 SemVer/项目约定；tag 指向 main 合并提交；release notes 用户可读且落盘 `docs/releases/`（核 @.agents/common/release-notes.md）
+- [ ] 【仅 feat】`gh` 可用则已用 `gh`，降级已注明；发布后事实（含 `tasks-state` 版本/Tag 行）的**落地时机与工作区纪律见 `github-flow.md` BR5**（单源指针，本清单不复写命令细节）
+- [ ] 【仅 feat】任务 DoD 四类已随**开工确认卡**逐任务实例化（产物路径 / 可执行验证判据 / 遗留项 / 交接），验收按同一份核
+- [ ] 【仅 feat】回执含 `遗留：` 字段且遗留项已**三出口**收口（关闭 / 接受含到期日 / 转办；零遗留显式「无」，可执行项已进 `tasks-state` 待派发队列）
+- [ ] 【仅 feat】**计数类数字必须自证一条命令** —— 用例数 / 断言数 / `files=` / 行数的**取数命令单源见 `tests/README.md`「取数命令四条」**（本清单**不复写命令**；PM / QA / RD 三侧同源）；回执须同时给 **命令 + 输出 + HEAD sha + 静默工作区状态**（三件套见 @.agents/common/output-format.md「回执硬性」第 3 条）；**回执与命令输出不一致时以命令为准**，并当场订正回执/文档（来源：L1 复盘 `docs/reports/2026-11-01-T536-retro.md`）
+- [ ] 【仅 feat】通过上面全部红线
+
+## `fix` 通道核对（完整 8 项 · 仅 fix）
+
+> 判据：能写出「期望行为 vs 实际行为」且可复现 → `fix`，否则升 `feat`（判据唯一出处：@.agents/skills/github-flow.md「通道分流判据」，本处不复制条件）。本节只核 8 条，**不减门禁**（`check` + `npm test` 全量 rc=0 照旧；无测试设施的降级见第 3 条）。
+
+- [ ] 分流成立：3 字段齐备（现象 / 复现 / 回退），「期望 vs 实际」可复现；不成立 ⇒ 当场升 `feat` 而非降格开工
+- [ ] 分支与范围：`fix/<issue-id>-<slug>`（无 Issue 降级 `nao/<批次-slug>`；线上问题从受影响版本 tag 切出）；diff 只碰修复路径，无夹带重构 / 格式化；**PM 按 `git diff --name-only` 核：文件集 ⊆ 修复点 + 其测试 + 台账，超出即打回；>3 文件须在 PR 内写书面理由（降级无 PR ⇒ 落 `docs/reports/<编号>-review.md` 或 `tasks-state` 该任务条目相邻行）**
+- [ ] 先红后绿：可失败用例先复现失败（回执贴命令 + 输出）→ 修复后全量 `bash .agents/scripts/nao-fleet.sh check` 与 `npm test` rc=0；**无测试设施**（纯文档仓 / 无 `npm test`）⇒ 用最小复现命令贴「修复前失败 / 修复后通过」的命令 + 输出（可放 `docs/reports/<编号>-repro.*` 或 Issue 内联）；项目 `AGENTS.md` 指定了门禁命令则**以它为准**，未指定则 `check` rc=0
+- [ ] 回退可执行：`git revert <sha>` 可干净回退；数据 / 契约类在 Issue 上 3 行写影响面
+- [ ] 复核留痕：非作者复核（QA / 另一会话）；单人项目允许**作者自审**，但**唯二载体**才算留痕 —— PR 描述「复核」一节 + `docs/tasks-state.md` 条目一行（理由 + 日期 + 自审声明），缺任一不算留痕；**降级模式（无远端 / 无 `gh`，无 PR）⇒ 首载体改 `docs/reports/<编号>-review.md`（或 `tasks-state` 该条目相邻行），内容与判据不变**
+- [ ] 不可逆动作仍走 `ask-me`（合并 main / 打 tag / 发 npm / 破坏性契约 / 删文件或数据）——`fix` 不豁免
+- [ ] 回执 `lite` 含门禁精确数字 + 遗留三出口；`docs/tasks-state.md` 已同步；合并前已核「分支无未推送提交」（`git rev-list --count origin/<branch>..HEAD` = 0 · `git status --porcelain` 空）
+- [ ] 文档 / 台账随任务 PR，工作期无 `wip()` 落 main —— **两通道同规**
 
 ## 会话回收 / 收窗核对（验收通过后 / 手工关窗前）
 
