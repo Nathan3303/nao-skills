@@ -1,5 +1,5 @@
 ---
-description: 按需技能——PM 运行手册（调度细则 / 开工确认卡 / 会话生命周期 / AGENTS.md 治理 / 交付归档）
+description: 按需技能——PM 运行手册（调度细则 / 开工确认卡 / 会话生命周期 / AGENTS.md 治理 / 交付归档 / 机制包版本自检）
 ---
 
 # PM 运行手册
@@ -91,3 +91,34 @@ PM 是舰队唯一常驻长寿会话：上下文过长时丢的是**纪律**（�
 - 内容：背景(5 Whys 摘要) → 目标指标与埋点 → 9 模块要点 → 决策留痕(RICE/取舍/回滚) → 参考来源(`docs/research/` 路径) → 派发记录（含需求分支、PR 编号、main 合并 commit hash） → 验收结果 → 变更记录 → 遗留项。
 - 首次归档创建 `docs/prds/README.md` 索引（日期 | 主题 | 交付 | 终签状态）。
 - 归档同时：更新 `docs/tasks-state.md` 接续快照；「派发记录」末行记**会话体检**（`contextTokens / 压缩次数 / cacheRead 占比`，取自 `/session`）；随后按本文件 §三「PM 会话生命周期」重开 PM 会话（归档 = 批次终态）。
+
+## 六、机制包版本自检（`ensure pm` 注入，仅提示不自动升级）
+
+> 契约来源：`docs/prds/2026-11-03-ensure-pm-update-check.md`（R1–R6）；关闭开关 `NAO_UPDATE_ON_ENSURE=0`。
+> 机制侧实现：`.agents/scripts/nao-fleet.sh` 的 `NAO_UPDATE_MSG` 常量（字符串常量，`grep -n '^NAO_UPDATE_MSG='` 可定位）。
+
+**触发**：目标解析为 `pm` 时，fleet 在 `--append-system-prompt <卡>` **之后**以 `--` 分隔追加一条固定首条用户消息；fleet 进程内**不执行任何** `npm`/`gh`/`curl`（零网络），检查由本会话自己做。非 `pm` 目标与开关关闭时命令行逐字不变。
+
+**检查顺序（只读）**
+
+1. 本地 pin：读 `.pi/settings.json` 里 `@nathan33/nao-skill` 的版本 X；无该文件/无该 pin ⇒ 走输出 ④。
+2. 远端：`timeout 5 npm view @nathan33/nao-skill version`（硬性 5s）；超时/报错 ⇒ 走输出 ③。
+3. 仅当 Y > X 才取要点：`gh release view v<Y>`，**压成不超过两句**；无 `gh` 或取不到 ⇒ 走输出 ⑤。
+
+**输出（恰好一行，按序命中即止）**
+
+- ① 有新版：`当前 X → 可升 Y（要点）。要升吗？`
+- ② 已最新：`版本检查：已是最新 X。`
+- ③ 离线或超时：`版本检查：离线或超时，跳过（可稍后手动 npx @nathan33/nao-skill --version 核对）。`
+- ④ 未检测到下游 pin：`版本检查：未检测到下游 pin（本仓为机制源），跳过。`
+- ⑤ 无 `gh`：`版本检查：当前 X → 可升 Y（要点取不到，见 https://github.com/Nathan3303/nao-skills/releases）。要升吗？`
+
+**零改动保证**：检查阶段只读（`.pi/settings.json` 只读、`npm view` / `gh release view` 均为查询）；**未获用户同意前不改任何文件、不升级**（不改 pin、不跑 `pi install` / `pi update`）。
+
+**用户同意后的动作序列**（升级属不可逆动作，按 ask-me 口径确认后再执行）
+
+1. `pi install -l npm:@nathan33/nao-skill@<Y>`（更新项目 `.pi/settings.json` 的 pin）；
+2. `pi update --extensions`；
+3. 提醒用户「本轮会话仍是旧角色卡，建议重开」（`ensure --force pm`）。
+
+用户未表态或说「稍后」⇒ 原样待命，不重试、不轮询、不后台检查（无定时任务）。噪声可接受度见 PRD §八 观察项（若用户抱怨，改为 24h 节流，需另立需求）。
