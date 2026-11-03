@@ -18,7 +18,7 @@
 # M20261101（PRD docs/prds/2026-11-01-status-pane-cwd-key.md · AC1–AC5）追加：
 #   ⑤ pane-only（名册不可用：agent-dir 无 tsx）⇒ 本仓 pane 判 `·` + 可执行 close（AC1）/ 他仓 pane 仍 `~`（AC2）
 #   ⑥ 两路 cwd 皆无 ⇒ 仍 `?（归属不可判定）` 且不给命令（AC4 · fail-closed 未退化）
-#   ⑦ 名册正常路径：新版输出与 `git show main:` 旧版 md5 逐字等价（AC5①）
+#   ⑦ 名册正常路径：新版输出与**固化 fixture 基线**逐字等价（AC5① · Issue #78：不再 `git show main:`）
 #   ⑧ 冲突：名册本仓 cwd vs pane 他仓 cwd ⇒ pane 优先（AC3）
 #   ⑨ 键口径变异负控：把 `pane_cwds` 建键改回 pane_id（复原缺陷）⇒ AC1 断言必须点名 FAIL（AC5②）
 #
@@ -222,25 +222,63 @@ t4_assert_match "$L_UNK_NO" "^  \? $UNK_NAME" "AC4 两路 cwd 皆无 ⇒ 仍走 
 t4_assert_contains "$L_UNK_NO" "归属不可判定" "AC4 不可判定行含「归属不可判定」"
 t4_assert_not_contains "$L_UNK_NO" "close --task" "AC4 不可判定整行不给可执行 close --task"
 
-# ============================================================ AC5① 名册正常路径零回归（逐字等价）
-# 只比**名册可用且 pane/名册一致**的场景（冲突/无名册场景正是本批要改的行为，不入零回归对照）。
-BASE_REF="${T519_BASE_REF:-main}"
+# ============================================================ AC5① 名册正常路径零回归（对固定基线 fixture 逐字等价）
+# 只比**名册可用且 pane/名册一致**的场景（冲突/无名册场景正是 M20261101 要改的行为，不入零回归对照）。
+#
+# 基线 = **固化 fixture**（Issue #78）：`tests/t4/fixtures/nao-fleet-baseline-<sha>.sh` =
+#   该 sha 的 `.agents/scripts/nao-fleet.sh` 原样副本（仅顶部追加上下文头）。**不再 `git show main:…`**
+#   —— 旧写法让基线随「分支 / 已合并」变动（分支上 2 条、合并后 0 条），门禁断言数跟着漂移。
+# 为什么是 2b4ade3：pane cwd 键口径修复（M20261101）的**前一版**，即「pane cwd 权威」生效前的
+#   历史基线；名册正常路径的 `status` 输出必须与它逐字等价（AC5① 的本义）。
+# fail-closed（Issue #78 AC2）：fixture 缺失 / 为空 / 无来源头 ⇒ **断言失败**（不再 `t4_info` 静默跳过），
+#   且基线脚本不可用时也不会假绿（空脚本 ⇒ 输出为空 ⇒ md5 断言必红）。
+# 更新流程（AC4）：有意改动 `status` 输出 ⇒ 同步更新本 fixture 并在 PR 说明（见 tests/README.md「用例 19」）。
+# 防自等价（QA P3-1）：整文件 md5 因 fixture 恒有头注释而永不相等 ⇒ 另比**正文** md5；
+#   正文相等 ⇒ `t4_note baseline-selfequiv` 明示「本轮为自等价」——否则「把当前脚本当 fixture」会让本组退化为恒绿。
+BASELINE_SHA="2b4ade3"
+BASELINE_FIXTURE="$T4_ROOT/tests/t4/fixtures/nao-fleet-baseline-$BASELINE_SHA.sh"
 BASE_SCRIPT="$LAB/base-fleet.sh"
 : > "$BASE_SCRIPT"
-if git -C "$T4_ROOT" rev-parse --verify --quiet "$BASE_REF^{commit}" >/dev/null 2>&1; then
-  git -C "$T4_ROOT" show "$BASE_REF:.agents/scripts/nao-fleet.sh" > "$BASE_SCRIPT" 2>/dev/null \
-    || : > "$BASE_SCRIPT"
+t4_assert_file "$BASELINE_FIXTURE" \
+  "AC5① 固化基线 fixture 存在（tests/t4/fixtures/nao-fleet-baseline-$BASELINE_SHA.sh）"
+if [ -f "$BASELINE_FIXTURE" ]; then
+  cp "$BASELINE_FIXTURE" "$BASE_SCRIPT" 2>/dev/null || : > "$BASE_SCRIPT"
 fi
+t4_assert_ne "0" "$(wc -c < "$BASE_SCRIPT" | tr -d ' ')" \
+  "AC5① 基线脚本非空（实际 $(wc -c < "$BASE_SCRIPT" | tr -d ' ') B ⇒ 空/缺失即失败，不静默跳过）"
+t4_assert_contains "$(head -12 "$BASELINE_FIXTURE" 2>/dev/null)" "source sha: $BASELINE_SHA" \
+  "AC5① fixture 顶部注明来源 sha（$BASELINE_SHA）与理由行"
 BASE_MD5="$(md5sum < "$BASE_SCRIPT" | awk '{print $1}')"
 SUBJ_MD5="$(md5sum < "$SUBJECT" | awk '{print $1}')"
-if [ "$TSX_OK" = "1" ] && [ -s "$BASE_SCRIPT" ] && [ "$BASE_MD5" != "$SUBJ_MD5" ]; then
+# P3-1（QA）自等价护栏：整文件 md5 因 fixture 恒有头注释而**永不相等** ⇒ 改比**正文**（去头）。
+#   fixture 头 = 第 1 行 shebang + 9 行注释 ⇒ 正文从第 11 行起；SUBJECT 正文从第 2 行起（同样去掉 shebang）。
+#   两者相等 ⇒ 说明 fixture 是被测脚本的副本（恒绿同义反复）⇒ 必须 t4_note 明示，不能当零回归证据。
+FIXTURE_HDR_LINES=10
+FIX_BODY_MD5="$(tail -n +$((FIXTURE_HDR_LINES + 1)) "$BASELINE_FIXTURE" 2>/dev/null | md5sum | awk '{print $1}')"
+SUBJ_BODY_MD5="$(tail -n +2 "$SUBJECT" | md5sum | awk '{print $1}')"
+if [ "$TSX_OK" = "1" ]; then
   run_status "$R_MULTI" "$PI_AGENT_DIR" "$BASE_SCRIPT"
-  t4_assert_eq "0" "$RC" "AC5① 基线（$BASE_REF 旧版）status rc=0"
-  t4_assert_eq "$(printf '%s' "$OUT_MIXED" | md5sum | awk '{print $1}')" \
-    "$(printf '%s' "$OUT" | md5sum | awk '{print $1}')" \
-    "AC5① 名册正常路径：新版 status 输出与 $BASE_REF 旧版逐字等价（md5 相同）"
+  t4_assert_eq "0" "$RC" "AC5① 基线（fixture $BASELINE_SHA）status rc=0"
+  # P3-2（QA）：FAIL 文案要能直接指导「怎么办」+ 给出定位差异的行，不只两个 md5
+  AC51_MSG="AC5① 名册正常路径：新版 status 输出与 fixture 基线（$BASELINE_SHA）逐字等价（md5 相同）"
+  AC51_HINT="若为有意改动 \`status\` 输出 ⇒ 更新 tests/t4/fixtures/nao-fleet-baseline-<sha>.sh（用**改动前**那一版脚本、新 \`<sha>\` 文件名）并在 PR 说明；见 tests/README.md「用例 19」"
+  if [ "$(printf '%s' "$OUT_MIXED" | md5sum | awk '{print $1}')" = "$(printf '%s' "$OUT" | md5sum | awk '{print $1}')" ]; then
+    t4_ok "$AC51_MSG"
+  else
+    AC51_BASE_OUT="$T4_CACHE_DIR/case19-ac51-baseline.out"
+    AC51_CUR_OUT="$T4_CACHE_DIR/case19-ac51-current.out"
+    printf '%s\n' "$OUT_MIXED" > "$AC51_BASE_OUT" 2>/dev/null || true
+    printf '%s\n' "$OUT" > "$AC51_CUR_OUT" 2>/dev/null || true
+    t4_bad "$AC51_MSG（期望=$(printf '%s' "$OUT_MIXED" | md5sum | awk '{print $1}') 实际=$(printf '%s' "$OUT" | md5sum | awk '{print $1}')）· $AC51_HINT · 两份输出已落 $AC51_BASE_OUT 与 $AC51_CUR_OUT"
+    printf '%s\n' "--- diff -u（前 20 行；左=基线 fixture / 右=当前被测）---"
+    diff -u "$AC51_BASE_OUT" "$AC51_CUR_OUT" 2>/dev/null | head -20 | sed 's/^/    /'
+  fi
+  t4_info "AC5① 对照口径：fixture 整文件 md5=$BASE_MD5 · 正文 md5=$FIX_BODY_MD5 · 被测整文件 md5=$SUBJ_MD5 · 被测正文 md5=$SUBJ_BODY_MD5"
+  if [ "$FIX_BODY_MD5" = "$SUBJ_BODY_MD5" ]; then
+    t4_note baseline-selfequiv "AC5① 本轮为自等价（护栏触发：fixture 正文 == 被测脚本正文）⇒ 该组对照是恒绿同义反复，不得当零回归证据；更新 fixture 请保留旧基线文件并用新 <sha> 文件名"
+  fi
 else
-  t4_info "AC5① 基线脚本不可取或与当前一致（$BASE_REF · tsx=$TSX_OK）⇒ 逐字等价对照跳过（合并后恒等，符合预期）"
+  t4_degrade "缺 tsx/node（$PI_AGENT_DIR/npm/node_modules/tsx）⇒ AC5① 名册正常路径逐字等价对照降级（fixture 存在/非空/来源头三条断言已跑）"
 fi
 
 # ============================================================ AC3 冲突优先级（pane 优先于名册）

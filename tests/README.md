@@ -27,7 +27,7 @@ npm run test:t4:full:dual                      # 发布前置**双环境** gate�
 - **用例 16 的能力与边界**：只读 **Node 探针**（动态 import pi-subagents 的 `validateIntercomBridgeConfig` / `resolveIntercomBridge` + 桩配置）；`pi-subagents` 缺失（或 `node` 缺失）⇒ 整例 `SKIP`（不 FAIL、不计 DEGRADE）。只断言 **nao 自身契约**（模板存在/含 G1–G3/不含目标占位符 · 安装说明 · 协议小节四条 · 配置 schema 接受与拒绝），**不断言 pi-subagents 自身文案**（防版本脆断）；零 LLM/零网络、不依赖 `pi-intercom`/`tmux`。
 - **用例 17 的能力与边界**：只读 **Node 探针**（动态 import pi-subagents 的 `registerRuntimeAgentEventListener` / `listRuntimeAgentConfigs`，桩 `pi.events` 假总线）；`pi-subagents` 缺失（或 `node` 缺失）⇒ 整例 `SKIP`（不 FAIL、不计 DEGRADE）。断言 **nao 自身契约**（6 条定义字节比对 / 锚点 cross-assert / 命名双向 / schema 与幂等 / 逃生阀 / 三态负控），**不断言 pi-subagents 内部文案**（仅判 ok/throw 与 `unknown fields` 形态，防版本脆断）；零 LLM/零网络、不真跑子代理、不依赖 `pi-intercom`/`tmux`。负控在 `$T4_CACHE_DIR` 夹具副本上做（不触碰仓库工作区）。
 - **「子代理不属舰队会话」口径**：由 pi-subagents 拉起的 `subagent-*` 会话（`subagent-<agent>-<id>` / `subagent-chat-<id>`）**不属**舰队会话身份模型 —— `status` 只对其汇总计数（不列名、不参与在线/判重），`close subagent-*` 显式拒绝（生命周期归 pi-subagents 的 stop/retention）。`subagentfoo` / `mysubagent-x` / 裸 `subagent` 不入此面；`qa-subagent-x` 仍是合法派生名。
-- **用例 19 的能力与夹具纪律**：需真 `tmux`（缺则整例 `SKIP`）；名册 cwd 镜像断言需 `tsx`（缺则 2 条夹具断言 `[DEGRADE]`，pane/会话名路径照跑）。夹具 = **隔离 socket** + 假名册探针 + 夹具根**不得落在任何 git 仓内**（否则 toplevel 锚会把「他仓」拉回本仓、用例假绿；开跑前硬断言）；收尾走机制 `cleanup -S`。变异 harness 只动 `$T4_CACHE_DIR` 的脚本副本（恒真/恒假各一次，子进程跑本用例必须翻红并点名），真仓库 `md5` 与 `git status` 前后一致，原脚本再跑一遍复绿。零网络、确定性（连跑两次同形）。
+- **用例 19 的能力与夹具纪律**：需真 `tmux`（缺则整例 `SKIP`）；名册 cwd 镜像断言需 `tsx`（缺则 2 条夹具断言 `[DEGRADE]`，pane/会话名路径照跑）。夹具 = **隔离 socket** + 假名册探针 + 夹具根**不得落在任何 git 仓内**（否则 toplevel 锚会把「他仓」拉回本仓、用例假绿；开跑前硬断言）；收尾走机制 `cleanup -S`。变异 harness 只动 `$T4_CACHE_DIR` 的脚本副本（恒真/恒假各一次，子进程跑本用例必须翻红并点名），真仓库 `md5` 与 `git status` 前后一致，原脚本再跑一遍复绿。零网络、确定性（连跑两次同形）。**AC5① 零回归基线 = 固化 fixture** `tests/t4/fixtures/nao-fleet-baseline-2b4ade3.sh`（该 sha 的脚本原样副本，不从 `main` 动态取 ⇒ 断言数不随「分支 / 已合并」漂移；fixture 缺失 / 为空 / 无来源头 ⇒ 断言失败，不静默跳过）。**有意改动 `status` 输出时需同步更新该 fixture，并在 PR 说明**。
 - **用例 20/21/22/23/24 的能力与夹具纪律**：都需真 `tmux`（缺则整例 `SKIP`）。夹具 = **隔离 socket**（≠ 生产默认候选）+ `env -u TMUX -u TMUX_PANE` + 桩 `pi`（20：记录 argv 后长驻，**不拉起真 pi 会话**；21：`--version` 固定输出满足 `check` 前提；22：记录 argv 后长驻）+ `PI_CODING_AGENT_DIR` 指向空目录（tsx 缺失 ⇒ 名册离线），因此**不依赖 `tsx`/网络/真会话**；pane 标题由用例直接 `select-pane -T` 注入（不依赖 pi 自身设标题）。夹具根**不得落在任何 git 仓内**（否则锚根判定被污染；开跑前硬断言），收尾走机制 `cleanup -S`。用例 21 的卡夹具（fifo/目录/超大文件）放在**项目侧** `.agents/prompts/`，机制包侧保持干净（避免 `check` 的交叉引用扫描去 grep fifo 而阻塞）。用例 22 的失败分支用 **tmux 桩**（`NAO_T539_FAIL_SPLIT=<名字>` ⇒ 仅该名字的 `split-window` 返回非 0），**不依赖真实窗口过窄**（不可复现）。用例 23/24 的 tmux 桩把 `split-window` 的**末位实参原样落盘**（断言取 fleet 交给 tmux 的原始字节）；用例 24 的负控是「改回全局 `PROMPT` 回落」（副本两处 sed）⇒ 子进程跑本用例必须翻红并点名 AC1。
 - **DEGRADE 语义**：环境缺能力但**其余断言继续跑**（不同于 `t4_skip` 会终止用例）；默认模式豁免、`T4_REQUIRE_FULL=1` 时计分。
 - **计数可见**：汇总尾部打印 `SKIP=n · DEGRADE=m · NOTE=k` + **NOTE 白名单命中明细**（`用例号:tag` 列表，逐条可解释）；「绿 + N SKIP/DEGRADE」不得表述为「全量通过」。
@@ -74,11 +74,12 @@ npm run test:t4:full:dual                      # 发布前置**双环境** gate�
 
 NOTE = 用例产出的**事实性说明**（合法的能力/前提说明，不是通过证据）。为避免「能力缺失时用 NOTE 跳过断言而不阻断」，NOTE 改为**白名单制**并分轴判定：
 
-- **签名**：`t4_note <tag> <msg>`；`tag` 必须是下列三个之一（枚举**单点定义**于 `tests/t4/lib.sh` 的 `T4_NOTE_TAGS`）。
-- **合法 tag（3 个）**：
+- **签名**：`t4_note <tag> <msg>`；`tag` 必须是下列四个之一（枚举**单点定义**于 `tests/t4/lib.sh` 的 `T4_NOTE_TAGS`）。
+- **合法 tag（4 个）**：
   - `static-contract` —— 用**静态断言**替代动态证据（如真 `pi` 加载需凭据，改判 manifest/文档契约）。
   - `pin-fallback` —— pin 版本尚未发布，改用已发布 `latest` 只做**布局**对照（内容差异不计）。
   - `migrate-fallback` —— CLI 未提供 `migrate`，改用 `init` 的自动迁移路径。
+  - `baseline-selfequiv` —— 用例 19 AC5① 检出「fixture 正文 == 被测脚本正文」：本轮逐字等价对照是**自等价（恒绿同义反复）**，不得当零回归证据；不能用 `t4_degrade`（不是能力缺失）也不能 `t4_skip`（其余断言照跑），故用 NOTE 如实标注。
 - **判定单点**：合法性只在 `run.sh` 汇总层判定（`t4_note` 只打印、从不 `exit`）。非 full ⇒ 只计数 + 未登记 tag 打 `WARN`（不阻断，日常 `npm test` 不因旧式调用变红）；`T4_REQUIRE_FULL=1` ⇒ **未登记 tag 或无 tag ⇒ `RESULT: FAIL` + rc≠0**，输出点名 `用例号:tag`。
 - **旧式调用**（`t4_note "msg"`，无 tag）：打印为 `  [NOTE] (untagged) msg`；非 full 仍跑（仅警告），full 下 FAIL —— 兼容旧分支但不放纵。
 - **新增 tag 的流程**：① 在 `tests/t4/lib.sh` 的 `T4_NOTE_TAGS` 加一项 ② 在本节写清「什么情况下允许、为什么不能改用 `t4_degrade`/`t4_skip`」③ 提交信息说明新增理由。两处缺一不可（`run.sh` 复用常量，不会漏判）。
