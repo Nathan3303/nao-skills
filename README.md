@@ -1,12 +1,25 @@
-# nao-skills
+<h1 align="center">nao-skills</h1>
 
-> 给你的 pi 配一支「开发小队」：你提需求，它自己找人干活、自己验收交付。
+<p align="center"><b>给你的 pi 配一支「开发小队」——你提需求，它自己找人干活、自己验收交付。</b></p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@nathan33/nao-skill"><img src="https://img.shields.io/npm/v/@nathan33/nao-skill?label=npm&color=cb3837&logo=npm&logoColor=white" alt="npm version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Nathan3303/nao-skills?label=license&color=3da639" alt="license: MIT"></a>
+  <img src="https://img.shields.io/badge/node-%E2%89%A518-3c873a?logo=nodedotjs&logoColor=white" alt="node >= 18">
+  <a href="https://pi.dev"><img src="https://img.shields.io/badge/host-pi%20only-6e56cf" alt="host: pi only"></a>
+</p>
+
+<p align="center"><sub>推荐配合模型 <b>deepseek-v4.1-flash</b> · 基于 <a href="https://pi.dev">pi</a> · Made by <a href="https://github.com/nathan">Nathan Lee</a></sub></p>
+
+[前置环境](#前置环境) · [三步装好](#三步装好) · [第一次跑起来](#第一次跑起来) · [六个角色](#六个角色) · [常见问题](#常见问题) · [想深入](#想深入)
 
 nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，你的项目里会有 6 个分工明确的 AI 会话——产品经理负责拆需求、派活、验收；前端、后端、测试各自干活；工程基座管构建发布与治理。你只做两件事：**回答问题**、**点确认**。
 
-基于 [pi](https://pi.dev)。Made by [Nathan Lee](https://github.com/nathan)。
+> **推荐配合模型：`deepseek-v4.1-flash`。** 舰队是 6 个常驻会话 + 长链路交接（派活 → 回执 → 验收），这个模型在长上下文稳定性和单轮成本上实测最省心；换成别的模型也能跑，只是纪律遵守与回执质量会有差异。
 
-## 前置环境（不满足就装不起来）
+## 前置环境
+
+> **不满足就装不起来。**
 
 **nao 只支持 pi。** 不为其他编程 Agent（Claude Code / Codex / Cursor 等）做适配，也不承诺在那类工具里能用——多会话派活、回执、回收整套机制都建立在 pi 之上。
 
@@ -35,7 +48,7 @@ pi --version && tmux -V && node -v && git --version
 | 需求没问清楚就开写，写完发现不对 | PM 先追问、写清 PRD 和目标，你点头才开工 |
 | 干完不知道算不算干完 | 每个任务必须「回执」并按清单自查，PM 逐条验收才归档 |
 
-## 三步装好（约 1 分钟）
+## 三步装好
 
 1. **装好上面的前置**（pi / tmux / Node）。
 
