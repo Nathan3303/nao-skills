@@ -1125,9 +1125,14 @@ build_system_prompt() {
 }
 
 spawn_one() {
-  local name="$1" repo="$2" model="$3" card_override="${4:-}" role_id="${5:-}" card prompt_file inner
+  local name="$1" repo="$2" model="$3" card_override="${4:-}" role_id="${5:-}" card_name="${6:-}" card prompt_file inner
   # T537：卡路径可由调用方显式给出（下游仓卡）；未给出时仍走清单（PROMPTS_DIR/<card>）逐字不变
-  if [[ -n "$card_override" ]]; then card="$card_override"; else card="$PROMPTS_DIR/${PROMPT:-}"; fi
+  # #75：**两条取卡通道分两个参数，禁混用** ——
+  #   ④ card_override = `--card` 的**完整路径**（下游卡，已由 resolve_card 限定在 <repo>/.agents/prompts/ 内）
+  #   ⑥ card_name     = 清单**相对名**（roles.yaml 的 card 文件名，由 cmd_ensure **按目标**下发）
+  #   旧写法在无 override 时回落全局 `$PROMPT`（resolve 阶段每个目标覆写一次 ⇒ 最后一个胜出），
+  #   于是多目标 `ensure arch rd-fe` 的**每个** pane 都拿到最后一个目标的卡（身份级错误）。
+  if [[ -n "$card_override" ]]; then card="$card_override"; else card="$PROMPTS_DIR/${card_name:-}"; fi
   [[ -f "$card" ]] || die "角色卡不存在: $card"
   [[ -d "$repo" ]] || die "工作区不存在: $repo"
 
@@ -2056,7 +2061,7 @@ cmd_cleanup() {
 cmd_ensure() {
   local force="$1" model="$2" task="$3"
   local i spec role repo key seen k card_arg card_as disp role_id
-  local -a cg_done=() t_names=() t_repos=() t_cards=() t_roles=()
+  local -a cg_done=() t_names=() t_repos=() t_cards=() t_roles=() t_prompts=()
   [[ ${#TARGETS[@]} -gt 0 ]] || die "ensure 需要至少一个角色，如: nao-fleet.sh ensure arch rd-fe rd-infra"
   # ==== 相位 1：全量解析 + 校验（BR11 两相执行）====
   #   卡、role、BR9、--as 全过才进相位 2；任一项失败都在**建 pane 之前** die ⇒ BR6「零副作用」可达
@@ -2088,11 +2093,15 @@ cmd_ensure() {
         disp="$CARD_ROLE"
       fi
       t_names+=("$disp"); t_repos+=("$CARD_REPO"); t_cards+=("$CARD_PATH"); t_roles+=("${CARD_ROLE:-}")
+      # #75：card 目标只走 ④ 完整路径；⑥ 留空（两条通道互斥，override 不得被当相对名）
+      t_prompts+=("")
     else
       [[ -z "$card_as" ]] || die "--as 只能用于同一目标的 --card 之后（如 ensure --card <卡> --as <会话名>）"
       resolve_role "$role"
       [[ -n "$repo" ]] || repo="${ROLE_WS[$NAME]:-$PWD}"
       t_names+=("$NAME"); t_repos+=("$repo"); t_cards+=(""); t_roles+=("$NAME")
+      # #75：常驻卡名**当场**取证（resolve_role 每目标覆写全局 PROMPT ⇒ 只有此刻的值属于本目标）
+      t_prompts+=("$PROMPT")
     fi
   done
   # ==== 相位 2：拉起（宿主窗口解析、判重、codegraph 状态、spawn 逐目标不变）====
@@ -2113,10 +2122,11 @@ cmd_ensure() {
       SPAWN_SKIP=$((SPAWN_SKIP + 1))   # T539/BR3：跳过也计入摘要（且不加成功行）
       continue
     fi
+    # #75：卡按目标下发（④ 完整路径 / ⑥ 相对名；两条通道互不混用），不再依赖全局 PROMPT
     if [[ -n "${t_cards[$i]}" ]]; then
-      spawn_one "$disp" "$repo" "$model" "${t_cards[$i]}" "${t_roles[$i]:-}"
+      spawn_one "$disp" "$repo" "$model" "${t_cards[$i]}" "${t_roles[$i]:-}" ""
     else
-      spawn_one "$disp" "$repo" "$model" "" "${t_roles[$i]:-}"
+      spawn_one "$disp" "$repo" "$model" "" "${t_roles[$i]:-}" "${t_prompts[$i]:-}"
     fi
   done
   # T536/BR3/AC4 + T539/BR3：**恰一行**摘要，三类计数（成功/跳过/失败）；三类全 0 不打印（与现状一致）。
