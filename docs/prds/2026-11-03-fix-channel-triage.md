@@ -20,7 +20,7 @@
 **范围（4 个机制文件 + 1 台账）**
 
 - `.agents/skills/github-flow.md`：新增八阶段之前的「阶段 0 受理（被动触发）」；分支命名补 `fix/<issue-id>-<slug>`；补「通道分流判据」；补「输入侧 Issue 与反双源边界」。
-- `.agents/prompts/product-manager.md`：§二 补 `fix` 通道豁免（3 字段替代 9 模块）；§十三 把 Issue 职责从「输出物」扩为「输入 + 摘要」双职并补 triage 三问；**bump `version` + `updated`**（31 → 32）。
+- `.agents/prompts/product-manager.md`：§二 补 `fix` 通道豁免（3 字段替代 9 模块）；§十三 把 Issue 职责从「输出物」扩为「输入 + 摘要」双职并补 triage 三问；**bump `version` + `updated`**（31 → 33：v32 首轮落 fix 豁免与 Issue 双职，v33 为 QA 复核整改 D4「自审留痕唯二载体」二次 bump）。
 - `.agents/checklists/pm.md`：`fix` 通道**深度裁剪**（核 5–8 项，不删条目；其余标注「仅 feat」）。
 - `.agents/templates/github/issue_template_bug.md.example`、`issue_template_feature.md.example`：两份新模板（与现有 PR 模板同一分发方式：PM 复制到项目 `.github/ISSUE_TEMPLATE/`）。
 - `docs/tasks-state.md`：登记本批（随本 PR）。
@@ -65,7 +65,7 @@
 - **AC4 双源边界无冲突**：`github-flow.md` 明确「输入侧 Issue 正文留平台 + 摘录回链」与「输出侧 Issue 不抄正文」并存，读者能按一句判据区分二者。
 - **AC5 模板可用**：两份 example 存在，`bug_report` 含 现象 / 期望 vs 实际 / 复现步骤 / 影响版本 / 来源；`feature_request` 含 场景 / 期望 / 价值；顶部注释给出安装路径 `.github/ISSUE_TEMPLATE/`。
 - **AC6 清单深度裁剪**：`checklists/pm.md` 有 `fix` 通道小节，核对项 **5–8 条**，其余条目标注「仅 feat」；**清单总条数不减少**（只在既有条目加通道标注 / 新增小节）。
-- **AC7 门禁与版本纪律**：`bash .agents/scripts/nao-fleet.sh check` rc=0 · `npm test` rc=0 · PM 卡 `version` 31 → 32 且 `updated` 为 2026-11-03 · 广播记录（`card product-manager v32`）落台账。
+- **AC7 门禁与版本纪律**：`bash .agents/scripts/nao-fleet.sh check` rc=0 · `npm test` rc=0 · PM 卡 `version` **31 → 33**（v32 首轮 / v33 QA 整改 D4 二次 bump）且 `updated` 为 2026-11-03 · 广播记录（`card product-manager v32`、`v33`）落台账。
 
 ## 八、上线闭环
 
