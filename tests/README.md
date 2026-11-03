@@ -74,11 +74,12 @@ npm run test:t4:full:dual                      # 发布前置**双环境** gate�
 
 NOTE = 用例产出的**事实性说明**（合法的能力/前提说明，不是通过证据）。为避免「能力缺失时用 NOTE 跳过断言而不阻断」，NOTE 改为**白名单制**并分轴判定：
 
-- **签名**：`t4_note <tag> <msg>`；`tag` 必须是下列三个之一（枚举**单点定义**于 `tests/t4/lib.sh` 的 `T4_NOTE_TAGS`）。
-- **合法 tag（3 个）**：
+- **签名**：`t4_note <tag> <msg>`；`tag` 必须是下列四个之一（枚举**单点定义**于 `tests/t4/lib.sh` 的 `T4_NOTE_TAGS`）。
+- **合法 tag（4 个）**：
   - `static-contract` —— 用**静态断言**替代动态证据（如真 `pi` 加载需凭据，改判 manifest/文档契约）。
   - `pin-fallback` —— pin 版本尚未发布，改用已发布 `latest` 只做**布局**对照（内容差异不计）。
   - `migrate-fallback` —— CLI 未提供 `migrate`，改用 `init` 的自动迁移路径。
+  - `baseline-selfequiv` —— 用例 19 AC5① 检出「fixture 正文 == 被测脚本正文」：本轮逐字等价对照是**自等价（恒绿同义反复）**，不得当零回归证据；不能用 `t4_degrade`（不是能力缺失）也不能 `t4_skip`（其余断言照跑），故用 NOTE 如实标注。
 - **判定单点**：合法性只在 `run.sh` 汇总层判定（`t4_note` 只打印、从不 `exit`）。非 full ⇒ 只计数 + 未登记 tag 打 `WARN`（不阻断，日常 `npm test` 不因旧式调用变红）；`T4_REQUIRE_FULL=1` ⇒ **未登记 tag 或无 tag ⇒ `RESULT: FAIL` + rc≠0**，输出点名 `用例号:tag`。
 - **旧式调用**（`t4_note "msg"`，无 tag）：打印为 `  [NOTE] (untagged) msg`；非 full 仍跑（仅警告），full 下 FAIL —— 兼容旧分支但不放纵。
 - **新增 tag 的流程**：① 在 `tests/t4/lib.sh` 的 `T4_NOTE_TAGS` 加一项 ② 在本节写清「什么情况下允许、为什么不能改用 `t4_degrade`/`t4_skip`」③ 提交信息说明新增理由。两处缺一不可（`run.sh` 复用常量，不会漏判）。

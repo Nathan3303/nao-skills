@@ -80,7 +80,8 @@ t4_bad()  { T4_FAIL=$((T4_FAIL + 1)); printf '  [FAIL] %s\n' "$*"; }
 # NOTE 白名单（T531 · BR1）：tag 枚举的**单点定义** —— run.sh 复用本数组做合法性判定。
 # 新增 tag 必须同时改这里 + 在 tests/README.md「NOTE 白名单」写明理由（缺一不可）。
 # 语义：static-contract=静态替代证据 · pin-fallback=pin 未发布改对照 latest · migrate-fallback=缺 migrate 走 init
-T4_NOTE_TAGS=(static-contract pin-fallback migrate-fallback)
+#        baseline-selfequiv=AC5① 基线 fixture 正文 == 被测脚本正文（本轮对照为自等价，非零回归证据）
+T4_NOTE_TAGS=(static-contract pin-fallback migrate-fallback baseline-selfequiv)
 
 # tag 是否登记在白名单（判定唯一入口；run.sh 聚合层调用）
 t4_note_tag_registered() {
