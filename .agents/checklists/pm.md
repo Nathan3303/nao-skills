@@ -65,7 +65,8 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 
 ## 交付检查清单（完整 44 项 · 仅 feat）
 
-> 通道标注：本节 44 项**仅 `feat` 通道**核对（逐项标 `【仅 feat】`）；`fix` 通道只核下一节 7 条。分流判据（能写出「期望 vs 实际」且可复现）唯一出处：@.agents/skills/github-flow.md。
+> 通道标注：本节 44 项**仅 `feat` 通道**核对（逐项标 `【仅 feat】`）；`fix` 通道只核下一节 8 条。分流判据（能写出「期望 vs 实际」且可复现）唯一出处：@.agents/skills/github-flow.md。
+> **例外（两通道中立，非 feat 专属）**：文档 / 台账随任务 PR、工作期不落 main —— 见下节第 8 条。
 
 - [ ] 【仅 feat】目标/边界/验收三件事齐备
 - [ ] 【仅 feat】证据 + 5 Whys 已产出
@@ -112,17 +113,18 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 【仅 feat】**计数类数字必须自证一条命令** —— 用例数 / 断言数 / `files=` / 行数的**取数命令单源见 `tests/README.md`「取数命令四条」**（本清单**不复写命令**；PM / QA / RD 三侧同源）；回执须同时给 **命令 + 输出 + HEAD sha + 静默工作区状态**（三件套见 @.agents/common/output-format.md「回执硬性」第 3 条）；**回执与命令输出不一致时以命令为准**，并当场订正回执/文档（来源：L1 复盘 `docs/reports/2026-11-01-T536-retro.md`）
 - [ ] 【仅 feat】通过上面全部红线
 
-## `fix` 通道核对（完整 7 项 · 仅 fix）
+## `fix` 通道核对（完整 8 项 · 仅 fix）
 
-> 判据：能写出「期望行为 vs 实际行为」且可复现 → `fix`；写不出 / 不可复现 / 改变用户可见行为 ⇒ 升 `feat`（走上方 44 项）。本节只核 7 条，**不减门禁**（`check` + `npm test` 全量 rc=0 照旧）。
+> 判据：能写出「期望行为 vs 实际行为」且可复现 → `fix`，否则升 `feat`（判据唯一出处：@.agents/skills/github-flow.md「通道分流判据」，本处不复制条件）。本节只核 8 条，**不减门禁**（`check` + `npm test` 全量 rc=0 照旧；无测试设施的降级见第 3 条）。
 
 - [ ] 分流成立：3 字段齐备（现象 / 复现 / 回退），「期望 vs 实际」可复现；不成立 ⇒ 当场升 `feat` 而非降格开工
-- [ ] 分支与范围：`fix/<issue-id>-<slug>`（无 Issue 降级 `nao/<批次-slug>`；线上问题从受影响版本 tag 切出）；diff 只碰修复路径，无夹带重构 / 格式化
-- [ ] 先红后绿：可失败用例先复现失败（回执贴命令 + 输出）→ 修复后全量 `bash .agents/scripts/nao-fleet.sh check` 与 `npm test` rc=0
+- [ ] 分支与范围：`fix/<issue-id>-<slug>`（无 Issue 降级 `nao/<批次-slug>`；线上问题从受影响版本 tag 切出）；diff 只碰修复路径，无夹带重构 / 格式化；**PM 按 `git diff --name-only` 核：文件集 ⊆ 修复点 + 其测试 + 台账，超出即打回；>3 文件须在 PR 内写书面理由**
+- [ ] 先红后绿：可失败用例先复现失败（回执贴命令 + 输出）→ 修复后全量 `bash .agents/scripts/nao-fleet.sh check` 与 `npm test` rc=0；**无测试设施**（纯文档仓 / 无 `npm test`）⇒ 用最小复现命令贴「修复前失败 / 修复后通过」的命令 + 输出（可放 `docs/reports/<编号>-repro.*` 或 Issue 内联）；项目 `AGENTS.md` 指定了门禁命令则**以它为准**，未指定则 `check` rc=0
 - [ ] 回退可执行：`git revert <sha>` 可干净回退；数据 / 契约类在 Issue 上 3 行写影响面
-- [ ] 复核留痕：非作者复核（QA / 另一会话）；单人项目允许「作者自审 + 写明理由」留痕
+- [ ] 复核留痕：非作者复核（QA / 另一会话）；单人项目允许**作者自审**，但**唯二载体**才算留痕 —— PR 描述「复核」一节 + `docs/tasks-state.md` 条目一行（理由 + 日期 + 自审声明），缺任一不算留痕
 - [ ] 不可逆动作仍走 `ask-me`（合并 main / 打 tag / 发 npm / 破坏性契约 / 删文件或数据）——`fix` 不豁免
 - [ ] 回执 `lite` 含门禁精确数字 + 遗留三出口；`docs/tasks-state.md` 已同步；合并前已核「分支无未推送提交」（`git rev-list --count origin/<branch>..HEAD` = 0 · `git status --porcelain` 空）
+- [ ] 文档 / 台账随任务 PR，工作期无 `wip()` 落 main —— **两通道同规**
 
 ## 会话回收 / 收窗核对（验收通过后 / 手工关窗前）
 

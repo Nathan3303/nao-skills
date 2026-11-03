@@ -1,5 +1,5 @@
 <!-- 由 PM 复制为项目 .github/ISSUE_TEMPLATE/feature_request.md（安装路径 .github/ISSUE_TEMPLATE/，见 @.agents/skills/github-flow.md） -->
-<!-- 用途：需求输入侧模板。写不出「期望 vs 实际」的对比、或要新增能力 / 改变用户可见行为 ⇒ 走 feat 通道（全量 PRD）；若是「本该如此却坏了」请改用 bug 模板 -->
+<!-- 用途：需求输入侧模板。写不出「期望 vs 实际」的对比 ⇒ 走 feat 通道（分流判据唯一出处 @.agents/skills/github-flow.md「通道分流判据」）；若是「本该如此却坏了」请改用 bug 模板 -->
 ## 场景
 
 <!-- 谁、在什么情况下、为了什么要做这件事：一句话画像 + 触发条件 -->
