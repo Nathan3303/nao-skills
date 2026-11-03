@@ -118,7 +118,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 > 判据：能写出「期望行为 vs 实际行为」且可复现 → `fix`，否则升 `feat`（判据唯一出处：@.agents/skills/github-flow.md「通道分流判据」，本处不复制条件）。本节只核 8 条，**不减门禁**（`check` + `npm test` 全量 rc=0 照旧；无测试设施的降级见第 3 条）。
 
 - [ ] 分流成立：3 字段齐备（现象 / 复现 / 回退），「期望 vs 实际」可复现；不成立 ⇒ 当场升 `feat` 而非降格开工
-- [ ] 分支与范围：`fix/<issue-id>-<slug>`（无 Issue 降级 `nao/<批次-slug>`；线上问题从受影响版本 tag 切出）；diff 只碰修复路径，无夹带重构 / 格式化；**PM 按 `git diff --name-only` 核：文件集 ⊆ 修复点 + 其测试 + 台账，超出即打回；>3 文件须在 PR 内写书面理由（**降级无 PR ⇒ 落 `docs/reports/<编号>-review.md` 或 `tasks-state` 该任务条目相邻行**）**
+- [ ] 分支与范围：`fix/<issue-id>-<slug>`（无 Issue 降级 `nao/<批次-slug>`；线上问题从受影响版本 tag 切出）；diff 只碰修复路径，无夹带重构 / 格式化；**PM 按 `git diff --name-only` 核：文件集 ⊆ 修复点 + 其测试 + 台账，超出即打回；>3 文件须在 PR 内写书面理由（降级无 PR ⇒ 落 `docs/reports/<编号>-review.md` 或 `tasks-state` 该任务条目相邻行）**
 - [ ] 先红后绿：可失败用例先复现失败（回执贴命令 + 输出）→ 修复后全量 `bash .agents/scripts/nao-fleet.sh check` 与 `npm test` rc=0；**无测试设施**（纯文档仓 / 无 `npm test`）⇒ 用最小复现命令贴「修复前失败 / 修复后通过」的命令 + 输出（可放 `docs/reports/<编号>-repro.*` 或 Issue 内联）；项目 `AGENTS.md` 指定了门禁命令则**以它为准**，未指定则 `check` rc=0
 - [ ] 回退可执行：`git revert <sha>` 可干净回退；数据 / 契约类在 Issue 上 3 行写影响面
 - [ ] 复核留痕：非作者复核（QA / 另一会话）；单人项目允许**作者自审**，但**唯二载体**才算留痕 —— PR 描述「复核」一节 + `docs/tasks-state.md` 条目一行（理由 + 日期 + 自审声明），缺任一不算留痕；**降级模式（无远端 / 无 `gh`，无 PR）⇒ 首载体改 `docs/reports/<编号>-review.md`（或 `tasks-state` 该条目相邻行），内容与判据不变**
