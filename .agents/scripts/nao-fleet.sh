@@ -131,7 +131,7 @@ CODEGRAPH_PKG="@sean_pedersen/pi-codegraph"
 NAO_UPDATE_MSG='【nao 机制包版本自检 · ensure pm 注入 · 仅提示，不自动升级】
 这条自检是本回合唯一额外动作；一行汇报后立即回到用户原来的消息，不要展开其它话题。
 1) 本地 pin：读 .pi/settings.json 里 @nathan33/nao-skill 的版本（X）；本仓若无该文件或无此 pin ⇒ 直接走 4 的情形 ④（不要说成必然有 pin）。
-2) 远端最新版：timeout 5 npm view @nathan33/nao-skill version（硬性 5s 超时；超时/报错 ⇒ 情形 ③）。
+2) 远端最新版：npm view @nathan33/nao-skill version --fetch-timeout=5000（内置 5s 超时；不要用外部 timeout 命令，macOS 原生没有；超时/报错 ⇒ 情形 ③）。
 3) 仅当有新版（Y 大于 X）才取要点：gh release view v<Y>（要点压成不超过两句，不要贴全文）；无 gh 或取不到 ⇒ 情形 ⑤。
 4) 只输出以下**恰好一行**（按 ①–⑤ 顺序命中即止，不解释、不追加）：
    ① 有新版：当前 X → 可升 Y（要点）。要升吗？
@@ -140,7 +140,7 @@ NAO_UPDATE_MSG='【nao 机制包版本自检 · ensure pm 注入 · 仅提示，
    ④ 未检测到下游 pin：版本检查：未检测到下游 pin（本仓为机制源），跳过。
    ⑤ 无 gh 只报版本号：版本检查：当前 X → 可升 Y（要点取不到，见 https://github.com/Nathan3303/nao-skills/releases）。要升吗？
 5) 硬约束：检查阶段只读；**未获我同意前不要改任何文件、不要升级**（不改 .pi/settings.json、不跑 pi install / pi update）。
-6) 只有我明确同意后才按序执行：pi install -l npm:@nathan33/nao-skill@<Y> → pi update --extensions → 提醒我「本轮会话仍是旧角色卡，建议重开」。
+6) 只有我明确同意后才按序执行：pi install -l npm:@nathan33/nao-skill@<Y>（若提示安装脚本授权，停下来交给我确认，不要自行放行）→ pi update --extensions → 提醒我「本轮会话仍是旧角色卡，建议重开」。
 7) 我未表态或说稍后：原样待命，不要重试、不要轮询、不要后台检查。'
 
 # R1/R6：开关判定（默认开；仅显式 0/false 关闭）

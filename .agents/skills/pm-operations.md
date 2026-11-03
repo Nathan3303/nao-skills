@@ -102,7 +102,7 @@ PM 是舰队唯一常驻长寿会话：上下文过长时丢的是**纪律**（�
 **检查顺序（只读）**
 
 1. 本地 pin：读 `.pi/settings.json` 里 `@nathan33/nao-skill` 的版本 X；无该文件/无该 pin ⇒ 走输出 ④。
-2. 远端：`timeout 5 npm view @nathan33/nao-skill version`（硬性 5s）；超时/报错 ⇒ 走输出 ③。
+2. 远端：`npm view @nathan33/nao-skill version --fetch-timeout=5000`（内置 5s 超时；**不要**用外部 `timeout` 命令——macOS 原生无该命令，rc=127 会被误判成「离线或超时」）；超时/报错 ⇒ 走输出 ③。
 3. 仅当 Y > X 才取要点：`gh release view v<Y>`，**压成不超过两句**；无 `gh` 或取不到 ⇒ 走输出 ⑤。
 
 **输出（恰好一行，按序命中即止）**
@@ -113,11 +113,11 @@ PM 是舰队唯一常驻长寿会话：上下文过长时丢的是**纪律**（�
 - ④ 未检测到下游 pin：`版本检查：未检测到下游 pin（本仓为机制源），跳过。`
 - ⑤ 无 `gh`：`版本检查：当前 X → 可升 Y（要点取不到，见 https://github.com/Nathan3303/nao-skills/releases）。要升吗？`
 
-**零改动保证**：检查阶段只读（`.pi/settings.json` 只读、`npm view` / `gh release view` 均为查询）；**未获用户同意前不改任何文件、不升级**（不改 pin、不跑 `pi install` / `pi update`）。
+**零改动保证**：检查阶段只读（`.pi/settings.json` 只读、`npm view` / `gh release view` 均为查询）；**「未获我同意前不要改任何文件、不要升级」**（逐字引自注入常量；不改 pin、不跑 `pi install` / `pi update`）。
 
 **用户同意后的动作序列**（升级属不可逆动作，按 ask-me 口径确认后再执行）
 
-1. `pi install -l npm:@nathan33/nao-skill@<Y>`（更新项目 `.pi/settings.json` 的 pin）；
+1. `pi install -l npm:@nathan33/nao-skill@<Y>`（更新项目 `.pi/settings.json` 的 pin；**若提示安装脚本授权 ⇒ 停下来交给用户确认，不自行放行**）；
 2. `pi update --extensions`；
 3. 提醒用户「本轮会话仍是旧角色卡，建议重开」（`ensure --force pm`）。
 

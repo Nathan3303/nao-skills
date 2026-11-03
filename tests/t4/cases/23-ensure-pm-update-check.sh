@@ -172,6 +172,10 @@ check_msg "未获我同意前不要改任何文件、不要升级" "⑤硬约束
 check_msg "pi install -l npm:@nathan33/nao-skill@<Y>" "⑥同意后动作 ①"
 check_msg "pi update --extensions" "⑥同意后动作 ②"
 check_msg "建议重开" "⑥本轮会话仍是旧角色卡提醒"
+check_msg "--fetch-timeout=5000" "① 5s 超时可移植（npm 内置参数，不用外部 timeout）"
+t4_assert_eq "0" "$(grep -cF -- 'timeout 5 npm view' <<< "$MSG" || true)" \
+  "D1 常量不再依赖外部 timeout 命令（macOS 原生无该命令）"
+check_msg "若提示安装脚本授权" "⑥授权提示须停下交用户确认（不自行放行）"
 
 # ============================================================ AC7 零网络：常量块外不得出现网络命令
 OUTSIDE="$LAB/fleet-outside-msg.sh"
