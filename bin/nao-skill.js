@@ -14,7 +14,7 @@
  *   - 已有 AGENTS.md      → 提示按 PM 卡 §七 / skills/pm-operations.md §四 合并规则手动追加，不自动覆盖
  *
  * 使用（安装后）
- *   bash .agents/scripts/nao-fleet.sh check / ensure arch rd-fe rd-be qa rd-infra
+ *   bash .agents/scripts/nao-fleet.sh check / ensure arch uiux rd-fe rd-be qa rd-infra
  *   角色卡经 fleet 拉起时 --append-system-prompt 注入；checklists 按需读取
  */
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -195,7 +195,7 @@ function install(target, force, verbose) {
   log('✔ 安装完成。下一步：');
   log('  bash .agents/scripts/nao-fleet.sh check                       # 体检');
   log('  bash .agents/scripts/nao-fleet.sh status                      # 在线状态');
-  log('  bash .agents/scripts/nao-fleet.sh ensure arch rd-fe rd-be qa rd-infra  # 拉起舰队');
+  log('  bash .agents/scripts/nao-fleet.sh ensure arch uiux rd-fe rd-be qa rd-infra  # 拉起舰队');
   log('  角色卡：.agents/prompts/ · 技能：.agents/skills/ · 交付清单：.agents/checklists/');
 }
 
@@ -377,7 +377,7 @@ function init(target, force, verbose, shimMode = 'shim', decision = null) {
   log('');
   log('✔ 初始化完成（项目内仅 shim，机制在 .pi/npm 包内）。下一步：');
   log('  bash .agents/scripts/nao-fleet.sh check     # 体检');
-  log('  bash .agents/scripts/nao-fleet.sh ensure pm arch-designer rd-fe rd-be qa rd-infra');
+  log('  bash .agents/scripts/nao-fleet.sh ensure pm arch-designer uiux-designer rd-fe rd-be qa rd-infra');
 }
 
 // ---------------------------------------------------------------------------
@@ -570,7 +570,7 @@ shim 判定式（migrate 默认；init 默认装）:
   nao-skill install [dir] [--force]   复制全套 .agents/ 到项目（--plugins 顺带装插件）
   nao-skill update [dir]              源优先覆盖升级旧版全套安装
 
-安装后: bash .agents/scripts/nao-fleet.sh check / ensure pm arch-designer rd-fe rd-be qa rd-infra
+安装后: bash .agents/scripts/nao-fleet.sh check / ensure pm arch-designer uiux-designer rd-fe rd-be qa rd-infra
 说明: 新形态项目内只有 shim；机制单一事实来源在 npm 包内（pi install --local 物化到 .pi/npm）。
 `);
 }

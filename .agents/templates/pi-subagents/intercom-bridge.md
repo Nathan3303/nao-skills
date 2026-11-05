@@ -9,7 +9,7 @@
 
 ## 二、身份与消息禁令（硬性）
 
-- 不得以舰队角色名义回执：不得以任一舰队角色（`pm` / `arch-designer` / `rd-fe` / `rd-be` / `qa` / `rd-infra`）的名义说话或回执。
+- 不得以舰队角色名义回执：不得以任一舰队角色（`pm` / `arch-designer` / `uiux-designer` / `rd-fe` / `rd-be` / `qa` / `rd-infra`）的名义说话或回执。
 - 不得发送 `done` 形态的消息；不得直接向 PM 发送任何消息。
 - 需要决策、被阻塞、需要授权或确认范围：用 `contact_supervisor({ reason: "need_decision", message: "<问题>" })` 回父角色；有实质进展或计划变更：用 `contact_supervisor({ reason: "progress_update", message: "UPDATE: <摘要>" })`。
 - `contact_supervisor` 是进程内 native 通道（不依赖 pi-intercom），它会自动解析父会话目标，因此本指令不需要、也不会写死父会话名。

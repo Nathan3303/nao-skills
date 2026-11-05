@@ -7,10 +7,10 @@
 
 缺任何一项都跑不起来，且不会「降级偷偷跑」——`check` / `ensure` 会直接报错退出。
 
-> **模型可选，但有推荐**：舰队推荐配合 **`deepseek-v4.1-flash`**（6 个常驻会话 + 长链路交接，长上下文稳定性与单轮成本更省心）。这不是硬依赖——换成别的模型也能跑，差异在纪律遵守与回执质量。
+> **模型可选，但有推荐**：舰队推荐配合 **`deepseek-v4.1-flash`**（7 个常驻会话 + 长链路交接，长上下文稳定性与单轮成本更省心）。这不是硬依赖——换成别的模型也能跑，差异在纪律遵守与回执质量。
 
 - **pi（≥ 1.4.0）**：唯一的运行宿主。本机制**只支持 pi**，不为其他编程 Agent（Claude Code / Codex / Cursor 等）提供适配或支持承诺。
-- **tmux（任意版本）**：舰队的 6 个会话都作为 tmux pane 在你的窗口里分屏拉起。
+- **tmux（任意版本）**：舰队的 7 个会话都作为 tmux pane 在你的窗口里分屏拉起。
 - **Node.js（≥ 18）**：`nao-skill` CLI 与 `nao-fleet.sh` 的转发入口都是 Node 脚本。
 - **git**：任务分支、提交、PR 全靠它；装了 **GitHub CLI（`gh`）** 则额外支持自动开 Issue / PR / Release，没有 `gh` 也能跑，只是这些步骤降级为本地操作。
 
@@ -86,7 +86,7 @@ cd <repo> && codegraph init                # 建索引（不带 -i；该 flag �
 
 ## 进阶用法：按需角色会话（`--card`）
 
-常驻的 6 个角色不用改清单，就能再加一个**按需角色**（Code Review、数据核对之类）：把卡放进你项目仓 `.agents/prompts/<名字>.md`，一条命令拉起。它和常驻角色一样被管起来——分屏托管、`status` 看得到、`close` 收得回——但**不写进 `roles.yaml`，也不算常驻**。
+常驻的 7 个角色不用改清单，就能再加一个**按需角色**（Code Review、数据核对之类）：把卡放进你项目仓 `.agents/prompts/<名字>.md`，一条命令拉起。它和常驻角色一样被管起来——分屏托管、`status` 看得到、`close` 收得回——但**不写进 `roles.yaml`，也不算常驻**。
 
 ```bash
 .agents/scripts/nao-fleet.sh ensure --card .agents/prompts/code-reviewer.md --task T537   # 拉起一次性 Code Review 会话

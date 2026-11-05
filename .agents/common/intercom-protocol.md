@@ -18,6 +18,7 @@ description: pi-intercom 多会话协作协议（常驻引用）
 | :--- | :--- | :--- |
 | `pm` | product-manager | 当前项目目录 |
 | `arch` / `arch-designer`（同义） | architecture-designer | 当前项目目录 |
+| `uiux` / `ui-designer`（同义） | uiux-designer | 当前项目目录 |
 | `rd-fe` | frontend-developer | 当前项目目录 |
 | `rd-be` | backend-developer | 前后端分离时显式 `rd-be@<repo>` |
 | `infra` / `rd-infra`（同义） | infra-engineer | 当前项目目录 |
