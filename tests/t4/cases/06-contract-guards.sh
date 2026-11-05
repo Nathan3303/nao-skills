@@ -124,4 +124,96 @@ fi
 lib_pipes="$(grep -cE 'printf[^|]*\|[[:space:]]*grep' "$T4_ROOT/tests/t4/lib.sh" 2>/dev/null || true)"
 t4_assert_eq "0" "${lib_pipes:-0}" "T536 BR4: lib.sh 内 printf…| grep 同型管道 0 处"
 
+# --- #82 A：真清单断言（孤儿卡假绿）------------------------------------------
+# 缺陷：`check` 对「卡在、roles.yaml 未登记」只出 1 条 warn（rc=0）⇒ 既有用例（09/17 自带夹具清单）
+#   看不见真实清单漂移。本节直接核**真** `.agents/roles.yaml`，并用夹具副本做负控证明断言能翻红。
+# 期望角色集**显式钉住**（不从清单自推，否则摘条目后仍自洽 = 断言空转）。
+MANIFEST_EXPECT="pm arch-designer uiux-designer rd-fe rd-be qa rd-infra"
+
+# 解析 roles.yaml → TSV: id \t aliases(csv,无空格) \t card
+manifest_tsv() {
+  awk '
+    /^roles:[[:space:]]*$/ { inr=1; next }
+    !inr { next }
+    /^  [^ ][^:]*:[[:space:]]*$/ {
+      if (id != "") printf "%s\t%s\t%s\n", id, al, card
+      c=$0; sub(/^  /,"",c); sub(/:[[:space:]]*$/,"",c); id=c; al=""; card=""; next
+    }
+    id != "" && /^    aliases:[[:space:]]*\[/ {
+      v=$0; sub(/^    aliases:[[:space:]]*\[/,"",v); sub(/\].*/,"",v); gsub(/[[:space:]]/,"",v); al=v; next
+    }
+    id != "" && /^    card:[[:space:]]/ {
+      v=$0; sub(/^    card:[[:space:]]*/,"",v); gsub(/[[:space:]]/,"",v); card=v; next
+    }
+    END { if (id != "") printf "%s\t%s\t%s\n", id, al, card }
+  ' "$1"
+}
+
+# 输出问题行（无输出 = 一致）；$1=根目录（含 .agents）
+manifest_problems() {
+  local root="$1" man="$1/.agents/roles.yaml" pdir="$1/.agents/prompts" id al card rf
+  local -a ids=() cards=()
+  while IFS=$'\t' read -r id al card; do
+    [ -n "$id" ] || continue
+    ids+=("$id")
+    if [ -z "$card" ]; then printf '%s：缺 card 字段\n' "$id"; continue; fi
+    cards+=("$card")
+    rf="$pdir/$card"
+    if [ ! -f "$rf" ]; then printf '%s：卡文件不存在（%s）\n' "$id" "$card"; continue; fi
+    local frole; frole="$(sed -n 's/^role:[[:space:]]*//p' "$rf" | head -1 | tr -d '\r')"
+    [ "$frole" = "$id" ] || printf '%s：卡 frontmatter role=%s 与清单 id 不一致\n' "$id" "${frole:-<空>}"
+  done < <(manifest_tsv "$man")
+  # ① 角色数 + 角色集（钉住期望集）
+  [ "${#ids[@]}" = "7" ] || printf '角色数=%s（期望 7）\n' "${#ids[@]}"
+  [ "$(printf '%s\n' "${ids[@]}" | sort | tr '\n' ' ')" = "$(printf '%s\n' $MANIFEST_EXPECT | sort | tr '\n' ' ')" ] \
+    || printf '角色集不一致：%s（期望 %s）\n' "${ids[*]:-<空>}" "$MANIFEST_EXPECT"
+  # ② 关键别名（#80 D1：canonical 必须登记）
+  local ual; ual="$(manifest_tsv "$man" | awk -F'\t' '$1=="uiux-designer"{print $2}')"
+  [ "$ual" = "uiux,ui-designer,uiux-designer" ] || printf 'uiux-designer 别名=%s（期望 uiux,ui-designer,uiux-designer）\n' "${ual:-<空>}"
+  # ③ card↔roles 双向：prompts/*.md 必须全部被清单引用（孤儿卡 = 漂移）
+  local f b found
+  for f in "$pdir"/*.md; do
+    [ -f "$f" ] || continue
+    b="$(basename "$f")"; found=0
+    for card in "${cards[@]}"; do [ "$b" = "$card" ] && found=1; done
+    (( found )) || printf '%s：卡存在但 roles.yaml 未登记（孤儿卡）\n' "$b"
+  done
+}
+
+real_problems="$(manifest_problems "$T4_ROOT")"
+t4_info "真清单：$(manifest_tsv "$T4_ROOT/.agents/roles.yaml" | wc -l | tr -d ' ') 个角色 · problems=${real_problems:-无}"
+t4_assert_eq "" "$real_problems" "A: 真 roles.yaml 与卡集一致（角色集 / 别名 / card↔roles 双向）"
+t4_assert_contains "$out" "roles=7" "A: 真清单下 check 报 roles=7（清单与卡集未漂移）"
+
+# 负控（先红）：夹具副本摘掉 uiux-designer 条目 ⇒ 断言必须翻红并点名
+FX82="$T4_CACHE_DIR/fx82-$$"
+rm -rf "$FX82"; mkdir -p "$FX82"
+cp -r "$T4_ROOT/.agents" "$FX82/.agents" || t4_bad "A 负控：夹具复制 .agents 失败"
+awk '
+  /^  uiux-designer:[[:space:]]*$/ { skip=1; next }
+  skip && /^  [^ ][^:]*:[[:space:]]*$/ { skip=0 }
+  !skip { print }
+' "$FX82/.agents/roles.yaml" > "$FX82/.agents/roles.yaml.new" \
+  && mv "$FX82/.agents/roles.yaml.new" "$FX82/.agents/roles.yaml"
+mut_problems="$(manifest_problems "$FX82")"
+t4_assert_ne "" "$mut_problems" "A 负控：摘掉 roles.yaml 条目 ⇒ 真清单断言翻红（不再假绿）"
+t4_assert_contains "$mut_problems" "uiux-designer" "A 负控：翻红点名 uiux-designer"
+t4_assert_contains "$mut_problems" "角色数=6" "A 负控：翻红给出角色数=6（期望 7）"
+t4_assert_contains "$mut_problems" "uiux-designer.md：卡存在但 roles.yaml 未登记" "A 负控：点名孤儿卡（card↔roles 反向）"
+# 现状留痕：check 在漂移清单上仍 rc=0（仅 warn）——本批不把它改成 error（Issue 修法为补断言），
+#   断言的存在即把「假绿」关进用例：清单漂移 ⇒ 本条红，不再随 check rc 一起绿。
+of82="$(mktemp)"; rc82=0
+( cd "$FX82" && env -u NAO_SKILLS timeout 120 bash "$FX82/.agents/scripts/nao-fleet.sh" check ) >"$of82" 2>&1 || rc82=$?
+t4_assert_eq "0" "$rc82" "A 负控：check 在漂移清单上 rc=0（假绿本体）"
+t4_assert_contains "$(cat "$of82")" "roles=6" "A 负控：check 报 roles=6（佐证漂移）"
+t4_assert_contains "$(cat "$of82")" "warn=1" "A 负控：check 只降到 warn=1（不翻红 ⇒ 假绿根因）"
+of82v="$(mktemp)"
+( cd "$FX82" && env -u NAO_SKILLS timeout 120 bash "$FX82/.agents/scripts/nao-fleet.sh" check -v ) >"$of82v" 2>&1 || true
+t4_assert_contains "$(cat "$of82v")" "! uiux-designer.md 未登记于 roles.yaml" "A 负控：-v 点名孤儿卡（漂移可见）"
+rm -f "$of82" "$of82v"
+# 复位（绿）：重新复制真清单 ⇒ 断言回到空
+cp "$T4_ROOT/.agents/roles.yaml" "$FX82/.agents/roles.yaml"
+t4_assert_eq "" "$(manifest_problems "$FX82")" "A: 复位后断言复绿"
+rm -rf "$FX82"
+
 t4_exit
