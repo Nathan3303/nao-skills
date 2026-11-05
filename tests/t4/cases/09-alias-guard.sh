@@ -45,6 +45,7 @@ write_manifest() { # $1=路径 $2=normal|no_canon|dup|empty|missing
     printf 'roles:\n'
     printf '  pm:\n    aliases: [pm]\n    card: product-manager.md\n    workspace: .\n'
     printf '  arch-designer:\n    aliases: %s\n    card: architecture-designer.md\n    workspace: .\n' "$a_arch"
+    printf '  uiux-designer:\n    aliases: [uiux, ui-designer, uiux-designer]\n    card: uiux-designer.md\n    workspace: .\n'
     printf '  rd-fe:\n'
     [ -n "$a_rdfe" ] && printf '    aliases: %s\n' "$a_rdfe"
     printf '    card: frontend-developer.md\n    workspace: .\n'
@@ -85,7 +86,7 @@ FX_N="$(mk_fx normal normal)"
 
 fx_fleet "$FX_N" check
 t4_assert_eq "0" "$T4_RC" "AC2: 正常态 check exit=0（NFR3）"
-t4_assert_contains "$T4_OUT" "roles=6" "AC2: 正常态 check 报 roles=6"
+t4_assert_contains "$T4_OUT" "roles=7" "AC2: 正常态 check 报 roles=7"
 
 fx_fleet "$FX_N" check -v
 t4_assert_eq "0" "$T4_RC" "AC2: 正常态 check -v exit=0"
@@ -126,7 +127,8 @@ t4_assert_ne "0" "$T4_RC" "AC2: aliases 字段缺失 → check 非 0（既有守
 # ---------------------------------------------------------------- AC1 别名解析（行为探针，零副作用）
 # close --task NAOQA9 <目标>：解析成功时输出含 <角色 id>-NAOQA9 且不报「未知角色」。
 t4_info "别名/canonical 解析探针（close --task NAOQA9 <目标>，不实拉）"
-c09_names=("pm:pm" "arch:arch-designer" "arch-designer:arch-designer" "rd-fe:rd-fe" \
+c09_names=("pm:pm" "arch:arch-designer" "arch-designer:arch-designer" "uiux:uiux-designer" \
+           "ui-designer:uiux-designer" "rd-fe:rd-fe" \
            "rd-be:rd-be" "qa:qa" "infra:rd-infra" "rd-infra:rd-infra")
 for pair in "${c09_names[@]}"; do
   n="${pair%%:*}"; want="${pair#*:}"
