@@ -1,4 +1,4 @@
-# UI/UX 设计师常驻角色卡（T537）
+# UI/UX 设计师常驻角色卡（#80）
 
 - 状态：已定稿 · 更新：2026-11-05 · Owner：pm
 - 指针：技能 `.agents/skills/uiux-design.md`（本批新增）· 二期任务 T540（Penpot MCP 接入）· 文档骨架 `.agents/checklists/deliverable-docs.md` §九
@@ -82,7 +82,7 @@
 
 ## 八、上线闭环
 
-- **Issue/分支**：`gh` 可用 ⇒ 建 Issue（摘要 + 指针，正文留本文）；分支 `feat/<issue>-uiux-designer-card`，`wip(T537):` 小步 + 路径级暂存。
+- **Issue/分支**：`gh` 可用 ⇒ 建 Issue（摘要 + 指针，正文留本文）；分支 `feat/<issue>-uiux-designer-card`，`wip(80):` 小步 + 路径级暂存。
 - **版本纪律**：新卡 v1；改 `product-manager.md` 必须 bump version 并广播 `card pm v<N+1>`（本批 ≥ v34）。
 - **发布**：feat ⇒ MINOR，0.21.3 → **0.22.0**；`docs/releases/v0.22.0.md` 面向用户首段写「现在有 7 个角色，多了 UI/UX 设计师」。
 - **文档载体**：PRD / 技能 / 卡 / 报告 / 台账全随本任务 PR，不单开 PR。
