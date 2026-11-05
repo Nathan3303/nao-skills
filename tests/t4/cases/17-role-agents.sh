@@ -5,12 +5,12 @@
 # 被测对象：.agents/extensions/nao-role-agents.mjs + package.json pi 段 + .agents/scripts/nao-fleet.sh check
 #
 # 断言分组：
-#   A 纯装配：6 条定义 · 名称集 ↔ roles.yaml 双向一一对应 · 无 subagent- 前缀 · 定义形状（无 tools/model/advertise）
-#   B 装配字节比对（AC2）：6 条 systemPrompt 的卡正文段 == 卡文件去 frontmatter 正文（探针独立实现去 frontmatter）
+#   A 纯装配：N 条定义（N = roles.yaml 条数）· 名称集 ↔ roles.yaml 双向一一对应 · 无 subagent- 前缀 · 定义形状（无 tools/model/advertise）
+#   B 装配字节比对（AC2）：N 条 systemPrompt 的卡正文段 == 卡文件去 frontmatter 正文（探针独立实现去 frontmatter）
 #   C 锚点 cross-assert（AC3）：锚点行 == nao-fleet.sh build_system_prompt 的 printf 段逐字（独立抽取 %s 格式串）
 #   D description（AC2）：== 卡 frontmatter description（探针独立解析）
-#   E schema 探针（AC5）：假 pi.events + pi-subagents 真 owner ⇒ 注册 ×6 + listRuntimeAgentConfigs == 6 + 字段口径
-#   F 幂等与韧性（AC5/AC7）：session_start 连发 2 次净 6 · dispose 幂等 · NAO_ROLE_AGENTS=off · 无 owner 仅 warn 不 throw
+#   E schema 探针（AC5）：假 pi.events + pi-subagents 真 owner ⇒ 注册 ×N + listRuntimeAgentConfigs == N + 字段口径
+#   F 幂等与韧性（AC5/AC7）：session_start 连发 2 次净 N · dispose 幂等 · NAO_ROLE_AGENTS=off · 无 owner 仅 warn 不 throw
 #   G 三态负控（AC6）：改卡 1 行 ⇒ 漂移被探针检出 · 删 manifest 声明 ⇒ check FAIL · 加 advertise ⇒ 注册被拒
 #
 # 能力门（BR7）：node 或 pi-subagents 缺失 ⇒ t4_skip（不 FAIL、不计 DEGRADE）。
@@ -129,7 +129,7 @@ if (mode === "drift") {
   const names = defs.map((d) => d.name);
   const expectedNames = ids.map((id) => `nao-${id}`);
 
-  emit("defs-count-6", defs.length === 6, `n=${defs.length}`);
+  emit("defs-count", defs.length === ids.length, `n=${defs.length} · roles=${ids.length}`);
   emit("names-bidirectional", JSON.stringify([...names].sort()) === JSON.stringify([...expectedNames].sort()),
     `names=${names.join(",")} · roles=${ids.join(",")}`);
   emit("no-subagent-prefix", !names.some((n) => n.startsWith("subagent-")), "");
@@ -152,18 +152,18 @@ if (mode === "drift") {
   emit("shape-inherit-project", defs.every((d) => d.definition.inheritProjectContext === true), "");
   emit("card-in-role-map", defs.every((d) => cards[d.role] === d.card), "");
 
-  // —— 假总线 + pi-subagents 真 owner：注册 ×6 ——
+  // —— 假总线 + pi-subagents 真 owner：注册 ×N（N = roles.yaml 条数）——
   const pi = fakePi();
   registerRuntimeAgentEventListener(pi);
   const teardown = ext.default(pi);
   pi.fire("session_start");
   const regs = listRuntimeAgentConfigs(pi);
-  emit("registry-count-6", regs.length === 6, `n=${regs.length}`);
+  emit("registry-count", regs.length === ids.length, `n=${regs.length} · roles=${ids.length}`);
   emit("registry-fields", regs.every((a) => a.systemPromptMode === "replace" && a.inheritProjectContext === true
     && a.aliases === undefined && a.tools === undefined && a.model === undefined), "");
-  // 幂等：session_start 连发 2 次 ⇒ 净 6
+  // 幂等：session_start 连发 2 次 ⇒ 净 N
   pi.fire("session_start");
-  emit("idempotent-start-6", listRuntimeAgentConfigs(pi).length === 6, `n=${listRuntimeAgentConfigs(pi).length}`);
+  emit("idempotent-start", listRuntimeAgentConfigs(pi).length === ids.length, `n=${listRuntimeAgentConfigs(pi).length}`);
   // dispose 幂等
   teardown();
   teardown();
@@ -179,7 +179,8 @@ if (mode === "drift") {
   delete process.env.NAO_ROLE_AGENTS;
   pi2.fire("session_start");
   emit("escape-valve-off-0", offCount === 0, `off=${offCount}`);
-  emit("escape-valve-reenable-6", listRuntimeAgentConfigs(pi2).length === 6, "");
+  emit("escape-valve-reenable", listRuntimeAgentConfigs(pi2).length === ids.length,
+    `n=${listRuntimeAgentConfigs(pi2).length} · roles=${ids.length}`);
   t2();
 
   // —— 韧性：无 owner ⇒ 仅 warn、不 throw ——

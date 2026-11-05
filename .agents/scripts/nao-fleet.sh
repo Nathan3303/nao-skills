@@ -35,7 +35,7 @@
 #                                                 进程归属判定 pane_hosts_caller，不再依赖 $TMUX_PANE——T530）
 #
 # 角色别名 → 角色卡：见 .agents/roles.yaml（单一事实来源）
-#   当前：pm / arch-designer(arch) / rd-fe / rd-be / qa / rd-infra(infra)
+#   当前：pm / arch-designer(arch) / uiux-designer(uiux, ui-designer) / rd-fe / rd-be / qa / rd-infra(infra)
 #
 # 环境变量
 #   NAO_TMUX_LAYOUT=main-row2|main-col|grid   tmux 布局（默认 main-row2）
@@ -878,8 +878,10 @@ main_col_right_w() {
 }
 
 # main-row2：主 pane 全高占左；往右每列 2 个上下堆叠
-#   1 | 2 | 4
-#   1 | 3 | 5
+#   5 pane：1 | 2 | 4
+#           1 | 3 | 5
+#   7 pane：1 | 2 | 4 | 6
+#           1 | 3 | 5 | 7
 # tmux 规范：相邻子 pane 之间 1 格 gap；{} 左右排列，[] 上下排列
 build_main_row2_layout() {
   local win_w="$1" win_h="$2" pct="$3"
