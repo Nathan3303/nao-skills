@@ -155,9 +155,11 @@ t4_assert_absent() { [ ! -e "$1" ] && t4_ok "$2" || t4_bad "$2（不应存在: $
 # ---------------------------------------------------------------- 环境 / 夹具
 t4_require_cmd() { command -v "$1" >/dev/null 2>&1 || t4_blocked "环境缺少命令: $1"; }
 
-# #84 A 机械护栏：用例不得在**默认 socket（= 宿主窗口）**上取 pane 数/做绝对断言。
+# #84 A 行级 lint：用例不得在**命令行位直接调 `tmux`**（默认 socket ⇒ 生产 server）取 pane 数/做绝对断言。
 #   判定：命令行位（行首 / | ; & ( $( { 之后）出现 tmux 或 $REAL_TMUX，且同串无 `-S`；
 #   `command -v tmux` / `t4_require_cmd tmux` 豁免（非调用）。输出 "basename:line: content"。
+#   覆盖边界：真实缺陷类（同 server 累积残留 + 全 server 计数 + `tail -1` 启发式）写法普遍带 `-S`，
+#   **不在此 lint 覆盖面**；那类由用例级解耦承担（见 `cases/20` 的 reset_lab + 快照 diff）。
 t4_scan_host_pane_refs() { # $1=用例目录
   local dir="$1" f ln body
   local re='(^|[|;&(]|\$\(|\{)[[:space:]]*(tmux|\$REAL_TMUX|"\$REAL_TMUX")[[:space:]]'

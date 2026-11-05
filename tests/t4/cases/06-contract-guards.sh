@@ -226,13 +226,15 @@ write_fx_manifest "$FX82/.agents/roles.yaml" normal
 t4_assert_eq "" "$(manifest_problems "$FX82")" "A: 复位后断言复绿（自包含清单，不依赖真清单状态）"
 rm -rf "$FX82"
 
-# --- #84 A 机械护栏：t4 用例不得对宿主窗口做绝对 pane 数断言 -------------------
-# 根因：用例直接调 `tmux`（默认 socket = 生产 server / 宿主窗口）取 pane 数做绝对断言 ⇒
-#   宿主多一个残留或并行跑就假红（`cases/20` v0.22.1 发布前置组 2 实测）。
-# 判据：用例内所有 tmux 调用必须显式 `-S <隔离 socket>`（或经自带 -S 的包装函数）；
-#   豁免 `command -v tmux` / `t4_require_cmd tmux`（非调用）。
+# --- #84 A 行级 lint：用例不得在命令行位直接调 tmux（裸 socket ⇒ 生产 server）-------
+# 真实缺陷类（`cases/20` v0.22.1 发布前置组 2 实测）：**同一隔离 server 内的累积残留（跨块/跨次）
+#   + 全 server 计数（`list-panes -a`）+ `tail -1` 顺序启发式** ⇒ 残留/时序一变就假红。
+#   该类写法普遍**带 `-S`** ⇒ 本 lint 对其零覆盖；`cases/20` 的解法是 reset_lab（每块重建隔离
+#   server）+ 快照 diff（用例级已解耦），**不是**把根因关进了本用例。
+# 本 lint 的范围（行级、静态）：命令行位的 `tmux` / `$REAL_TMUX` 调用必须显式 `-S`；
+#   豁免 `command -v tmux` / `t4_require_cmd tmux`（非调用）。已知假阳/漏判见 #84 QA P3-2。
 host_viol="$(t4_scan_host_pane_refs "$T4_ROOT/tests/t4/cases")"
-t4_assert_eq "" "$host_viol" "AC2 护栏: 用例集无「默认 socket 上的 tmux 调用」（宿主 pane 数不可被绝对断言）"
+t4_assert_eq "" "$host_viol" "AC2 护栏: 用例集无命令行位裸 tmux 调用（行级 lint；累积残留类由 cases/20 的 reset_lab 覆盖）"
 # 负控：人造两条违规（直接命令行位 + 包装函数内）⇒ 护栏必须命中并点名
 FXG="$T4_CACHE_DIR/fxguard-$$"
 rm -rf "$FXG"; mkdir -p "$FXG"
