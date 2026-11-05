@@ -186,15 +186,25 @@ t4_assert_eq "" "$real_problems" "A: 真 roles.yaml 与卡集一致（角色集 
 t4_assert_contains "$out" "roles=7" "A: 真清单下 check 报 roles=7（清单与卡集未漂移）"
 
 # 负控（先红）：夹具副本摘掉 uiux-designer 条目 ⇒ 断言必须翻红并点名
+# #84 B：负控夹具**自包含**（固定清单字面量，不复用真 roles.yaml）—— 真清单自身漂移时，
+#   负控仍只报该负控自己的红，不额外带出「真清单漂移」的误导性条目。
 FX82="$T4_CACHE_DIR/fx82-$$"
 rm -rf "$FX82"; mkdir -p "$FX82"
 cp -r "$T4_ROOT/.agents" "$FX82/.agents" || t4_bad "A 负控：夹具复制 .agents 失败"
-awk '
-  /^  uiux-designer:[[:space:]]*$/ { skip=1; next }
-  skip && /^  [^ ][^:]*:[[:space:]]*$/ { skip=0 }
-  !skip { print }
-' "$FX82/.agents/roles.yaml" > "$FX82/.agents/roles.yaml.new" \
-  && mv "$FX82/.agents/roles.yaml.new" "$FX82/.agents/roles.yaml"
+write_fx_manifest() { # $1=目标 roles.yaml；$2=normal|mutant（摘掉 uiux-designer）
+  local dst="$1" v="$2"
+  {
+    printf 'roles:\n'
+    printf '  pm:\n    aliases: [pm]\n    card: product-manager.md\n    workspace: .\n'
+    printf '  arch-designer:\n    aliases: [arch, arch-designer]\n    card: architecture-designer.md\n    workspace: .\n'
+    [ "$v" = "mutant" ] || printf '  uiux-designer:\n    aliases: [uiux, ui-designer, uiux-designer]\n    card: uiux-designer.md\n    workspace: .\n'
+    printf '  rd-fe:\n    aliases: [rd-fe]\n    card: frontend-developer.md\n    workspace: .\n'
+    printf '  rd-be:\n    aliases: [rd-be]\n    card: backend-developer.md\n    workspace: .\n'
+    printf '  qa:\n    aliases: [qa]\n    card: test-engineer.md\n    workspace: .\n'
+    printf '  rd-infra:\n    aliases: [infra, rd-infra]\n    card: infra-engineer.md\n    workspace: .\n'
+  } > "$dst"
+}
+write_fx_manifest "$FX82/.agents/roles.yaml" mutant
 mut_problems="$(manifest_problems "$FX82")"
 t4_assert_ne "" "$mut_problems" "A 负控：摘掉 roles.yaml 条目 ⇒ 真清单断言翻红（不再假绿）"
 t4_assert_contains "$mut_problems" "uiux-designer" "A 负控：翻红点名 uiux-designer"
@@ -212,8 +222,45 @@ of82v="$(mktemp)"
 t4_assert_contains "$(cat "$of82v")" "! uiux-designer.md 未登记于 roles.yaml" "A 负控：-v 点名孤儿卡（漂移可见）"
 rm -f "$of82" "$of82v"
 # 复位（绿）：重新复制真清单 ⇒ 断言回到空
-cp "$T4_ROOT/.agents/roles.yaml" "$FX82/.agents/roles.yaml"
-t4_assert_eq "" "$(manifest_problems "$FX82")" "A: 复位后断言复绿"
+write_fx_manifest "$FX82/.agents/roles.yaml" normal
+t4_assert_eq "" "$(manifest_problems "$FX82")" "A: 复位后断言复绿（自包含清单，不依赖真清单状态）"
 rm -rf "$FX82"
+
+# --- #84 A 行级 lint：用例不得在命令行位直接调 tmux（裸 socket ⇒ 生产 server）-------
+# 真实缺陷类（`cases/20` v0.22.1 发布前置组 2 实测）：**同一隔离 server 内的累积残留（跨块/跨次）
+#   + 全 server 计数（`list-panes -a`）+ `tail -1` 顺序启发式** ⇒ 残留/时序一变就假红。
+#   该类写法普遍**带 `-S`** ⇒ 本 lint 对其零覆盖；`cases/20` 的解法是 reset_lab（每块重建隔离
+#   server）+ 快照 diff（用例级已解耦），**不是**把根因关进了本用例。
+# 本 lint 的范围（行级、静态）：命令行位的 `tmux` / `$REAL_TMUX` 调用必须显式 `-S`；
+#   豁免 `command -v tmux` / `t4_require_cmd tmux`（非调用）。已知假阳/漏判见 #84 QA P3-2。
+host_viol="$(t4_scan_host_pane_refs "$T4_ROOT/tests/t4/cases")"
+t4_assert_eq "" "$host_viol" "AC2 护栏: 用例集无命令行位裸 tmux 调用（行级 lint；累积残留类由 cases/20 的 reset_lab 覆盖）"
+# 负控：人造两条违规（直接命令行位 + 包装函数内）⇒ 护栏必须命中并点名
+FXG="$T4_CACHE_DIR/fxguard-$$"
+rm -rf "$FXG"; mkdir -p "$FXG"
+# 夹具正文用 @TMUX@ 占位再替换成 `tmux`：避免本用例自身源码出现「命令行位 tmux」被自己的护栏扫到
+cat > "$FXG/99-direct.sh" <<'SH'
+#!/usr/bin/env bash
+n="$(@TMUX@ list-panes -a -F '#{pane_id}' | wc -l)"
+t4_assert_eq "2" "$n" "宿主窗口恰 2 个 pane"
+SH
+cat > "$FXG/98-wrapper.sh" <<'SH'
+#!/usr/bin/env bash
+TX() { @TMUX@ list-panes -a -F '#{pane_id}'; }
+SH
+sed -i 's/@TMUX@/tmux/g' "$FXG/99-direct.sh" "$FXG/98-wrapper.sh"
+viol="$(t4_scan_host_pane_refs "$FXG")"
+t4_assert_ne "" "$viol" "AC2 护栏负控: 人造违规被命中（非空转）"
+t4_assert_contains "$viol" "99-direct.sh" "AC2 护栏负控: 点名直接命令行位违规文件"
+t4_assert_contains "$viol" "98-wrapper.sh" "AC2 护栏负控: 点名包装函数内违规文件"
+t4_assert_eq "2" "$(printf '%s\n' "$viol" | grep -c .)" "AC2 护栏负控: 恰 2 条命中（不漏判也不误判）"
+# 豁免面自检：写一条合规调用 ⇒ 不计入
+cat > "$FXG/97-ok.sh" <<'SH'
+#!/usr/bin/env bash
+SOCK="$LAB/sock/tmux-0/default"
+TX() { tmux -S "$SOCK" list-panes -a -F '#{pane_id}'; }
+SH
+t4_assert_eq "2" "$(t4_scan_host_pane_refs "$FXG" | grep -c .)" "AC2 护栏: 合规调用（tmux -S）不计入违规"
+rm -rf "$FXG"
 
 t4_exit
