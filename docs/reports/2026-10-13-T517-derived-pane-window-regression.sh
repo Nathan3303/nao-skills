@@ -70,7 +70,13 @@ if ! command -v tmux >/dev/null 2>&1; then
 fi
 
 # ---- 夹具路径 + 硬护栏（先于一切 tmux 操作）--------------------------------
-LAB="${T517_LAB:-/tmp/t517-reg}"
+# #82 C：默认路径**逐次唯一**——先前固定 `/tmp/t517-reg` ⇒ 两个会话并行跑本用例会相互踩踏
+#   （隔离 socket 本身互不影响，只有夹具目录撞车 ⇒ `AC7② 新建 W2 失败`）。显式 `T517_LAB` 仍可覆盖（固定路径复现用）。
+if [[ -n "${T517_LAB:-}" ]]; then
+  LAB="$T517_LAB"
+else
+  LAB="$(mktemp -d "${TMPDIR:-/tmp}/t517-reg.XXXXXX")" || { echo "夹具目录创建失败（mktemp）" >&2; exit 2; }
+fi
 SOCKDIR="$LAB/sock"
 SOCK="$SOCKDIR/tmux-$(id -u)/default"
 GUARD=0
