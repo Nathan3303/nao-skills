@@ -119,6 +119,20 @@ BASE="$(basename "$LAB")"
 
 t4_assert_ne "" "$CALLER" "夹具：隔离 tmux server + 调用者 pane 建立（$CALLER）"
 
+# #84 A：用例**自建窗口** —— 每个块前重置隔离 server（清掉上一次运行/上一块的残留窗口与 pane）。
+#   缺陷根因（v0.22.1 发布前置组 2 实测）：块间累积 pane + `tail -1` 式挑选 + 全 server 计数
+#   ⇒ 残留/时序一变就假红（AC3④ 期望=2 实际=3 / AC7① 期望=2 实际=0 / AC4③C close rc=1）。
+reset_lab() {
+  TX kill-server >/dev/null 2>&1 || true
+  mkdir -p "$SOCKDIR/tmux-$(id -u)"; chmod 700 "$SOCKDIR/tmux-$(id -u)"
+  TX new-session -d -s lab -x 240 -y 60 -c "$LAB" >/dev/null 2>&1
+  sleep 0.2
+  CALLER="$(TX list-panes -t lab -F '#{pane_id}' | head -1)"
+  TX setenv -g PATH "$LAB/bin:$PATH" >/dev/null 2>&1
+  ROSTER_JSON='[]'
+  t4_assert_ne "" "$CALLER" "夹具重置：隔离 server 重建、调用者 pane = $CALLER"
+}
+
 # ---- 收尾：先机制 cleanup -S，再复刻 lib 缓存清理语义（保真退出码）----
 t520_teardown() {
   [ -n "${SOCK:-}" ] && [ -d "${LAB:-/nonexistent}" ] || return 0
@@ -152,7 +166,7 @@ run_fleet() { # <args...> → T4_RC / T4_OUT / T4_ERR（T4_ERR_ANSI 去色后版
   T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
 }
 pane_ids() { TX list-panes -a -F '#{pane_id}' 2>/dev/null | sort; }
-pane_count() { TX list-panes -a -F '#{pane_id}' 2>/dev/null | grep -c . || true; }
+pane_count() { TX list-panes -t lab -F '#{pane_id}' 2>/dev/null | grep -c . || true; }   # #84 A：只数夹具窗口（不数整 server）
 set_title() { # <pane_id> <session-name>
   TX select-pane -t "$1" -T "π - $2 - $BASE" >/dev/null 2>&1 || true
 }
@@ -171,6 +185,7 @@ name_of() { # <pane_id> → 该 pane 的 --name 实参
 last_status_line() { printf '%s\n' "$T4_OUT" | grep -F -- "$1" || true; }
 
 # ============================================================ AC1 主路径
+reset_lab
 BEFORE="$(pane_ids)"
 run_fleet ensure --card .agents/prompts/code-reviewer.md --task T537
 t4_assert_eq "0" "$T4_RC" "AC1 ensure --card rc=0（T4_ERR=$(printf '%s' "$T4_ERR" | head -1)）"
@@ -198,6 +213,7 @@ t4_assert_contains "$(cat "${PROMPT_CR:-/dev/null}" 2>/dev/null)" "NAO_SKILLS=$L
 ANCHOR_CR="$(grep -F -- 'NAO_SKILLS=' "${PROMPT_CR:-/dev/null}" 2>/dev/null | tail -1)"
 
 # ============================================================ AC3④ 混合批次：qa 走清单、卡走默认名
+reset_lab
 BEFORE="$(pane_ids)"
 run_fleet ensure qa --card .agents/prompts/data-reviewer.md
 t4_assert_eq "0" "$T4_RC" "AC3④ 混合批次 ensure（常驻 qa + 卡 data-reviewer）rc=0"
@@ -215,6 +231,7 @@ for p in $NEWS; do TX kill-pane -t "$p" >/dev/null 2>&1 || true; done
 sleep 0.3
 
 # ============================================================ AC4① status 可见
+reset_lab
 BEFORE="$(pane_ids)"
 run_fleet ensure --card .agents/prompts/code-reviewer.md --task T537
 P_CR="$(new_panes "$BEFORE" | head -1)"
@@ -269,6 +286,7 @@ run_fleet status
 t4_assert_eq "" "$(last_status_line "code-reviewer-T537")" "AC4⑤ 回收后 status 不再列出该卡会话"
 
 # ============================================================ AC4③A 常驻仍须警告（正向）
+reset_lab
 BEFORE="$(pane_ids)"
 run_fleet ensure qa
 P_QA="$(new_panes "$BEFORE" | head -1)"
@@ -279,8 +297,10 @@ t4_assert_contains "$T4_ERR_ANSI" "[fleet] 常驻会话 qa：任务闭环后应 
   "AC4③A 常驻会话仍弹固定前缀警告（未被整体静音）"
 
 # ============================================================ AC4③C 正交：B 之后 A 的警告仍在
+reset_lab
+BEFORE="$(pane_ids)"
 run_fleet ensure --card .agents/prompts/code-reviewer.md
-P_CR2="$(TX list-panes -a -F '#{pane_id}' | grep -vxF "$CALLER" | grep -vxF "$P_RES" | tail -1)"
+P_CR2="$(new_panes "$BEFORE" | head -1)"
 set_title "$P_CR2" "code-reviewer"
 run_fleet close code-reviewer
 t4_assert_eq "0" "$T4_RC" "AC4③C （B 路径：裸名卡会话）close rc=0"
@@ -294,6 +314,7 @@ t4_assert_contains "$T4_ERR_ANSI" "[fleet] 常驻会话 qa：任务闭环后应 
   "AC4③C B 之后 A 的常驻警告仍出现（禁整体静音蒙过 B）"
 
 # ============================================================ AC4③D 闸门分叉不外溢
+reset_lab
 BEFORE="$(pane_ids)"
 run_fleet ensure --card .agents/prompts/code-reviewer.md --task T537
 P_CR3="$(new_panes "$BEFORE" | head -1)"
@@ -311,6 +332,7 @@ TX kill-pane -t "$P_QA" >/dev/null 2>&1 || true
 TX kill-session -t fx-residue >/dev/null 2>&1 || true
 
 # ============================================================ AC6 反冒充（前缀/保留前缀/字符集）
+reset_lab
 neg_case() { # <label> <卡文件名> <期望 stderr 子串>
   local label="$1" card="$2" want="$3" before
   before="$(pane_count)"
@@ -328,12 +350,14 @@ neg_case "④33 字符" role-long.md "名字过长"
 neg_case "①撞常驻 id（role: qa）" role-qa.md "与常驻角色/别名 qa 同名"
 
 # ⑤ 正控：合法卡通过（证明拒绝不是「一律拒」）
+BEFORE="$(pane_ids)"
 run_fleet ensure --card .agents/prompts/data-reviewer.md --task T537
 t4_assert_eq "0" "$T4_RC" "AC6⑤ 正控：data-reviewer 通过（拒绝不是一律拒）"
-P_OK="$(TX list-panes -a -F '#{pane_id}' | grep -vxF "$CALLER" | grep -vxF "$P_RES" | tail -1)"
+P_OK="$(new_panes "$BEFORE" | head -1)"
 TX kill-pane -t "${P_OK:-$CALLER}" >/dev/null 2>&1 || true
 
 # ============================================================ AC3 ①–③ --as 边界
+reset_lab
 run_fleet ensure --card .agents/prompts/role-qa.md --as audit
 t4_assert_ne "0" "$T4_RC" "AC3① role 撞常驻 id 时拒绝"
 t4_assert_contains "$T4_ERR" "--as" "AC3① 拒绝文案提到 --as（D9 后须同时说明只能改卡内 role）"
@@ -349,6 +373,7 @@ t4_assert_ne "0" "$T4_RC" "AC3③ --as 撞 ROLE_ORDER id（qa）⇒ 拒绝"
 t4_assert_contains "$T4_ERR" "与常驻角色/别名 qa 同名" "AC3③ 拒绝文案点名冲突角色"
 
 # ============================================================ AC3⑤（D9）--as 前缀约束
+reset_lab
 # 负控：脱罻卡 role 前缀 ⇒ die（warn 不够：会起出 status/close 解析不到的会话）
 before="$(pane_count)"
 run_fleet ensure --card .agents/prompts/code-reviewer.md --as audit
@@ -384,6 +409,7 @@ fi
 ROSTER_JSON='[]'
 
 # ============================================================ AC7 语法绑定 + 两相执行
+reset_lab
 before="$(pane_count)"
 run_fleet ensure --card
 t4_assert_ne "0" "$T4_RC" "AC7② 末尾悬挂 --card ⇒ 用法错（rc≠0）"
@@ -401,10 +427,11 @@ t4_assert_eq "$before" "$(pane_count)" "AC7④ 零副作用复核（pane 数逐�
 
 # AC7①：--card 只绑其后第一个 positional —— `qa` 在前、卡在后时 qa 不得被当成卡
 before="$(pane_count)"
+before_ids="$(pane_ids)"
 run_fleet ensure qa --card .agents/prompts/data-reviewer.md --task T537
 t4_assert_eq "0" "$T4_RC" "AC7① ensure qa --card <卡> 正常执行（qa 走清单、卡走卡）"
 t4_assert_eq "$((before + 2))" "$(pane_count)" "AC7① 恰拉起 2 个 pane（无误绑成 1 个或 0 个）"
-NEWS="$(TX list-panes -a -F '#{pane_id}' | grep -vxF "$CALLER" | grep -vxF "$P_RES")"
+NEWS="$(new_panes "$before_ids")"
 for p in $NEWS; do TX kill-pane -t "$p" >/dev/null 2>&1 || true; done
 
 t4_exit
