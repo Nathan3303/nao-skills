@@ -51,7 +51,7 @@ npm run test:t4:full:dual                      # 发布前置**双环境** gate�
 | 03 | 未物化 exit 2 + `DEGRADED:` + 恢复命令；D7 防重入；D6 解析序 | AC3/NFR3 · D5/D6/D7 | `init` + shim |
 | 04 | 零网络 `check` exit=0 + strace 无 AF_INET | NFR2 · 闸门B | `init` + shim |
 | 05 | 迁移精准删除 + `.nao-obsolete` 备份 + 共享目录保留 | AC4 · §12-C/D | `migrate`（或 `init` 自动迁移） |
-| 06 | 契约守护：AC6 机制侧 + AC8 manifest/注入 + AC2 静态 + 测试基建 helper 级正反断言（`t4_cli_supports` 命中/未命中）+ `lib.sh` 同型管道 0 处恒量护栏（T536） | AC2/AC6/AC8 · T536/BR4 | 无（读 manifest + 机制脚本） |
+| 06 | 契约守护：AC6 机制侧 + AC8 manifest/注入 + AC2 静态 + 测试基建 helper 级正反断言（`t4_cli_supports` 命中/未命中）+ `lib.sh` 同型管道 0 处恒量护栏（T536）+ **真清单断言**（#82 A：核真 `roles.yaml` 的角色集/别名/`card`↔`roles` 双向，夹具副本摘条目 ⇒ 必翻红并点名；同时留痕 `check` 在该漂移上 rc=0 仅 warn=1 = 假绿根因） | AC2/AC6/AC8 · T536/BR4 · #82 AC1 | 无（读 manifest + 机制脚本） |
 | 07 | 真实 `pi install` 与 tarball 布局对照 | AC1/NFR2 | `pi` + npm registry |
 | 08 | 评审修复回归：F1 lock 保缩进 + F2 init --force 走 migrate 防混装 | AC4 · BR5 | `migrate` / `init` |
 | 09 | T509 别名解析 / check 守卫 / close 跨仓回收 | AC3 · #19 | `init` + shim |
@@ -69,6 +69,7 @@ npm run test:t4:full:dual                      # 发布前置**双环境** gate�
 | 22 | `ensure` 输出三态互斥：成功恰 1 行 `[tmux] 已拉起 …`（逐字不变）· 跳过/失败 **0 假行**（诊断 warn 保留不合并）· 摘要恰一行且给出「成功 N / 跳过 M / 失败 K」· 混合批次 1/1/1 计数守恒（和 = 目标数）· 失败分支 rc 仍 0（BR4） | AC1–AC4 · BR1–BR6 · T539 | `tmux`（隔离 socket，缺则 SKIP）；桩 `pi` + **tmux 桩选择性令 `split-window` 失败** ⇒ 不依赖真实窗口几何/`tsx` |
 | 23 | `ensure pm` 下游版本自检注入：注入常量六要素可 grep（pin+5s / `gh release view` 两句话 / 一行询问 / 五种降级 / 硬约束「未获我同意前不要改任何文件」/ 同意后序列+重开）· 命令行形态（`--append-system-prompt` 之后 `--` 再常量全文，整体 `printf %q`）· 真 pi argv 侧「`--` 恰 1 次 + 之后恰 1 参数 = 常量全文」· `rd-be` 与 `NAO_UPDATE_ON_ENSURE=0` 两条路径命令行**逐字重建 diff 为空** · 常量块外无 `npm view`/`gh release`/`curl`/`wget` | AC1–AC7 · R1–R6 · M20261103 | `tmux`（隔离 socket，缺则 SKIP）；桩 `pi`（记 argv+END 后长驻）+ 桩 `tmux`（把 `split-window` 命令串原样落盘后转发）⇒ 不依赖真实 pi 会话/`tsx`/网络 |
 | 24 | `ensure` 多目标**每 pane 用其目标自己的卡**（Issue #75）：`arch rd-fe rd-infra` 与 `rd-be qa` 两组逐 pane 断言「会话名 = 目标」+「提示文件 = 该目标卡正文逐字 + 锚点」+「文件名由该卡 stem 生成」+ 三个提示文件互不相同；单目标 / `--card` 完整路径 / 同批混合三条路径命令行**逐字重建 diff 为空**（override 与相对名两条通道不混用）；负控 = 改回全局 `PROMPT` 回落（副本两处 sed）⇒ 本用例翻红并点名 AC1，还原复绿 | AC1–AC4 · #75 | `tmux`（隔离 socket，缺则 SKIP）；桩 `pi`（记 argv+END 后长驻）+ 桩 `tmux`（`split-window` 命令串落盘后转发）⇒ 不依赖真实 pi 会话/`tsx`/网络 |
+| 25 | 布局守卫容量判据（#82 B）：从**真脚本**抽取 `main_row2_geom`/`main_row2_min_col` 实跑边界（n=7/8/9/10 ⇒ 137/184/184/230 + 阈值两侧逐值）· 语义断言 n = 宿主窗口实际 pane 数（`list-panes`，非 `ROLE_ORDER`）· 活体 7 目标 = 8 pane（183 列 warn / 184 列零 warn）· 变异负控把守卫实参改 `n-1`（模拟「按角色数」）⇒ 判定改变，断言可捕获 | #82 AC2 | `tmux`（隔离 socket；缺则 SKIP）+ 桩 `pi`；零网络（`NAO_UPDATE_ON_ENSURE=0`） |
 
 ## NOTE 白名单（T531 · `t4_note <tag> <msg>`）
 
