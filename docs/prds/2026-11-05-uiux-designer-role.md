@@ -1,14 +1,14 @@
 # UI/UX 设计师常驻角色卡（T537）
 
-- 状态：待确认 · 更新：2026-11-03 · Owner：pm
-- 指针：技能 `.agents/skills/uiux-design.md`（本批新增）· 二期任务 T538（Penpot MCP 接入）· 文档骨架 `.agents/checklists/deliverable-docs.md` §九
+- 状态：已定稿 · 更新：2026-11-05 · Owner：pm
+- 指针：技能 `.agents/skills/uiux-design.md`（本批新增）· 二期任务 T540（Penpot MCP 接入）· 文档骨架 `.agents/checklists/deliverable-docs.md` §九
 
 ## TL;DR
 
 - **做什么**：新增第 7 个常驻角色 `uiux-designer`（角色卡 + 设计技能 + 设计报告骨架 + 设计一致性验收闸门），并把「六个角色」口径全量改为七个。
 - **给谁**：跑 nao 舰队、有真实界面产出的下游项目；本仓是机制源。
 - **成功标准**：`check` rc=0（roles=7）· `npm test` rc=0 · 7 pane 下无新增布局 warn · 设计类需求在 PM 验收前有可引用的设计结论载体。
-- **不做什么**：本期**不接入 Penpot MCP**（另立 T538）· 不做截图 diff 类视觉自动化 · 不动 `rd-fe` 卡与 `frontend-design` 技能。
+- **不做什么**：本期**不接入 Penpot MCP**（另立 T540）· 不做截图 diff 类视觉自动化 · 不动 `rd-fe` 卡与 `frontend-design` 技能。
 
 ## 一、问题证据
 
@@ -28,17 +28,18 @@
 
 **范围**
 
-- **`roles.yaml` 登记**：`uiux-designer`，`aliases: [uiux, ui-designer]`，`card: uiux-designer.md`、`workspace: .`。
+- **范围外必要连带（rd-infra 报批 · PM 接受）**：`.agents/templates/pi-subagents/intercom-bridge.md`（子代理身份禁令的角色枚举，漏则冒充新角色不算违规）· `bin/nao-skill.js`（3 处安装提示 `ensure …` 示例串）· `tests/t4/cases/17-role-agents.sh` + `tests/README.md`（硬编码 6 角色计数）。
+- **`roles.yaml` 登记**：`uiux-designer`，`aliases: [uiux, ui-designer, uiux-designer]`，`card: uiux-designer.md`、`workspace: .`。
 - **角色卡** `.agents/prompts/uiux-designer.md` v1：定位与边界 · 降级阶梯 · 闸门与回执 · 红线 · 环境锚点。
 - **技能** `.agents/skills/uiux-design.md`：设计报告骨架、降级阶梯细则、Penpot 操作口径（二期扩展位）、可用性/无障碍基线、反 AI 味清单。
 - **文档骨架**：`deliverable-docs.md` 新增「设计报告」章节（骨架 + 行数上限 + 禁写清单）。
 - **落点**：`docs/designs/README.md` 索引 + 一件本批自用样例报告。
 - **闸门接入**：`product-manager.md`（designer gate + 派发纪律，**bump version**）· `pm-routing.md` 路由行 · `intercom-protocol.md` 角色表 · `README.md` / `docs/INSTALL.md` / `skills/nao-fleet/SKILL.md` 的「六个角色 → 七个角色」与启动串。
-- **测试**：`tests/t4/cases/09-alias-guard.sh:88` 的 `roles=6` 断言改 `roles=7`（否则必红）；必要时补一条 7 角色下别名解析正例。
+- **测试**：`tests/t4/cases/09-alias-guard.sh:88` 的 `roles=6` 改 `roles=7` + 补 `uiux` / `ui-designer` 别名正例；`tests/t4/cases/17-role-agents.sh` 的 4 处硬编码 `=== 6` 必须参数化（新角色即红，实测改前 4 条 FAIL）。**订正**：PRD 初稿写「`cases/09` 不改必红」经实测**证伪**（该用例 fixture 自带 6 角色清单、孤儿卡只 warn 不红）——改动仍保留，理由是新角色在夹具层零覆盖。
 
 **非范围（每条带理由）**
 
-- **Penpot MCP 接入**（`.pi/mcp.json` / `@penpot/mcp` / 浏览器插件）：需 Penpot 实例 + 浏览器常开插件 + key，故障面与回退都独立；先定降级路径再做真实接入，另立 T538。
+- **Penpot MCP 接入**（`.pi/mcp.json` / `@penpot/mcp` / 浏览器插件）：需 Penpot 实例 + 浏览器常开插件 + key，故障面与回退都独立；先定降级路径再做真实接入，另立 T540。
 - **视觉自动化（截图 diff / 无头浏览器）**：`qa` 卡已定不做，体感类只能人验；重复实现等于双源。
 - **改 `rd-fe` 卡或 `frontend-design` 技能**：实现层视觉已由该技能覆盖，再加一遍即双源。
 - **设计师产出功能代码**：与零代码红线冲突；Penpot/ASCII/规格属设计资产，不算源码。
@@ -48,7 +49,7 @@
 
 - **场景 1（设计类需求）**：PM 派发「PRD 路径 + AC 编号 + 回执级别」→ 设计师读 PRD、出设计报告与原型 → `done(lite)` → PM 验收时引用其结论。
 - **场景 2（无 Penpot，本期默认）**：设计师按降级阶梯交付文字规格 / ASCII 线框 / 分步作图指令，**不因缺工具挂起任务**。
-- **场景 3（T538 落地后）**：同一张卡切换为 MCP 作图，报告里留帧链接 + 要点摘录，闸门不变。
+- **场景 3（T540 落地后）**：同一张卡切换为 MCP 作图，报告里留帧链接 + 要点摘录，闸门不变。
 - **场景 4（非设计类需求）**：纯接口/数据/构建改动，PM 不派发设计师，链路不长出第 7 跳。
 
 ## 五、业务规则
@@ -59,7 +60,7 @@
 - **BR3 代码边界**：设计师不改源码/测试/构建配置；可写 `docs/designs/` 与 Penpot 文件。
 - **BR4 降级阶梯**（按序取一，交付即成立）：① 结构化文字规格（层级/间距/状态/断点）② ASCII 线框 ③ 分步作图指令（画板/图层/组件命名）。
 - **BR5 资产落点**：设计报告与降级产物随任务 PR 落 `docs/designs/`；外部 Penpot 链接必须附要点摘录，防断链不可追溯。
-- **BR6 命名约束**：角色 id/别名不得与既有 6 角色前缀相交；别名取 `[uiux, ui-designer]`（避开 `arch-designer` 的 `designer` 模糊面）；若 `check` 前缀校验报冲突 ⇒ 回退为 `[uiux]` 单名并在回执说明。
+- **BR6 命名约束**：角色 id/别名不得与既有 6 角色前缀相交；别名取 `[uiux, ui-designer, uiux-designer]`——避开 `arch-designer` 的 `designer` 模糊面；**第三个别名是 `check` BR2 强制**（canonical id 必须登记于 aliases，现有 6 角色皆如此，PRD 初稿漏此项为 PM 失准）。
 
 ## 六、NFRs
 
@@ -89,9 +90,9 @@
 
 ## 九、变更治理
 
-- **T538（二期）**：Penpot MCP 接入（arch 评审结论：**本地自托管 4400/4401 优于云端 remote**，因凭证与故障面留在本机且可逐角色门控）。
-- **MCP 门控事实（arch 复核已定稿）**：pi 的 MCP 配置在 `.pi/mcp.json`（项目级，需 trust）/ `~/.pi/agent/mcp.json`（用户级），**无 role 维度**，会话启动即连 ⇒ 7 个会话同见工具。隔离两条路——**A 卡内行为约束**（默认，零改动，本期做）｜**B `ensure` 时按角色下发 `--no-mcp` / `--tools` 白名单**（改启动串 + t4 夹具，属 T538 可选加固）。
-- **T538 三条硬约束**：① 凭证与实例 URL 零入库（文档只给占位符；本机 `mcp.json` 内是真 JWT，严禁复制进仓）② 不依赖浏览器插件常开（断链必须走 BR4 降级、不阻塞）③ 可被 `--tools` / `--no-mcp` 精确门控。
+- **T540（二期）**：Penpot MCP 接入（编号由 T538 改定——T538 已被「门禁数字可复现口径」占用；arch 评审结论：**本地自托管 4400/4401 优于云端 remote**，因凭证与故障面留在本机且可逐角色门控）。
+- **MCP 门控事实（arch 复核已定稿）**：pi 的 MCP 配置在 `.pi/mcp.json`（项目级，需 trust）/ `~/.pi/agent/mcp.json`（用户级），**无 role 维度**，会话启动即连 ⇒ 7 个会话同见工具。隔离两条路——**A 卡内行为约束**（默认，零改动，本期做）｜**B `ensure` 时按角色下发 `--no-mcp` / `--tools` 白名单**（改启动串 + t4 夹具，属 T540 可选加固）。
+- **T540 三条硬约束**：① 凭证与实例 URL 零入库（文档只给占位符；本机 `mcp.json` 内是真 JWT，严禁复制进仓）② 不依赖浏览器插件常开（断链必须走 BR4 降级、不阻塞）③ 可被 `--tools` / `--no-mcp` 精确门控。
 - **二期改动面**：只动卡与技能里的「原型产出」章节 + 安装说明，**不动**闸门（BR1/BR2）与 `docs/designs/` 落点。
 - **已知边界**：不支持「只装 6 个角色」的子集安装；设计质量最终仍由人（用户）判定，卡只保证产出结构与可核性。
 
@@ -102,6 +103,7 @@
 - **RICE**：Reach 4（全部下游 UI 仓）· Impact 3（补一个责任缺位）· Confidence 0.8 · Effort 0.5 人日 ⇒ **RICE ≈ 19.2**，排序靠前。
 - **Kano**：期望型——有则满意、无则抱怨（设计需求无人负责），非兴奋型，故不做花活（不做视觉自动化）。
 
-- 修订：2026-11-03 初稿（用户已确认 5 项澄清：报告+原型 / 第 7 常驻 / MCP 分两期且需 ASCII 降级 / 设计一致性须过设计师 / `docs/designs/` 独立落点）
-- 修订：2026-11-03 开工确认：派发前走 arch 轻量评审 · AC1 改夹具验不 live · 别名定 `[uiux, ui-designer]`
-- 修订：2026-11-03 arch 评审落地（无阻塞）：布局零改动只需改 `cases/09:88` · MCP 隔离改「A 卡内约束（本期）+ B `--tools`/`--no-mcp` 门控（T538）」· 新增 BR2a 覆盖边界 · T538 三条硬约束与本地优先结论
+- 修订：2026-11-05 初稿（用户已确认 5 项澄清：报告+原型 / 第 7 常驻 / MCP 分两期且需 ASCII 降级 / 设计一致性须过设计师 / `docs/designs/` 独立落点）
+- 修订：2026-11-05 开工确认：派发前走 arch 轻量评审 · AC1 改夹具验不 live · 别名定 `[uiux, ui-designer]`
+- 修订：2026-11-05 arch 评审落地（无阻塞）：布局零改动只需动测试（`cases/09` 计数 + `cases/17` 硬编码计数） · MCP 隔离改「A 卡内约束（本期）+ B `--tools`/`--no-mcp` 门控（二期）」· 新增 BR2a 覆盖边界 · 二期三条硬约束与本地优先结论
+- 修订：2026-11-05 实现回归 PM 拍板：D1 别名接受三别名（canonical 强制）· D2 二期编号改 T540 · E3 证伪「cases/09 不改必红」· R4 范围外 3 处接受 · 门禁 roles=7 / files=54 / 868 断言
