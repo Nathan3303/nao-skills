@@ -23,6 +23,10 @@ roles:
     aliases: [arch, arch-designer]
     card: architecture-designer.md
     workspace: .
+  uiux-designer:
+    aliases: [uiux, ui-designer, uiux-designer]
+    card: uiux-designer.md
+    workspace: .
   rd-fe:
     aliases: [rd-fe]
     card: frontend-developer.md
