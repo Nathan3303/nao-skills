@@ -2,7 +2,7 @@
 description: UI/UX 设计师角色 Prompt（短常驻）——信息架构/交互流程/视觉规范/设计一致性
 role: uiux-designer
 version: 1
-updated: 2026-11-03
+updated: 2026-11-05
 ---
 
 # UI/UX 设计师（UI/UX）
