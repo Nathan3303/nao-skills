@@ -155,6 +155,26 @@ t4_assert_absent() { [ ! -e "$1" ] && t4_ok "$2" || t4_bad "$2（不应存在: $
 # ---------------------------------------------------------------- 环境 / 夹具
 t4_require_cmd() { command -v "$1" >/dev/null 2>&1 || t4_blocked "环境缺少命令: $1"; }
 
+# #84 A 机械护栏：用例不得在**默认 socket（= 宿主窗口）**上取 pane 数/做绝对断言。
+#   判定：命令行位（行首 / | ; & ( $( { 之后）出现 tmux 或 $REAL_TMUX，且同串无 `-S`；
+#   `command -v tmux` / `t4_require_cmd tmux` 豁免（非调用）。输出 "basename:line: content"。
+t4_scan_host_pane_refs() { # $1=用例目录
+  local dir="$1" f ln body
+  local re='(^|[|;&(]|\$\(|\{)[[:space:]]*(tmux|\$REAL_TMUX|"\$REAL_TMUX")[[:space:]]'
+  local allow1='(command -v tmux|t4_require_cmd tmux)'
+  local allow2='(tmux|\$REAL_TMUX)"?[[:space:]]+-S([[:space:]]|$)'
+  for f in "$dir"/*.sh; do
+    [ -f "$f" ] || continue
+    while IFS= read -r ln; do
+      body="${ln#*:}"
+      case "$body" in \#*) continue;; esac
+      grep -qE "$allow1" <<< "$ln" && continue
+      grep -qE "$allow2" <<< "$ln" && continue
+      printf '%s:%s\n' "$(basename "$f")" "$ln"
+    done < <(grep -nE "$re" "$f")
+  done
+}
+
 t4_fixture() { # 输出一个 git 初始化过的临时项目目录
   local d
   d="$(mktemp -d "$T4_CACHE_DIR/fx.XXXXXX")" || t4_blocked "无法创建临时夹具目录"
