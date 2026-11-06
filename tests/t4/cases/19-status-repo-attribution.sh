@@ -133,12 +133,29 @@ run_status() {  # [roster-json] [agent-dir] [被测脚本]；$TMUX 指向隔离 
 mk_session() { printf '{"name":"%s","cwd":"%s","status":"%s"}' "$1" "$2" "${3:-idle}"; }
 roster() { local s="[" e; for e in "$@"; do s="$s$e,"; done; printf '%s' "${s%,}]"; }
 TX() { tmux -S "$SOCK" "$@"; }
-start_pane() {  # <session> <cwd> <pane-title-契约>；echo pane_id
-  TX new-session -d -s "$1" -x 200 -y 50 -c "$2" >/dev/null 2>&1 || return 9
-  sleep 0.3
-  local p
-  p="$(TX list-panes -t "$1" -F '#{pane_id}' | head -1)"
-  TX select-pane -t "$p" -T "$3" >/dev/null 2>&1 || true
+# #90：标题**由 pane 内进程自己一次性输出 OSC 0** 后常驻 idle —— 不再用 `select-pane -T`。
+#   根因（负载下 6/6 复现）：`select-pane -T` 设的 pane_title 会被 pane 内 shell 的 prompt
+#   （PS1 里的 `\e]0;\u@\h:\w`）随后重设回 `user@host:/cwd`；负载高时 prompt 重绘晚到，
+#   竞态由「我们赢」翻成「prompt 赢」⇒ 标题契约丢失 ⇒ fleet 无法把 pane 映射到会话名 ⇒
+#   pane cwd 权威失效 ⇒ 回落到名册 cwd（AC3 冲突场景于是被判「本仓」）。
+#   状态稳定后 pid 换成 `sleep`（不再有进程改标题）⇒ 标题恒定。
+# 有界等待（AC4）：等 pane_title == 期望契约，上限 5s（50×0.1s）；等不到 ⇒ return 8（调用方判红）。
+wait_title() {  # <pane_id> <expected> → 0 就绪 / 1 超时
+  local p="$1" want="$2" i got
+  for i in $(seq 1 50); do
+    got="$(TX display-message -p -t "$p" '#{pane_title}' 2>/dev/null)"
+    [ "$got" = "$want" ] && return 0
+    sleep 0.1
+  done
+  return 1
+}
+start_pane() {  # <session> <cwd> <pane-title-契约>；echo pane_id（标题未就绪 ⇒ 空 + rc=8）
+  local sess="$1" dir="$2" title="$3" p
+  TX new-session -d -s "$sess" -x 200 -y 50 -c "$dir" \
+    "bash -c 'printf \"\\033]0;%s\\007\" \"$title\"; exec sleep 1800'" >/dev/null 2>&1 || return 9
+  p="$(TX list-panes -t "$sess" -F '#{pane_id}' 2>/dev/null | head -1)"
+  [ -n "$p" ] || return 9
+  wait_title "$p" "$title" || return 8
   printf '%s' "$p"
 }
 line_of() {  # <会话名> ⇒ 该会话在 status 派生区的整行（空 = 未列出）
@@ -147,7 +164,7 @@ line_of() {  # <会话名> ⇒ 该会话在 status 派生区的整行（空 = �
 
 # ---- 夹具：先只建本仓 pane（cwd = LAB）⇒ 单仓场景；再补他仓 pane 与不可判定会话 ----
 P_LOCAL="$(start_pane fxlocal "$LAB" "π - $LOCAL_NAME - $LAB_BASE")"
-t4_assert_ne "" "$P_LOCAL" "夹具：本仓派生 pane 建立（标题契约 π - $LOCAL_NAME - $LAB_BASE）"
+t4_assert_ne "" "$P_LOCAL" "夹具：本仓派生 pane 建立且标题契约就绪（π - $LOCAL_NAME - $LAB_BASE；等不到标题 ⇒ 空 ⇒ 本断言红）"
 
 R_LOCAL="$(roster "$(mk_session "$LOCAL_NAME" "$LAB")")"
 R_MULTI="[]"
@@ -164,10 +181,17 @@ t4_assert_contains "$L_LOCAL" "close --task T9001 rd-infra" "① 本仓会话行
 
 # ---- 夹具：补他仓 pane（cwd = 仓外目录）+ 不可判定会话 ----
 P_OTHER="$(start_pane fxother "$OTHER" "π - $OTHER_NAME - $OTHER_BASE")"
-t4_assert_ne "" "$P_OTHER" "夹具：他仓派生 pane 建立（pane cwd = 仓外目录 $OTHER_BASE）"
+t4_assert_ne "" "$P_OTHER" "夹具：他仓派生 pane 建立且标题就绪（pane cwd = 仓外目录 $OTHER_BASE）"
 # 不可判定会话：legacy `nao-*` detached 会话（无标题契约 ⇒ 无 pane cwd），名册亦无 cwd
-TX new-session -d -s "nao-$UNK_NAME" -x 200 -y 50 -c "$LAB" >/dev/null 2>&1 || true
-sleep 0.3
+# ③ legacy `nao-*` detached 会话：标题**显式**设成非契约形态（同样由进程 OSC 0 输出，恒定），
+#   不再依赖 shell prompt 偶然不回写标题。这样「无 pane cwd 可用」是确定性事实，不是竞态产物。
+TX new-session -d -s "nao-$UNK_NAME" -x 200 -y 50 -c "$LAB" \
+  "bash -c 'printf \"\\033]0;legacy-detached\\007\"; exec sleep 1800'" >/dev/null 2>&1 || true
+P_UNK="$(TX list-panes -t "nao-$UNK_NAME" -F '#{pane_id}' 2>/dev/null | head -1)"
+t4_assert_ne "" "${P_UNK:-}" "夹具：不可判定会话 pane 建立"
+wait_title "${P_UNK:-%0}" "legacy-detached" \
+  && t4_ok "夹具：不可判定会话标题 = legacy-detached（非契约，确定性）" \
+  || t4_bad "夹具：不可判定会话标题未在 5s 内就绪（等不到 ⇒ 红）"
 
 if [ "$TSX_OK" = "1" ]; then
   # ② 名册 cwd 与 pane 同为他仓目录；③ 名册条目在但 cwd 为空（pane/名册均无 cwd ⇒ unknown）
@@ -284,7 +308,7 @@ fi
 # ============================================================ AC3 冲突优先级（pane 优先于名册）
 CONFLICT_NAME="qa-T9004"
 P_CONFLICT="$(start_pane fxconflict "$OTHER" "π - $CONFLICT_NAME - $OTHER_BASE")"
-t4_assert_ne "" "$P_CONFLICT" "AC3 夹具：冲突 pane 建立（pane cwd = 他仓 $OTHER_BASE）"
+t4_assert_ne "" "$P_CONFLICT" "AC3 夹具：冲突 pane 建立且标题就绪（pane cwd = 他仓 $OTHER_BASE）"
 if [ "$TSX_OK" = "1" ]; then
   R_CONFLICT="$(roster "$(mk_session "$LOCAL_NAME" "$LAB")" \
                        "$(mk_session "$OTHER_NAME" "$OTHER")" \
