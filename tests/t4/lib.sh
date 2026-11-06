@@ -291,7 +291,10 @@ t4_strace_available() {
 #   ④ 轻度放宽：首次 120s / 重试 180s（`T4_PI_TIMEOUT` / `T4_PI_RETRY_TIMEOUT` 可覆盖，供负控用）；
 #   ⑤ 额外不重试前置：「No API key」（凭据缺失与延迟抖动无关，重试必同样失败）。
 # 返回：0=拿到真实输出 · 3=无凭据 · 4=超时/失败（调用方按 BR10 判 SKIP）
-# 副作用：写 $1（stdout）/$2（stderr），设全局 T4_PI_SMOKE_INFO。
+# 副作用：写 $1（stdout）/$2（stderr）与 **"$2.info"**（同一行 info，供**子 shell** 调用方回读）；
+#   另设全局 T4_PI_SMOKE_INFO（仅**父 shell 直接调用**时可见 —— 子 shell 里设的全局不会传回，
+#   `set -u` 下直接插值会中止用例 ⇒ 子 shell 调用方必须读 "$2.info"，禁插值全局）。
+T4_PI_SMOKE_INFO=""          # set -u 兜底：任何插值都不会因未绑定而中止
 t4_pi_smoke() {
   local out="$1" err="$2"; shift 2
   local t1="${T4_PI_TIMEOUT:-120}" t2="${T4_PI_RETRY_TIMEOUT:-180}"
@@ -312,9 +315,9 @@ t4_pi_smoke() {
     rcf="$rc1"; bf="$b1"
     T4_PI_SMOKE_INFO="pi-smoke: attempt1 rc=$rc1 bytes=$b1 · attempt2 rc=- bytes=- · retry=no${reason:+（$reason）}"
   fi
-  # info 的唯一可靠出口：本行已落进用例输出（子 shell 调用时全局 T4_PI_SMOKE_INFO 另存不到，
-  #   调用方若在子 shell 内则只能靠这行；父 shell 直接调用时全局亦可用）。
+  # 三处出口：① 用例输出（人看/可 grep）② "$err.info"（**子 shell 调用方唯一可靠通道**）③ 全局（仅父 shell）
   t4_info "$T4_PI_SMOKE_INFO"
+  printf '%s\n' "$T4_PI_SMOKE_INFO" > "${err}.info" 2>/dev/null || true
   grep -q "No API key" "$err" 2>/dev/null && return 3
   [ "$rcf" = "0" ] && [ "$bf" != "0" ] && return 0
   return 4
