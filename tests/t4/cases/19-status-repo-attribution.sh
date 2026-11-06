@@ -92,6 +92,15 @@ trap t519_exit_trap EXIT
 # ---- 夹具构造 ----
 mkdir -p "$LAB" "$OTHER" "$SOCKDIR/tmux-$(id -u)"
 chmod 700 "$SOCKDIR/tmux-$(id -u)"                 # tmux 3.7+ 校验默认 socket 目录权限（0700）
+# #90 P3-①：pane 启动器 —— 标题**只经 argv 传入**（`"$1"`），不做任何字符串内插/转义
+#   ⇒ 标题含单引号 / 双引号 / `$` / 空格都安全（旧写法把 title 拼进 `bash -c` 脚本串，含 `'` 即破）。
+PANE_LAUNCH="$LAB/pane-title.sh"
+cat > "$PANE_LAUNCH" <<'SH'
+#!/usr/bin/env bash
+printf '\033]0;%s\007' "$1"
+exec sleep 1800
+SH
+chmod +x "$PANE_LAUNCH"
 cp -r "$T4_ROOT/.agents" "$LAB/.agents" || { t4_bad "夹具复制 .agents 失败"; t4_exit; }
 cp "$SUBJECT" "$LAB/.agents/scripts/nao-fleet.sh" || { t4_bad "夹具写入被测脚本失败（$SUBJECT）"; t4_exit; }
 # 名册假探针（只读 env；绝不接触真实 pi-intercom 名册/broker）；pretty-print 逐字段一行
@@ -151,8 +160,7 @@ wait_title() {  # <pane_id> <expected> → 0 就绪 / 1 超时
 }
 start_pane() {  # <session> <cwd> <pane-title-契约>；echo pane_id（标题未就绪 ⇒ 空 + rc=8）
   local sess="$1" dir="$2" title="$3" p
-  TX new-session -d -s "$sess" -x 200 -y 50 -c "$dir" \
-    "bash -c 'printf \"\\033]0;%s\\007\" \"$title\"; exec sleep 1800'" >/dev/null 2>&1 || return 9
+  TX new-session -d -s "$sess" -x 200 -y 50 -c "$dir" "$PANE_LAUNCH" "$title" >/dev/null 2>&1 || return 9
   p="$(TX list-panes -t "$sess" -F '#{pane_id}' 2>/dev/null | head -1)"
   [ -n "$p" ] || return 9
   wait_title "$p" "$title" || return 8
@@ -185,8 +193,7 @@ t4_assert_ne "" "$P_OTHER" "夹具：他仓派生 pane 建立且标题就绪（p
 # 不可判定会话：legacy `nao-*` detached 会话（无标题契约 ⇒ 无 pane cwd），名册亦无 cwd
 # ③ legacy `nao-*` detached 会话：标题**显式**设成非契约形态（同样由进程 OSC 0 输出，恒定），
 #   不再依赖 shell prompt 偶然不回写标题。这样「无 pane cwd 可用」是确定性事实，不是竞态产物。
-TX new-session -d -s "nao-$UNK_NAME" -x 200 -y 50 -c "$LAB" \
-  "bash -c 'printf \"\\033]0;legacy-detached\\007\"; exec sleep 1800'" >/dev/null 2>&1 || true
+TX new-session -d -s "nao-$UNK_NAME" -x 200 -y 50 -c "$LAB" "$PANE_LAUNCH" "legacy-detached" >/dev/null 2>&1 || true
 P_UNK="$(TX list-panes -t "nao-$UNK_NAME" -F '#{pane_id}' 2>/dev/null | head -1)"
 t4_assert_ne "" "${P_UNK:-}" "夹具：不可判定会话 pane 建立"
 wait_title "${P_UNK:-%0}" "legacy-detached" \
