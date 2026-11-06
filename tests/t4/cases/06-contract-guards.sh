@@ -218,7 +218,10 @@ t4_info "真清单 vs 期望（角色数期望 $EXPECT_N）：problems=${real_pr
 t4_assert_eq "" "$real_problems" "A: 真 roles.yaml + 真卡集与期望文件一致（角色集 / 别名 / card↔roles）"
 # check 与期望同源核对：仅在不漂移时断言（漂移时已由上面一条红覆盖，避免同源重复红）
 if [ -z "$real_problems" ]; then
-  t4_assert_contains "$out" "roles=$EXPECT_N" "A: check 报 roles=$EXPECT_N（与期望文件一致）"
+  # 作用域收窄：只在 check 的**汇总行**上断言（整段输出含 `roles=` 的其它位置不算数）
+  CHECK_SUMMARY="$(printf '%s\n' "$out" | grep -m1 '^check: OK')"
+  t4_assert_ne "" "${CHECK_SUMMARY:-}" "A: 存在 check 汇总行（check: OK · roles=…）"
+  t4_assert_contains "${CHECK_SUMMARY:-}" "roles=$EXPECT_N" "A: check **汇总行**报 roles=$EXPECT_N（与期望文件一致）"
 else
   t4_info "存在清单漂移 ⇒ 跳过 check roles= 断言（避免同源重复红）"
 fi
@@ -262,15 +265,15 @@ neg_state() { # $1=标签 $2=期望点名子串 $3=期望指路子串 $4=变异�
   r="$(manifest_problems "$FX88" "$EXPECT")"
   t4_assert_eq "$SNAP" "$r" "A 负控($label): 复位后与**变异前快照**一致"
 }
-neg_state "摘条目" "qa" "请更新 tests/t4/expected-roles.txt" \
+neg_state "摘条目" "清单缺少: qa" "请更新 tests/t4/expected-roles.txt" \
   "awk '/^  qa:[[:space:]]*\$/{s=1;next} s&&/^  [^ ][^:]*:[[:space:]]*\$/{s=0} !s' .agents/roles.yaml > /tmp/r88.\$\$ && mv /tmp/r88.\$\$ .agents/roles.yaml"
-neg_state "加未登记卡" "probe-role.md：卡存在但 roles.yaml 未登记" "请更新 tests/t4/expected-roles.txt" \
+neg_state "加未登记卡" "probe-role.md：卡存在但 roles.yaml 未登记（孤儿卡）" "请更新 tests/t4/expected-roles.txt" \
   "printf -- '---\nrole: probe-role\ndescription: probe\n---\n' > .agents/prompts/probe-role.md"
-neg_state "删别名" "uiux-designer：别名 [uiux] 与期望" "请更新 tests/t4/expected-roles.txt" \
+neg_state "删别名" "uiux-designer：别名 [uiux] 与期望 [uiux,ui-designer,uiux-designer]" "请更新 tests/t4/expected-roles.txt" \
   "sed -i 's/^    aliases: \\[uiux,ui-designer,uiux-designer\\]\$/    aliases: [uiux]/' .agents/roles.yaml"
 neg_state "卡文件缺失" "qa：卡文件不存在（test-engineer.md）" "核对 roles.yaml 的 card 与卡文件名" \
   "rm -f .agents/prompts/test-engineer.md"
-neg_state "frontmatter role 不一致" "qa：卡 frontmatter role=qa-mutated" "改卡 role 或同步清单/期望文件" \
+neg_state "frontmatter role 不一致" "qa：卡 frontmatter role=qa-mutated 与清单 id 不一致" "改卡 role 或同步清单/期望文件" \
   "sed -i 's/^role: qa\$/role: qa-mutated/' .agents/prompts/test-engineer.md"
 rm -rf "$FX88"
 
@@ -279,8 +282,8 @@ WRONG="$T4_CACHE_DIR/expect-wrong-$$.txt"
 sed 's/^rd-infra	/rd-infraX	/' "$EXPECT" > "$WRONG"
 wrong_problems="$(manifest_problems "$T4_ROOT" "$WRONG")"
 t4_assert_ne "" "$wrong_problems" "A: 期望文件与真清单不一致 ⇒ 断言必红（防自洽空转）"
-t4_assert_contains "$wrong_problems" "rd-infraX" "A: 点名期望里写错的角色名（rd-infraX）"
-t4_assert_contains "$wrong_problems" "rd-infra" "A: 同时点名真清单缺的（rd-infra）"
+t4_assert_contains "$wrong_problems" "清单缺少: rd-infraX" "A: 点名期望里写错的角色名（清单缺少: rd-infraX）"
+t4_assert_contains "$wrong_problems" "清单多出: rd-infra" "A: 同时点名真清单多出的（清单多出: rd-infra）"
 rm -f "$WRONG"
 
 # --- #84 A 行级 lint：用例不得在命令行位直接调 tmux（裸 socket ⇒ 生产 server）-------
