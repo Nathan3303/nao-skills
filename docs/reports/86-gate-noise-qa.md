@@ -91,3 +91,34 @@ RD 按 P2-1 改了判据并补测，QA 逐条复跑（未再跑 dual，按 PM �
 **门禁（复跑）**：`check` rc=0 ×2（`roles=7 · files=54`，逐字一致）· `npm test` rc=0 · 用例 **25** · 断言 **955** · `SKIP=0 · DEGRADE=0 · NOTE=2`（白名单 `06:static-contract` ×2）—— 与 PM 自证一致。
 
 **复行结论：CONDITIONAL GO 未闭合 —— 新 P1-1 阻断合并**（P2-1 已闭合）。P1-1 修法 3 行以内 + 1 条 wired 负控；改完 QA 复跑 `--case 02`（假 pi 两态 + 无凭据态）+ `--case 26` + `npm test` 即可。
+
+## 七、终审（round 3 · 基线 `41b5836` = `7a53799` 修复 + PM 台账 `41b5836`）
+
+**P1-1 — 已闭合（四态实测）**
+
+- 修复形态核对：`lib.sh` 顶层 `T4_PI_SMOKE_INFO=""`（`set -u` 兜底）+ `printf … > "${err}.info"`（给子 shell 调用方的**文件通道**）；`cases/02` 改为 `pi_info="$(cat "$ef.info")"`，不再插值全局（注释同时写明「勿插值全局」）。
+- 四态自跑（用例脚本级，假 `pi` 走 `PATH` 前置）：
+
+  | 态 | 用例 rc | SKIP 文案 |
+  | :-- | :-- | :-- |
+  | 真跑（真 `pi`） | 0（`PASS`，`attempt1 rc=0 bytes=185335`） | — |
+  | 恒失败 + 有输出（`rc=7`/20B） | **77** | `pi 未成功启动或无输出（pi-smoke: attempt1 rc=7 bytes=20 · attempt2 rc=- bytes=- · retry=no）…` |
+  | 恒失败 + 无输出（`rc=7`/0B） | **77** | `…（attempt1 rc=7 bytes=0 · attempt2 rc=- … retry=no）…`（未重试，符合收严判据） |
+  | 无凭据（`No API key`/rc=2） | **77** | `pi 无可用凭据（No API key；… retry=no（no-api-key））…` |
+
+  ⇒ 三条 SKIP 路径都不再中止，且 SKIP 文案带上 rc + 字节数（数据来自 `$ef.info`）。
+
+**R6 wired 负控 — 非空转（QA 独立两组变异）**
+
+- **M6「回退 P1 的两处修复」**（删顶层兜底 + `cases/02` 改回插值全局）⇒ `cases/26` rc=1、**4 红**，其中三条是**行为级**：`R6① 期望=77 实际=1`、`输出含 SKIP:` 缺失、`无 set -u 未绑定变量中止` 命中；另一条是 `R5` 静态断言。⇒ 本次 P1 若再犯，会被当场打红。
+- **M5「只删 info 文件通道」**（`> "${err}.info"` 改成 `:`）⇒ **只有 1 红，且是 `R5` 静态断言**；`R6①` 那条「SKIP 文案带上 rc + 字节数」**仍是绿的** —— 因为该断言查的是**整段用例输出**，而 `-- pi-smoke: …` 那行本来就在输出里，所以它证明不了「数据通道」工作（见 P3-1）。
+
+**门禁（终审自跑 · 串行）**：`check` rc=0 ×2（`roles=7 · files=54 · layout=main-row2`，逐字一致）· `npm test` rc=0 · 用例 **25** · 断言 **967** · `SKIP=0 · DEGRADE=0 · NOTE=2`（白名单 `06:static-contract` ×2）· `[FAIL]` 0 条 · `--case 02` 真跑 PASS · `--case 26` 43 断言全 PASS。断言数演进：949（round 1）→ 955（round 2：R2b/R3b）→ **967**（round 3：R6 九条 + R5 三条）。`main...HEAD` 对 `.agents/scripts/`、`bin/`、`package.json`、`roles.yaml`、`prompts/` **0 行**改动；`41b5836` 为 docs-only（`tasks-state` 1 行）；零敏感值。
+
+**P3-1（新 · 不阻断）· `R6①` 的「SKIP 文案」断言精度不足**
+
+- 现状：`t4_assert_contains "$C02_OUT" "rc=7 bytes=20"` 对整个输出断言，`-- pi-smoke:` 行即可满足 ⇒ 数据通道断了也绿（M5 实证）。
+- 影响：真正的 P1 回归仍会被另外两条行为断言（`rc=77` / `无未绑定变量`）抓到，故不阻断；但「SKIP 文案带 rc/字节」这条**声明与实际判据不符**（声明比实际强）。
+- 建议（缺陷，不改代码）：断言改为**只看 SKIP 行**（`printf '%s\n' "$C02_OUT" | grep '^SKIP:'` 再 `contains`），或加一条「断言里不得出现 `pi-smoke:` 之外的来源」；`R6②` 的 `no-api-key` 同理（它恰好只出现在 SKIP 行，风险较低）。
+
+**终审结论：GO（0 P1 / 0 P2 / 1 P3 观察 · 不阻断合并）。** P3-1 建议随下批（或 PM 若愿意，可在合并前让 RD 顺手 1 行改断言；QA 复跑 `--case 26` 约 20 秒即可）。
