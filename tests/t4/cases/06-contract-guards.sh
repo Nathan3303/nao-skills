@@ -124,13 +124,22 @@ fi
 lib_pipes="$(grep -cE 'printf[^|]*\|[[:space:]]*grep' "$T4_ROOT/tests/t4/lib.sh" 2>/dev/null || true)"
 t4_assert_eq "0" "${lib_pipes:-0}" "T536 BR4: lib.sh 内 printf…| grep 同型管道 0 处"
 
-# --- #82 A：真清单断言（孤儿卡假绿）------------------------------------------
-# 缺陷：`check` 对「卡在、roles.yaml 未登记」只出 1 条 warn（rc=0）⇒ 既有用例（09/17 自带夹具清单）
-#   看不见真实清单漂移。本节直接核**真** `.agents/roles.yaml`，并用夹具副本做负控证明断言能翻红。
-# 期望角色集**显式钉住**（不从清单自推，否则摘条目后仍自洽 = 断言空转）。
-MANIFEST_EXPECT="pm arch-designer uiux-designer rd-fe rd-be qa rd-infra"
+# --- #82 A / #88：真清单断言（期望收单处 + 负控自包含）---------------------------
+# 沿革：#82 —— `check` 对「卡在、roles.yaml 未登记」只出 1 条 warn（rc=0）⇒ 假绿，本节直接核真清单；
+#   #88 —— 期望曾散成字面量（角色数=7 / roles=7 / 硬编码别名）⇒ **计划内的角色新增**被自家闸判 4 红，
+#          其中 2 条是误导红（负控/复位读了真清单状态）。
+# 现在：① 期望**单处**在 `tests/t4/expected-roles.txt`（角色 id / 别名 / 卡名），不一致时文案直接指路；
+#       ② 断言 = 真 `roles.yaml` + 真 `prompts/` **对**期望文件；
+#       ③ 负控/复位**完全自包含**（清单与 prompts 都由期望文件生成），复位用**快照比对**；
+#       ④ 防自洽空转：期望文件"结构相同但角色名写错" ⇒ 断言必红（不是拿真清单自证）。
+EXPECT="$T4_ROOT/tests/t4/expected-roles.txt"
+EXPECT_HINT="新增/删除角色或改别名/卡名请更新 tests/t4/expected-roles.txt"
+t4_assert_file "$EXPECT" "A: 期望常量文件存在（tests/t4/expected-roles.txt）"
 
-# 解析 roles.yaml → TSV: id \t aliases(csv,无空格) \t card
+# 期望文件 → TSV（跳过注释/空行）
+expect_tsv() { grep -vE '^[[:space:]]*(#|$)' "$1"; }
+
+# roles.yaml → TSV: id \t aliases(csv,无空格) \t card
 manifest_tsv() {
   awk '
     /^roles:[[:space:]]*$/ { inr=1; next }
@@ -149,82 +158,133 @@ manifest_tsv() {
   ' "$1"
 }
 
-# 输出问题行（无输出 = 一致）；$1=根目录（含 .agents）
+# 输出问题行（无输出 = 与期望一致）；$1=根目录（含 .agents） $2=期望文件
 manifest_problems() {
-  local root="$1" man="$1/.agents/roles.yaml" pdir="$1/.agents/prompts" id al card rf
-  local -a ids=() cards=()
+  local root="$1" exp="$2" man="$1/.agents/roles.yaml" pdir="$1/.agents/prompts"
+  local id al card eid eal ecard rf frole f b found extra="" missing=""
+  local -a ids=() exp_ids=() exp_cards=()
+  local -A m_al=() m_card=()
   while IFS=$'\t' read -r id al card; do
     [ -n "$id" ] || continue
-    ids+=("$id")
-    if [ -z "$card" ]; then printf '%s：缺 card 字段\n' "$id"; continue; fi
-    cards+=("$card")
-    rf="$pdir/$card"
-    if [ ! -f "$rf" ]; then printf '%s：卡文件不存在（%s）\n' "$id" "$card"; continue; fi
-    local frole; frole="$(sed -n 's/^role:[[:space:]]*//p' "$rf" | head -1 | tr -d '\r')"
-    [ "$frole" = "$id" ] || printf '%s：卡 frontmatter role=%s 与清单 id 不一致\n' "$id" "${frole:-<空>}"
+    ids+=("$id"); m_al["$id"]="$al"; m_card["$id"]="$card"
   done < <(manifest_tsv "$man")
-  # ① 角色数 + 角色集（钉住期望集）
-  [ "${#ids[@]}" = "7" ] || printf '角色数=%s（期望 7）\n' "${#ids[@]}"
-  [ "$(printf '%s\n' "${ids[@]}" | sort | tr '\n' ' ')" = "$(printf '%s\n' $MANIFEST_EXPECT | sort | tr '\n' ' ')" ] \
-    || printf '角色集不一致：%s（期望 %s）\n' "${ids[*]:-<空>}" "$MANIFEST_EXPECT"
-  # ② 关键别名（#80 D1：canonical 必须登记）
-  local ual; ual="$(manifest_tsv "$man" | awk -F'\t' '$1=="uiux-designer"{print $2}')"
-  [ "$ual" = "uiux,ui-designer,uiux-designer" ] || printf 'uiux-designer 别名=%s（期望 uiux,ui-designer,uiux-designer）\n' "${ual:-<空>}"
-  # ③ card↔roles 双向：prompts/*.md 必须全部被清单引用（孤儿卡 = 漂移）
-  local f b found
+  while IFS=$'\t' read -r eid eal ecard; do
+    [ -n "$eid" ] || continue
+    exp_ids+=("$eid"); exp_cards+=("$ecard")
+  done < <(expect_tsv "$exp")
+
+  # ① 角色集 / 角色数 —— **合并成一条**（新增/删除角色只红这一条，不同源重复）
+  for id in "${ids[@]}"; do
+    found=0; for eid in "${exp_ids[@]}"; do [ "$id" = "$eid" ] && found=1; done
+    (( found )) || extra="$extra $id"
+  done
+  for eid in "${exp_ids[@]}"; do
+    found=0; for id in "${ids[@]}"; do [ "$id" = "$eid" ] && found=1; done
+    (( found )) || missing="$missing $eid"
+  done
+  if [ -n "$extra$missing" ]; then
+    printf '角色集不一致：清单 %s 个 / 期望 %s 个%s%s —— %s\n' "${#ids[@]}" "${#exp_ids[@]}" \
+      "${extra:+ · 清单多出:${extra}}" "${missing:+ · 清单缺少:${missing}}" "$EXPECT_HINT"
+  fi
+
+  # ② 每个期望角色：别名 / card 字段 / 卡文件 / frontmatter role
+  while IFS=$'\t' read -r eid eal ecard; do
+    [ -n "$eid" ] || continue
+    [ -n "${m_card[$eid]+x}" ] || continue        # 缺条目已在 ① 报过
+    al="${m_al[$eid]}"; card="${m_card[$eid]}"
+    [ "$al" = "$eal" ] || printf '%s：别名 [%s] 与期望 [%s] 不一致 —— %s\n' "$eid" "$al" "$eal" "$EXPECT_HINT"
+    if [ -z "$card" ]; then printf '%s：清单缺 card 字段 —— %s\n' "$eid" "$EXPECT_HINT"; continue; fi
+    rf="$pdir/$card"
+    if [ ! -f "$rf" ]; then
+      printf '%s：卡文件不存在（%s）—— 核对 roles.yaml 的 card 与卡文件名（改名请同时更新期望文件）\n' "$eid" "$card"
+      continue
+    fi
+    frole="$(sed -n 's/^role:[[:space:]]*//p' "$rf" | head -1 | tr -d '\r')"
+    [ "$frole" = "$eid" ] || printf '%s：卡 frontmatter role=%s 与清单 id 不一致 —— 改卡 role 或同步清单/期望文件\n' "$eid" "${frole:-<空>}"
+  done < <(expect_tsv "$exp")
+
+  # ③ 孤儿卡：prompts/*.md 不在**期望**卡集内
   for f in "$pdir"/*.md; do
     [ -f "$f" ] || continue
     b="$(basename "$f")"; found=0
-    for card in "${cards[@]}"; do [ "$b" = "$card" ] && found=1; done
-    (( found )) || printf '%s：卡存在但 roles.yaml 未登记（孤儿卡）\n' "$b"
+    for card in "${exp_cards[@]}"; do [ "$b" = "$card" ] && found=1; done
+    (( found )) || printf '%s：卡存在但 roles.yaml 未登记（孤儿卡）—— %s\n' "$b" "$EXPECT_HINT"
   done
 }
 
-real_problems="$(manifest_problems "$T4_ROOT")"
-t4_info "真清单：$(manifest_tsv "$T4_ROOT/.agents/roles.yaml" | wc -l | tr -d ' ') 个角色 · problems=${real_problems:-无}"
-t4_assert_eq "" "$real_problems" "A: 真 roles.yaml 与卡集一致（角色集 / 别名 / card↔roles 双向）"
-t4_assert_contains "$out" "roles=7" "A: 真清单下 check 报 roles=7（清单与卡集未漂移）"
+EXPECT_N="$(expect_tsv "$EXPECT" | grep -c . || true)"
+real_problems="$(manifest_problems "$T4_ROOT" "$EXPECT")"
+t4_info "真清单 vs 期望（角色数期望 $EXPECT_N）：problems=${real_problems:-无}"
+t4_assert_eq "" "$real_problems" "A: 真 roles.yaml + 真卡集与期望文件一致（角色集 / 别名 / card↔roles）"
+# check 与期望同源核对：仅在不漂移时断言（漂移时已由上面一条红覆盖，避免同源重复红）
+if [ -z "$real_problems" ]; then
+  # 作用域收窄：只在 check 的**汇总行**上断言（整段输出含 `roles=` 的其它位置不算数）
+  CHECK_SUMMARY="$(printf '%s\n' "$out" | grep -m1 '^check: OK')"
+  t4_assert_ne "" "${CHECK_SUMMARY:-}" "A: 存在 check 汇总行（check: OK · roles=…）"
+  t4_assert_contains "${CHECK_SUMMARY:-}" "roles=$EXPECT_N" "A: check **汇总行**报 roles=$EXPECT_N（与期望文件一致）"
+else
+  t4_info "存在清单漂移 ⇒ 跳过 check roles= 断言（避免同源重复红）"
+fi
 
-# 负控（先红）：夹具副本摘掉 uiux-designer 条目 ⇒ 断言必须翻红并点名
-# #84 B：负控夹具**自包含**（固定清单字面量，不复用真 roles.yaml）—— 真清单自身漂移时，
-#   负控仍只报该负控自己的红，不额外带出「真清单漂移」的误导性条目。
-FX82="$T4_CACHE_DIR/fx82-$$"
-rm -rf "$FX82"; mkdir -p "$FX82"
-cp -r "$T4_ROOT/.agents" "$FX82/.agents" || t4_bad "A 负控：夹具复制 .agents 失败"
-write_fx_manifest() { # $1=目标 roles.yaml；$2=normal|mutant（摘掉 uiux-designer）
-  local dst="$1" v="$2"
+# ---- 负控：**自包含夹具**（清单 + prompts 全由期望文件生成，不读真清单状态），复位用快照比对 ----
+FX88="$T4_CACHE_DIR/fx88-$$"
+build_selfcontained() { # $1=夹具根
+  local root="$1" eid eal ecard
+  rm -rf "$root"; mkdir -p "$root"
+  cp -r "$T4_ROOT/.agents" "$root/.agents" || return 1
+  rm -f "$root/.agents/prompts"/*.md          # 只保留期望声明的卡 ⇒ 真仓新增角色不影响本夹具
+  while IFS=$'\t' read -r eid eal ecard; do
+    [ -n "$eid" ] || continue
+    if [ -f "$T4_ROOT/.agents/prompts/$ecard" ]; then
+      cp "$T4_ROOT/.agents/prompts/$ecard" "$root/.agents/prompts/$ecard"
+    else
+      printf -- '---\nrole: %s\ndescription: fx88\n---\n\n# %s\n' "$eid" "$eid" > "$root/.agents/prompts/$ecard"
+    fi
+  done < <(expect_tsv "$EXPECT")
   {
     printf 'roles:\n'
-    printf '  pm:\n    aliases: [pm]\n    card: product-manager.md\n    workspace: .\n'
-    printf '  arch-designer:\n    aliases: [arch, arch-designer]\n    card: architecture-designer.md\n    workspace: .\n'
-    [ "$v" = "mutant" ] || printf '  uiux-designer:\n    aliases: [uiux, ui-designer, uiux-designer]\n    card: uiux-designer.md\n    workspace: .\n'
-    printf '  rd-fe:\n    aliases: [rd-fe]\n    card: frontend-developer.md\n    workspace: .\n'
-    printf '  rd-be:\n    aliases: [rd-be]\n    card: backend-developer.md\n    workspace: .\n'
-    printf '  qa:\n    aliases: [qa]\n    card: test-engineer.md\n    workspace: .\n'
-    printf '  rd-infra:\n    aliases: [infra, rd-infra]\n    card: infra-engineer.md\n    workspace: .\n'
-  } > "$dst"
+    while IFS=$'\t' read -r eid eal ecard; do
+      [ -n "$eid" ] || continue
+      printf '  %s:\n    aliases: [%s]\n    card: %s\n    workspace: .\n' "$eid" "$eal" "$ecard"
+    done < <(expect_tsv "$EXPECT")
+  } > "$root/.agents/roles.yaml"
 }
-write_fx_manifest "$FX82/.agents/roles.yaml" mutant
-mut_problems="$(manifest_problems "$FX82")"
-t4_assert_ne "" "$mut_problems" "A 负控：摘掉 roles.yaml 条目 ⇒ 真清单断言翻红（不再假绿）"
-t4_assert_contains "$mut_problems" "uiux-designer" "A 负控：翻红点名 uiux-designer"
-t4_assert_contains "$mut_problems" "角色数=6" "A 负控：翻红给出角色数=6（期望 7）"
-t4_assert_contains "$mut_problems" "uiux-designer.md：卡存在但 roles.yaml 未登记" "A 负控：点名孤儿卡（card↔roles 反向）"
-# 现状留痕：check 在漂移清单上仍 rc=0（仅 warn）——本批不把它改成 error（Issue 修法为补断言），
-#   断言的存在即把「假绿」关进用例：清单漂移 ⇒ 本条红，不再随 check rc 一起绿。
-of82="$(mktemp)"; rc82=0
-( cd "$FX82" && env -u NAO_SKILLS timeout 120 bash "$FX82/.agents/scripts/nao-fleet.sh" check ) >"$of82" 2>&1 || rc82=$?
-t4_assert_eq "0" "$rc82" "A 负控：check 在漂移清单上 rc=0（假绿本体）"
-t4_assert_contains "$(cat "$of82")" "roles=6" "A 负控：check 报 roles=6（佐证漂移）"
-t4_assert_contains "$(cat "$of82")" "warn=1" "A 负控：check 只降到 warn=1（不翻红 ⇒ 假绿根因）"
-of82v="$(mktemp)"
-( cd "$FX82" && env -u NAO_SKILLS timeout 120 bash "$FX82/.agents/scripts/nao-fleet.sh" check -v ) >"$of82v" 2>&1 || true
-t4_assert_contains "$(cat "$of82v")" "! uiux-designer.md 未登记于 roles.yaml" "A 负控：-v 点名孤儿卡（漂移可见）"
-rm -f "$of82" "$of82v"
-# 复位（绿）：重新复制真清单 ⇒ 断言回到空
-write_fx_manifest "$FX82/.agents/roles.yaml" normal
-t4_assert_eq "" "$(manifest_problems "$FX82")" "A: 复位后断言复绿（自包含清单，不依赖真清单状态）"
-rm -rf "$FX82"
+build_selfcontained "$FX88" || t4_bad "A 负控：自包含夹具构造失败"
+SNAP="$(manifest_problems "$FX88" "$EXPECT")"
+t4_assert_eq "" "$SNAP" "A 负控: 自包含夹具基线一致（与真清单状态无关）"
+
+neg_state() { # $1=标签 $2=期望点名子串 $3=期望指路子串 $4=变异片段（在夹具根执行）
+  local label="$1" want="$2" hint="$3" mut="$4" p r
+  build_selfcontained "$FX88" || t4_bad "A 负控($label)：夹具构造失败"
+  ( cd "$FX88" && eval "$mut" ) || t4_bad "A 负控($label)：变异未执行"
+  p="$(manifest_problems "$FX88" "$EXPECT")"
+  t4_assert_ne "" "$p" "A 负控($label): 漂移 ⇒ 断言翻红"
+  t4_assert_contains "$p" "$want" "A 负控($label): 精确点名（$want）"
+  t4_assert_contains "$p" "$hint" "A 负控($label): 文案含可执行指路"
+  build_selfcontained "$FX88" || t4_bad "A 负控($label)：复位夹具构造失败"
+  r="$(manifest_problems "$FX88" "$EXPECT")"
+  t4_assert_eq "$SNAP" "$r" "A 负控($label): 复位后与**变异前快照**一致"
+}
+neg_state "摘条目" "清单缺少: qa" "请更新 tests/t4/expected-roles.txt" \
+  "awk '/^  qa:[[:space:]]*\$/{s=1;next} s&&/^  [^ ][^:]*:[[:space:]]*\$/{s=0} !s' .agents/roles.yaml > /tmp/r88.\$\$ && mv /tmp/r88.\$\$ .agents/roles.yaml"
+neg_state "加未登记卡" "probe-role.md：卡存在但 roles.yaml 未登记（孤儿卡）" "请更新 tests/t4/expected-roles.txt" \
+  "printf -- '---\nrole: probe-role\ndescription: probe\n---\n' > .agents/prompts/probe-role.md"
+neg_state "删别名" "uiux-designer：别名 [uiux] 与期望 [uiux,ui-designer,uiux-designer]" "请更新 tests/t4/expected-roles.txt" \
+  "sed -i 's/^    aliases: \\[uiux,ui-designer,uiux-designer\\]\$/    aliases: [uiux]/' .agents/roles.yaml"
+neg_state "卡文件缺失" "qa：卡文件不存在（test-engineer.md）" "核对 roles.yaml 的 card 与卡文件名" \
+  "rm -f .agents/prompts/test-engineer.md"
+neg_state "frontmatter role 不一致" "qa：卡 frontmatter role=qa-mutated 与清单 id 不一致" "改卡 role 或同步清单/期望文件" \
+  "sed -i 's/^role: qa\$/role: qa-mutated/' .agents/prompts/test-engineer.md"
+rm -rf "$FX88"
+
+# ---- AC4 防自洽空转：期望文件"结构相同但角色名写错" ⇒ 断言必红（不是拿真清单自证）----
+WRONG="$T4_CACHE_DIR/expect-wrong-$$.txt"
+sed 's/^rd-infra	/rd-infraX	/' "$EXPECT" > "$WRONG"
+wrong_problems="$(manifest_problems "$T4_ROOT" "$WRONG")"
+t4_assert_ne "" "$wrong_problems" "A: 期望文件与真清单不一致 ⇒ 断言必红（防自洽空转）"
+t4_assert_contains "$wrong_problems" "清单缺少: rd-infraX" "A: 点名期望里写错的角色名（清单缺少: rd-infraX）"
+t4_assert_contains "$wrong_problems" "清单多出: rd-infra" "A: 同时点名真清单多出的（清单多出: rd-infra）"
+rm -f "$WRONG"
 
 # --- #84 A 行级 lint：用例不得在命令行位直接调 tmux（裸 socket ⇒ 生产 server）-------
 # 真实缺陷类（`cases/20` v0.22.1 发布前置组 2 实测）：**同一隔离 server 内的累积残留（跨块/跨次）

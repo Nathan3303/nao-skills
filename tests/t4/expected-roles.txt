@@ -1,0 +1,11 @@
+# 角色清单期望 —— **单一事实来源**（#88）
+# 规则：新增 / 删除 / 改名角色，或改别名、改卡文件名 ⇒ **必须同步更新本文件**；
+#       本文件与真 `.agents/roles.yaml` 不一致时，`cases/06` 会**恰红 1 条**并指向本文件。
+# 格式（TAB 分隔）：<role-id>	<aliases 逗号分隔>	<card 文件名>
+pm	pm	product-manager.md
+arch-designer	arch,arch-designer	architecture-designer.md
+uiux-designer	uiux,ui-designer,uiux-designer	uiux-designer.md
+rd-fe	rd-fe	frontend-developer.md
+rd-be	rd-be	backend-developer.md
+qa	qa	test-engineer.md
+rd-infra	infra,rd-infra	infra-engineer.md
