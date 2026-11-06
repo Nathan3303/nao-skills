@@ -53,7 +53,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 未过 PM 验收就合并 PR，或直推 main？（PM 验收通过 = 授权合并；见 `github-flow.md`）
 - [ ] PM 亲自合并 PR / `push` main？（合并由 RD 执行，PM 只验收授权）
 - [ ] PM 改了**源码/测试/构建配置**，或手改冲突内容？（应转 worker；PM 只做仓库治理与发布）
-- [ ] main 上出现多条本需求提交，或出现 `wip()` 提交（未 squash）？
+- [ ] main 上出现多条本需求提交，或出现 `wip()` 提交（未 squash）？或 squash **body** 被自动拼接出 `wip(`/已证伪的旧表述（合并时缺 `--body-file`）？（判据：`%s` 与 `%b` 各 `grep -c 'wip('` = 0，见 `github-flow.md` 合并节）
 - [ ] 为文档 / 台账**单开 PR**，或任务期文档作为**独立提交直落 main**？（应随任务 PR；唯一例外 = BR3 立项摘要，降级批次无例外；见 `github-flow.md`）
 - [ ] PR 标题 / 提交信息不可读（纯编号/类名/函数名/文件路径）？
 - [ ] Issue 与 `docs/` 双源（正文抄进 Issue，或状态只留平台）？
@@ -104,7 +104,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 【仅 feat】**文档随任务 PR**：本任务文档与台账（PRD 定稿 / 报告 / ADR / `docs/tasks-state.md` / 索引 / release notes）已在本需求分支提交并随同一 PR 进 main；main 上无 `docs(<编号>):` 独立提交、无文档-only PR（立项摘要例外仅 1 条且单一文件）
 - [ ] 【仅 feat】Issue 已建（或降级已标注）：body 为摘要 + 指针，正文在 `docs/prds/`；同步仅 5 个节点
 - [ ] 【仅 feat】验收在 PR 上完成：AC 逐条评论核对 + QA 门禁数字；**UI 呈现类已交用户验收清单并获回填**（QA 产出 → PM 审 → 用户执行）；**验收通过后才授权合并**
-- [ ] 【仅 feat】合并由 RD 执行（`--squash`）；main 上本需求恰好 1 条提交且无 `wip()`；需求分支已删除
+- [ ] 【仅 feat】合并由 RD 执行（`--squash` + 显式 `--subject` **与 `--body-file`（用 PR 描述）**）；main 上本需求恰好 1 条提交、**subject 与 body 均无 `wip()`**；需求分支已删除
 - [ ] 【仅 feat】合并前已核「分支无未推送提交」（适用：在分支上提交过的**任何角色**，含 PM 落的文档/台账）：`git rev-list --count origin/<branch>..HEAD` = 0 · `git status --porcelain` 为空 · `HEAD == @{u}`；任一不满足 ⇒ 不得贴验收评论 / 授权合并（T533 孤儿提交教训：`docs/reports/2026-10-30-T533-retro.md`）
 - [ ] 【仅 feat】发布（若有）：版本号符合 SemVer/项目约定；tag 指向 main 合并提交；release notes 用户可读且落盘 `docs/releases/`（核 @.agents/common/release-notes.md）
 - [ ] 【仅 feat】`gh` 可用则已用 `gh`，降级已注明；发布后事实（含 `tasks-state` 版本/Tag 行）的**落地时机与工作区纪律见 `github-flow.md` BR5**（单源指针，本清单不复写命令细节）

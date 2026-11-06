@@ -68,7 +68,14 @@ PM 在**受理 / 立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 P
 - **禁止** `git push` 到 main、**禁止绕过 PR 合并**；feature 分支允许 `--force-with-lease`（改基 / 压缩历史时）。
 - 提交规范、`wip()` 前缀、路径级暂存、可读性：见 @.agents/skills/commit.md。
 - **squash 后 main 上的提交信息 = PR 标题 + PR 正文** → **可读性硬性落在 PR 标题**（用户可见行为，禁纯编号/类名/路径）。
-- ⚠️ **单提交 PR 的 squash 陷阱（T511 实测 3/3 仓中招）**：`gh pr merge --squash` 在 PR **只有 1 条提交**时，取的是**该提交的 subject**（**不是** PR 标题）⇒ 分支纪律的 `wip(<编号>):` 前缀会直接进主干。**合并命令必须显式指定**：`gh pr merge <n> --squash --delete-branch --subject "<用户可读主题>" --body "<摘要>"`；或合并前把分支压成一条用户可读提交。主干受保护（禁 force-push / `enforce_admins=true`）时该偏差**不可回溯**，只能记录。
+- ⚠️ **squash 提交信息的两处陷阱（T511 / #84 实测，主干上不可回溯）**：
+  1. **subject**：PR **只有 1 条提交**时 `gh pr merge --squash` 取的是**该提交的 subject**（**不是** PR 标题）⇒ 分支纪律的 `wip(<编号>):` 前缀会直接进主干；
+  2. **body**：未显式给 `--body` / `--body-file` 时，GitHub 把**各提交标题**自动拼成 body ⇒ 主干 body 含 `wip(` 与**已被证伪的旧表述**（实测：#84 6 处、#80 8 处、#82 4 处，同型）。
+  - ✅ **合并命令必须同时显式指定 subject 与 body，且 body 取 PR 描述**：
+    `gh pr merge <n> --squash --delete-branch --subject "<用户可读主题>" --body-file <PR 描述文件>`
+    （取描述：`gh pr view <n> --json body --jq .body > /tmp/pr<n>.md`，或复用开 PR 时写的那份文件。）
+  - **合并后即时自证（判据，两处都要 0）**：`git log -1 --format=%s | grep -c 'wip('` = 0 **且** `git log -1 --format=%b | grep -c 'wip('` = 0；body 首行也不得是被证伪的旧表述。
+  - 主干受保护（禁 force-push / `enforce_admins=true`）时该偏差**不可回溯**，只能记录 —— 故此处是**合并前**的硬要求。
 
 ## Issue 与状态（避免双源）
 
