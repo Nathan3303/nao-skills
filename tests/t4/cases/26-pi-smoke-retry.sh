@@ -112,6 +112,44 @@ t4_assert_eq "3" "$rc" "R4: 无凭据 ⇒ 返回 3（调用方 SKIP 口径）"
 t4_assert_eq "1" "$n_calls" "R4: 无凭据不重试（凭据缺失与延迟抖动无关）"
 t4_assert_contains "$T4_PI_SMOKE_INFO" "retry=no" "R4: info 行标 retry=no"
 
+# ---------------------------------------------------------------- R6 wired 负控（P1 回归的守卫）
+# `cases/02` 在**子 shell** 里调护栏 ⇒ 曾因插值全局（`set -u`）把 SKIP 变成 FAIL。这里以**整例子进程**验证：
+#   假 pi 恒失败 / 无凭据 ⇒ 必须 **SKIP（77）**，且 SKIP 文案带上 rc/字节数（数据通道 = "$ef.info"）。
+C02="$T4_ROOT/tests/t4/cases/02-skill-registration.sh"
+STUBDIR="$LAB/bin"; mkdir -p "$STUBDIR"
+TB="$(t4_pkg_tarball)" || t4_bad "R6: 无法构造被测 tarball"
+run_case02() { # $1=label $2=桩正文 [$3=用例脚本] → 设 C02_RC / C02_OUT
+  local label="$1" body="$2" script="${3:-$C02}" cache="$LAB/c02-$1"
+  printf '#!/usr/bin/env bash\n%s\n' "$body" > "$STUBDIR/pi"; chmod +x "$STUBDIR/pi"
+  rm -rf "$cache"; mkdir -p "$cache"
+  C02_OUT="$( cd "$T4_ROOT" && T4_CACHE_DIR="$cache" T4_TARBALL="$TB" T4_PI_TIMEOUT=30 \
+      PATH="$STUBDIR:$PATH" bash "$script" 2>&1 )"
+  C02_RC=$?
+  rm -rf "$cache"
+}
+
+# 态 ①：恒失败（rc=7 + 20B 输出 ⇒ 「非超时失败不重试」那一支）
+run_case02 fail 'head -c 20 /dev/zero | tr "\0" a; exit 7'
+t4_assert_eq "77" "$C02_RC" "R6①: 假 pi 恒失败 ⇒ cases/02 仍 SKIP（77），不是 FAIL（P1 回归守卫）"
+t4_assert_contains "$C02_OUT" "SKIP:" "R6①: 输出含 SKIP 行（未被 set -u 中止）"
+t4_assert_contains "$C02_OUT" "rc=7 bytes=20" "R6①: SKIP 文案带上 rc + 字节数（数据通道 = 环境无关的 info 文件）"
+t4_assert_not_contains "$C02_OUT" "未绑定的变量" "R6①: 无 set -u 未绑定变量中止"
+
+# 态 ②：无凭据
+run_case02 nokey 'echo "No API key for provider" >&2; exit 2'
+t4_assert_eq "77" "$C02_RC" "R6②: 无凭据 ⇒ cases/02 SKIP（77）"
+t4_assert_contains "$C02_OUT" "无可用凭据" "R6②: 走凭据分支（非通用失败分支）"
+t4_assert_contains "$C02_OUT" "no-api-key" "R6②: SKIP 文案带上不重试原因（no-api-key）"
+
+# 态 ③：变异「把 SKIP 改成 FAIL」⇒ 本用例的 77 断言必然翻红（证明非空转）
+MUTT4="$LAB/t4mut"
+rm -rf "$MUTT4"; cp -r "$T4_ROOT/tests/t4" "$MUTT4"
+sed -i 's/^  exit 77$/  exit 1/' "$MUTT4/lib.sh"
+t4_assert_eq "1" "$(grep -c '^  exit 1$' "$MUTT4/lib.sh" || true)" \
+  "R6③: 变异夹具已把 t4_skip 的 exit 77 改为 exit 1（SKIP→FAIL）"
+run_case02 mut 'head -c 20 /dev/zero | tr "\0" a; exit 7' "$MUTT4/cases/02-skill-registration.sh"
+t4_assert_ne "77" "$C02_RC" "R6③: SKIP→FAIL 变异后 rc 不再是 77 ⇒ 本用例的 SKIP 断言可被该类变异精确打红（非空转）"
+
 # ---------------------------------------------------------------- R5 接线（防护栏只在用例里空转）
 t4_assert_contains "$(cat "$T4_ROOT/tests/t4/cases/02-skill-registration.sh")" "t4_pi_smoke" \
   "R5: cases/02 真跑路径确实经该护栏（非只在用例内空转）"
@@ -119,5 +157,11 @@ t4_assert_match "$(cat "$T4_ROOT/tests/t4/lib.sh")" 'T4_PI_TIMEOUT:-120' \
   "R5: 默认首次超时 = 120s（护栏④）"
 t4_assert_match "$(cat "$T4_ROOT/tests/t4/lib.sh")" 'T4_PI_RETRY_TIMEOUT:-180' \
   "R5: 默认重试超时 = 180s（护栏④）"
+t4_assert_contains "$(cat "$T4_ROOT/tests/t4/lib.sh")" 'T4_PI_SMOKE_INFO=""' \
+  "R5: 全局 T4_PI_SMOKE_INFO 顶层初始化（set -u 兜底，P1 防再犯）"
+t4_assert_contains "$(cat "$T4_ROOT/tests/t4/cases/02-skill-registration.sh")" 'cat "$ef.info"' \
+  "R5: cases/02 从 info 文件回读（子 shell 数据通道），不插值全局"
+t4_assert_contains "$(cat "$T4_ROOT/tests/t4/lib.sh")" '"${err}.info"' \
+  "R5: 护栏写出 err.info（子 shell 调用方的唯一可靠通道）"
 
 t4_exit
