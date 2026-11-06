@@ -74,7 +74,9 @@ PM 在**受理 / 立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 P
   - ✅ **合并命令必须同时显式指定 subject 与 body，且 body 取 PR 描述**：
     `gh pr merge <n> --squash --delete-branch --subject "<用户可读主题>" --body-file <PR 描述文件>`
     （取描述：`gh pr view <n> --json body --jq .body > /tmp/pr<n>.md`，或复用开 PR 时写的那份文件。）
-  - **合并后即时自证（判据，两处都要 0）**：`git log -1 --format=%s | grep -c 'wip('` = 0 **且** `git log -1 --format=%b | grep -c 'wip('` = 0；body 首行也不得是被证伪的旧表述。
+  - **合并后即时自证（判据，两处都要 0）**：`git log -1 --format=%s | grep -c 'wip(' || true` = 0 **且** `git log -1 --format=%b | grep -c 'wip(' || true` = 0。
+    ⚠️ 写成 `|| true` 是硬要求：`grep -c` 在 0 命中时**退出码为 1**，裸用在 `set -e` / `&&` 链里会把「通过」误读成失败。
+  - **人工项（不可机械判）**：body 首行是否仍含**已被证伪的旧表述**（结论会随认知更新而变化）⇒ 合并前由执行者**读一遍 PR 描述**确认，不设自动判据。
   - 主干受保护（禁 force-push / `enforce_admins=true`）时该偏差**不可回溯**，只能记录 —— 故此处是**合并前**的硬要求。
 
 ## Issue 与状态（避免双源）
