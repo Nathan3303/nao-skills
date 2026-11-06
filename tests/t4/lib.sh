@@ -281,3 +281,39 @@ t4_strace_available() {
   command -v strace >/dev/null 2>&1 || return 1
   strace -f -e trace=connect -o /dev/null true >/dev/null 2>&1
 }
+
+# ---------------------------------------------------------------- 真 pi 冒烟（#86 A：受限重试）
+# 语义（Issue #86 §A，护栏一条不简化）：
+#   ① 每次调用都产出可 grep 的 info 行（两次 attempt 的 rc + stdout 字节数）；
+#   ② **只有**「首次 rc=124（timeout 超时）或首次 stdout 0 字节」才允许重试 —— 其它非 0
+#      （`--mode json` 解析崩、进程异常退出）**不重试**，照原样判（BR10：由调用方 SKIP/红）；
+#   ③ 重试后仍失败 ⇒ 语义不变（调用方仍走原判，full 轴照旧计分）；
+#   ④ 轻度放宽：首次 120s / 重试 180s（`T4_PI_TIMEOUT` / `T4_PI_RETRY_TIMEOUT` 可覆盖，供负控用）；
+#   ⑤ 额外不重试前置：「No API key」（凭据缺失与延迟抖动无关，重试必同样失败）。
+# 返回：0=拿到真实输出 · 3=无凭据 · 4=超时/失败（调用方按 BR10 判 SKIP）
+# 副作用：写 $1（stdout）/$2（stderr），设全局 T4_PI_SMOKE_INFO。
+t4_pi_smoke() {
+  local out="$1" err="$2"; shift 2
+  local t1="${T4_PI_TIMEOUT:-120}" t2="${T4_PI_RETRY_TIMEOUT:-180}"
+  local rc1=0 b1=0 rc2="-" b2="-" retry="no" reason="" rcf=0 bf=0
+  timeout "$t1" "$@" >"$out" 2>"$err"; rc1=$?
+  b1="$(wc -c <"$out" 2>/dev/null | tr -d ' ')"; b1="${b1:-0}"
+  if grep -q "No API key" "$err" 2>/dev/null; then
+    reason="no-api-key"
+  elif [ "$rc1" = "124" ] || [ "$b1" = "0" ]; then
+    retry="yes"
+    timeout "$t2" "$@" >"$out" 2>"$err"; rc2=$?
+    b2="$(wc -c <"$out" 2>/dev/null | tr -d ' ')"; b2="${b2:-0}"
+  fi
+  if [ "$retry" = "yes" ]; then
+    rcf="$rc2"; bf="$b2"
+    T4_PI_SMOKE_INFO="pi-smoke: attempt1 rc=$rc1 bytes=$b1 · attempt2 rc=$rc2 bytes=$b2 · retry=yes"
+  else
+    rcf="$rc1"; bf="$b1"
+    T4_PI_SMOKE_INFO="pi-smoke: attempt1 rc=$rc1 bytes=$b1 · attempt2 rc=- bytes=- · retry=no${reason:+（$reason）}"
+  fi
+  t4_info "$T4_PI_SMOKE_INFO"   # 用例输出内可直接 grep `pi-smoke:`（子 shell 调用也不丢）
+  grep -q "No API key" "$err" 2>/dev/null && return 3
+  [ "$rcf" = "0" ] && [ "$bf" != "0" ] && return 0
+  return 4
+}

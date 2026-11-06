@@ -62,16 +62,17 @@ t4_materialize "$fx"
 if t4_cli_supports init; then t4_run_init "$fx" >/dev/null 2>&1; fi
 
 of="$T4_CACHE_DIR/pi-reg.jsonl"; ef="$T4_CACHE_DIR/pi-reg.err"
-( cd "$fx" && timeout 120 pi --mode json --approve --no-session --no-mcp -p ok ) >"$of" 2>"$ef"
+# #86 A：受限重试（`t4_pi_smoke`）—— 只吸收「超时 / 0 字节」这类延迟抖动，不吸收其它红。
+#   语义见 lib.sh 该函数头注；info 行恒含两次 attempt 的 rc + 字节数（可 grep `pi-smoke:`）。
+( cd "$fx" && t4_pi_smoke "$of" "$ef" pi --mode json --approve --no-session --no-mcp -p ok )
 pi_rc=$?
-t4_info "pi rc=$pi_rc · stdout=$(wc -c <"$of")B"
 
 # BR10 极性：外部不可达 / 未成功启动 / 无凭据 ⇒ SKIP（不得假红）；仅「确已拿到真实输出且内容不符」判 FAIL
-if grep -q "No API key" "$ef" 2>/dev/null; then
+if [ "$pi_rc" = "3" ] || grep -q "No API key" "$ef" 2>/dev/null; then
   t4_skip "pi 无可用凭据（No API key），动态注册检查跳过；静态契约已校验"
 fi
-if [ "$pi_rc" -ne 0 ] || [ ! -s "$of" ]; then
-  t4_skip "pi 未成功启动或无输出（rc=$pi_rc，stdout=$(wc -c <"$of")B），动态注册检查跳过；静态契约已校验"
+if [ "$pi_rc" != "0" ] || [ ! -s "$of" ]; then
+  t4_skip "pi 未成功启动或无输出，动态注册检查跳过；静态契约已校验"
 fi
 
 reg_tsv="$(node -e '
