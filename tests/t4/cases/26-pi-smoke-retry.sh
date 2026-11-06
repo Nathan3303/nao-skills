@@ -3,7 +3,8 @@
 #
 # 判据来源：Issue #86 §A（QA 设计输入，四条护栏一条不简化）· `tests/t4/lib.sh` 的 `t4_pi_smoke`
 #   ① 每次调用都打 info 行，含**两次 attempt 的 rc + 字节数**（可 grep `pi-smoke:`）
-#   ② **只有**「首次 rc=124（超时）或首次 stdout 0 字节」才允许重试；其它非 0 ⇒ **不重试**、照原样判
+#   ② **只有**「首次 rc=124（超时）」**或**「首次 rc=0 且 stdout 0 字节」才允许重试；**非零退出即便 0 字节也不重试**
+#      （收严自 Issue 原文「rc=124 或 0 字节」—— 原式会把「非超时真故障」洗成绿，QA P2-1 实测）
 #   ③ 重试仍失败 ⇒ 语义不变（调用方仍 SKIP，full 轴照旧计分）
 #   ④ 轻度放宽：首次 120s / 重试 180s（`T4_PI_TIMEOUT` / `T4_PI_RETRY_TIMEOUT` 可覆盖）
 #   ⑤ 额外不重试前置：「No API key」（凭据缺失与抖动无关）
@@ -11,7 +12,7 @@
 # 断言分组（全部用桩命令，不跑真 pi / 不联网 / 不依赖 tmux）：
 #   R1 超时 ⇒ 重试；两次都超时 ⇒ 仍返回 4（= 调用方 SKIP，AC1/AC3）
 #   R2 非超时失败（有输出）⇒ **不重新调用**（AC2 负控，按调用次数证，而非只信 info 行）
-#   R3 0 字节非超时 ⇒ 按规则②允许重试（此处重试后成功 ⇒ 返回 0）
+#   R3 非零退出 + 0 字节 ⇒ 不重试（P2-1 收严）；R3b rc=0 且 0 字节 ⇒ 仍重试；R2b 非零失败 + 第二次会成功 ⇒ 仍不重试
 #   R4 No API key ⇒ 不重试、返回 3（凭据缺失额外前置）
 #   R5 接线：`cases/02` 真跑路径确实调用该护栏（防「护栏只在用例里被调」的空转）
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
@@ -31,6 +32,8 @@ case "$kind" in
   fail)    head -c $n /dev/zero | tr '\\0' 'a'; exit 7 ;;
   empty)   exit 3 ;;
   retryok) c=\$(wc -l < "$CNT"); if [ "\$c" = "1" ]; then exec sleep 30; fi; printf '{"ok":1}'; exit 0 ;;
+  zeroexit) exit 0 ;;
+  failthenok) c=\$(wc -l < "$CNT"); if [ "\$c" = "1" ]; then exit 7; fi; printf '{"ok":1}'; exit 0 ;;
   nokey)   echo "No API key for provider" >&2; exit 2 ;;
 esac
 SH
@@ -73,14 +76,32 @@ t4_assert_contains "$T4_PI_SMOKE_INFO" "attempt1 rc=7 bytes=20" "R2 负控: info
 t4_assert_contains "$T4_PI_SMOKE_INFO" "attempt2 rc=- bytes=-" "R2 负控: info 行标重试未发生（占位 -）"
 t4_assert_contains "$T4_PI_SMOKE_INFO" "retry=no" "R2 负控: info 行标 retry=no"
 
-# ---------------------------------------------------------------- R3 0 字节非超时 ⇒ 规则允许重试
+# ---------------------------------------------------------------- R3 收严（P2-1）：非零退出 + 0 字节 ⇒ **不**重试
 mk_stub empty 0
 T4_PI_TIMEOUT=5 T4_PI_RETRY_TIMEOUT=5 t4_pi_smoke "$OUT" "$ERR" "$LAB/stub.sh"
 rc="$?"
 n_calls="$(wc -l < "$CNT" | tr -d ' ')"
-t4_assert_eq "2" "$n_calls" "R3: 首次 0 字节 ⇒ 允许重试（规则②的 OR 分支）"
-t4_assert_eq "4" "$rc" "R3: 重试同样空 ⇒ 仍返回 4（不洗白）"
-t4_assert_contains "$T4_PI_SMOKE_INFO" "retry=yes" "R3: info 行标 retry=yes"
+t4_assert_eq "1" "$n_calls" "R3: 非零退出 + 0 字节 ⇒ **不重试**（收严后的判据，钉 1 次调用）"
+t4_assert_eq "4" "$rc" "R3: 该支仍返回 4（不洗白）"
+t4_assert_contains "$T4_PI_SMOKE_INFO" "retry=no" "R3: info 行标 retry=no"
+
+# ---------------------------------------------------------------- R3b rc=0 且 0 字节 ⇒ **仍**重试
+mk_stub zeroexit 0
+T4_PI_TIMEOUT=5 T4_PI_RETRY_TIMEOUT=5 t4_pi_smoke "$OUT" "$ERR" "$LAB/stub.sh"
+rc="$?"
+n_calls="$(wc -l < "$CNT" | tr -d ' ')"
+t4_assert_eq "2" "$n_calls" "R3b: rc=0 且 0 字节 ⇒ **仍**重试一次（判据的左半支）"
+t4_assert_eq "4" "$rc" "R3b: 重试后仍空 ⇒ 返回 4（不洗白）"
+t4_assert_contains "$T4_PI_SMOKE_INFO" "retry=yes" "R3b: info 行标 retry=yes"
+
+# ---------------------------------------------------------------- R2b 首次非零失败 + 第二次会成功 ⇒ 仍不重试、仍 4
+mk_stub failthenok 0
+T4_PI_TIMEOUT=5 T4_PI_RETRY_TIMEOUT=5 t4_pi_smoke "$OUT" "$ERR" "$LAB/stub.sh"
+rc="$?"
+n_calls="$(wc -l < "$CNT" | tr -d ' ')"
+t4_assert_eq "1" "$n_calls" "R2b 负控: 首次非零失败 ⇒ 不重试（哪怕第二次本会成功）"
+t4_assert_eq "4" "$rc" "R2b 负控: 真故障不被重试洗成绿（仍返回 4）"
+t4_assert_contains "$T4_PI_SMOKE_INFO" "retry=no" "R2b 负控: info 行标 retry=no"
 
 # ---------------------------------------------------------------- R4 No API key ⇒ 不重试、返回 3
 mk_stub nokey 0

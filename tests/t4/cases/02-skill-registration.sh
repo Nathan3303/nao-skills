@@ -69,10 +69,10 @@ pi_rc=$?
 
 # BR10 极性：外部不可达 / 未成功启动 / 无凭据 ⇒ SKIP（不得假红）；仅「确已拿到真实输出且内容不符」判 FAIL
 if [ "$pi_rc" = "3" ] || grep -q "No API key" "$ef" 2>/dev/null; then
-  t4_skip "pi 无可用凭据（No API key），动态注册检查跳过；静态契约已校验"
+  t4_skip "pi 无可用凭据（No API key；$T4_PI_SMOKE_INFO），动态注册检查跳过；静态契约已校验"
 fi
 if [ "$pi_rc" != "0" ] || [ ! -s "$of" ]; then
-  t4_skip "pi 未成功启动或无输出，动态注册检查跳过；静态契约已校验"
+  t4_skip "pi 未成功启动或无输出（$T4_PI_SMOKE_INFO），动态注册检查跳过；静态契约已校验"
 fi
 
 reg_tsv="$(node -e '
