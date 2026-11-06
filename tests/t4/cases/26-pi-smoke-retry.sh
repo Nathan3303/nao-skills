@@ -129,17 +129,21 @@ run_case02() { # $1=label $2=桩正文 [$3=用例脚本] → 设 C02_RC / C02_OU
 }
 
 # 态 ①：恒失败（rc=7 + 20B 输出 ⇒ 「非超时失败不重试」那一支）
+# ⚠️ 数据通道断言**只看 SKIP 行**：护栏自身会打印 `-- pi-smoke: …` 行，若断言整段输出，
+#    info 文件通道断掉也照样绿（QA M5 实证）⇒ 先精确取出 SKIP 行，再在该行上断言。
 run_case02 fail 'head -c 20 /dev/zero | tr "\0" a; exit 7'
 t4_assert_eq "77" "$C02_RC" "R6①: 假 pi 恒失败 ⇒ cases/02 仍 SKIP（77），不是 FAIL（P1 回归守卫）"
-t4_assert_contains "$C02_OUT" "SKIP:" "R6①: 输出含 SKIP 行（未被 set -u 中止）"
-t4_assert_contains "$C02_OUT" "rc=7 bytes=20" "R6①: SKIP 文案带上 rc + 字节数（数据通道 = 环境无关的 info 文件）"
+C02_SKIP1="$(printf '%s\n' "$C02_OUT" | grep -m1 '^SKIP:')"
+t4_assert_ne "" "${C02_SKIP1:-}" "R6①: 存在行首 SKIP 行（未被 set -u 中止）"
+t4_assert_contains "${C02_SKIP1:-}" "rc=7 bytes=20" "R6①: **SKIP 行本身**带上 rc + 字节数（数据通道真接通，不靠护栏自打印行）"
 t4_assert_not_contains "$C02_OUT" "未绑定的变量" "R6①: 无 set -u 未绑定变量中止"
 
 # 态 ②：无凭据
 run_case02 nokey 'echo "No API key for provider" >&2; exit 2'
 t4_assert_eq "77" "$C02_RC" "R6②: 无凭据 ⇒ cases/02 SKIP（77）"
-t4_assert_contains "$C02_OUT" "无可用凭据" "R6②: 走凭据分支（非通用失败分支）"
-t4_assert_contains "$C02_OUT" "no-api-key" "R6②: SKIP 文案带上不重试原因（no-api-key）"
+C02_SKIP2="$(printf '%s\n' "$C02_OUT" | grep -m1 '^SKIP:')"
+t4_assert_contains "${C02_SKIP2:-}" "无可用凭据" "R6②: 走凭据分支（非通用失败分支）"
+t4_assert_contains "${C02_SKIP2:-}" "no-api-key" "R6②: **SKIP 行本身**带上不重试原因（no-api-key）"
 
 # 态 ③：变异「把 SKIP 改成 FAIL」⇒ 本用例的 77 断言必然翻红（证明非空转）
 MUTT4="$LAB/t4mut"
