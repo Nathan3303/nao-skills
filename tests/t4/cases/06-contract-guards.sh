@@ -323,4 +323,69 @@ SH
 t4_assert_eq "2" "$(t4_scan_host_pane_refs "$FXG" | grep -c .)" "AC2 护栏: 合规调用（tmux -S）不计入违规"
 rm -rf "$FXG"
 
+# --- #93 语义化 lint：真实缺陷类（全 server 计数 + 顺序启发式挑尾）-----------------
+# 病根（#84 P3-2）：上面的行级 lint 只判「命令行位裸 tmux 必须 -S」，而真实缺陷类写法**带 -S**
+#   （同一隔离 server 内跨块/跨次累积残留 + 全 server 计数 + 挑最后一行）⇒ 对该类零覆盖。
+# 本块 = 把缺陷形态固化成 fixture，并断言：**同一份输入**新 lint 必红、旧行级 lint 仍绿。
+# AC1/AC2：新 lint 必红 + 旧 lint 仍绿（两条都必须有，只证前者等于没证明补上了零覆盖那块）。
+# AC4：不纳管类（会话定向 / 只计数 / 取首行 / 跨行）由 controls fixture 逐条做负控。
+# AC5：变异自证 —— 在子进程里把新 lint 改恒假 / 去掉 -a 判据，复刻本块断言 ⇒ 必须点名翻红。
+FX93="$T4_ROOT/tests/t4/fixtures/93-all-server-tail1"
+F93_DEFECT="$FX93/defect.sh"
+F93_CONTROLS="$FX93/controls.sh"
+t4_assert_file "$F93_DEFECT" "AC2 #93: 缺陷 fixture 存在（fixtures/93-all-server-tail1/defect.sh）"
+t4_assert_file "$F93_CONTROLS" "AC2 #93: 负控 fixture 存在（fixtures/93-all-server-tail1/controls.sh）"
+fixture_head="$(sed -n '1,8p' "$F93_DEFECT")"
+t4_assert_contains "$fixture_head" "Issue #93" "AC2 #93: fixture 标注来源（Issue #93）"
+t4_assert_contains "$fixture_head" "2026-11-09" "AC2 #93: fixture 标注日期（2026-11-09）"
+
+new_hits="$(t4_scan_all_server_tail1 "$FX93")"
+t4_assert_ne "" "$new_hits" "AC1 #93: 同一份缺陷输入 ⇒ 新语义 lint 必红（补上旧 lint 的零覆盖）"
+t4_assert_eq "2" "$(printf '%s\n' "$new_hits" | grep -c .)" "AC2 #93: 恰 2 条命中（包装函数调用 + 显式 -S 直调）"
+t4_assert_contains "$new_hits" "pane_count" "AC2 #93: 点名包装函数调用形态"
+t4_assert_contains "$new_hits" "pane_total" "AC2 #93: 点名显式 -S 直调形态"
+t4_assert_not_contains "$new_hits" "pane_of_session" "AC4 #93 负控: 会话定向采样 + 挑尾不纳管（不是全 server 计数）"
+t4_assert_not_contains "$new_hits" "pane_total_wc" "AC4 #93 负控: 全 server 计数但不挑尾不纳管"
+t4_assert_not_contains "$new_hits" "pane_first" "AC4 #93 负控: 全 server 计数但取首行不纳管"
+t4_assert_not_contains "$new_hits" "pane_multiline" "AC4 #93 负控: 跨行写法不纳管（行级 lint 不拼接续行，已知漏判）"
+old_hits="$(t4_scan_host_pane_refs "$FX93")"
+t4_assert_eq "" "$old_hits" "AC1 #93: 旧行级 lint 对**同一份 fixture** 仍绿（证明此前零覆盖，不是 lint 坏了）"
+t4_assert_eq "" "$(t4_scan_all_server_tail1 "$T4_ROOT/tests/t4/cases")" "AC1 #93 常态护栏: 用例集 0 处「全 server 计数 + 顺序挑尾」组合"
+
+# AC5 变异自证：子进程只替换 lint（本块的断言原样复刻），确认变松/变假会当场红
+MUT93="$T4_CACHE_DIR/mut93-$$.sh"
+cat > "$MUT93" <<'SH'
+#!/usr/bin/env bash
+source "$MUT_LIB" >/dev/null 2>&1
+kind="$1"; fx="$2"
+case "$kind" in
+  const-false) t4_scan_all_server_tail1() { :; } ;;
+  drop-all) t4_scan_all_server_tail1() {
+      local dir="$1" f ln body
+      local re='\|[[:space:]]*tail[[:space:]]+(-[0-9]*1|-n[[:space:]]*1|--lines=1)([^[:alnum:]]|$)'
+      for f in "$dir"/*.sh; do
+        [ -f "$f" ] || continue
+        while IFS= read -r ln; do
+          body="${ln#*:}"
+          case "$body" in \#*) continue;; esac
+          printf '%s:%s\n' "$(basename "$f")" "$ln"
+        done < <(grep -nE "$re" "$f")
+      done
+    } ;;
+esac
+hits="$(t4_scan_all_server_tail1 "$fx")"
+n="$(printf '%s\n' "$hits" | grep -c . || true)"
+t4_assert_ne "" "$hits" "AC2: 缺陷 fixture 必红（新 lint 命中）"
+t4_assert_eq "2" "$n" "AC2: 恰 2 条命中（包装函数 + 显式 -S）"
+t4_assert_not_contains "$hits" "pane_of_session" "AC4: 会话定向采样不纳管"
+t4_exit
+SH
+mut_out="$(MUT_LIB="$T4_ROOT/tests/t4/lib.sh" bash "$MUT93" const-false "$FX93" 2>&1)"; mut_rc=$?
+t4_assert_eq "1" "$mut_rc" "AC5 #93 变异(恒假): 复刻断言翻红（rc=1，不静默通过）"
+t4_assert_contains "$mut_out" "[FAIL] AC2: 缺陷 fixture 必红" "AC5 #93 变异(恒假): 点名翻红的 AC2 断言"
+mut_out="$(MUT_LIB="$T4_ROOT/tests/t4/lib.sh" bash "$MUT93" drop-all "$FX93" 2>&1)"; mut_rc=$?
+t4_assert_eq "1" "$mut_rc" "AC5 #93 变异(丢 -a 判据): 复刻断言翻红（rc=1，不静默通过）"
+t4_assert_contains "$mut_out" "[FAIL] AC2: 恰 2 条命中" "AC5 #93 变异(丢 -a 判据): 点名计数断言翻红（命中了不纳管类）"
+rm -f "$MUT93"
+
 t4_exit
