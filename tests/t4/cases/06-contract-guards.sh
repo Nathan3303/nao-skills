@@ -415,25 +415,46 @@ t4_assert_eq "1" "$(grep -c 'c1 > MIN_PI_MAJOR' "$FLEET_VER" || true)" "major �
 t4_assert_contains "$(cat "$FLEET_VER")" 'pi ≥$MIN_PI_VERSION；' "运行前提小节标题插值常量"
 t4_assert_eq "2" "$(grep -cE 'pi 版本 %s [≥<] %s' "$FLEET_VER" || true)" "✓/✗ 两行文案均插值常量"
 
-# 活体（副本 + 桩 pi；不读宿主真 pi，结果可复现）：正控 ≥ 行；负控抬阈值后判据行自洽
+# 活体（副本 + 桩 pi；不读宿主真 pi，结果可复现）：正控（恰好达标边界）· 负控（抬阈值）· P3-2 变异自证
 LABVER="$(mktemp -d "$T4_CACHE_DIR/pi-ver.XXXXXX")" || t4_blocked "pi 版本用例夹具创建失败"
 cp -r "$T4_ROOT/.agents" "$LABVER/.agents" || t4_bad "pi 版本用例：复制 .agents 失败"
 mkdir -p "$LABVER/bin"
-printf '#!/usr/bin/env bash\n[ "${1:-}" = "--version" ] && { echo "1.5.0"; exit 0; }\nexit 0\n' > "$LABVER/bin/pi"
+# 桩 pi **故意等于常量值**（「实际 == 阈值」边界）：既是「恰好达标仍 PASS」的正面例子，也是旧缺陷
+#   「1.4.0 < 1.4.0」唯一可能出现的前提（实际版本与文案阈值撞车）；否则矛盾类断言永不变红（QA P3-2）。
+printf '#!/usr/bin/env bash\n[ "${1:-}" = "--version" ] && { echo "%s"; exit 0; }\nexit 0\n' "$MINPI" > "$LABVER/bin/pi"
 chmod +x "$LABVER/bin/pi"
-lab_check() { ( cd "$LABVER" && PATH="$LABVER/bin:$PATH" timeout 120 bash .agents/scripts/nao-fleet.sh check -v 2>&1 ); }
-out_pos="$(lab_check)"
+LABFLEET="$LABVER/.agents/scripts/nao-fleet.sh"
+lab_check() { local root="$1"; ( cd "$root" && PATH="$root/bin:$PATH" timeout 120 bash .agents/scripts/nao-fleet.sh check -v 2>&1 ); }
+lab_line()  { printf '%s\n' "$1" | grep -E '✗ pi 版本' | head -1 | sed 's/^ *//'; }
+out_pos="$(lab_check "$LABVER")"
 rc_pos=$?
-t4_assert_eq "0" "$rc_pos" "正控: 桩 pi 1.5.0 + 现阈值 ⇒ check rc=0"
-t4_assert_contains "$out_pos" "✓ pi 版本 1.5.0 ≥ $MINPI" "正控: 通过文案与常量值一致"
-sed -i.bak 's/^MIN_PI_VERSION=.*$/MIN_PI_VERSION="9.9.9"/' "$LABVER/.agents/scripts/nao-fleet.sh"
-t4_assert_eq "9.9.9" "$(sed -n 's/^MIN_PI_VERSION="\([^"]*\)"$/\1/p' "$LABVER/.agents/scripts/nao-fleet.sh" | head -1)" "负控: 夹具副本阈值已抬到 9.9.9"
-out_neg="$(lab_check)"
+t4_assert_eq "0" "$rc_pos" "正控: 桩 pi == 常量 $MINPI ⇒ check rc=0（恰好达标的边界）"
+t4_assert_contains "$out_pos" "✓ pi 版本 $MINPI ≥ $MINPI" "正控: 达标边界仍 PASS，且 ✓ 行阈值 = 常量值"
+sed -i.bak 's/^MIN_PI_VERSION=.*$/MIN_PI_VERSION="9.9.9"/' "$LABFLEET"
+t4_assert_eq "9.9.9" "$(sed -n 's/^MIN_PI_VERSION="\([^"]*\)"$/\1/p' "$LABFLEET" | head -1)" "负控: 夹具副本阈值已抬到 9.9.9"
+out_neg="$(lab_check "$LABVER")"
 rc_neg=$?
+neg_line="$(lab_line "$out_neg")"
 t4_assert_ne "0" "$rc_neg" "负控: 阈值抬到 9.9.9 ⇒ check rc≠0（聚合）"
-t4_assert_contains "$out_neg" "✗ pi 版本 1.5.0 < 9.9.9" "负控: 判据行随常量走（9.9.9 自洽，非硬编码 1.4.0）"
-t4_assert_eq "0" "$(printf '%s' "$out_neg" | grep -cF "$MINPI < $MINPI" || true)" "负控: 不再出现「$MINPI < $MINPI」这类文案与判据分叉"
+t4_assert_eq "✗ pi 版本 $MINPI < 9.9.9" "$neg_line" "负控: ✗ 行「实际」=桩版本、「阈值」=常量（两段都随源走）"
 t4_assert_contains "$out_neg" "pi ≥9.9.9" "负控: 小节标题同源插值（9.9.9）"
-t4_assert_eq "1" "$(grep -cF -- "$MINPI" "$T4_ROOT/.agents/scripts/nao-fleet.sh" || true)" "负控后真脚本未被改动（阈值仍为 $MINPI，副本才会改写）"
+t4_assert_eq "0" "$(printf '%s' "$out_neg" | grep -cF "$MINPI < $MINPI" || true)" "负控: 无「$MINPI < $MINPI」——实际==常量时文案与判据仍自洽"
+
+# P3-2 非空转自证：把副本 ✗ 行改回**硬编码阈值**（复刻旧缺陷）⇒ 上面两条通用判据必须一起变红。
+#   若不跑这一段，「不再出现 1.4.0 < 1.4.0」在实际≠常量时永不变红（QA 实测空转）。
+LABMUT="$LABVER-mut"
+cp -r "$LABVER" "$LABMUT" || t4_bad "P3-2: 变异副本创建失败"
+awk -v v="$MINPI" '{ if (index($0, "✗ pi 版本 %s < %s") > 0) gsub(/%s < %s/, "%s < " v); print }' \
+  "$LABMUT/.agents/scripts/nao-fleet.sh" > "$LABMUT/fleet.mut" || t4_bad "P3-2: 变异副本生成失败"
+mv "$LABMUT/fleet.mut" "$LABMUT/.agents/scripts/nao-fleet.sh"
+t4_assert_ne "0" "$(cmp -s "$LABFLEET" "$LABMUT/.agents/scripts/nao-fleet.sh" && echo 0 || echo 1)" "P3-2: 变异副本确与负控副本不同（✗ 行阈值已硬编码 $MINPI）"
+out_mut="$(lab_check "$LABMUT")"
+rc_mut=$?
+mut_line="$(lab_line "$out_mut")"
+t4_assert_ne "0" "$rc_mut" "P3-2 变异: 硬编码 ✗ 行后仍 rc≠0（不是靠 rc 绊住，靠文案）"
+t4_assert_eq "✗ pi 版本 $MINPI < $MINPI" "$mut_line" "P3-2 变异: 旧缺陷如实复现（文案回头 $MINPI < $MINPI）"
+t4_assert_ne "✗ pi 版本 $MINPI < 9.9.9" "$mut_line" "P3-2 变异: 「✗ 行阈值==常量」判据在变异上必红（断言非空转）"
+t4_assert_eq "1" "$(printf '%s' "$out_mut" | grep -cF "$MINPI < $MINPI" || true)" "P3-2 变异: 「无矛盾文案」判据在变异上计数 1（断言非空转）"
+t4_assert_eq "1" "$(grep -cF -- "$MINPI" "$T4_ROOT/.agents/scripts/nao-fleet.sh" || true)" "全段结束后真脚本未被改动（阈值仍为 $MINPI，只在副本里变异）"
 
 t4_exit
