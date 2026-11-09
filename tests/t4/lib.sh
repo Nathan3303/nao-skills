@@ -159,7 +159,8 @@ t4_require_cmd() { command -v "$1" >/dev/null 2>&1 || t4_blocked "环境缺少�
 #   判定：命令行位（行首 / | ; & ( $( { 之后）出现 tmux 或 $REAL_TMUX，且同串无 `-S`；
 #   `command -v tmux` / `t4_require_cmd tmux` 豁免（非调用）。输出 "basename:line: content"。
 #   覆盖边界：真实缺陷类（同 server 累积残留 + 全 server 计数 + `tail -1` 启发式）写法普遍带 `-S`，
-#   **不在此 lint 覆盖面**；那类由用例级解耦承担（见 `cases/20` 的 reset_lab + 快照 diff）。
+#   **不在此 lint 覆盖面**；那类由下面的 `t4_scan_all_server_tail1`（#93 语义化 lint）守，
+#   用例级解耦仍是 `cases/20` 的 reset_lab + 快照 diff。
 t4_scan_host_pane_refs() { # $1=用例目录
   local dir="$1" f ln body
   local re='(^|[|;&(]|\$\(|\{)[[:space:]]*(tmux|\$REAL_TMUX|"\$REAL_TMUX")[[:space:]]'
@@ -172,6 +173,58 @@ t4_scan_host_pane_refs() { # $1=用例目录
       case "$body" in \#*) continue;; esac
       grep -qE "$allow1" <<< "$ln" && continue
       grep -qE "$allow2" <<< "$ln" && continue
+      printf '%s:%s\n' "$(basename "$f")" "$ln"
+    done < <(grep -nE "$re" "$f")
+  done
+}
+
+# #93 语义化 lint：真实缺陷类「全 server 计数（`list-panes -a`）+ 顺序启发式挑尾（`| tail -1`）」。
+#   病根见 #84 P3-2：这类写法**普遍带 `-S`**（同一隔离 server 内跨块/跨次累积残留），
+#   上面那条「命令行位裸 tmux 必须 -S」的行级 lint 对它零覆盖。
+#   判定（行级、静态）：同一行内 `list-panes` 带全 server 旗标 `-a`，且 `list-panes` 所在的
+#   **第一条**管道直接接只取末行的 `tail`（`tail -1` / `-n 1` / `-n1` / `--lines=1`）。
+#   不看调用方是不是 `tmux`、也不看 socket 形态（`-S` / `-L` 均不解除风险）；
+#   **不解析引号 / 续行 / 数据流**（行级静态判据的固有边界，下面逐类写明）。
+#   输出 "basename:line: content"；命中即属缺陷类，应改「只数夹具窗口 / 快照 diff」。
+#
+#   承诺边界（#93 AC4 + 复核 P2-1：逐类写清纳管/不纳管 + 理由，禁止「声明比判据强」）：
+#     纳管：`list-panes -a … | tail -1`（`list-panes` 前为行首/空白/`;`）—— 含包装函数
+#           `TX list-panes -a … | tail -1`、显式 `tmux -S … list-panes -a … | tail -1`、
+#           同行 `env tmux …` / `bash -c "tmux …"` 前缀、`tail -n 1` / `-n1` / `--lines=1`。
+#     不纳管（**已知漏判**；理由 = 行级静态不解析引号/续行/数据流）：
+#       ① 中间隔了别的管道：`list-panes -a … | grep -v x | tail -1` —— 判据只认**第一条**管道。
+#       ② `list-panes` 紧跟 `(` / `"` / `$(`：`arr=(list-panes -a …)`、`args="list-panes -a …"`、
+#          `x=$(list-panes -a … | tail -1)` —— 前缀只认行首/空白/`;`；末例是命令位置包裹，
+#          前两例是变量间接拼装（判据不追数据流）。
+#       ③ 跨行写法（`-a` 与 `| tail -1` 不在同一行）：行级 lint 不拼接续行。
+#       ④ 两行变量拼装（先 `cmds="list-panes -a …"` 再 `tmux -S … $cmds | tail -1`）：不追数据流。
+#          **同一行 `;` 之后调用整条命令变量**（`cmd="tmux … list-panes -a …"; $cmd | tail -1`）
+#          同样不纳管：行级静态不追数据流，且 `;` 会截断 gap。
+#       ⑤ `list-panes -a … | wc -l` / `| head -1`：只有全 server 计数或只取首行，缺「顺序挑尾」要件。
+#       ⑥ `list-panes -t <target> … | tail -1`：会话/窗口定向采样，不是全 server 计数。
+#     已知假阳（**不承诺判对**；理由 = 行级静态不解析引号）：
+#       - 字符串字面量：`echo "run list-panes -a | tail -1"`（引号内文本被当代码）。
+#       - `-a` 只在引号内：`list-panes -F '#{@x} -a ' | tail -1`（`-a` 不是真旗标）。
+#       - 跨语句已收紧：`;` / `&&` 后的无关 `tail -1` 不得算同一条管道 —— gap 用
+#         `([^|;&]|&[^&])*`（比 `[^|;&]*` 多容忍 `2>&1` 这类单个 `&`；代价 = 单 `&` 后台写法
+#         （`… list-panes -a … & echo done | tail -1`）仍会命中，属**残余边界**，不承诺判对）。
+#     #84 假阳 3 例（旧 lint 的 socket 判定面）：`tmux -S"$SOCK"` 紧贴 / 跨行 `tmux \` / `tmux -L`
+#       —— 本 lint 不判 socket 形态，故均不纳管（这 3 类不构成新 lint 的承诺面）；
+#       其中跨行若把 `-a` / `| tail -1` 拆两行，按 ③ 漏判。
+#     #84 漏判 4 例（旧 lint 的命令行位判定面）：`env tmux …` / `bash -c "tmux …"` / 数组或变量
+#       间接 / `TMUX=$SOCK tmux …` —— 本 lint 不看调用方，只看同行是否有 `list-panes -a` + 第一条
+#       管道接 `tail`：同行出现的 `env` / `bash -c` 前缀纳管；数组/变量间接看形态 —— 调用与
+#       `list-panes` 同行的命中（如 `args=(-S s); tmux "${args[@]}" list-panes -a … | tail -1`），
+#       命令拼进变量字符串的按 ② 漏判；同一行 `;` 之后调用整条命令变量的按 ④ 漏判。
+t4_scan_all_server_tail1() { # $1=用例目录
+  local dir="$1" f ln body
+  local re='(^|[[:space:];])list-panes([^|;&]|&[^&])*[[:space:]]-a[[:alnum:]]*([[:space:]]|$)([^|;&]|&[^&])*\|[[:space:]]*tail[[:space:]]+(-[0-9]*1|-n[[:space:]]*1|--lines=1)([^[:alnum:]]|$)'
+  for f in "$dir"/*.sh; do
+    [ -f "$f" ] || continue
+    while IFS= read -r ln; do
+      body="${ln#*:}"
+      body="${body#"${body%%[![:space:]]*}"}"   # P3-2：先 trim 前导空白再判注释
+      case "$body" in \#*) continue;; esac
       printf '%s:%s\n' "$(basename "$f")" "$ln"
     done < <(grep -nE "$re" "$f")
   done
