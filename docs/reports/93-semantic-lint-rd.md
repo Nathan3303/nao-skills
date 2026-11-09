@@ -2,7 +2,7 @@
 
 - 状态：第二轮复核整改完成 · 待 QA 复核 / PM 验收 · 更新：2026-11-09 · Owner：rd-infra
 - 指针：Issue [#93](https://github.com/Nathan3303/nao-skills/issues/93) · PR [#94](https://github.com/Nathan3303/nao-skills/pull/94) · 分支 `fix/93-semantic-lint` · 来源 QA #84 P3-2（台账待派发 Q2）
-- 门禁 HEAD：`6cd8167`（本轮整改提交，tests 内容即交付面）；本报告为其后的 docs-only 提交，工作区静默 = `git status --porcelain` 0 行
+- 门禁 HEAD：`3a11b92`（第三轮文字整改提交，tests 内容即交付面）；本报告为其后的 docs-only 提交，工作区静默 = `git status --porcelain` 0 行
 
 ## TL;DR
 
@@ -64,11 +64,11 @@
 - 丢 `-a` 变异：`hits n=8`，`rc=1` ⇒ `[FAIL] AC2: 恰 2 条命中（期望=2 实际=8）` + `[FAIL] AC4: 会话定向采样不纳管`（fixture 已含 C5–C8 负控；红数仍为 2 条）。
 - **gap 改回 `[^|]*` 变异**（临时 worktree 只改该行）：`cases/06` `rc=1`，**3 红** ⇒ `AC2: 恰 2 条命中（期望=2 实际=4）` + `P3-1 负控: 分号后接无关 tail -1 不得命中（不应包含: pane_then_echo）` + `P3-1 负控: 逻辑与后接无关 tail -1 不得命中（不应包含: pane_and_echo）`。⇒ 跨语句收紧有机械护栏，不是只靠注释。
 
-## 六、AC6：门禁（HEAD `6cd8167` · 工作区静默）
+## 六、AC6：门禁（HEAD `3a11b92` · 工作区静默）
 
 - `bash .agents/scripts/nao-fleet.sh check` 连跑 2 次：`rc1=0 / rc2=0`，两次输出 `diff` 0 行；`check: OK · roles=7 · files=54 · layout=main-row2`
 - `npm test` → `rc=0` · 用例 **25**（`run.sh --list | tail -n +2 | wc -l`）· 断言 **1011**（`grep -c '\[PASS\]'`）· `FAIL=0` · `SKIP=0 · DEGRADE=0 · NOTE=2`（白名单 `06:static-contract` ×2）
-- 断言数对账：上一轮 **1004** → 本轮 **1011**（**+7**），逐条 = 快照 fixture 存在 +1 · 快照来源 sha +1 · 快照日期 +1 · C5/C6/C7/C8 负控 +4；基线 v0.22.6 **986** → 本轮 **1011**（**+25**，全部为 #93 及相关复核断言）。
+- 断言数对账：上一轮 **1004** → 本轮 **1011**（**+7**；第三轮纯文字批复跑仍 **1011**，未增删断言），逐条 = 快照 fixture 存在 +1 · 快照来源 sha +1 · 快照日期 +1 · C5/C6/C7/C8 负控 +4；基线 v0.22.6 **986** → 本轮 **1011**（**+25**，全部为 #93 及相关复核断言）。
 
 ## 七、变更面与回退
 
@@ -76,7 +76,7 @@
 - 分支累计（按 sha 口径，禁会随文档增删漂移的「全分支」总数）：
   - 代码提交 `6cd8167`：7 文件 **+276 −3**
   - 含报告修订至 `65e8d3a`：7 文件 **+280 −3**
-  - 第三轮文字批（`lib.sh` 注释 + 本报告）后的 HEAD 值以回执的 `git diff --shortstat main...HEAD` 实测为准
+  - 含第三轮文字批（`lib.sh` 注释 + 本报告最终版）：7 文件 **+287 −3**
 - `nao-fleet.sh` / `bin/` / `.agents/` 零改动
 - 回退：单条 squash `git revert` 可干净回退。
 - 已知边界：行级静态不拼续行、不追数据流、不解析引号（P2-1 已逐类声明）；字符串字面量/引号内 `-a` 是已知假阳，不承诺判对。
