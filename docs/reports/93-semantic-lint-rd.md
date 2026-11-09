@@ -17,7 +17,7 @@
 - 新判据（行级、静态）：同一行内 `list-panes` 带全 server 旗标 `-a`，且 `list-panes` 所在**第一条**管道直接接只取末行的 `tail`（`-1` / `-n 1` / `-n1` / `--lines=1`）。不判 socket 形态；**不解析引号 / 续行 / 数据流**。
 - 承诺边界写在 `tests/t4/lib.sh`（P2-1 订正后）：
   - 纳管：该组合（含包装函数 `TX list-panes -a … | tail -1`、显式 `tmux -S …`、同行 `env tmux` / `bash -c "tmux …"` 前缀、`tail -n 1` / `-n1` / `--lines=1`）。
-  - 不纳管（已知漏判，理由 = 行级静态不解析引号/续行/数据流）：① 中间隔别的管道（`| grep … | tail -1`，只认第一条管道）② `list-panes` 紧跟 `(` / `"` / `$(`（`arr=(list-panes -a …)` / `args="list-panes -a …"` / `x=$(list-panes -a … | tail -1)`）③ 跨行 ④ 两行变量拼装（`cmds="list-panes -a …"` 再 `$cmds | tail -1`）⑤ `| wc -l` / `| head -1` ⑥ 会话定向 `list-panes -t … | tail -1`。
+  - 不纳管（已知漏判，理由 = 行级静态不解析引号/续行/数据流）：① 中间隔别的管道（`| grep … | tail -1`，只认第一条管道）② `list-panes` 紧跟 `(` / `"` / `$(`（`arr=(list-panes -a …)` / `args="list-panes -a …"` / `x=$(list-panes -a … | tail -1)`）③ 跨行 ④ 两行变量拼装（`cmds="list-panes -a …"` 再 `$cmds | tail -1`）；同行 `;` 之后调用整条命令变量（`cmd="tmux … list-panes -a …"; $cmd | tail -1`）同样不纳管（不追数据流 + `;` 截断 gap）⑤ `| wc -l` / `| head -1` ⑥ 会话定向 `list-panes -t … | tail -1`。
   - 已知假阳（不承诺判对，理由 = 不解析引号）：字符串字面量 `echo "run list-panes -a | tail -1"`、引号内 `-a`（`list-panes -F '#{@x} -a ' | tail -1`）。
 
 ## 二、第二轮整改（QA CONDITIONAL 四项）
@@ -29,7 +29,7 @@
   arr=(list-panes -a -F x); tmux -S s "${arr[@]}" | tail -1        → 0
   args="list-panes -a -F x"; tmux -S s $args | tail -1             → 0
   ```
-- **P3-1（跨语句假阳）**：管道 gap 由 `[^|]*` 收紧为 `([^|;&]|&[^&])*`（等价收紧 `;` / `&&`，但容忍 `2>&1` 这类单个 `&`，不制造新漏判）。实测：
+- **P3-1（跨语句假阳）**：管道 gap 由 `[^|]*` 收紧为 `([^|;&]|&[^&])*`（等价收紧 `;` / `&&`，但容忍 `2>&1` 这类单个 `&`）。「未制造新漏判」**仅限该情形**：单 `&` 后台写法（`… list-panes -a … & echo done | tail -1`）仍会命中 —— 这是为容忍 `2>&1` 付出的代价，已作为**残余边界**写进 `lib.sh` 注释（不承诺判对）。实测：
   ```
   x() { … list-panes -a …; echo done | tail -1; }        → 0（改前命中）
   list-panes -a -F x && echo done | tail -1              → 0（改前命中）
@@ -61,7 +61,7 @@
 
 - 负控（`controls.sh`，逐条断言不命中）：C1 会话定向+挑尾 · C2 `| wc -l` · C3 `| head -1` · C4 跨行 · C5 两行变量 · C6 `;` 跨语句 · C7 `&&` 跨语句 · C8 缩进注释。
 - 恒假变异（子进程替换 lint，复刻断言）：`hits n=0`，`rc=1` ⇒ `[FAIL] AC2: 缺陷 fixture 必红（不应等于 ）` + `恰 2 条命中（期望=2 实际=0）`。
-- 丢 `-a` 变异：`hits n=4`，`rc=1` ⇒ `[FAIL] AC2: 恰 2 条命中（期望=2 实际=4）` + `[FAIL] AC4: 会话定向采样不纳管`。
+- 丢 `-a` 变异：`hits n=8`，`rc=1` ⇒ `[FAIL] AC2: 恰 2 条命中（期望=2 实际=8）` + `[FAIL] AC4: 会话定向采样不纳管`（fixture 已含 C5–C8 负控；红数仍为 2 条）。
 - **gap 改回 `[^|]*` 变异**（临时 worktree 只改该行）：`cases/06` `rc=1`，**3 红** ⇒ `AC2: 恰 2 条命中（期望=2 实际=4）` + `P3-1 负控: 分号后接无关 tail -1 不得命中（不应包含: pane_then_echo）` + `P3-1 负控: 逻辑与后接无关 tail -1 不得命中（不应包含: pane_and_echo）`。⇒ 跨语句收紧有机械护栏，不是只靠注释。
 
 ## 六、AC6：门禁（HEAD `6cd8167` · 工作区静默）
@@ -73,6 +73,10 @@
 ## 七、变更面与回退
 
 - 本轮 `6cd8167`：5 文件 · `tests/README.md +1 −1` · `cases/06 +18 −4` · `controls.sh +9` · `pre93-host-pane-refs.sh +29`（新）· `lib.sh +31 −18`
-- 全分支（含报告）：7 文件 **+276 −3**（`tests/` + 报告；`nao-fleet.sh` / `bin/` / `.agents/` 零改动）
+- 分支累计（按 sha 口径，禁会随文档增删漂移的「全分支」总数）：
+  - 代码提交 `6cd8167`：7 文件 **+276 −3**
+  - 含报告修订至 `65e8d3a`：7 文件 **+280 −3**
+  - 第三轮文字批（`lib.sh` 注释 + 本报告）后的 HEAD 值以回执的 `git diff --shortstat main...HEAD` 实测为准
+- `nao-fleet.sh` / `bin/` / `.agents/` 零改动
 - 回退：单条 squash `git revert` 可干净回退。
 - 已知边界：行级静态不拼续行、不追数据流、不解析引号（P2-1 已逐类声明）；字符串字面量/引号内 `-a` 是已知假阳，不承诺判对。
