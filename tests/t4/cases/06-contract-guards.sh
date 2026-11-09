@@ -402,4 +402,38 @@ t4_assert_eq "1" "$mut_rc" "AC5 #93 变异(丢 -a 判据): 复刻断言翻红（
 t4_assert_contains "$mut_out" "[FAIL] AC2: 恰 2 条命中" "AC5 #93 变异(丢 -a 判据): 点名计数断言翻红（命中了不纳管类）"
 rm -f "$MUT93"
 
+# --- M20261109：pi 版本阈值的**单一事实**（MIN_PI_VERSION）-------------------------
+# 判据：常量只有一份（脚本内该版本字面量恰 1 次）；比较阈值由它派生（无魔术数 4/1）；
+#       三处文案插值；活体负控抬到 9.9.9 后**文案与判据自洽**（不再出现「1.4.0 < 1.4.0」）。
+FLEET_VER="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+MINPI="$(sed -n 's/^MIN_PI_VERSION="\([^"]*\)"$/\1/p' "$FLEET_VER" 2>/dev/null | head -1)"
+t4_assert_match "$MINPI" '^[0-9]+\.[0-9]+\.[0-9]+$' "MIN_PI_VERSION 可从脚本抽出且为 x.y.z（得到「$MINPI」）"
+t4_assert_eq "1" "$(grep -cF -- "$MINPI" "$FLEET_VER" || true)" "MIN_PI_VERSION 在脚本内仅出现 1 次（文案/判据一律派生，无双源）"
+t4_assert_eq "1" "$(grep -c 'c2 >= MIN_PI_MINOR' "$FLEET_VER" || true)" "比较判据用派生 MIN_PI_MINOR（无魔术数 4）"
+t4_assert_eq "0" "$(grep -c 'c2 >= 4' "$FLEET_VER" || true)" "旧魔术数「c2 >= 4」已不存在"
+t4_assert_eq "1" "$(grep -c 'c1 > MIN_PI_MAJOR' "$FLEET_VER" || true)" "major 阈值同源派生（c1 > MIN_PI_MAJOR）"
+t4_assert_contains "$(cat "$FLEET_VER")" 'pi ≥$MIN_PI_VERSION；' "运行前提小节标题插值常量"
+t4_assert_eq "2" "$(grep -cE 'pi 版本 %s [≥<] %s' "$FLEET_VER" || true)" "✓/✗ 两行文案均插值常量"
+
+# 活体（副本 + 桩 pi；不读宿主真 pi，结果可复现）：正控 ≥ 行；负控抬阈值后判据行自洽
+LABVER="$(mktemp -d "$T4_CACHE_DIR/pi-ver.XXXXXX")" || t4_blocked "pi 版本用例夹具创建失败"
+cp -r "$T4_ROOT/.agents" "$LABVER/.agents" || t4_bad "pi 版本用例：复制 .agents 失败"
+mkdir -p "$LABVER/bin"
+printf '#!/usr/bin/env bash\n[ "${1:-}" = "--version" ] && { echo "1.5.0"; exit 0; }\nexit 0\n' > "$LABVER/bin/pi"
+chmod +x "$LABVER/bin/pi"
+lab_check() { ( cd "$LABVER" && PATH="$LABVER/bin:$PATH" timeout 120 bash .agents/scripts/nao-fleet.sh check -v 2>&1 ); }
+out_pos="$(lab_check)"
+rc_pos=$?
+t4_assert_eq "0" "$rc_pos" "正控: 桩 pi 1.5.0 + 现阈值 ⇒ check rc=0"
+t4_assert_contains "$out_pos" "✓ pi 版本 1.5.0 ≥ $MINPI" "正控: 通过文案与常量值一致"
+sed -i.bak 's/^MIN_PI_VERSION=.*$/MIN_PI_VERSION="9.9.9"/' "$LABVER/.agents/scripts/nao-fleet.sh"
+t4_assert_eq "9.9.9" "$(sed -n 's/^MIN_PI_VERSION="\([^"]*\)"$/\1/p' "$LABVER/.agents/scripts/nao-fleet.sh" | head -1)" "负控: 夹具副本阈值已抬到 9.9.9"
+out_neg="$(lab_check)"
+rc_neg=$?
+t4_assert_ne "0" "$rc_neg" "负控: 阈值抬到 9.9.9 ⇒ check rc≠0（聚合）"
+t4_assert_contains "$out_neg" "✗ pi 版本 1.5.0 < 9.9.9" "负控: 判据行随常量走（9.9.9 自洽，非硬编码 1.4.0）"
+t4_assert_eq "0" "$(printf '%s' "$out_neg" | grep -cF "$MINPI < $MINPI" || true)" "负控: 不再出现「$MINPI < $MINPI」这类文案与判据分叉"
+t4_assert_contains "$out_neg" "pi ≥9.9.9" "负控: 小节标题同源插值（9.9.9）"
+t4_assert_eq "1" "$(grep -cF -- "$MINPI" "$T4_ROOT/.agents/scripts/nao-fleet.sh" || true)" "负控后真脚本未被改动（阈值仍为 $MINPI，副本才会改写）"
+
 t4_exit

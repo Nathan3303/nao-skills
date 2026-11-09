@@ -3,7 +3,7 @@
 # nao-fleet.sh — 按角色一键拉起 pi 会话窗口（nao 团队工具箱）
 #
 # 运行前提（ADR 2026-10-27-strict-tmux-pi · 唯一路径）
-#   必须在 tmux 会话内（$TMUX 非空且 tmux 命令可用）· pi ≥ 1.4.0（check 断言）
+#   必须在 tmux 会话内（$TMUX 非空且 tmux 命令可用）· pi ≥ MIN_PI_VERSION（check 断言；阈值单源，见下方常量区）
 #   非 tmux ⇒ ensure/status/close 一律 exit 3 + 一行提示，且不建 session/pane/lock、不写状态（BR3）
 #   cleanup 豁免本前提：其正常场景就是「非 tmux 的隔离实验场」（env -u TMUX ... -S <socket>）
 #
@@ -82,6 +82,14 @@ SKILLS_DIR="${NAO_SKILLS:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 PROMPTS_DIR="$SKILLS_DIR/.agents/prompts"
 COMMON_DIR="$SKILLS_DIR/.agents/common"
 SKILLS_SUB="$SKILLS_DIR/.agents/skills"
+
+# pi 运行前提（ADR 2026-10-27-strict-tmux-pi）的**单源**：check 文案与比较判据全部由它派生，
+#   脚本内禁再出现该版本的字面量（tests/t4 用例 06 静态兜住）。改阈值只改这一行。
+MIN_PI_VERSION="1.4.0"
+# 派生比较阈值（major / minor）：判据里不得重敲数字；patch 不参与比较（准入只认版本线）
+MIN_PI_MAJOR="${MIN_PI_VERSION%%.*}"
+MIN_PI_MINOR="${MIN_PI_VERSION#*.}"
+MIN_PI_MINOR="${MIN_PI_MINOR%%.*}"
 
 MANIFEST="$SKILLS_DIR/.agents/roles.yaml"
 CARD_MAX_LINES=200
@@ -379,7 +387,7 @@ codegraph_state() {
 }
 
 # pi 运行前提（BR4/AC3）：版本源 = `pi --version` 首个 semver token；预发布（含 `-`）视为不满足。
-# 输出当前版本（缺失/不可解析也给占位），rc 0 = 满足 ≥1.4.0；失败只置 rc，由 check 聚合后继续跑完其余体检。
+# 输出当前版本（缺失/不可解析也给占位），rc 0 = 满足 ≥ MIN_PI_VERSION；失败只置 rc，由 check 聚合后继续跑完其余体检。
 pi_version_check() {
   if ! command -v pi >/dev/null 2>&1; then printf '%s' '<缺失>'; return 1; fi
   local raw cur base c1 c2
@@ -391,9 +399,9 @@ pi_version_check() {
   base="${cur%%+*}"                        # 忽略 build metadata
   c1="${base%%.*}"; base="${base#*.}"
   c2="${base%%.*}"
-  if (( c1 > 1 )); then return 0; fi
-  if (( c1 < 1 )); then return 1; fi
-  if (( c2 >= 4 )); then return 0; fi
+  if (( c1 > MIN_PI_MAJOR )); then return 0; fi
+  if (( c1 < MIN_PI_MAJOR )); then return 1; fi
+  if (( c2 >= MIN_PI_MINOR )); then return 0; fi
   return 1
 }
 
@@ -1358,7 +1366,7 @@ cmd_check() {
     done
   fi
 
-  echo "== 运行前提（tmux 内 + pi ≥1.4.0；AC1/AC3）=="
+  echo "== 运行前提（tmux 内 + pi ≥$MIN_PI_VERSION；AC1/AC3）=="
   if command -v tmux >/dev/null 2>&1; then
     echo '  ✓ tmux 可用（唯一受支持宿主）'
   else
@@ -1371,9 +1379,9 @@ cmd_check() {
   fi
   local pi_cur
   if pi_cur="$(pi_version_check)"; then
-    printf '  ✓ pi 版本 %s ≥ 1.4.0\n' "$pi_cur"
+    printf '  ✓ pi 版本 %s ≥ %s\n' "$pi_cur" "$MIN_PI_VERSION"
   else
-    printf '  ✗ pi 版本 %s < 1.4.0\n' "$pi_cur"; rc=1
+    printf '  ✗ pi 版本 %s < %s\n' "$pi_cur" "$MIN_PI_VERSION"; rc=1
   fi
 
   echo "== tmux 布局 =="
