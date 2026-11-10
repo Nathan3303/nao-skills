@@ -17,7 +17,10 @@
 #   be_new_pane [cwd]             新建 pane，打印 pane_id（首个 pane 由 session/workspace 创建）
 #   be_run <pane_id> <cmd>        在既有 pane 内执行命令（fire-and-forget）
 #   be_teardown                   stop + delete（herdr）/ kill-server（tmux）；判据看 **effect**
+#   be_arm_cleanup                失败/中断兜底：把「停本场 server」链进 EXIT trap（保留原 $?）
+#   be_sweep_orphans              起跑前扫「死 run 遗留」的 herdr server 并 stop（不碰用户根/活 run）
 #   辅助：be_session_exists / be_sessions_dir / be_herdr / be_guard_session / be_herdr_protocol
+#         be_orphan_server_count / _be_scan_herdr_servers（供用例按 effect 断言）
 #
 # 硬约束（arch spike 实测；PRD 附一「最易引 flake 的两处」+ §五 BR6）：
 #   ① 就绪禁固定 sleep：50×100ms 轮询 + 5s 上限 + 超时 fail loud（实测 API 就绪仅 69ms）；
@@ -76,18 +79,47 @@ _be_guard_tmux_sock() {
   return 0
 }
 
-# 会话名守卫（BR5/④）：空 ⇒ 缺 --session · default ⇒ 用户会话 · 实验根不在 cache 下 ⇒ 拒绝
+# ---------------------------------------------------------------- 实验根判定（结构性；守卫与孤儿 sweep 复用）
+# 用户根一律拒（BR9）：`$HOME/.config/herdr` 及其下 —— 那是用户 `default` 会话。
+#   实测用户 server 的 `XDG_CONFIG_HOME` 通常是 `$HOME/.config`（会话目录 = 其下 `herdr/`），
+#   这条也覆盖「根正好是 `$HOME/.config`」以外的任何用户侧形态：凡不含 `nao-t4.*` 段且不在
+#   当前 cache 下者一律不算实验根。
+_be_is_user_herdr_root() {
+  local r="${1:-}" h="${HOME:-}"
+  [ -n "$r" ] && [ -n "$h" ] || return 1
+  case "$r" in "$h/.config/herdr"|"$h/.config/herdr"/*|"$h/.config") return 0 ;; esac
+  return 1
+}
+
+# t4 实验根 = 路径含 `nao-t4.*` 段（T524 缓存形态）或位于当前 BE_CACHE_ROOT 之下
+_be_is_lab_root() {
+  local r="${1:-}"
+  [ -n "$r" ] || return 1
+  _be_is_user_herdr_root "$r" && return 1
+  case "$r" in */nao-t4.*/*) return 0 ;; esac
+  if [ -n "${BE_CACHE_ROOT:-}" ]; then case "$r" in "$BE_CACHE_ROOT"/*) return 0 ;; esac; fi
+  return 1
+}
+
+# 实验根所属的 cache 目录（`/tmp/nao-t4.ABC/lab/config` ⇒ `/tmp/nao-t4.ABC`；无形态则空）
+_be_cache_of_root() { printf '%s' "${1:-}" | sed -nE 's#^(.*/nao-t4\.[^/]+)/.*$#\1#p'; }
+
+# 会话名守卫（BR5/④）：空 ⇒ 缺 --session · default ⇒ 用户会话 · 根不是实验根 ⇒ 拒
 # 这是「缺 --session ⇒ FAIL」的唯一实现点；cases/27 对它有正断言（含变异自证）。
 be_guard_session() {
-  local s="${1:-}"
+  local s="${1:-}" root="${BE_CFGROOT:-}"
   case "$s" in
     "")      be_guard_fail "缺 --session（无 --session 会静默读到用户 default）"; return 1 ;;
     default) be_guard_fail "会话名不得为 default（用户会话，实测无 --session 时会静默命中）"; return 1 ;;
     *[[:space:]]*|*/*)
              be_guard_fail "会话名非法（空白或 /）: $s"; return 1 ;;
   esac
-  [ -n "${BE_CFGROOT:-}" ] || { be_guard_fail "未初始化 herdr 实验根（先 be_init）"; return 1; }
-  _be_guard_herdr_root
+  [ -n "$root" ] || { be_guard_fail "未初始化 herdr 实验根（先 be_init）"; return 1; }
+  if _be_is_user_herdr_root "$root"; then
+    be_guard_fail "会话根指向用户 herdr 根（$root）—— 绝不碰用户 default"; return 1
+  fi
+  _be_is_lab_root "$root" || { be_guard_fail "会话根不是 t4 实验根（$root）"; return 1; }
+  return 0
 }
 
 # ---------------------------------------------------------------- 初始化
@@ -104,6 +136,7 @@ be_init() { # <lab-root> [session]
   BE_POLL_INT="${BE_POLL_INT:-0.1}"
   BE_START_EFFECT=0
   BE_TEARDOWN_EFFECT=0
+  BE_CLEANUP_ARMED="${BE_CLEANUP_ARMED:-0}"     # 不覆盖已挂的兜底（ctx 切换不得丢保护）
   case "$BE_BACKEND" in
     tmux)
       BE_SOCK="$BE_LAB/sock/tmux-$(id -u)/default"
@@ -140,6 +173,185 @@ _be_herdr_exec() {
 }
 
 be_herdr() { _be_herdr_exec "$@"; }   # 别名：调用方显式命名（语义 = 「经唯一入口」）
+
+# 临时切换上下文执行（孤儿 sweep 用：拿**孤儿自己的根**去 stop 它，不动调用方的场）
+_be_with_ctx() { # <root> <session> <fn> [args...]
+  local root="$1" sess="$2" fn="$3"; shift 3
+  local s_root="${BE_CFGROOT:-}" s_sess="${BE_SESSION:-}" rc=0
+  BE_CFGROOT="$root"; BE_SESSION="$sess"
+  "$fn" "$@"; rc=$?
+  BE_CFGROOT="$s_root"; BE_SESSION="$s_sess"
+  return "$rc"
+}
+
+# ---------------------------------------------------------------- 孤儿 sweep（P2 缺陷修复）
+# 缺陷：herdr server 用 `setsid` 脱离进程组 ⇒ 用例被中断 / 失败时 EXIT 钩子杀不掉它；
+#   T524 口径失败**保留 cache**（好证据）但**进程**没人管 ⇒ 每次失败泄漏一个常驻 server。
+# 三层防护（本文件单点实现）：① 起跑前扫孤儿（be_sweep_orphans）② 失败/中断兜底（be_arm_cleanup）
+#   ③ 正常拆场（be_teardown）。判据一律看 **effect**（进程真的没了）不看 rc。
+# 安全边界（绝不误伤）：
+#   · 只认**实验根形态**（含 `nao-t4.*` 段 / 在 BE_CACHE_ROOT 下）；
+#   · **用户根（$HOME/.config/herdr、$HOME/.config）结构上不可能被选中**；
+#   · **活 run 的 cache 跳过**（有进程持有该 cache 的 `T4_CACHE_DIR=`）⇒ 并发跑不会互杀；
+#     活 run 自己的残留由它自己的 teardown + EXIT 兜底负责；只有「死 run 遗留」才被清。
+#   · **不删**任何目录（只停进程 + 删该会话场）；cache 目录按 T524 口径留给证据。
+
+# 枚举 herdr server 进程：argv[0] basename == herdr，argv 含 `--session <n>` 且含 `server`
+# 输出：`<pid>\t<session>\t<XDG_CONFIG_HOME>`（根缺失 = 空字段 ⇒ 调用方按「非实验根」处理）
+_be_scan_herdr_servers() {
+  local d pid args argv0 line prev name has_server root
+  for d in /proc/[0-9]*; do
+    pid="${d##*/}"
+    [ -r "$d/cmdline" ] || continue
+    args="$(tr '\0' '\n' < "$d/cmdline" 2>/dev/null)" || continue
+    [ -n "$args" ] || continue
+    argv0="${args%%$'\n'*}"; argv0="${argv0##*/}"
+    [ "$argv0" = "herdr" ] || continue
+    name=""; has_server=0; prev=""
+    while IFS= read -r line; do
+      [ "$line" = "server" ] && has_server=1
+      [ "$prev" = "--session" ] && name="$line"
+      prev="$line"
+    done <<< "$args"
+    # 也纳管「无 --session 的 server」（用户 default 形态 = `herdr server`）—— 只为让负控有基线；
+    # 它 roots 不在实验根判据内 ⇒ sweep 永远不会动它。
+    [ "$has_server" = "1" ] || continue
+    root="$(tr '\0' '\n' < "$d/environ" 2>/dev/null | sed -nE 's/^XDG_CONFIG_HOME=(.*)$/\1/p' | head -1)"
+    printf '%s\t%s\t%s\n' "$pid" "$name" "$root"
+  done
+}
+
+# 某进程的祖先里是否有 herdr（孤儿 server 的**子孙**会继承起跑方的 T4_CACHE_DIR；
+#   实测 server 会起 curl 子进程 ⇒ 只看「排除 argv0=herdr」不够，会把死 run 的 cache 错判成活）
+_be_pid_has_herdr_ancestor() {
+  local cur="${1:-}" ppid a0 i=0 rest
+  [ -n "$cur" ] || return 1
+  while [ "$cur" != "1" ] && [ -n "$cur" ] && [ "$i" -lt 64 ]; do
+    rest="$(sed 's/^[^)]*)//' "/proc/$cur/stat" 2>/dev/null)" || return 1
+    ppid="$(printf '%s' "$rest" | awk '{print $2}')"
+    case "$ppid" in ''|*[!0-9]*) return 1 ;; esac
+    cur="$ppid"
+    [ "$cur" = "1" ] && return 1
+    a0="$(tr '\0' '\n' < "/proc/$cur/cmdline" 2>/dev/null | head -1)"; a0="${a0##*/}"
+    [ "$a0" = "herdr" ] && return 0
+    i=$((i + 1))
+  done
+  return 1
+}
+
+# 活 run 的 cache 根（有**非 herdr 世系**的进程持有 `T4_CACHE_DIR=<dir>`）：sweep 跳过，防并发误杀。
+# 判据要排除「herdr 自身及其子孙」—— 否则孤儿 server 会把自己赖着的 cache 标成「活」（自锁，实测踩过）。
+_be_live_cache_dirs() {
+  local d v a0
+  for d in /proc/[0-9]*; do
+    [ -r "$d/environ" ] || continue
+    a0="$(tr '\0' '\n' < "$d/cmdline" 2>/dev/null | head -1)"; a0="${a0##*/}"
+    [ "$a0" = "herdr" ] && continue
+    v="$(tr '\0' '\n' < "$d/environ" 2>/dev/null | sed -nE 's/^T4_CACHE_DIR=(.*)$/\1/p' | head -1)"
+    [ -n "$v" ] || continue
+    _be_pid_has_herdr_ancestor "${d##*/}" && continue
+    printf '%s\n' "$v"
+  done 2>/dev/null | sort -u
+}
+
+# 某根下的 server 进程数（effect 断言用；非 0 ⇒ 仍有残留）
+be_orphan_server_count() { # <root>
+  local root="${1:-}" pid name r n=0
+  [ -n "$root" ] || return 1
+  while IFS=$'\t' read -r pid name r; do
+    [ "${r:-}" = "$root" ] && n=$((n + 1))
+  done < <(_be_scan_herdr_servers)
+  printf '%s' "$n"
+}
+
+# 某 pid 已不是 herdr server（僵尸进程 cmdline 为空 ⇒ 也不在扫描结果里）
+_be_server_gone() {
+  ! _be_scan_herdr_servers | awk -F'\t' -v p="${1:-}" '$1==p{found=1} END{exit(found?0:1)}'
+}
+
+# be_sweep_orphans —— 停掉「死 run 遗留」的 herdr server（含删其会话场）。幂等：第 2 次 effect=0。
+# effect 三数：BE_SWEEP_EFFECT（真停掉数）/ BE_SWEEP_SKIPPED_LIVE（活 run 跳过）/ BE_SWEEP_SKIPPED_FOREIGN（非实验根跳过）
+# 失败：BE_SWEEP_FAILED 逐条 `BE-SWEEP-WARN:` 点名（不静默），函数 rc=1。
+be_sweep_orphans() {
+  BE_SWEEP_EFFECT=0; BE_SWEEP_FAILED=0
+  BE_SWEEP_SKIPPED_LIVE=0; BE_SWEEP_SKIPPED_FOREIGN=0
+  BE_BACKEND="${BE_BACKEND:-$(be_backend)}" || return 1   # sweep 可能先于 be_init 调用（run.sh 起跑前）
+  [ "$BE_BACKEND" = "herdr" ] || return 0                  # tmux 侧无 setsid 脱离问题（kill-server 已覆盖）
+  BE_CACHE_ROOT="${BE_CACHE_ROOT:-${T4_CACHE_DIR:-}}"
+  BE_POLL_MAX="${BE_POLL_MAX:-50}"; BE_POLL_INT="${BE_POLL_INT:-0.1}"
+  BE_CLEANUP_ARMED="${BE_CLEANUP_ARMED:-0}"
+  local pid name root cache live
+  live="$(_be_live_cache_dirs)"
+  while IFS=$'\t' read -r pid name root; do
+    [ -n "${pid:-}" ] || continue
+    if ! _be_is_lab_root "${root:-}" || [ -z "${name:-}" ]; then
+      BE_SWEEP_SKIPPED_FOREIGN=$((BE_SWEEP_SKIPPED_FOREIGN + 1)); continue
+    fi
+    cache="$(_be_cache_of_root "$root")"
+    if [ -n "$cache" ] && grep -qxF -- "$cache" <<< "$live"; then
+      BE_SWEEP_SKIPPED_LIVE=$((BE_SWEEP_SKIPPED_LIVE + 1)); continue
+    fi
+    _be_with_ctx "$root" "$name" be_teardown >/dev/null 2>&1 || true
+    # 兜底：会话场不可达（如 cache 目录已被删 ⇒ socket 消失，`session stop` 够不着）⇒ 按 pid 终止。
+    #   安全性由上层判据保证（该 pid 的 XDG_CONFIG_HOME 已是**实验根**，绝不可能是用户 server）。
+    if ! be_wait_until 20 0.1 _be_server_gone "$pid"; then
+      be_msg "BE-SWEEP-NOTE: 会话场不可达，按 pid 终止（pid=$pid session=$name）"
+      kill -TERM "$pid" 2>/dev/null || true
+      if ! be_wait_until 20 0.1 _be_server_gone "$pid"; then
+        kill -KILL "$pid" 2>/dev/null || true
+      fi
+    fi
+    # effect 判据：该 pid 不再是 herdr server 进程（僵尸 cmdline 为空 ⇒ 也不在扫描结果里）
+    if be_wait_until 20 0.1 _be_server_gone "$pid"; then
+      BE_SWEEP_EFFECT=$((BE_SWEEP_EFFECT + 1))
+    else
+      BE_SWEEP_FAILED=$((BE_SWEEP_FAILED + 1))
+      be_msg "BE-SWEEP-WARN: 孤儿 server 未停掉（pid=$pid session=$name root=$root）—— 下次起跑重试"
+    fi
+  done < <(_be_scan_herdr_servers)
+  [ "$BE_SWEEP_FAILED" = "0" ] || return 1
+  return 0
+}
+
+# 失败/中断兜底：把「停本场 server」前置进既有 EXIT trap（lib.sh 的 t4_cache_cleanup 必须最后跑且拿到原 $?）。
+# 不能 `trap X EXIT` 直接覆盖 —— 那会吞掉 T524 的缓存生命周期语义（cases/14）。
+_be_chain_exit_hook() { # <fn>
+  local fn="${1:-}" prev cmd
+  prev="$(trap -p EXIT)"
+  case "$prev" in
+    '') trap "$fn" EXIT; return 0 ;;
+    "trap -- '"*"' EXIT")
+      cmd="${prev#trap -- \'}"; cmd="${cmd%\' EXIT}"
+      case "$cmd" in *"'"*) be_msg "BE-WARN: 既有 EXIT trap 含单引号，无法安全接管（$prev）"; return 1 ;; esac
+      trap "$fn; $cmd" EXIT
+      return 0 ;;
+    *) be_msg "BE-WARN: 无法解析既有 EXIT trap（$prev），跳过失败路径兜底"; return 1 ;;
+  esac
+}
+
+_be_exit_stop() { # EXIT 钩子：必须原样返回 $?（后继 t4_cache_cleanup 按它判「失败保留缓存」）
+  local rc=$?
+  [ "${BE_CLEANUP_ARMED:-0}" = "1" ] && [ "${BE_BACKEND:-}" = "herdr" ] || return "$rc"
+  be_session_exists 2>/dev/null || return "$rc"
+  if be_teardown >/dev/null 2>&1; then
+    printf 'BE-CLEANUP: 失败/中断路径兜底已停本场 server（%s）\n' "${BE_SESSION:-}" >&2
+  else
+    printf 'BE-CLEANUP-WARN: 兜底 stop 失败（session=%s root=%s）—— 下次起跑由 be_sweep_orphans 清扫\n' \
+      "${BE_SESSION:-}" "${BE_CFGROOT:-}" >&2
+  fi
+  return "$rc"
+}
+
+# 挂上兜底（herdr 起 server 成功后调；tmux 无异步 server）
+be_arm_cleanup() {
+  [ "$BE_BACKEND" = "herdr" ] || return 0
+  BE_ARMED_SESSION="$BE_SESSION"
+  BE_CLEANUP_ARMED=1
+  [ "${BE_HOOK_CHAINED:-0}" = "1" ] && return 0     # 只链一次（钩子按当时 BE_SESSION 收场，避免 trap 串增殖）
+  _be_chain_exit_hook _be_exit_stop || return 1
+  BE_HOOK_CHAINED=1
+  return 0
+}
 
 # 依赖门槛（AC1.5 第一类 ⇒ 调用方 SKIP 并给原因）：版本 + 协议。
 # 版本/schema 都是离线元数据，但仍走唯一入口（口径统一：任何 herdr 调用都带 --session）。
@@ -199,6 +411,8 @@ be_start_server() { # [cols rows]
     fi
     return 1
   fi
+  # 失败/中断兜底（P2 缺陷修复）：setsid 的 server 不在本进程组 ⇒ 必须显式挂 EXIT 钩子
+  be_arm_cleanup
   return 0
 }
 
@@ -236,6 +450,8 @@ be_teardown() {
     be_stage_fail "拆场后会话仍存在: $BE_SESSION"
     return 1
   fi
+  # 正常拆场完成 ⇒ 卸下兜底（只认被 arm 的那场；sweep 拆别人的场不得卸自己的保护）
+  if [ "${BE_SESSION:-}" = "${BE_ARMED_SESSION:-}" ]; then BE_CLEANUP_ARMED=0; fi
   return 0
 }
 

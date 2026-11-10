@@ -50,10 +50,17 @@ if [ "$GUARD_ONLY" = "1" ]; then
   out="$(be_guard_session "default" 2>&1)"; rc=$?
   t4_assert_ne "0" "$rc" "护栏②：会话名 default 被拒（用户会话，绝不作为实验场）"
   t4_assert_contains "$out" "不得为 default" "护栏②：拒绝理由点名「不得为 default」"
-  BE_CACHE_ROOT="$T4_CACHE_DIR/definitely-not-the-cache"
+  # 护栏③：会话根指向**用户 herdr 根** ⇒ 拒（sweep 与守卫共用的结构性边界；BR9 碰不到）
+  root_saved="$BE_CFGROOT"; BE_CFGROOT="$HOME/.config/herdr"
   out="$(be_guard_session "nao-t4-27-guard" 2>&1)"; rc=$?
-  t4_assert_ne "0" "$rc" "护栏③：实验根不在 \$T4_CACHE_DIR 下被拒（AC1.5：此类 fail loud，不 SKIP）"
-  t4_assert_contains "$out" "实验根不在" "护栏③：拒绝理由点名「实验根不在」（含 cache 根对照）"
+  BE_CFGROOT="$root_saved"
+  t4_assert_ne "0" "$rc" "护栏③：会话根指向用户 herdr 根被拒（绝不碰用户 default）"
+  t4_assert_contains "$out" "用户 herdr 根" "护栏③：拒绝理由点名「用户 herdr 根」"
+  # 护栏④：实验根不在 \$T4_CACHE_DIR 下 ⇒ be_init FAIL（AC1.5 第二类：fail loud，不 SKIP）
+  out="$(NAO_TEST_TERMINAL=herdr NAO_T4_BE_CFGROOT="${T4_CACHE_DIR%/*}/nao-outside-$$" \
+          be_init "$GUARD_LAB/lab4" "nao-t4-27-guard4" 2>&1)"; rc=$?
+  t4_assert_ne "0" "$rc" "护栏④：实验根不在 \$T4_CACHE_DIR 下 ⇒ be_init FAIL（AC1.5 第二类）"
+  t4_assert_contains "$out" "实验根不在" "护栏④：拒绝理由点名「实验根不在」（含 cache 根对照）"
   t4_exit
 fi
 
@@ -209,6 +216,49 @@ case "$BE_NAME" in
       "default 不可达：实验 server 内只有本实验会话（隔离 socket 自带）"
     ;;
 esac
+
+# ---------------------------------------------------------------- 孤儿 sweep（P2 缺陷修复）
+# 缺陷现场（PM 实测）：server 用 `setsid` 脱离进程组 ⇒ 用例被中断/失败时 EXIT 钩子杀不掉它，
+#   而 T524 口径「失败保留 cache」⇒ 每次失败留一个常驻 server（比目录泄漏更重）。
+# 三层防护：① 起跑前扫孤儿 ② 失败/中断 EXIT 兜底 ③ 正常拆场。本组按 **effect** 断言，不看 rc。
+if [ "$BE_NAME" = "herdr" ]; then
+  t4_assert_eq "no" "$(_be_is_lab_root "$HOME/.config/herdr" && echo yes || echo no)" \
+    "孤儿 sweep①：用户 herdr 根结构上不算实验根（判据里根本选不中它）"
+  user_before="$(_be_scan_herdr_servers | awk -F'\t' '$3 !~ /nao-t4\./ {print $1}' | sort -u)"
+  # 造孤儿：陈旧 cache 形态的实验根（**无活 run 持有**，与实测现场同形）+ 起 server 后「不 teardown」
+  SWEEP_CACHE="$T4_CACHE_PARENT/nao-t4.sweep-$$"
+  SWEEP_LAB="$SWEEP_CACHE/lab"
+  BE_CFGROOT="$SWEEP_LAB/config"; BE_SESSION="nao-t4-27-sweep-$$"; BE_CACHE_ROOT="$SWEEP_CACHE"
+  be_start_server >/dev/null 2>&1 || t4_bad "孤儿构造：server 起不来（$BE_NAME）"
+  SWEEP_PID="$(_be_scan_herdr_servers | awk -F'\t' -v r="$SWEEP_LAB/config" '$3==r{print $1; exit}')"
+  t4_assert_ne "" "${SWEEP_PID:-}" "孤儿 sweep②：复现现场 —— 「失败/中断未收尾」的 server 仍在跑（pid 已取，无人 stop）"
+  t4_assert_eq "1" "$(be_orphan_server_count "$SWEEP_LAB/config")" "孤儿 sweep②：该实验根下 server 数 = 1（与 PM 实测同形）"
+  be_sweep_orphans; sw_rc=$?
+  t4_assert_eq "0" "$sw_rc" "孤儿 sweep③：sweep rc=0（失败逐条点名，不静默）"
+  t4_assert_eq "1" "$BE_SWEEP_EFFECT" "孤儿 sweep③：sweep effect=1（真停掉该遗留 server，按 effect 判）"
+  t4_assert_eq "0" "$(be_orphan_server_count "$SWEEP_LAB/config")" "孤儿 sweep③：sweep 后该 root 的 server 数 = 0"
+  be_sweep_orphans; sw_rc2=$?
+  t4_assert_eq "0" "$BE_SWEEP_EFFECT" "孤儿 sweep④：幂等 —— 连跑 2 次 effect=0（rc=$sw_rc2）"
+  t4_assert_eq "0" "$(ls -A "$SWEEP_LAB/config/herdr/sessions" 2>/dev/null | grep -c . || true)" \
+    "孤儿 sweep④：遗留会话场一并清掉（sessions/ 空）"
+  rm -rf "$SWEEP_CACHE"
+  t4_assert_ge "1" "$(be_orphan_server_count "$ROOT_A")" \
+    "孤儿 sweep⑤ 负控：本 run 自己的场（活 cache）不被 sweep 误杀"
+  # 失败路径兜底（EXIT 钩子）：子进程起 server 后 exit 1、**不调 teardown** ⇒ 退出即被停
+  EXIT_LAB="$LAB/exitlab"
+  ch_out="$(bash -c 'set -uo pipefail; source "$1"; source "$2"; be_init "$3" "$4" || exit 9; be_start_server || exit 9; exit 1' \
+            _ "$T4_ROOT/tests/t4/lib.sh" "$BE_LIB" "$EXIT_LAB" "nao-t4-27-exit-$$" 2>&1)"; ch_rc=$?
+  t4_assert_eq "1" "$ch_rc" "孤儿 sweep⑥：子进程按预期 rc=1 退出（失败路径；EXIT 兜底不得改退出码）"
+  t4_assert_contains "$ch_out" "BE-CLEANUP" "孤儿 sweep⑥：兜底钩子点火（BE-CLEANUP 点名本场会话）"
+  t4_assert_eq "0" "$(be_orphan_server_count "$EXIT_LAB/config")" "孤儿 sweep⑥：子进程退出后该 root server 数 = 0（EXIT 兜底生效）"
+  user_after="$(_be_scan_herdr_servers | awk -F'\t' '$3 !~ /nao-t4\./ {print $1}' | sort -u)"
+  t4_assert_eq "$user_before" "$user_after" \
+    "孤儿 sweep⑦ 负控：用户 herdr server 集合 sweep 前后逐字一致（未被误杀；本机基线 ${user_before:-<无>}）"
+  # 归位：恢复本 run 的 cache 根与失败兜底（sweep 停过 scratch 场，可能已卸 flag）
+  BE_CACHE_ROOT="$T4_CACHE_DIR"
+  be_ctx a "$SESS_A" >/dev/null 2>&1 || true
+  be_arm_cleanup
+fi
 
 # ---------------------------------------------------------------- 零残留前置：pane 内长驻进程（拆场应带走）
 printf 'sleep 600\n' > "$LAB/marker-a.sh"
