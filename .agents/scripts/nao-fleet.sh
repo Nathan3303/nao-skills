@@ -426,7 +426,10 @@ resolve_role() {
 #
 #   名字 = `<core>[@<scope>]`；core = `<role>[-<task>]`（role = 常驻 id 或下游卡 role）
 #   scope 末位、`@` 分隔、**非空才出现**（为空时名字与改动前逐字相同 ⇒ BR1 零回归）
-#   预算：卡 core ≤32 · 总名长 ≤48（scope ≤16）
+#   预算（三个数各管一段，勿相加）：卡 core ≤32 · scope ≤16 · **full ≤48**（= core [+ '@' + scope]）；
+#     派生 core = <role>-<task> 不设 core 上限，但 full 仍 ≤48 ⇒ 长 task 配长 scope 会被拒（P2-1）。
+#     full 的上限**只在 parse** 判；builder 不 die（close/status 也调它，抛错会把坏名字变成命令崩）——
+#     故 ensure 相位 1 必须拿 parse 复核 builder 输出，非 OK 即 die（BR6 零副作用）。
 #   名字是**路由标签，不作身份证明**；二期只允许替换 scope 的来源与归一化实现（后两个符号）
 #
 # 接线清单（11 处解析点全经 fleet_name_parse；契约函数体外禁前缀切片 / 名字拼接）：
@@ -467,8 +470,23 @@ fleet_scope_problem() {
   return 0
 }
 
+# ⓪ core 构造：<role> [task] → stdout `<role>` 或 `<role>-<task>`
+#   core 是名字的前半段（§0），与 scope 无关。同样是**唯一**构造点：C3② 的 lint 把 `core=` 也纳入
+#   扫描面（合法拼法只有这里），任何 `core="$x-$task"` 形态都会红 —— 这样「core 手拼」不再是盲区。
+fleet_core_build() {
+  local role="${1-}" task="${2-}"
+  [[ -n "$role" ]] || { printf 'fleet_core_build：role 为空\n' >&2; return 1; }
+  if [[ -z "$task" ]]; then printf '%s\n' "$role"; return 0; fi
+  [[ "$task" =~ ^[A-Za-z0-9_-]+$ ]] \
+    || { printf 'fleet_core_build：task 含非法字符（仅字母/数字/-/_）：%s\n' "$task" >&2; return 1; }
+  printf '%s-%s\n' "$role" "$task"
+}
+
 # ① 名字构造：<kind> <core> [scope] → stdout `<core>[@<scope>]`
 #   kind ∈ resident|derived|card 只做契约自证（名字本身不编码 kind —— 语法冻结）
+#   **预算关系（§0，P2-1 自洽口径）**：core 由 fleet_core_build 产（`<role>[-<task>]`），
+#   full = core [+ '@' + scope]；三个数各管一段：卡 core ≤32、scope ≤16、**full ≤48**（含 '@'），
+#   而 full 的上限由 parse 独占判定 —— 故 builder 照造、ensure 相位 1 用 parse 复核后才落 pane。
 fleet_name_build() {
   local kind="${1-}" core="${2-}" scope="${3-}" why=""
   case "$kind" in
@@ -928,7 +946,7 @@ derived_in_field() {  # <core> [scope] → 派生名列表（每行一个；空 
     [[ "$out" == "OK "* ]] || continue
     IFS=',' read -r k r t s <<< "${out#OK }"
     [[ -n "$t" ]] || continue                      # 无任务号 ⇒ 不是派生
-    c="$r-$t"
+    c="$(fleet_core_build "$r" "$t")"
     [[ "$c" == "$core"-?* ]] || continue           # 比 core（不是裸名字前缀）
     [[ "$s" == "$want" ]] || continue              # scope 必须一致（否则他仓派生被算本仓）
     printf '%s\n' "$n"
@@ -946,7 +964,7 @@ fleet_scoped_candidates() {  # <core> → 名字（每行一个；空 = 无）
     [[ "$out" == "OK "* ]] || continue
     IFS=',' read -r k r t s <<< "${out#OK }"
     [[ -n "$s" ]] || continue                      # 无 scope ⇒ 不是本函数的候选
-    c="$r"; if [[ -n "$t" ]]; then c="$r-$t"; fi
+    c="$(fleet_core_build "$r" "$t")"
     [[ "$c" == "$core" ]] || continue
     printf '%s\n' "$n"
   done < <(visible_session_names)
@@ -2029,19 +2047,32 @@ cmd_status() {
     IFS=',' read -r p_kind p_role p_task p_scope <<< "${pout#OK }"
     [[ -n "$p_scope" ]] && any_scoped=1
     [[ "$p_kind" == "resident" && -n "$p_scope" ]] || continue
-    [[ -n "${scoped_resident[$p_role]:-}" ]] || scoped_resident["$p_role"]="$p_scope"
+    # 同一角色可能有多个带 scope 的常驻（不同仓）⇒ 累积成列表（空格分隔，值域是 slug）
+    case " ${scoped_resident[$p_role]:-} " in
+      *" $p_scope "*) ;;
+      *) scoped_resident["$p_role"]="${scoped_resident[$p_role]:-}$p_scope " ;;
+    esac
   done
   echo "== 角色会话在线状态（权威名单见 intercom({action:'list'})；本表按 tmux 终端标题/名册判定）=="
+  local a_ok a_sc a_nm
   for a in "${ROLE_ORDER[@]}"; do
+    a_ok=0
     if running "$a" "${ROLE_WS[$a]:-}"; then
       printf '  ✓ %-14s 在线（--name %s；卡片 %s）\n' "$a" "$a" "${ROLE_CARDS[$a]}"
-    elif [[ -n "${scoped_resident[$a]:-}" ]]; then
-      # 带 scope 的常驻：scope 非空才可能出现本行（D5 只加字段，既有行格式不动）
-      printf '  ✓ %-14s 在线（--name %s；卡片 %s）·scope=%s\n' \
-        "$a" "$a@${scoped_resident[$a]}" "${ROLE_CARDS[$a]}" "${scoped_resident[$a]}"
-    else
-      printf '  · %-14s 未运行（ensure 拉起）\n' "$a"
+      a_ok=1
     fi
+    # P3-2（同族静默漏行）：裸名与带 scope **同场时两条都要显示** —— 旧写法用 elif 只留裸名，
+    #   带 scope 那条就整条消失（P1 只覆盖「仅带 scope」）。scope 空 ⇒ 本段零输出（BR1 逐字不变）。
+    # P3-3①：显示行里的名字走 builder（§0⑤「builder 之外禁名字拼接」）。
+    if [[ -n "${scoped_resident[$a]:-}" ]]; then
+      for a_sc in ${scoped_resident[$a]}; do
+        a_nm="$(fleet_name_build resident "$a" "$a_sc")"
+        printf '  ✓ %-14s 在线（--name %s；卡片 %s）·scope=%s\n' \
+          "$a" "$a_nm" "${ROLE_CARDS[$a]}" "$a_sc"
+      done
+      a_ok=1
+    fi
+    (( a_ok )) || printf '  · %-14s 未运行（ensure 拉起）\n' "$a"
   done
   # D5：分节标题示例带上全名写法 —— **仅当在场确有带 scope 的会话**（scope 为空时逐字保留旧标题 ⇒ BR1）
   if (( any_scoped )); then
@@ -2273,13 +2304,11 @@ cmd_close() {
   #   core = <role>[-<task>]；kind 只供 builder 自证（语法冻结，名字不编码 kind）
   if [[ "$is_resident" == "1" ]]; then
     resolve_role "$tgt"
-    core="$NAME"
-    [[ -n "$task" ]] && core="$NAME-$task"
+    core="$(fleet_core_build "$NAME" "$task")"
     kindc="resident"; [[ -n "$task" ]] && kindc="derived"
     fallback_repo="${ROLE_WS[$NAME]:-$PWD}"
   else
-    core="$card_role"
-    [[ -n "$task" ]] && core="$card_role-$task"
+    core="$(fleet_core_build "$card_role" "$task")"
     kindc="card"
     fallback_repo="${card_path%/.agents/prompts/*}"
     [[ -n "$fallback_repo" ]] || fallback_repo="$PWD"
@@ -2474,7 +2503,8 @@ cmd_cleanup() {
 cmd_ensure() {
   local force="$1" model="$2" task="$3"
   local i spec role repo key seen k card_arg card_as disp role_id scope core kind vrd
-  local -a cg_done=() t_names=() t_repos=() t_cards=() t_roles=() t_prompts=() t_scopes=()
+  local chk_core chk_full chk_p maxs chk_role chk_added
+  local -a cg_done=() t_names=() t_repos=() t_cards=() t_roles=() t_prompts=() t_scopes=() t_kinds=()
   # BR8：parse 的角色事实表（常驻 id）。ensure 不读卡集（不为判重引入额外 glob 与 CARD_SET_MAX 告警）
   fleet_roles_init
   [[ ${#TARGETS[@]} -gt 0 ]] || die "ensure 需要至少一个角色，如: nao-fleet.sh ensure arch rd-fe rd-infra"
@@ -2518,7 +2548,7 @@ cmd_ensure() {
         die "ensure 中止：无法确定 <$CARD_REPO> 的 scope（该怎么办：修或删 <目标仓>/.agents/fleet-scope，或用 --scope <slug> 显式指定）"
       fi
       t_names+=("$disp"); t_repos+=("$CARD_REPO"); t_cards+=("$CARD_PATH"); t_roles+=("${CARD_ROLE:-}")
-      t_scopes+=("$scope")
+      t_scopes+=("$scope"); t_kinds+=("card")
       if [[ -n "$scope" ]] && $VERBOSE; then
         log "scope=$scope @ $CARD_REPO（来源：$([ -n "$CLI_SCOPE" ] && printf -- '--scope' || printf '.agents/fleet-scope')）"
       fi
@@ -2532,12 +2562,34 @@ cmd_ensure() {
         die "ensure 中止：无法确定 <$repo> 的 scope（该怎么办：修或删 <目标仓>/.agents/fleet-scope，或用 --scope <slug> 显式指定）"
       fi
       t_names+=("$NAME"); t_repos+=("$repo"); t_cards+=(""); t_roles+=("$NAME")
-      t_scopes+=("$scope")
+      t_scopes+=("$scope"); t_kinds+=("resident")
       if [[ -n "$scope" ]] && $VERBOSE; then
         log "scope=$scope @ $repo（来源：$([ -n "$CLI_SCOPE" ] && printf -- '--scope' || printf '.agents/fleet-scope')）"
       fi
       # #75：常驻卡名**当场**取证（resolve_role 每目标覆写全局 PROMPT ⇒ 只有此刻的值属于本目标）
       t_prompts+=("$PROMPT")
+    fi
+    # ---- P2-1（命名预算自洽）：builder 造得出 ≠ parse 认得回 ----
+    #   管理面（status/close）**全靠 parse**：造出 parse 不认的名字 ⇒ 会话拉得起来但整条从 status
+    #   消失（连「角色未识别」节都不进）⇒ 旧脚本可见、新脚本消失 = 回归。故相位 1 就用 parse 复核
+    #   builder 输出，非 OK 即 die（**建 pane 之前** ⇒ BR6 零副作用）。builder 本身不 die：close/status
+    #   也调它，抛错会把「读到坏名字」变成「命令崩」。
+    kind="${t_kinds[$i]}"
+    if [[ "$kind" == "resident" && -n "$task" ]]; then kind="derived"; fi
+    chk_core="$(fleet_core_build "${t_names[$i]}" "$task")"
+    chk_full="$(fleet_name_build "$kind" "$chk_core" "${t_scopes[$i]}")"
+    # 本目标的 role 可能不在全局事实表里（ensure 不读卡集：为判重引入 glob/IO 属 P3-1 观察项，本批不动）
+    #   ⇒ 只为**这次复核**临时登记再撤销，绝不改变 ensure 的判重语义（running_verdict 看到的表不变）。
+    chk_role="${t_roles[$i]:-}"
+    chk_added=0
+    if [[ -n "$chk_role" && -z "${FLEET_ROLE_KIND[$chk_role]:-}" ]]; then
+      FLEET_ROLE_KIND["$chk_role"]="card"; chk_added=1
+    fi
+    chk_p="$(fleet_name_parse "$chk_full")"
+    (( chk_added )) && unset 'FLEET_ROLE_KIND[$chk_role]'
+    if [[ "$chk_p" != "OK "* ]]; then
+      maxs=$(( 48 - ${#chk_core} - 1 )); (( maxs < 0 )) && maxs=0
+      die "ensure 中止：目标名超预算 —— 「$chk_full」共 ${#chk_full} 字符 > 48。名字 = <core>[@<scope>]：core ≤32（仅卡；派生 = <role>-<task> 不限 core，但 full 仍 ≤48）、scope ≤16、**总长 ≤48**（含 '@'）。该怎么办：缩短 --task 编号（当前 core ${#chk_core} 字符）或缩短 scope（当前 ${#scope} 字符，core 不变时最多 $maxs 字符）"
     fi
   done
   # ==== 相位 2：拉起（宿主窗口解析、判重、codegraph 状态、spawn 逐目标不变）====
@@ -2548,11 +2600,9 @@ cmd_ensure() {
     repo="${t_repos[$i]}"
     # ---- BR8：名字的**唯一**构造点（builder）。core = <role>[-<task>]，scope 已在相位 1 算定 ----
     #   任务派生 = 独立 intercom 身份（并行隔离，避免同名冲突）；scope 空 ⇒ 与改动前逐字相同
-    core="${t_names[$i]}"
-    [[ -n "$task" ]] && core="${t_names[$i]}-${task}"
-    kind="resident"
-    [[ -n "$task" ]] && kind="derived"
-    [[ -n "${t_cards[$i]}" ]] && kind="card"
+    kind="${t_kinds[$i]}"
+    if [[ "$kind" == "resident" && -n "$task" ]]; then kind="derived"; fi
+    core="$(fleet_core_build "${t_names[$i]}" "$task")"
     disp="$(fleet_name_build "$kind" "$core" "${t_scopes[$i]}")"
     # CodeGraph 索引健康（同 repo 只查一次，不阻塞拉起）
     key="$repo"; seen=0

@@ -24,7 +24,11 @@
 #
 # C3 单写点 lint（静态、变异负控在 $T4_CACHE_DIR 的副本上做，绝不写工作区）：
 #   ① `grep -c 'exec pi --name'` == 1（唯一 exec 点）
-#   ② 契约块**外**正文 0 命中 `(name|disp)="?${…}-${?(task|TASK)`（禁名字拼接）
+#   ② 契约块**外**正文 0 命中 `(name|disp|core)="?${…}-${?(task|TASK)`（禁名字**与** core 拼接）
+#      判据边界（P3-3② 选 ①）：只匹配「`${…}` + `-` + `${…task…}`」这种**拼接形态**；
+#      `core="${1-}"` / `core="$p_role"` / `core="$(fleet_core_build …)"` 这类纯赋值与
+#      唯一构造点**不匹配** ⇒ 不会把合法用法误判成违规。已知盲区：拼接不落在 `name|disp|core`
+#      这三个变量名上（如 `c="$r-$t"`）—— 已全部改走 `fleet_core_build`，故本轮 0 命中。
 #   ③ `grep -c fleet_name_parse` ≥ 11（11 解析点全接线的**可见面**）+ 代码调用点数固定
 #   负控：close 里手写 `name="${NAME}-${task}"` ⇒ ②红；删一条 parse 调用 ⇒ ③红
 #
@@ -223,14 +227,14 @@ lint1() { grep -c 'exec pi --name' "$1" || true; }                     # ① 唯
 lint2() {                                                              # ② 契约块外的名字拼接
   awk -v b="$CONTRACT_BEGIN" -v e="$CONTRACT_END" '
     $0 ~ b { f=1; next } $0 ~ e { f=0; next } f { next } { print }' "$1" \
-    | grep -cE '(name|disp)="?\$\{[^}]+\}-\$\{?(task|TASK)' || true
+    | grep -cE '(name|disp|core)="?\$\{[^}]+\}-\$\{?(task|TASK)' || true
 }
 lint3() { grep -c 'fleet_name_parse' "$1" || true; }                   # ③ 接线可见面（含说明行）
 lint3c() { grep -cE 'fleet_name_parse "' "$1" || true; }               # ③ 代码调用点数
 
 t4_assert_eq "1" "$(lint1 "$SUBJECT")" "C3① 全脚本恰 1 处 \`exec pi --name\`（唯一 exec 点）"
 t4_assert_eq "0" "$(lint2 "$SUBJECT")" \
-  "C3② 契约块外 0 处手写名字拼接（(name|disp)=\${…}-\${task} 形态）"
+  "C3② 契约块外 0 处手写名字/core 拼接（(name|disp|core)=\${…}-\${task} 形态）"
 N3="$(lint3 "$SUBJECT")"; N3C="$(lint3c "$SUBJECT")"
 t4_assert_ge "11" "$N3" "C3③ \`grep -c fleet_name_parse\` ≥ 11（11 解析点全接线的可见面；实际 $N3）"
 t4_info "C3③ 代码调用点数（fleet_name_parse \"…\"）= $N3C"
@@ -245,6 +249,17 @@ if mutate_file "$SUBJECT" "$NEG_A" \
   t4_assert_ne "0" "$(lint2 "$NEG_A")" "C3 负控A 手写 \`name=\"\${NAME}-\${task}\"\` ⇒ ②红（点名拼接点）"
 else
   t4_bad "C3 负控A 变异锚点未命中（用例锚点须跟随实现）"
+fi
+# ---- C3 负控 A2（P3-3②）：`core=` 手拼在 builder 外 ⇒ ②也必须红（旧 lint 只认 name|disp ⇒ 盲区）----
+NEG_A2="$T4_CACHE_DIR/c3-neg-a2.sh"
+if mutate_file "$SUBJECT" "$NEG_A2" \
+    '  local force="$1" task="$2" target="${3:-}"' \
+    '  local force="$1" task="$2" target="${3:-}"
+  core="${NAME}-${task}"'; then
+  t4_assert_ne "0" "$(lint2 "$NEG_A2")" \
+    "C3 负控A2 手写 \`core=\"\${NAME}-\${task}\"\` ⇒ ②红（core 不再是盲区）"
+else
+  t4_bad "C3 负控A2 变异锚点未命中（用例锚点须跟随实现）"
 fi
 # ---- C3 负控 B：删一条 parse 调用 ⇒ ③代码调用点数必须掉 ----
 NEG_B="$T4_CACHE_DIR/c3-neg-b.sh"
@@ -466,5 +481,79 @@ fi
 t4_assert_eq "$MDB_A" "$MDB_B" \
   "C2② 新版 ensure「已拉起」行 + pi --name 值与基线逐字等价（md5 $MDB_A；scope 为空 ⇒ 零回归）"
 t4_info "C2② ensure blob md5 = $MDB_A（已拉起 $LAUNCH_N_B 条 + --name $(printf '%s\n' "$BLOB_B" | grep -c '^$' >/dev/null; printf '%s' "$BLOB_B" | sed -n '/已拉起/,$p' | grep -cE '^[a-z]' || true) 值）"
+
+# ============================================================================
+# P2-1（第二轮 QA · 命名预算自洽）：builder 造得出 ⇒ parse 必须认得回
+#   回归：card core 32 + '@' + scope 16 = 49 > 48 时，builder 照造、ensure 相位 1 不校验总长
+#   ⇒ 会话拉得起来但 parse 恒 ERR ⇒ status **整条消失**（连「角色未识别」节也不进）。
+#   修法：相位 1 用 parse 复核 builder 输出，非 OK 即 die（建 pane 之前 ⇒ BR6 零副作用）；
+#   builder 不 die（close/status 也调它）。
+# ============================================================================
+T42="$(printf 'T%.0s' $(seq 1 42))"        # rd-be- + 42 = 48 字符（上限内，必须能起 + 必须可见）
+T43="$(printf 'T%.0s' $(seq 1 43))"        # 49 字符（必须被拒）
+BUD48="rd-be-$T42"
+CARD32="$(printf 'c%.0s' $(seq 1 32))"     # 卡 core 恰好 32（卡校验上限）
+SCOPE15="$(printf 's%.0s' $(seq 1 15))"    # 32 + 1 + 15 = 48（合法边界）
+SCOPE16="$(printf 's%.0s' $(seq 1 16))"    # 32 + 1 + 16 = 49（超限）
+printf -- '---\nrole: %s\n---\n# 32 字符卡（P2-1 预算边界夹具）\n' "$CARD32" > "$LAB/.agents/prompts/$CARD32.md"
+
+pane_count_b() { "$REAL_TMUX" -S "$SOCK_B" list-panes -a -F '#{pane_id}' 2>/dev/null | wc -l | tr -d ' '; }
+
+# ---- 负控：49 字符（task 43）⇒ die + 指路；零副作用 ----
+BEFORE_N="$(pane_count_b)"
+run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task "$T43" rd-be
+t4_assert_ne "0" "$T4_RC" "P2-1 负控A：\`--task\` 43 位（总名 49 > 48）⇒ 拒绝（rc≠0）"
+t4_assert_contains "$T4_ERR_ANSI" "目标名超预算" "P2-1 负控A：die 点名「目标名超预算」"
+t4_assert_contains "$T4_ERR_ANSI" "49 字符 > 48" "P2-1 负控A：die 回显当前长度与上限（49 > 48）"
+t4_assert_contains "$T4_ERR_ANSI" "该怎么办" "P2-1 负控A：die 给改法（该怎么办：缩短 --task 编号或 scope）"
+t4_assert_eq "$BEFORE_N" "$(pane_count_b)" "P2-1 负控A：零副作用（建 pane 之前就 die，pane 数不变）"
+
+# ---- 负控：卡 core 32 + scope 16 = 49 ⇒ die（两者各自合法，合起来超限）----
+BEFORE_N="$(pane_count_b)"
+run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" \
+  ensure --card ".agents/prompts/$CARD32.md" --scope "$SCOPE16"
+t4_assert_ne "0" "$T4_RC" "P2-1 负控B：卡 core 32 + scope 16（总名 49）⇒ 拒绝（rc≠0）"
+t4_assert_contains "$T4_ERR_ANSI" "49 字符 > 48" "P2-1 负控B：die 回显当前长度（32+1+16=49）"
+t4_assert_eq "$BEFORE_N" "$(pane_count_b)" "P2-1 负控B：零副作用（pane 数不变）"
+
+# ---- 正控：48 字符边界仍能起（task 42）----
+run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task "$T42" rd-be
+t4_assert_eq "0" "$T4_RC" "P2-1 正控A：总名恰 48 字符 ⇒ rc=0（边界不被误拒）"
+t4_assert_contains "$T4_OUT_ANSI" "已拉起" "P2-1 正控A：确实拉起（已拉起行在位）"
+t4_assert_eq "48" "$(printf '%s' "$BUD48" | wc -c | tr -d ' ')" "P2-1 正控A：夹具名字长度确认 = 48"
+
+# ---- 正控：48 字符名字在 status 里**看得见**（这就是 P2-1 要防的静默漏行）----
+start_titled "$SOCK_B" "fx-bud48" "π - $BUD48 - $(basename "$LAB")" >/dev/null \
+  || t4_bad "P2-1 正控A：48 字符名字的标题 pane 未就绪（等不到标题 ⇒ 负控可能假绿）"
+run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" status
+t4_assert_contains "$T4_OUT_ANSI" "  · $BUD48" \
+  "P2-1 正控A：48 字符名在 status 派生节可见（parse 认得回 ⇒ 不静默漏行）"
+
+# ---- 正控：卡 core 32 + scope 15 = 48 ⇒ 起得来 ----
+run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" \
+  ensure --card ".agents/prompts/$CARD32.md" --scope "$SCOPE15"
+t4_assert_eq "0" "$T4_RC" "P2-1 正控B：卡 core 32 + scope 15 = 48 ⇒ rc=0"
+t4_assert_contains "$T4_OUT_ANSI" "$CARD32@$SCOPE15" \
+  "P2-1 正控B：拉起名逐字 = <32 卡 role>@<15 scope>（scope 由 builder 追加）"
+
+# ============================================================================
+# P3-2 / P3-3①：常驻「裸名 + 带 scope」同场 ⇒ **两条都显示**；显示名走 builder
+#   回归：旧写法 `elif` 只留裸名 ⇒ `rd-be@todo` 在 status 任何位置都不出现。
+# ============================================================================
+start_titled "$SOCK_B" "fx-bare-rbe" "π - rd-be - $(basename "$LAB")" >/dev/null \
+  || t4_bad "P3-2 夹具：裸名 rd-be 的标题 pane 未就绪"
+start_titled "$SOCK_B" "fx-scoped-rbe" "π - rd-be@todo - $(basename "$LAB")" >/dev/null \
+  || t4_bad "P3-2 夹具：rd-be@todo 的标题 pane 未就绪"
+run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" status
+RBE_LINES="$(printf '%s\n' "$T4_OUT_ANSI" | grep -F -- '  ✓ rd-be ' || true)"
+t4_assert_eq "2" "$(printf '%s\n' "$RBE_LINES" | grep -c . || true)" \
+  "P3-2 同场：rd-be 与 rd-be@todo **两条都显示**（旧写法只留裸名 ⇒ 本断言红）"
+t4_assert_contains "$RBE_LINES" "--name rd-be；" "P3-2 同场：裸名那条仍在（逐字格式不变）"
+t4_assert_contains "$RBE_LINES" "--name rd-be@todo；" "P3-2 同场：带 scope 那条在位（名字经 builder 生成）"
+t4_assert_contains "$RBE_LINES" "·scope=todo" "P3-2 / D5：带 scope 行尾有 ·scope=<x> 字段"
+t4_assert_not_contains "$(printf '%s\n' "$RBE_LINES" | grep -F -- '·scope=todo')" "--name rd-be；" \
+  "P3-3① ·scope 行只出现在带 scope 的那条上（不是裸名行被追加字段）"
+t4_assert_contains "$T4_OUT_ANSI" "rd-be@todo" \
+  "P2-1 正控C：带 scope 常驻可在 status 定位（不整条消失）"
 
 t4_exit
