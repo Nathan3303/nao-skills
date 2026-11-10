@@ -1,0 +1,29 @@
+# herdr 后端登记集 —— PRD #96 一期 AC1.1（Issue #96 · `NAO_TEST_TERMINAL=herdr`）
+#
+# 格式：`<用例编号>  <shared|own>  <到期>  <理由>`
+#   shared = 与 tmux 后端**共享**（后端无关：断言面不依赖 tmux / herdr）
+#   own    = **本后端专有**（理由必写；到期 = 复核日期，逾期须重判是否仍专有）
+# 语义（run.sh 单点实现）：登记集内的用例才跑；**未登记**的用例输出 `[PENDING]` 并点名 ——
+#   不得静默 SKIP（PRD §二 目标指标 + 附一裁定①）。登记集非法（未知编号 / 重复 / 列不合法）⇒ rc=1。
+# 维护：改本文件必须同步 `tests/README.md`「后端登记集」小节（登记集是 herdr 侧的**唯一**准入清单）。
+#
+# 为什么不登记 D 类 10 例（09/12/15/19/20/21/22/23/24/25）：它们的断言面建在 tmux 语义上
+#   （宿主窗口 / pane 标题契约 / 名册 cwd / `close` 前提 …），**迁移归二期**（PRD §三 范围）且
+#   要与生产路径同批改。现在登记只会把 tmux 断言面硬套到 herdr 上、靠 SKIP 掩盖（附一裁定①：不采全绿口径）。
+#
+01  shared  —  后端无关（夹具项目 + shim `check`，不接触 tmux/herdr）
+02  shared  —  后端无关（真 `pi` 注册 / manifest 契约，不接触 tmux/herdr）
+03  shared  —  后端无关（未物化 `DEGRADED` + D7 防重入，不接触 tmux/herdr）
+04  shared  —  后端无关（零网络 `check` + strace，不接触 tmux/herdr）
+05  shared  —  后端无关（migrate 删除面，纯文件系统）
+06  shared  —  后端无关（契约守护 + 静态 lint；lint 只读源码，不建 server）
+07  shared  —  后端无关（真 `pi install` 布局对照，不建 server）
+08  shared  —  后端无关（lock 缩进 / init --force 走 migrate，纯文件系统）
+10  shared  —  后端无关（shim 判定式 / 开关 / lock 去重，纯文件系统）
+13  shared  —  后端无关（`close` 前提用**假 socket 句柄**，不建真 server）
+14  shared  —  后端无关（夹具缓存生命周期，私有 TMPDIR 内纯本地）
+16  shared  —  后端无关（子代理桥契约：只读 Node 探针）
+17  shared  —  后端无关（角色→子代理单一事实：只读 Node 探针）
+18  shared  —  后端无关（codegraph 四态检测：纯 bash + 夹具 stub）
+26  shared  —  后端无关（真 `pi` 冒烟重试护栏：纯 bash 桩，不建 server）
+27  own     2027-01-31  后端自检：只验测试侧抽象层 `lib-backend.sh`；herdr 专有断言由 `BE_BACKEND` 门控。到期复核：三期 herdr 转默认后，本用例的 tmux 分支同步升级，届时重判是否升为 shared

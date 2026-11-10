@@ -8,6 +8,13 @@
 #   bash tests/t4/run.sh --case 03           # 只跑指定编号
 #   T4_ALLOW_MISSING=1 bash tests/t4/run.sh  # 宽松：依赖缺失=BLOCKED（仅显式 1）
 #   T4_REQUIRE_FULL=1 bash tests/t4/run.sh   # 发布前置：SKIP+DEGRADE 计数>0 即 FAIL，非白名单 NOTE 亦 FAIL（与上者正交）
+#   NAO_TEST_TERMINAL=herdr bash tests/t4/run.sh   # 后端自检：只跑 tests/t4/backends/herdr.txt 登记集，未登记点名 PENDING
+#   NAO_TEST_TERMINAL=tmux bash tests/t4/run.sh    # 默认后端（未设同义）：全量跑，行为与 #96 改动前逐字一致
+#
+# 后端开关（PRD #96 一期 AC1.1 / AC1.2）：NAO_TEST_TERMINAL=tmux|herdr|auto（未设 = tmux，auto 一期 = tmux）。
+#   **仅 herdr** 启用「登记集 + PENDING 点名」：登记文件 `tests/t4/backends/herdr.txt`（每条 = 编号/共享或专有/到期/理由）。
+#   未登记的用例输出 `[PENDING]` 并点名（**不得静默 SKIP**）；登记集非法（未知编号/重复/缺列）⇒ rc=1 硬错。
+#   tmux（默认）路径**不加载登记集、不新增任何输出行** —— AC1.2 的「逐字 diff 空」靠此保证。
 #
 # NOTE 白名单（T531）：用例产出 `[NOTE] <tag> <msg>`；tag 枚举单点定义于 lib.sh 的 T4_NOTE_TAGS。
 # 非 full ⇒ 仅计数 + 未登记 tag 给警告（不阻断，日常 `npm test` 不因旧式调用变红）；
@@ -22,7 +29,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 
-CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26")
+CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26" "27")
 CASE_TITLES=(
   "主路径足迹 + check exit=0（AC1）"
   "设计一致性：注册 skill 数==2 且无 collision（AC1/AC6）"
@@ -49,6 +56,7 @@ CASE_TITLES=(
   "ensure 多目标每 pane 用目标自己的角色卡（含 --card 完整路径通道）+ 全局 PROMPT 负控（#75）"
   "布局守卫容量判据：n = 角色数 + 调用者（n=7/8/9/10 ⇒ 137/184/184/230）+ n-1 变异负控（#82 B）"
   "真 pi 冒烟受限重试护栏（#86 A）：超时才重试 / 非超时失败不重试（按调用次数证）/ 无凭据不重试"
+  "后端抽象层自检（#96 一期步 1）：两场隔离 / 零渗透 / 拆场幂等 / 零残留 / default 不可达 + 护栏变异自证"
 )
 
 mode="run"; only=""; arg_err=""
@@ -73,6 +81,57 @@ if [ -z "$arg_err" ] && [ "$mode" = "case" ]; then
     for id in "${CASE_IDS[@]}"; do [ "$only" = "$id" ] && matched=1; done
     [ "$matched" = "1" ] || arg_err="--case 无匹配用例: $only"
   fi
+fi
+
+if [ -n "$arg_err" ]; then
+  printf '参数错误: %s\n' "$arg_err" >&2
+  printf '用法: bash tests/t4/run.sh [--list | --preflight | --case <用例编号>]\n' >&2
+  exit 1
+fi
+
+# ---------------------------------------------------------------- 后端开关（PRD #96 一期）
+# 未设 = tmux（默认）；auto 一期解为 tmux（herdr 转默认归三期）。非法取值 fail loud，不猜。
+BACKEND="${NAO_TEST_TERMINAL:-tmux}"
+case "$BACKEND" in
+  tmux|herdr) ;;
+  auto) BACKEND="tmux" ;;
+  *) printf '参数错误: NAO_TEST_TERMINAL=%s 非法（期望 tmux|herdr|auto）\n' "$BACKEND" >&2; exit 1 ;;
+esac
+
+# 登记集（仅 herdr 加载；tmux 路径零新增行为/零新增输出）
+declare -A REG_KIND=()
+if [ "$BACKEND" = "herdr" ]; then
+  REG_FILE="$HERE/backends/herdr.txt"
+  if [ ! -f "$REG_FILE" ]; then
+    printf '登记集缺失: %s（herdr 后端只跑登记集，不得静默全跑）\n' "$REG_FILE" >&2; exit 1
+  fi
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line#"${line%%[![:space:]]*}"}"          # 去前导空白
+    case "$line" in ''|'#'*) continue ;; esac
+    id="${line%%[[:space:]]*}"
+    rest="${line#"$id"}"; rest="${rest#"${rest%%[![:space:]]*}"}"
+    kind="${rest%%[[:space:]]*}"
+    matched=0; for x in "${CASE_IDS[@]}"; do [ "$id" = "$x" ] && matched=1; done
+    if [ "$matched" != 1 ]; then
+      printf '登记集非法: 用例编号 %s 不在 CASE_IDS（%s）\n' "$id" "$REG_FILE" >&2; exit 1
+    fi
+    if [ -n "${REG_KIND[$id]:-}" ]; then
+      printf '登记集重复: 用例编号 %s（%s）\n' "$id" "$REG_FILE" >&2; exit 1
+    fi
+    case "$kind" in
+      shared|own) ;;
+      *) printf '登记集非法: 用例 %s 的第 2 列必须是 shared|own（实际=%s，%s）\n' "$id" "${kind:-<空>}" "$REG_FILE" >&2; exit 1 ;;
+    esac
+    if [ -z "${rest#"$kind"}" ]; then
+      printf '登记集非法: 用例 %s 缺「到期 + 理由」两列（%s）\n' "$id" "$REG_FILE" >&2; exit 1
+    fi
+    REG_KIND[$id]="$kind"
+  done < "$REG_FILE"
+fi
+
+if [ -z "$arg_err" ] && [ "$mode" = "case" ] && [ "$BACKEND" = "herdr" ]; then
+  [ -n "${REG_KIND[$only]:-}" ] \
+    || arg_err="用例 $only 未登记在 tests/t4/backends/herdr.txt（herdr 后端只跑登记集，见 PRD #96 AC1.1）"
 fi
 
 if [ -n "$arg_err" ]; then
@@ -116,11 +175,32 @@ fi
 unset T4_CACHE_NO_CREATE
 source "$HERE/lib.sh"
 
+# 孤儿 sweep（#96 P2 缺陷修复）：herdr server 用 setsid 脱离进程组 ⇒ 失败/被中断的跑次会遗留常驻 server。
+# 起跑前清扫「死 run 遗留」并 stop；**不碰用户 ~/.config/herdr**、**不碰活 run 的 cache**（防并发互杀）。
+# tmux（默认）路径整段不执行 ⇒ 零新增输出（AC1.2）；herdr 侧只在真扫到东西时说一句话。
+if [ "$BACKEND" = "herdr" ]; then
+  source "$HERE/lib-backend.sh"
+  if be_sweep_orphans; then
+    if [ "${BE_SWEEP_EFFECT:-0}" -gt 0 ]; then
+      printf '孤儿 sweep: 停掉死 run 遗留的 herdr server %d 个（活 run 跳过 %d / 非实验根跳过 %d）\n' \
+        "$BE_SWEEP_EFFECT" "$BE_SWEEP_SKIPPED_LIVE" "$BE_SWEEP_SKIPPED_FOREIGN"
+    fi
+  else
+    printf '孤儿 sweep: WARN 有 %d 个遗留 server 停不掉（见上逐条点名；下次起跑重试）\n' "$BE_SWEEP_FAILED"
+  fi
+fi
+
 declare -A results
 
 for i in "${!CASE_IDS[@]}"; do
   id="${CASE_IDS[$i]}"
   if [ "$mode" = "case" ] && [ "$only" != "$id" ]; then continue; fi
+  if [ "$BACKEND" = "herdr" ] && [ -z "${REG_KIND[$id]:-}" ]; then
+    # 未登记 ⇒ **点名**（不得静默 SKIP）：不跑、不计 SKIP，汇总结算为 PENDING
+    results[$id]="PENDING"
+    printf '  [PENDING] 用例 %s: %s —— 未登记 tests/t4/backends/herdr.txt（点名，不静默 SKIP）\n' "$id" "${CASE_TITLES[$i]}"
+    continue
+  fi
   printf '\n===== 用例 %s: %s =====\n' "$id" "${CASE_TITLES[$i]}"
   script="$(ls "$HERE/cases/${id}-"*.sh 2>/dev/null | head -1)"
   if [ -z "$script" ]; then results[$id]="MISSING"; continue; fi
@@ -139,6 +219,7 @@ done
 
 printf '\n==================== T4 汇总 ====================\n'
 fail=0; blocked=0; skip_cases=0; degrade_lines=0; note_lines=0
+run_shared=0; run_own=0; run_pending=0
 # NOTE 白名单聚合（T531 · BR1/BR2）：逐条解析行首 `[NOTE]` 后的首个 token，合法性判定只在此处。
 note_wl=(); note_bad=()
 for i in "${!CASE_IDS[@]}"; do
@@ -164,8 +245,19 @@ for i in "${!CASE_IDS[@]}"; do
     done < <(sed -nE 's/^[[:space:]]*\[NOTE\][[:space:]]*([^[:space:]]*).*/\1/p' "$log" 2>/dev/null)
   fi
   printf '  %s  %-12s %s\n' "$id" "$st" "${CASE_TITLES[$i]}"
+  if [ "$BACKEND" = "herdr" ]; then
+    case "$st" in
+      PENDING) run_pending=$((run_pending + 1)) ;;
+      *) case "${REG_KIND[$id]:-}" in
+           shared) run_shared=$((run_shared + 1)) ;;
+           own)    run_own=$((run_own + 1)) ;;
+         esac ;;
+    esac
+  fi
   case "$st" in
     PASS|SKIP) ;;       # 白名单：仅 PASS/SKIP 视为通过
+    PENDING)            # 仅 herdr 登记集模式可出现；不算 SKIP、不算 FAIL
+      [ "$BACKEND" = "herdr" ] || fail=1 ;;
     BLOCKED) blocked=1 ;;
     *) fail=1 ;;        # FAIL* / MISSING / NOT_RUN / 未知值 一律 rc≠0
   esac
@@ -177,6 +269,10 @@ join_by() { local sep="$1" out="" x; shift; for x in "$@"; do out="${out:+$out$s
 printf '  ---\n'
 printf '  SKIP=%d · DEGRADE=%d · NOTE=%d\n' "$skip_cases" "$degrade_lines" "$note_lines"
 printf '  （SKIP 含用例内 [SKIP]/SKIP: 行；DEGRADE=能力降级，默认豁免、full 计分；NOTE 按白名单分轴）\n'
+if [ "$BACKEND" = "herdr" ]; then
+  printf '  后端索引（herdr）：共享 %d / 本后端专有 %d / PENDING %d（登记文件 tests/t4/backends/herdr.txt）\n' \
+    "$run_shared" "$run_own" "$run_pending"
+fi
 if [ "${#note_wl[@]}" -gt 0 ]; then
   printf '  NOTE 白名单命中（%d 条）：%s\n' "${#note_wl[@]}" "$(join_by ' · ' "${note_wl[@]}")"
 else
