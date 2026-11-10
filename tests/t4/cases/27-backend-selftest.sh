@@ -92,7 +92,9 @@ mkdir -p "$LAB"
 if [ "$BE_NAME" = "herdr" ]; then
   # 最小上下文（仅探元数据，不起 server）：be_guard_session 要求实验根已在 cache 下
   BE_CFGROOT="$LAB/config"; BE_CACHE_ROOT="$T4_CACHE_DIR"
-  H_VER="$(herdr --version 2>/dev/null | sed -nE 's/^herdr[[:space:]]+([0-9.]+)$/\1/p' | head -1)"
+  # 版本探针也走**唯一入口**（#96 步 2b · P3-3：白名单是整行等值，不容忍「捕获写法」）：
+  #   实测 herdr 0.9.1 接受 `--session <s> --version`（输出与裸 `--version` 一致，rc=0）。
+  H_VER="$(be_herdr "nao-t4-27-probe-$$" --version 2>/dev/null | sed -nE 's/^herdr[[:space:]]+([0-9.]+)$/\1/p' | head -1)"
   H_PROTO="$(be_herdr_protocol "nao-t4-27-probe-$$" 2>/dev/null || true)"
   if [ -z "$H_VER" ]; then t4_skip "herdr --version 无法解析 ⇒ 协议/版本不兼容（AC1.5 第一类）"; fi
   if [ "$H_PROTO" != "22" ]; then
@@ -120,25 +122,31 @@ viol="$(t4_scan_host_pane_refs "$FXG")"
 t4_assert_eq "" "$viol" "静态①：lib-backend 无命令行位裸 tmux 调用（复用 #84 行级 lint；tmux 恒经 _be_tmux 带 -S）"
 # herdr 裸调用点位：行级静态只认**命令位**（行首 / `;` / `$(` / `{` 之后，可带 exec/setsid 前缀）；
 #   字符串字面量里的 `herdr xxx` 不纳管（本文件报错文案含该类文本）—— 与 #84 行级 lint 同口径。
-# BR6④ 口径（P3-3 修正）：调用必须带 `--session`（经唯一入口 `_be_herdr_exec` 注入）；
-#   **白名单只此一条**：`herdr --version`（纯本地元数据：无会话参数、不读写任何会话/用户文件），
-#   且必须**恰好 1 处**（多一处即白名单被滥用 ⇒ 红）。其余任何命令位裸调用 ⇒ 红。
+#   前缀集注：本文件的内联判据**比公共 lint 窄**（`lib.sh::t4_scan_herdr_bare_calls` 另有 `| & (`；
+#   那条负责全 `cases` 目录，见 `cases/06`）—— 本处只自扫单文件，宽窄不同不影响二者合取从严。
+# BR6④ 口径（P3-3）：调用必须带 `--session`（经唯一入口 `_be_herdr_exec` 注入）；
+#   **白名单只此一条且整行等值**：整行恰为 `[exec|setsid] herdr --version`
+#   （纯本地元数据：无会话参数、不读写任何会话/用户文件）。行内出现 `herdr --version` **不豁免**
+#   （`herdr workspace list # herdr --version` / `herdr --version ; herdr workspace list` 均违规）。
+#   注：本文件的内联判据**不剥行尾注释**（本文件无「尾注白名单」写法；剥注释在公共 lint 里）；
+#   本文件现已**零豁免使用**：版本探针也改走唯一入口（旧写法 `$(herdr --version | …)` 属捕获壳，
+#   在整行等值口径下就是裸调用）—— 白名单的正控留在 fixtures，不靠真实调用占位。
 HRE='(^|;|\$\(|\{)[[:space:]]*(exec[[:space:]]+)?(setsid[[:space:]]+)?herdr([[:space:]]|$)'
-HWL='herdr[[:space:]]+--version([[:space:]]|$)'
+HWL='^[[:space:]]*(exec[[:space:]]+|setsid[[:space:]]+)?herdr[[:space:]]+--version[[:space:]]*$'
 herdr_raw="$(grep -nE "$HRE" "$BE_LIB" | grep -vE '^[0-9]+:[[:space:]]*#')"
 t4_assert_ge "2" "$(printf '%s\n' "$herdr_raw" | grep -c .)" "静态②：lib-backend 的 herdr 裸调用点位可被检出（非空转；口径 = 命令位）"
 t4_assert_eq "0" "$(printf '%s\n' "$herdr_raw" | grep -v -- '--session' | grep -c .)" \
   "静态②：lib-backend 的裸调用点位 0 处缺 --session（--session 由唯一入口注入）"
-be_fstart="$(grep -n '^_be_herdr_exec()' "$BE_LIB" | cut -d: -f1)"
+be_fstart="$(grep -nE '^_be_herdr_exec[[:space:]]*\(\)' "$BE_LIB" | cut -d: -f1)"
 be_fend="$(awk -v s="${be_fstart:-0}" 'NR>s && /^}/ {print NR; exit}' "$BE_LIB")"
 be_outside="$(printf '%s\n' "$herdr_raw" | cut -d: -f1 | awk -v s="${be_fstart:-0}" -v e="${be_fend:-0}" '$1<s||$1>e')"
 t4_assert_eq "" "$be_outside" "静态②：lib-backend 的裸 herdr 调用全部在 _be_herdr_exec 函数体内（唯一入口，无旁路）"
-# 用例侧：白名单显式且**只此一条**（P3-3 实测缺口：cases/27 有 1 处 `herdr --version` 未走唯一入口）
+# 用例侧：白名单**零豁免使用**（P3-3 收紧：捕获壳写法不再算白名单；探针已走唯一入口）
 case_raw="$(grep -nE "$HRE" "$BE_SELF" | grep -vE '^[0-9]+:[[:space:]]*#')"
 case_wl="$(printf '%s\n' "$case_raw" | grep -E "$HWL")"
 case_other="$(printf '%s\n' "$case_raw" | grep -vE "$HWL")"
-t4_assert_eq "1" "$(printf '%s\n' "$case_wl" | grep -c .)" \
-  "静态②：cases/27 的 herdr 白名单恰好 1 处（herdr --version：纯元数据、无会话参数）"
+t4_assert_eq "0" "$(printf '%s\n' "$case_wl" | grep -c .)" \
+  "静态②：cases/27 白名单 0 处使用（版本探针走唯一入口；整行等值口径下捕获壳 = 裸调用）"
 t4_assert_eq "" "$case_other" "静态②：cases/27 除白名单外无命令位裸 herdr 调用（其余一律经唯一入口）"
 # 双向负控：① 伪造 `herdr workspace list` 裸调用 ⇒ 同一判据必红 ② 只放 `herdr --version` ⇒ 判据放行
 NEG1="$LAB/lint-herdr-neg-bare.sh"; NEG2="$LAB/lint-herdr-neg-wl.sh"
@@ -148,6 +156,15 @@ t4_assert_eq "1" "$(grep -E "$HRE" "$NEG1" | grep -vE "$HWL" | grep -c .)" \
   "静态② 负控：伪造裸 herdr 调用 ⇒ 判据命中 1 处（非白名单 ⇒ 必红）"
 t4_assert_eq "0" "$(grep -E "$HRE" "$NEG2" | grep -vE "$HWL" | grep -c .)" \
   "静态② 正控：仅 herdr --version ⇒ 判据放行（白名单不是空转）"
+# P3-3 安全洞负控：白名单必须是**整行等值** —— 「裸调用 + 附带白名单片段」两形态必红
+NEG3="$LAB/lint-herdr-neg-trick.sh"; NEG4="$LAB/lint-herdr-neg-semicolon.sh"
+printf 'herdr workspace list # herdr --version\n' > "$NEG3"
+# 夹具正文用 @H@ 占位再替换：本行若直接写 `; herdr …`，会被公共 lint 判成字符串字面量假阳
+printf '@H@ --version ; @H@ workspace list\n' > "$NEG4"; sed -i 's/@H@/herdr/g' "$NEG4"
+t4_assert_eq "1" "$(grep -E "$HRE" "$NEG3" | grep -vE "$HWL" | grep -c .)" \
+  "静态② 负控（P3-3①）：裸调用 + 行尾注释伪造白名单 ⇒ 仍命中 1 处（整行等值才放行）"
+t4_assert_eq "1" "$(grep -E "$HRE" "$NEG4" | grep -vE "$HWL" | grep -c .)" \
+  "静态② 负控（P3-3②）：herdr --version 后接 ; 裸调用 ⇒ 仍命中 1 处（不是「行内出现即豁免」）"
 t4_assert_eq "0" "$(grep -cE '(^|[[:space:];|&(])sleep[[:space:]]+[0-9]' "$BE_LIB" || true)" \
   "静态③：无固定 sleep（禁固定等待；就绪/等待只用轮询间隔）"
 t4_assert_contains "$(grep -E 'BE_POLL_MAX|BE_POLL_INT' "$BE_LIB")" 'BE_POLL_MAX:-50' \

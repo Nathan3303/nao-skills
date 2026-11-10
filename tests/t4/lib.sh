@@ -180,40 +180,47 @@ t4_scan_host_pane_refs() { # $1=用例目录
 
 # #96 延长线（步 2b）herdr 侧行级 lint：命令行位出现 `herdr` 必须**既在唯一入口
 #   `_be_herdr_exec` 函数体内、又同串带 `--session`**（不在函数体 ⇒ 旁路；缺 `--session` ⇒
-#   实测会静默读到用户 `default` 会话）。与上面 `t4_scan_host_pane_refs` 对称：行级、静态、
-#   只看命令位（行首 / | ; & ( $( { 之后，可带 exec/setsid 前缀），注释行跳过，输出
-#   "basename:line:content"（同格式）。
-#   判定（违规 = 以下同时成立）：① 命令位命中 herdr ② **不满足**「命中行在 `_be_herdr_exec`
-#   函数体内」③ **不满足**「命中行带 `--session`」（② 与 ③ 是 AND 关系：任缺其一即违规 ——
-#   函数体外带 `--session` 仍是旁路，函数体内缺 `--session` 仍会打到用户会话）
-#   ④ 且不命中白名单。
-#   白名单（显式且最小，只有这一条，逐条给理由）：
-#     · `herdr --version` —— 纯本地元数据：不读会话、不连 server、不写任何用户文件，
-#       也因此无法经唯一入口注入 `--session`（唯一入口的契约正是「注入 --session」）。
-#       除它之外**没有**第二条：`--help` / 其它 `--` 旗标都不在白名单内（白名单不是「所有旗标」），
-#       新增条目必须在此逐条写理由 —— 禁止留「以后可能要加」的口子。
-#   函数体边界：文件内首个 `^_be_herdr_exec() {` 到其后首个 `^}`；一个文件最多认一个入口
-#   （多个入口 = 单点契约已破，属另案）。
-#   固有边界（行级静态，不解析引号/续行/数据流）：字符串字面量里的 `herdr …` 不纳管
-#   （本仓报错文案含该类文本）；跨行的 `herdr \` + 换行 `--session` 会误判为缺 `--session`
-#   （行级 lint 不拼接续行）；`--session` 写在同行注释里会被误当合规（不回看引号/注释归属）。
+#   实测会静默读到用户 `default` 会话）。与上面 `t4_scan_host_pane_refs` 对称：行级、静态，
+#   输出 "basename:line:content"（同格式），缩进注释先 trim 再判注释符。
+#   判定（违规 = 以下同时成立）：① 命令位命中 herdr ② ¬「命中行在 `_be_herdr_exec` 函数体内」
+#   ③ ¬「命中行带 `--session`」（②③ 是 AND：函数体外带 `--session` 仍是旁路，函数体内缺
+#   `--session` 仍会打到用户会话）④ ¬白名单。
+#   **命令位前缀集只有 7 种**（即判据正则的字符类）：行首 / `|` / `;` / `&` / `(` / `$(` / `{`
+#   （其后可带 `exec` / `setsid` 前缀与空白）。**已知漏判**（本批不扩前缀集：扩了会引入新假阳，
+#   边界只声明不改判据）：`herdr|wc -l`（管道无空白）、`env X=1 herdr …`、`X=1 herdr …`、
+#   `! herdr …`、反引号 `` `herdr …` ``、`if herdr …` / `; then herdr …`（shell 关键字后的命令位）。
+#   **已知假阳**（行级静态不解析 heredoc / 引号 / 续行 / 数据流）：heredoc 正文行首的 `herdr …`、
+#   字符串字面量里的 `; herdr …` / `$(herdr …)` 等含命令位形态前缀的文本、跨行 `herdr \` ＋
+#   换行 `--session`（会被判缺 `--session`）。这些目前仓内 0 命中 —— 属**声明边界**，不承诺判对。
+#   白名单（显式且最小，**整行等值**，绝不是「行内出现就放行」）：剥掉行尾注释（空白 + `#` 起）
+#   后，整行必须**恰好**是 `[exec|setsid] herdr --version`：
+#     `^[[:space:]]*(exec[[:space:]]+|setsid[[:space:]]+)?herdr[[:space:]]+--version[[:space:]]*$`
+#   理由：`herdr --version` 是纯本地元数据（不读会话、不连 server、不写用户文件），也因此无法
+#   经唯一入口注入 `--session`（唯一入口的契约正是「注入 --session」）。
+#   **行内出现不是豁免**（安全边界，禁改成子串匹配）：`herdr workspace list # herdr --version`、
+#   `herdr --version ; herdr workspace list` 都是「裸调用 + 附带白名单片段」⇒ 违规。
+#   白名单只有这一条：`--help` 等其它 `--` 旗标不豁免；新增条目必须在此逐条写理由。
+#   函数体边界：文件内首个 `^_be_herdr_exec[[:space:]]*\(\)`（空格写法 `_be_herdr_exec () {`
+#   同样识别）到其后首个 `^}`；一个文件最多认一个入口（多个入口 = 单点契约已破，属另案）。
 #   覆盖面：tmux 侧那条守「裸 socket」，本 lint 守「绕过唯一入口 / 缺会话参数」—— 两者都**不**
 #   判 herdr 的语义正确性（隔离/私有根见 `lib-backend.sh` 与 `cases/27`）。
 t4_scan_herdr_bare_calls() { # $1=用例目录（扫其 *.sh）
-  local dir="$1" f ln lnno body body_trim fstart fend inbody
+  local dir="$1" f ln lnno body body_trim body_nc fstart fend inbody
   local re='(^|[|;&(]|\$\(|\{)[[:space:]]*(exec[[:space:]]+)?(setsid[[:space:]]+)?herdr([[:space:]]|$)'
-  local wl='herdr[[:space:]]+--version([[:space:]]|$)'
+  local wl='^[[:space:]]*(exec[[:space:]]+|setsid[[:space:]]+)?herdr[[:space:]]+--version[[:space:]]*$'
   local sess='--session([[:space:]]|=|$)'
   for f in "$dir"/*.sh; do
     [ -f "$f" ] || continue
-    fstart="$(grep -n '^_be_herdr_exec()' "$f" 2>/dev/null | head -1 | cut -d: -f1)"
+    fstart="$(grep -nE '^_be_herdr_exec[[:space:]]*\(\)' "$f" 2>/dev/null | head -1 | cut -d: -f1)"
     fend=""
     [ -n "$fstart" ] && fend="$(awk -v s="$fstart" 'NR>s && /^}/ {print NR; exit}' "$f")"
     while IFS= read -r ln; do
       lnno="${ln%%:*}"; body="${ln#*:}"
       body_trim="${body#"${body%%[![:space:]]*}"}"     # 缩进注释先 trim 再判注释符（与 #93 P3-2 同口径）
       case "$body_trim" in \#*) continue;; esac
-      grep -qE -- "$wl" <<< "$body" && continue          # 白名单（只有 herdr --version）
+      # 剥行尾注释（空白 + `#` 起）后**整行等值**判白名单 —— 行内出现 `herdr --version` 不豁免
+      body_nc="$(printf '%s' "$body_trim" | sed 's/[[:space:]]#.*$//')"
+      grep -qE -- "$wl" <<< "$body_nc" && continue
       inbody=0
       if [ -n "$fstart" ] && [ "$lnno" -ge "$fstart" ] && { [ -z "$fend" ] || [ "$lnno" -le "$fend" ]; }; then
         inbody=1
