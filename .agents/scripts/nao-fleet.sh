@@ -555,6 +555,33 @@ _term_herdr_workspace_id_for() {  # <label> → workspace_id（无则空）
   return 0
 }
 
+# process-info 探针（P3-6）：**只有明确 pane_not_found 才算「回放幽灵」**；其它错误/空输出一律不 close。
+#   返回 "ok" / "notfound<TAB><详情>" / "error<TAB><详情>"（详情截断 160 字节，供 fail loud 点名）。
+_term_herdr_probe_pane() {  # <pane_id>
+  local pid="${1-}" js rc=0
+  [[ -n "$pid" ]] || { printf 'error\t缺 pane_id\n'; return 0; }
+  # herdr 的错误 JSON 走 **stderr**（实测 rc=1）⇒ 必须合流才能判 pane_not_found
+  js="$(_term_herdr_exec pane process-info --pane "$pid" 2>&1)" || rc=$?
+  if (( rc != 0 )); then
+    if [[ "$js" == *'"code":"pane_not_found"'* ]]; then
+      printf 'notfound\t%s\n' "$(printf '%s' "$js" | head -c 160)"
+      return 0
+    fi
+    printf 'error\t%s\n' "$(printf '%s' "${js:-<空输出>}" | head -c 160)"
+    return 0
+  fi
+  if [[ -z "${js//[[:space:]]/}" ]]; then
+    printf 'error\t空输出（pane 可达但无 process-info 响应）\n'
+    return 0
+  fi
+  if [[ "$js" == *'"error"'* ]]; then
+    printf 'error\t%s\n' "$(printf '%s' "$js" | head -c 160)"
+    return 0
+  fi
+  printf 'ok\n'
+  return 0
+}
+
 # 前台进程全部是交互式 shell 才允许复用（否则 `pane run` 会把命令注入用户正在跑的程序）
 _term_fg_list_is_shell() {  # <name...> → 0 全部在 TERM_SHELL_NAMES 白名单
   local n sh_n hit
@@ -593,30 +620,49 @@ _term_herdr_spawn() {  # <name> <inner> <repo> [force] → SPAWN_RC_OK|FAIL
   fi
   if (( nmatch == 1 )); then
     pane="$hit"
-    local vline fgname
+    local vline fgname probe pstate pmsg
     local -a fgnames=()
     vline="$(term_liveness "$name" "$repo")"
     IFS=$'\t' read -r verdict _ seq _ <<< "$vline"
-    while IFS=$'\t' read -r fgname _; do
-      [[ -n "$fgname" ]] && fgnames+=("$fgname")
-    done < <(_term_herdr_argv "$pane")
-    if (( ${#fgnames[@]} == 0 )); then
-      # process-info 不可用 ⇒ `stop→restart` 回放出的幽灵 pane（pane list 有、pane run 报 pane_not_found）
-      warn "restart 回放幽灵：$name 的 pane=$pane process-info 不可用（verdict=$verdict seq=$seq）⇒ 不判「已在运行」，关闭该幽灵 pane 后重建"
-      _term_herdr_exec pane close "$pane" >/dev/null 2>&1 || true
-      pane=""
-    elif _term_fg_list_is_shell "${fgnames[@]}"; then
-      # 前台是交互式 shell ⇒ 可以安全把启动命令送进去；label 在、agent 无 = **不判「已在运行」**（不静默跳过）
-      warn "label 已在场但不在线（幽灵 pane / stale：$name ⇒ $pane，verdict=$verdict 前台=${fgnames[*]}）⇒ 不判「已在运行」，复用该 pane 重跑 agent"
-    elif $force; then
-      # --force：显式要一个新会话；**不向在场程序注入按键**（会污染 vim/REPL/cat 的输入）
-      warn "前台非 shell（$name ⇒ $pane 前台=${fgnames[*]}）：--force ⇒ 新建 pane，不向在场程序注入按键（随后同名 label 会有 2 个，status 将标歧义）"
-      pane=""
-    else
-      warn "前台非 shell（$name ⇒ $pane 前台=${fgnames[*]}）⇒ **不注入按键**、不判「已在运行」（向正在运行的程序写命令会污染其输入：vim/REPL/cat）"
-      warn "  该怎么办：人工核对后关闭该 pane（回收面归 B3），或加 --force 新建（会产生同名 label，需人工收口）"
-      return "$SPAWN_RC_FAIL"
-    fi
+    probe="$(_term_herdr_probe_pane "$pane")"
+    pstate="${probe%%$'\t'*}"; pmsg="${probe#*$'\t'}"
+    [[ "$pmsg" == "$probe" ]] && pmsg=""
+    case "$pstate" in
+      notfound)
+        # **只有明确 pane_not_found** 才是 `stop→restart` 回放的不可寻址 pane ⇒ close 安全
+        warn "restart 回放幽灵：$name 的 pane=$pane 明确 pane_not_found（verdict=$verdict seq=$seq）⇒ 不判「已在运行」，关闭该幽灵 pane 后重建"
+        _term_herdr_exec pane close "$pane" >/dev/null 2>&1 || true
+        pane=""
+        ;;
+      ok)
+        while IFS=$'\t' read -r fgname _; do
+          [[ -n "$fgname" ]] && fgnames+=("$fgname")
+        done < <(_term_herdr_argv "$pane")
+        if (( ${#fgnames[@]} == 0 )); then
+          # pane 可达但前台不可判（空进程表）⇒ **不 close**、不注入，fail loud
+          warn "前台不可判（$name ⇒ $pane：process-info 无前台进程）⇒ 不关闭、不注入、不判「已在运行」"
+          warn "  该怎么办：核对 pane 后人工处理（回收归 B3），或加 --force 新建（会产生同名 label）"
+          return "$SPAWN_RC_FAIL"
+        elif _term_fg_list_is_shell "${fgnames[@]}"; then
+          # 前台是交互式 shell ⇒ 可以安全把启动命令送进去；label 在、agent 无 = **不判「已在运行」**（不静默跳过）
+          warn "label 已在场但不在线（幽灵 pane / stale：$name ⇒ $pane，verdict=$verdict 前台=${fgnames[*]}）⇒ 不判「已在运行」，复用该 pane 重跑 agent"
+        elif $force; then
+          # --force：显式要一个新会话；**不向在场程序注入按键**（会污染 vim/REPL/cat 的输入）
+          warn "前台非 shell（$name ⇒ $pane 前台=${fgnames[*]}）：--force ⇒ 新建 pane，不向在场程序注入按键（随后同名 label 会有 2 个，status 将标歧义）"
+          pane=""
+        else
+          warn "前台非 shell（$name ⇒ $pane 前台=${fgnames[*]}）⇒ **不注入按键**、不判「已在运行」（向正在运行的程序写命令会污染其输入：vim/REPL/cat）"
+          warn "  该怎么办：人工核对后关闭该 pane（回收面归 B3），或加 --force 新建（会产生同名 label，需人工收口）"
+          return "$SPAWN_RC_FAIL"
+        fi
+        ;;
+      *)
+        # internal_error / 超时 / 解析失败 / 空输出：pane 可能仍可达 ⇒ **绝不 close**，fail loud 点名错误类别
+        warn "process-info 错误（$name ⇒ $pane：${pmsg:-未知错误}）⇒ **不关闭**（pane 可能仍可达/正跑用户程序）、不判「已在运行」、不注入"
+        warn "  该怎么办：稍后重试；确认该 pane 无用后人工关闭（回收面归 B3），或加 --force 新建（会产生同名 label）"
+        return "$SPAWN_RC_FAIL"
+        ;;
+    esac
   fi
 
   # ---- 复用 pane（ghost）：先 label 后启动；失败（不可寻址）⇒ 关闭幽灵 pane 后重建 ----

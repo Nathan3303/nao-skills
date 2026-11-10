@@ -43,7 +43,8 @@ herdr 后端第一次**真的起会话**：`ensure` 在专用 session 的（按 
 | label 命中 0 个 | 正常放置 |
 | label 命中 1 个，`ghost`（label 在、agent 条目缺） | **不判 same**；复用该 pane（rename 幂等 + run），不新建同名 label |
 | label 命中 1 个，**前台是交互式 shell**（`bash/zsh/sh/dash/fish/ksh/mksh/tcsh/csh/nu/elvish/xonsh`） | **不判 same**；复用该 pane（rename 幂等 + run）。**前台非 shell ⇒ 不注入**（否则会把启动命令写进 `cat`/`vim`/REPL 的输入） |
-| label 命中 1 个，`process-info` 不可用（`stop→restart` 回放：pane 不可寻址） | **不判 same**；关闭该幽灵 pane 后重建（实测 `pane run`/`process-info` ⇒ `pane_not_found`，`pane close` 可用） |
+| label 命中 1 个，`process-info` **明确 `pane_not_found`**（`stop→restart` 回放：pane 不可寻址） | **不判 same**；关闭该幽灵 pane 后重建（`pane close` 对该形态可用） |
+| label 命中 1 个，`process-info` 其它错误（`internal_error`/超时/解析失败）**或空输出**（pane 可达） | **绝不 close、不注入**：warn 点名错误类别 + `--force` 指路 + `SPAWN_FAIL`（防误关活 pane，P3-6） |
 | label 命中 1 个，在线 + `--force` | 新建 pane（显式 warn：随后同名 label 会有 2 个，`status` 标歧义） |
 | label 命中 1 个，**前台非 shell**（`cat`/`vim`/`sleep`/…）且无 `--force` | **不注入按键、不关闭在场 pane**：warn 点名实际前台 + `SPAWN_FAIL`，给 `--force` 指路 |
 | label 命中 >1 个 | warn 点名全部 pane + **不猜**（零 rename/run/split）+ `SPAWN_FAIL`；`status` 单列「同名 label 多 pane」 |
@@ -172,10 +173,10 @@ $ # 负控：自造第 7 条
 ### ⑥ 门禁（本机实测）
 
 - `bash .agents/scripts/nao-fleet.sh check` **rc=0 ×2，输出逐字相同**（md5 `31b5978e95e7f5b4dc7a9fd861548065`，与 B1 相同 ⇒ check 输出零变化）。
-- `npm test`（tmux 默认）**rc=0**：**27 例**全 PASS（`bash tests/t4/run.sh --list | tail -n +2 | wc -l` = 27，编号 01–10 + 12–28）· `SKIP=0 · DEGRADE=0 · NOTE=2`（既有白名单项）· 运行时 **`[PASS]` 行 = 1331**。
+- `npm test`（tmux 默认）**rc=0**：**27 例**全 PASS（`bash tests/t4/run.sh --list | tail -n +2 | wc -l` = 27，编号 01–10 + 12–28）· `SKIP=0 · DEGRADE=0 · NOTE=2`（既有白名单项）· 运行时 **`[PASS]` 行 = 1347**。
 - `NAO_TEST_TERMINAL=herdr npm test` **rc=0**：`共享 15 / 本后端专有 1 / PENDING 11`（与 `tests/t4/backends/herdr.txt` 对账一致；PENDING 仍是未登记用例点名，含 28）。
 - **BR1 零回归**：用例 28 的 C2 对照仍为 `status` 全文 md5 **`144f3447c9ff406d6aed828d9c9720e5`**、`ensure`「已拉起」行 + pi `--name` 值拼接 md5 **`c2de6533a1826dbf470dcc401cb29063`**（与基线 fixture 逐字相等）；tmux 逐子命令调用次数（`list-panes` / `list-sessions` / `display-message` / `capture-pane` / `has-session` + 总数）与基线全等。
-- **断言增量（运行时 `[PASS]` 行数）**：用例 06 `170 → 184`（+14）· 用例 28 `108 → 167`（+59：B1 轮 +28 / QA 第二轮 +31）· 全量 `1258 → 1331`（+73）；其余 25 例源码与断言数零变化（未改其文件）。
+- **断言增量（运行时 `[PASS]` 行数）**：用例 06 `170 → 184`（+14）· 用例 28 `108 → 183`（+75：B1 轮 +28 / QA 第二轮 +31 / QA 第三轮 +16）· 全量 `1258 → 1347`（+89）；其余 25 例源码与断言数零变化（未改其文件）。
 - 静态 lint：`t4_scan_term_bare_calls` 0 命中 · `t4_verify_term_ledger` rc=0 · `t4_scan_term_herdr_forbidden` 0 命中（herdr 区无 `TMUX`/标题字段）· `t4_scan_herdr_bare_calls` 0 命中。
 
 ### ⑦ 提交形态
@@ -216,16 +217,35 @@ captured.txt = 0 字节；含 `exec pi --name rd-fe` 的行数 = 0；残留进�
 - 桩负控（`cat` / `vim` / `sleep` 各 7 条，共 21 条）：均断言 `前台非 shell` + 回显实际名 + `--force` 指路 + 无成功行 + **`pane run` 0 次** + **`pane close` 0 次**。
 - 回放分支改为 `process-info` 不可用判定（不再用 `seq==0`）：桩负控断言「点名 restart 回放幽灵 + `pane close` 恰 1 + 只在**新** pane 上 run 1 次」。
 
-### ③ P3-1：「28 例」是最大编号不是例数 —— 订正为 27 例
+### ③ P3-1：把「最大编号 28」误当例数 —— 订正为 27 例
 
-- 本报告与 PR 描述中所有「28 例」⇒ **27 例**（唯一出处 `bash tests/t4/run.sh --list | tail -n +2 | wc -l` = **27**，编号 01–10 + 12–28，无 11）。
-- 断言数不变：`[PASS]` 行 **1331**（新增断言来自 P2-1/P2-2/P2-2b，与例数无关）。
+- 本报告与 PR 描述中「把最大编号当例数」的表述 ⇒ **27 例**（唯一出处 `bash tests/t4/run.sh --list | tail -n +2 | wc -l` = **27**，编号 01–10 + 12–28，无 11）。
+- 断言数：`[PASS]` 行 **1347**（第三轮 P3-6 负控再 +16；与例数无关）。
 
 ### ④ P3-3：就绪门「5s 上限」名不副实 —— 选 ②（wall-clock 上限）
 
 - 实现：`deadline` 用 `date +%s%N` 计 **wall-clock**，默认 `TERM_READY_TIMEOUT_MS=5000`（`NAO_HERDR_READY_TIMEOUT_MS` 可覆盖），每轮含 3 次 CLI 也计入；超时消息口径改为 `wall-clock 上限 ${budget}ms / ≤N 轮 × 0.1s，实际 ${elapsed}ms`。
 - 用例 28 B2① 用 `NAO_HERDR_READY_TIMEOUT_MS=400` 覆盖（避免白等 5s）并断言消息含 `wall-clock 上限 400ms`。
 - 实测：真机正常路径 `ensure` **2713ms / 2901ms**（含 codegraph + pi 启动，就绪门在 pi 报 `idle/seq≥1` 后立即返回）；QA 观测的 ghost 成功路径 5951ms 属旧实现「只数睡眠」的 wall-clock，现超 5s 会按承诺 fail loud（并逐条报缺），可用 env 提高预算。
+
+### ⑤ P3-6（提级必修）：`process-info` 任意错误都被当回放证据 —— 只有 `pane_not_found` 才 close
+
+- 实现：新增 `_term_herdr_probe_pane`（`process-info` 的 stderr 合流后判 `"code":"pane_not_found"`）——
+  - 明确 `pane_not_found` ⇒ 关闭幽灵 pane 后重建（原路径不退化）；
+  - `internal_error` / 超时 / 解析失败 / **空输出但 pane 可达** ⇒ **零 `pane close`、零 `pane run`**，warn 点名错误类别 + `--force` 指路 + `SPAWN_FAIL`；
+  - `ok` 且前台不可判（空进程表）⇒ 同样不 close、不注入（防御分支）。
+- 负控（用例 28，桩把错误 JSON 打到 **stderr**，与真机一致；桩计数 = `calls.log`）：
+
+```
+P3-6② 明确 pane_not_found ⇒ 判回放幽灵（不注入、不判 same）
+P3-6② 回放判据点名「明确 pane_not_found」（不是任意错误）
+P3-6② 回放幽灵：关闭该幽灵 pane 恰 1 次（不可寻址故 close 安全）
+P3-6 internal_error：fail loud 点名 process-info 错误 · 回显错误类别 · 明确「不关闭」
+P3-6 internal：**零 pane close**（不误关仍可达的活 pane） · 零 pane run（不注入）
+P3-6 空输出：fail loud 点名「空输出」 · 明确「不关闭」 · **零 pane close**
+```
+
+（`pane close` 次数直接取桩调用日志 `grep -c 'pane close '` = 0/1，不靠文案推断。）
 
 ## 四、PM 两项裁定落地
 
@@ -235,14 +255,14 @@ captured.txt = 0 字节；含 `exec pi --name rd-fe` 的行数 = 0；残留进�
 
 ## 五、遗留与观察（按三出口，不夹带）
 
-1. **`stop→restart` 回放出的 pane 不可寻址**（herdr 0.9.1 实测：`pane list`/`pane get`/`pane close` 可用，`pane run`/`split`/`process-info` 报 `pane_not_found`）⇒ 本批以「**`process-info` 不可用**判回放 + 关闭重建」处理（不再用 `seq==0` 当判据，QA P3-4 指出稳态重启会恢复 agent 条目并给新 seq，`seq==0` 只在抢进恢复窗口时命中）。**接受（含到期 2027-01-31）**：若 herdr 后续修好虚拟化时机，此分支退化为普通 ghost 复用。
+1. **`stop→restart` 回放出的 pane 不可寻址**（herdr 0.9.1 实测：`pane list`/`pane get`/`pane close` 可用，`pane run`/`split`/`process-info` 报 `pane_not_found`）⇒ 本批以「**明确 `pane_not_found`** 判回放 + 关闭重建」处理；其它 `process-info` 错误/空输出一律 fail loud 且**不 close**（P3-6）。**接受（含到期 2027-01-31）**：若 herdr 后续修好虚拟化时机，此分支退化为普通 ghost 复用。
 2. **`--force` 在 herdr 会造出同名 label 两个 pane**（现显式 warn，`status` 标歧义）。**转办 B3**：回收面提供「重复 label 清理」；在 B3 落地前以人工 `herdr pane close` 收口。
 3. **同名歧义告警在 `status` 里会打两次**（hv 预计算 + `running` 复判），属噪声不属错误。**接受（含到期 2027-01-31）**：B3 接忙闲/回收时可顺手把逐名判定缓存化。
 4. **就绪门成本**：wall-clock ≤5s 内每轮（`pane list` + `process-info` + `agent list`）最多 50 轮 = 150 次 CLI。**接受**：只在超时路径付满；正常路径 2–3 次（真机实测 2.7–2.9s 完成）。
 5. **`session-start` 不自证 pane 内环境**（只保证机械清环境；① ② 判据由 smoke/用例证）。若三期要把它变成门禁，可加 `--verify` 在首 pane 内跑 `env` 断言 —— **转办三期**（属布局/形态面）。
 6. **在待复用 pane 内跑 `ensure` 会排队**（`pane run` 把命令投给正忙的 shell）；这是测试构造 artifact，不是生产路径（PM 从一个 pane 起其它 pane）。**接受**：已在 smoke 报告中标注，用例 28 用独立 caller pane 规避。
 7. **`agent wait --until idle` 仍不可作就绪门**（B1 实测 6ms 假阳性）；本批在注释与测试里钉死，禁止后续「优化」回退。
-8. **QA P3-4（转 B3 观察）**：回放叙事比实现窄 —— 稳态重启后 herdr 会恢复 agent 条目并给新 seq，本批的「`process-info` 不可用」分支只在「ensure 抢进恢复窗口」命中；窗口内还会观测到 `pane list` 有 pane 但 `process-info` 报 `pane_not_found`（<1s）。B3 接回收时要留意该窗口（不得把恢复中的 pane 当可回收/可复用）。
+8. **QA P3-4（转 B3 观察）**：回放叙事比实现窄 —— 稳态重启后 herdr 会恢复 agent 条目并给新 seq，本批的「明确 `pane_not_found`」分支只在「ensure 抢进恢复窗口」命中；窗口内还会观测到 `pane list` 有 pane 但 `process-info` 报 `pane_not_found`（<1s）。**P3-6 修复后该窗口行为**：`pane_not_found` 仍走关闭重建，其它错误/空输出改为 fail loud 且不 close。B3 接回收时要留意该窗口（不得把恢复中的 pane 当可回收/可复用）。
 9. **QA P3-5（观察）**：`/tmp/nao-fleet-<card>-*.md` 在 60s 清理窗口后仍可能残留（既有机制，非 B2 引入）。**接受**，不在本批扩面。
 
 ## 六、文件

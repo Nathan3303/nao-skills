@@ -709,10 +709,19 @@ case "$cmd" in
       process-info)
         pid="${2:-}"; label="$(awk -F'|' -v p="$pid" '$1==p{print $2}' "$ST/panes")"
         fg="$(awk -F'|' -v p="$pid" '$1==p{print $3}' "$ST/panes")"
-        # phantom = stop→restart 回放出的不可寻址 pane（实测 pane run/process-info ⇒ pane_not_found）
+        # phantom = stop→restart 回放出的不可寻址 pane（实测 pane run/process-info ⇒ pane_not_found，**错误 JSON 走 stderr**）
         if [ "$fg" = "phantom" ]; then
-          printf '{"error":{"code":"pane_not_found","message":"pane %s not found"}}\n' "$pid"
+          printf '{"error":{"code":"pane_not_found","message":"pane %s not found"}}\n' "$pid" >&2
           exit 1
+        fi
+        # internal = 服务端内部错误（pane 仍可达）—— **不得**被当成回放证据
+        if [ "$fg" = "internal" ]; then
+          printf '{"error":{"code":"internal_error","message":"boom"}}\n' >&2
+          exit 1
+        fi
+        # empty = 可达但空输出（协议异常）—— 也不得 close
+        if [ "$fg" = "empty" ]; then
+          exit 0
         fi
         if [ "$fg" = "pi" ]; then
           printf '{"result":{"process_info":{"foreground_processes":[{"argv":["/usr/bin/pi","--name","%s"],"name":"pi","pid":1}],"pane_id":"%s"}}}\n' "$label" "$pid"
@@ -908,13 +917,40 @@ t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN
   NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure rd-fe
 B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
 B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
-t4_assert_eq "0" "$T4_RC" "P2-2b 回放幽灵：ensure rc=0"
-t4_assert_contains "$B2_ERR" "restart 回放幽灵" "P2-2b process-info 不可用 ⇒ 判回放幽灵（不注入、不判 same）"
+t4_assert_eq "0" "$T4_RC" "P3-6② 回放幽灵：ensure rc=0（原路径不退化）"
+t4_assert_contains "$B2_ERR" "restart 回放幽灵" "P3-6② 明确 pane_not_found ⇒ 判回放幽灵（不注入、不判 same）"
+t4_assert_contains "$B2_ERR" "明确 pane_not_found" "P3-6② 回放判据点名「明确 pane_not_found」（不是任意错误）"
 t4_assert_eq "1" "$(grep -c 'pane close ' "$B2ST_ST/calls.log" || true)" \
-  "P2-2b 回放幽灵：关闭该幽灵 pane 恰 1 次（不可寻址故 close 安全）"
+  "P3-6② 回放幽灵：关闭该幽灵 pane 恰 1 次（不可寻址故 close 安全）"
 t4_assert_contains "$B2_OUT" "已拉起 rd-fe" "P2-2b 回放幽灵：关闭后重建成功"
 t4_assert_eq "1" "$(grep -c 'pane run ' "$B2ST_ST/calls.log" || true)" \
   "P2-2b 回放幽灵：只在**新** pane 上 run 一次"
+
+# ---- P3-6（提级必修）：**只有明确 pane_not_found 才 close**；其它 process-info 错误不得关闭活 pane ----
+for b2bad in internal empty; do
+  b2_reset
+  printf 'w1:p1|rd-fe|%s|w1\n' "$b2bad" > "$B2ST_ST/panes"
+  : > "$B2ST_ST/agents"; : > "$B2ST_ST/ws"
+  t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-x' \
+    NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure rd-fe
+  B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  t4_assert_eq "0" "$T4_RC" "P3-6 $b2bad：ensure rc=0（失败计 SPAWN_FAIL，不是 crash）"
+  if [ "$b2bad" = "internal" ]; then
+    t4_assert_contains "$B2_ERR" "process-info 错误" "P3-6 internal_error：fail loud 点名 process-info 错误"
+    t4_assert_contains "$B2_ERR" "internal_error" "P3-6 internal_error：回显错误类别（可定位）"
+    t4_assert_contains "$B2_ERR" "不关闭" "P3-6 internal_error：明确「不关闭」（pane 可能仍可达）"
+  else
+    t4_assert_contains "$B2_ERR" "空输出" "P3-6 空输出：fail loud 点名「空输出」（错误类别可定位）"
+    t4_assert_contains "$B2_ERR" "不关闭" "P3-6 空输出：明确「不关闭」"
+  fi
+  t4_assert_contains "$B2_ERR" "--force" "P3-6 $b2bad：给 --force 指路"
+  t4_assert_not_contains "$B2_OUT" "[herdr] 已拉起" "P3-6 $b2bad：不得冒充成功"
+  t4_assert_eq "0" "$(grep -c 'pane close ' "$B2ST_ST/calls.log" || true)" \
+    "P3-6 $b2bad：**零 pane close**（不误关仍可达的活 pane）"
+  t4_assert_eq "0" "$(grep -c 'pane run ' "$B2ST_ST/calls.log" || true)" \
+    "P3-6 $b2bad：零 pane run（不注入）"
+done
 
 # ---- ④ BR7 忙闲映射 + 阶梯单测（抽取门面区到子进程；只灌纯依赖，不启 tmux）----
 FACADE_SRC="$T4_CACHE_DIR/b1-facade.sh"
