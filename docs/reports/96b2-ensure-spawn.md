@@ -30,7 +30,7 @@ herdr 后端第一次**真的起会话**：`ensure` 在专用 session 的（按 
 
 ### 2.3 就绪门（反假阳性硬判据）
 
-全条件**与**（50×100ms、5s 上限；**禁用 `agent wait --until idle`**）：
+全条件**与**（轮询间隔 100ms、**wall-clock 上限 5000ms**（`NAO_HERDR_READY_TIMEOUT_MS` 可覆盖）、每轮上限 50；**禁用 `agent wait --until idle`**）：
 
 `pane 存在` ∧ `foreground name == pi` ∧ `argv --name == 期望全名` ∧ `agent_session != null` ∧ `agent_status == idle` ∧ `state_change_seq ≥ 1` ∧ `screen_detection_skipped == true`
 
@@ -42,16 +42,18 @@ herdr 后端第一次**真的起会话**：`ensure` 在专用 session 的（按 
 | :-- | :-- |
 | label 命中 0 个 | 正常放置 |
 | label 命中 1 个，`ghost`（label 在、agent 条目缺） | **不判 same**；复用该 pane（rename 幂等 + run），不新建同名 label |
-| label 命中 1 个，`seq == 0`（`stop→restart` 回放：agent 条目陈旧且 pane 不可寻址） | **不判 same**；关闭该幽灵 pane 后重建（实测 `pane run` ⇒ `pane_not_found`，`pane close` 可用） |
+| label 命中 1 个，**前台是交互式 shell**（`bash/zsh/sh/dash/fish/ksh/mksh/tcsh/csh/nu/elvish/xonsh`） | **不判 same**；复用该 pane（rename 幂等 + run）。**前台非 shell ⇒ 不注入**（否则会把启动命令写进 `cat`/`vim`/REPL 的输入） |
+| label 命中 1 个，`process-info` 不可用（`stop→restart` 回放：pane 不可寻址） | **不判 same**；关闭该幽灵 pane 后重建（实测 `pane run`/`process-info` ⇒ `pane_not_found`，`pane close` 可用） |
 | label 命中 1 个，在线 + `--force` | 新建 pane（显式 warn：随后同名 label 会有 2 个，`status` 标歧义） |
-| label 命中 1 个，其余非在线 | 为免误伤在场进程：**不复用、不重复建 label**，warn + `SPAWN_FAIL`（给 `--force` 指路） |
+| label 命中 1 个，**前台非 shell**（`cat`/`vim`/`sleep`/…）且无 `--force` | **不注入按键、不关闭在场 pane**：warn 点名实际前台 + `SPAWN_FAIL`，给 `--force` 指路 |
 | label 命中 >1 个 | warn 点名全部 pane + **不猜**（零 rename/run/split）+ `SPAWN_FAIL`；`status` 单列「同名 label 多 pane」 |
 
 ### 2.5 BR6 生产化（PM 裁定 Q1-A）
 
 - `session-start` 是**起 server 的唯一生产入口**：`env -u TMUX -u TMUX_PANE -u TMUX_TMPDIR` + `for v in $(env | grep -o '^HERDR_[A-Z_]*'); do unset "$v"; done`（枚举清），`setsid`（无则降级后台）。
 - 宿主终端句柄名表 `_TERM_HOST_HANDLE_VARS` 声明在门面**通用区**：herdr 实现区仍**零** `TMUX` 字面量（`t4_scan_term_herdr_forbidden` 继续咬）。
-- 会话名守卫与测试侧同源：非空、≠`default`、`^[A-Za-z0-9._-]+$`、socket 推导路径必须在 `${XDG_CONFIG_HOME:-$HOME/.config}/herdr/sessions/<名>/` 下。
+- 会话名守卫与测试侧同源：非空、≠`default`、`^[A-Za-z0-9._-]+$`。
+- **pane 内 `HERDR_SOCKET_PATH` 必须落在目标根**：`realpath -m` 后须以 `${XDG_CONFIG_HOME:-$HOME/.config}/herdr/sessions/<名>/` 为前缀，否则 `exit 3`（stale/外贸 env 必拒）。`session-start` 不再重复校验它自己拼出的 socket 路径（`case "$sock"` 恒真 = 死守卫，已删）。
 - 就绪判据 = **`api snapshot`**（真触 server）；`api schema` 是本地静态元数据（无 server 也 rc=0，**禁**作存活判据——本批实测踩到并修正）。
 - 所有 herdr 调用仍只经 `_term_herdr_exec`（缺 `--session` ⇒ 拒）。
 
@@ -132,6 +134,7 @@ TMUX=/tmp/tmux-<uid>/default,<pid>,0
 clean pane: TMUX 行数=0
 HERDR_SESSION=nao-b2evi-1772624
 HERDR_SOCKET_PATH=/tmp/nao-b2-evi/cfg/herdr/sessions/nao-b2evi-1772624/herdr.sock
+XDG_CONFIG_HOME=/tmp/nao-b2-evi/cfg
 ```
 
 （`session-start` 即平反路径；pane 内 `HERDR_SESSION` 与 socket 前缀都指向目标根。）
@@ -169,15 +172,60 @@ $ # 负控：自造第 7 条
 ### ⑥ 门禁（本机实测）
 
 - `bash .agents/scripts/nao-fleet.sh check` **rc=0 ×2，输出逐字相同**（md5 `31b5978e95e7f5b4dc7a9fd861548065`，与 B1 相同 ⇒ check 输出零变化）。
-- `npm test`（tmux 默认）**rc=0**：28 例全 PASS · `SKIP=0 · DEGRADE=0 · NOTE=2`（既有白名单项）· 运行时 **`[PASS]` 行 = 1300**。
+- `npm test`（tmux 默认）**rc=0**：**27 例**全 PASS（`bash tests/t4/run.sh --list | tail -n +2 | wc -l` = 27，编号 01–10 + 12–28）· `SKIP=0 · DEGRADE=0 · NOTE=2`（既有白名单项）· 运行时 **`[PASS]` 行 = 1331**。
 - `NAO_TEST_TERMINAL=herdr npm test` **rc=0**：`共享 15 / 本后端专有 1 / PENDING 11`（与 `tests/t4/backends/herdr.txt` 对账一致；PENDING 仍是未登记用例点名，含 28）。
 - **BR1 零回归**：用例 28 的 C2 对照仍为 `status` 全文 md5 **`144f3447c9ff406d6aed828d9c9720e5`**、`ensure`「已拉起」行 + pi `--name` 值拼接 md5 **`c2de6533a1826dbf470dcc401cb29063`**（与基线 fixture 逐字相等）；tmux 逐子命令调用次数（`list-panes` / `list-sessions` / `display-message` / `capture-pane` / `has-session` + 总数）与基线全等。
-- **断言增量（运行时 `[PASS]` 行数）**：用例 06 `170 → 184`（+14）· 用例 28 `108 → 136`（+28）· 全量 `1258 → 1300`（+42）；其余 26 例源码与断言数零变化（未改其文件）。
+- **断言增量（运行时 `[PASS]` 行数）**：用例 06 `170 → 184`（+14）· 用例 28 `108 → 167`（+59：B1 轮 +28 / QA 第二轮 +31）· 全量 `1258 → 1331`（+73）；其余 25 例源码与断言数零变化（未改其文件）。
 - 静态 lint：`t4_scan_term_bare_calls` 0 命中 · `t4_verify_term_ledger` rc=0 · `t4_scan_term_herdr_forbidden` 0 命中（herdr 区无 `TMUX`/标题字段）· `t4_scan_herdr_bare_calls` 0 命中。
 
 ### ⑦ 提交形态
 
 见回执（HEAD sha / 工作区静默 / `git diff --shortstat main...HEAD`）。报告与实现同 PR。
+
+## 三之二、QA 第二轮（P2-1 / P2-2 / P3-1 / P3-3）修复证据
+
+### ① P2-1：「`HERDR_SOCKET_PATH` 根未校验」+ 死守卫 —— 选 ①（realpath 后比较**目标根**）
+
+- 实现：`_term_herdr_require` 现按 `realpath -m` 归一后要求 `HERDR_SOCKET_PATH` 以 `${XDG_CONFIG_HOME:-$HOME/.config}/herdr/sessions/<名>/` 为前缀；不符 ⇒ **exit 3**（命令未执行）。测试夹具同步把 socket 放到 `$LAB/cfg/herdr/sessions/<名>/` 并设 `XDG_CONFIG_HOME=$LAB/cfg`。
+- 死守卫：`_term_herdr_session_start` 的 `case "$sock"`（socket 由 root+会话名拼出、会话名禁 `/`/glob ⇒ 恒真）**已删除**；防串台由会话名守卫 + `--session` + pane 内 socket 根校验承担。
+- 负控（用例 28 · P2-1 四条）：
+
+```
+P2-1 错误根的 HERDR_SOCKET_PATH ⇒ exit 3（stale/外贸 env 必拒，不假绿）
+P2-1 拒绝理由点名「目标根」（不是任意 */sessions/<名>/*）
+P2-1 回显期望根（可定位）
+P2-1 根校验先于一切 herdr 调用（stale env 下零后端调用）
+```
+
+- 报告口径订正：原文 §2.5 写「必须在 `${XDG_CONFIG_HOME}/herdr/sessions/<名>/` 下」但实现只匹配 `*/sessions/<名>/*`（over-claim）⇒ 现实现与文字一致；`session-start` 的恒真 case 描述同步删除。
+
+### ② P2-2：「幽灵复用直接 `pane run` 会注入用户前台程序」—— 前台 shell 白名单
+
+- 白名单：`bash zsh sh dash fish ksh mksh tcsh csh nu elvish xonsh`（`TERM_SHELL_NAMES`；用 `process-info.foreground_processes[].name`）。
+- 非 shell ⇒ **不 `pane run`、不 `pane close`**，warn 点名实际前台 + `SPAWN_FAIL` + `--force` 指路；`--force` 时也只新建 pane，**不向在场程序注入**（会产生同名 label，显式 warn）。
+- **真机复现 QA 场景**（label=`rd-fe` 的 pane 前台跑 `cat > captured.txt`，从另一 pane 跑 `ensure`）：
+
+```
+[fleet] 前台非 shell（rd-fe ⇒ w1:p1 前台=cat）⇒ **不注入按键**、不判「已在运行」（向正在运行的程序写命令会污染其输入：vim/REPL/cat）
+[fleet]   该怎么办：人工核对后关闭该 pane（回收面归 B3），或加 --force 新建（会产生同名 label，需人工收口）
+[fleet] 已拉起 0 个会话（成功 0 / 跳过 0 / 失败 1）
+rc=0    elapsed_ms=726
+captured.txt = 0 字节；含 `exec pi --name rd-fe` 的行数 = 0；残留进程 = 0
+```
+
+- 桩负控（`cat` / `vim` / `sleep` 各 7 条，共 21 条）：均断言 `前台非 shell` + 回显实际名 + `--force` 指路 + 无成功行 + **`pane run` 0 次** + **`pane close` 0 次**。
+- 回放分支改为 `process-info` 不可用判定（不再用 `seq==0`）：桩负控断言「点名 restart 回放幽灵 + `pane close` 恰 1 + 只在**新** pane 上 run 1 次」。
+
+### ③ P3-1：「28 例」是最大编号不是例数 —— 订正为 27 例
+
+- 本报告与 PR 描述中所有「28 例」⇒ **27 例**（唯一出处 `bash tests/t4/run.sh --list | tail -n +2 | wc -l` = **27**，编号 01–10 + 12–28，无 11）。
+- 断言数不变：`[PASS]` 行 **1331**（新增断言来自 P2-1/P2-2/P2-2b，与例数无关）。
+
+### ④ P3-3：就绪门「5s 上限」名不副实 —— 选 ②（wall-clock 上限）
+
+- 实现：`deadline` 用 `date +%s%N` 计 **wall-clock**，默认 `TERM_READY_TIMEOUT_MS=5000`（`NAO_HERDR_READY_TIMEOUT_MS` 可覆盖），每轮含 3 次 CLI 也计入；超时消息口径改为 `wall-clock 上限 ${budget}ms / ≤N 轮 × 0.1s，实际 ${elapsed}ms`。
+- 用例 28 B2① 用 `NAO_HERDR_READY_TIMEOUT_MS=400` 覆盖（避免白等 5s）并断言消息含 `wall-clock 上限 400ms`。
+- 实测：真机正常路径 `ensure` **2713ms / 2901ms**（含 codegraph + pi 启动，就绪门在 pi 报 `idle/seq≥1` 后立即返回）；QA 观测的 ghost 成功路径 5951ms 属旧实现「只数睡眠」的 wall-clock，现超 5s 会按承诺 fail loud（并逐条报缺），可用 env 提高预算。
 
 ## 四、PM 两项裁定落地
 
@@ -187,13 +235,15 @@ $ # 负控：自造第 7 条
 
 ## 五、遗留与观察（按三出口，不夹带）
 
-1. **`stop→restart` 回放出的 pane 不可寻址**（herdr 0.9.1 实测：`pane list`/`pane get`/`pane close` 可用，`pane run`/`split`/`process-info` 报 `pane_not_found`）⇒ 本批以「`seq==0` 判回放 + 关闭重建」处理。**接受（含到期 2027-01-31）**：若 herdr 后续修好虚拟化时机，此分支退化为普通 ghost 复用。
+1. **`stop→restart` 回放出的 pane 不可寻址**（herdr 0.9.1 实测：`pane list`/`pane get`/`pane close` 可用，`pane run`/`split`/`process-info` 报 `pane_not_found`）⇒ 本批以「**`process-info` 不可用**判回放 + 关闭重建」处理（不再用 `seq==0` 当判据，QA P3-4 指出稳态重启会恢复 agent 条目并给新 seq，`seq==0` 只在抢进恢复窗口时命中）。**接受（含到期 2027-01-31）**：若 herdr 后续修好虚拟化时机，此分支退化为普通 ghost 复用。
 2. **`--force` 在 herdr 会造出同名 label 两个 pane**（现显式 warn，`status` 标歧义）。**转办 B3**：回收面提供「重复 label 清理」；在 B3 落地前以人工 `herdr pane close` 收口。
 3. **同名歧义告警在 `status` 里会打两次**（hv 预计算 + `running` 复判），属噪声不属错误。**接受（含到期 2027-01-31）**：B3 接忙闲/回收时可顺手把逐名判定缓存化。
-4. **就绪门成本**：最坏 50 次 ×（`pane list` + `process-info` + `agent list`）= 150 次 CLI（5s 内）。**接受**：只在超时路径付满；正常路径 2–3 次。
+4. **就绪门成本**：wall-clock ≤5s 内每轮（`pane list` + `process-info` + `agent list`）最多 50 轮 = 150 次 CLI。**接受**：只在超时路径付满；正常路径 2–3 次（真机实测 2.7–2.9s 完成）。
 5. **`session-start` 不自证 pane 内环境**（只保证机械清环境；① ② 判据由 smoke/用例证）。若三期要把它变成门禁，可加 `--verify` 在首 pane 内跑 `env` 断言 —— **转办三期**（属布局/形态面）。
 6. **在待复用 pane 内跑 `ensure` 会排队**（`pane run` 把命令投给正忙的 shell）；这是测试构造 artifact，不是生产路径（PM 从一个 pane 起其它 pane）。**接受**：已在 smoke 报告中标注，用例 28 用独立 caller pane 规避。
 7. **`agent wait --until idle` 仍不可作就绪门**（B1 实测 6ms 假阳性）；本批在注释与测试里钉死，禁止后续「优化」回退。
+8. **QA P3-4（转 B3 观察）**：回放叙事比实现窄 —— 稳态重启后 herdr 会恢复 agent 条目并给新 seq，本批的「`process-info` 不可用」分支只在「ensure 抢进恢复窗口」命中；窗口内还会观测到 `pane list` 有 pane 但 `process-info` 报 `pane_not_found`（<1s）。B3 接回收时要留意该窗口（不得把恢复中的 pane 当可回收/可复用）。
+9. **QA P3-5（观察）**：`/tmp/nao-fleet-<card>-*.md` 在 60s 清理窗口后仍可能残留（既有机制，非 B2 引入）。**接受**，不在本批扩面。
 
 ## 六、文件
 

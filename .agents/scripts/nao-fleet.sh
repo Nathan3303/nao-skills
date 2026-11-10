@@ -69,6 +69,7 @@
 #   NAO_CLOSE_BUSY_PATTERN=<ERE>             close 的在跑 turn 判定正则（默认内置 pi 状态行标记）
 #   NAO_TERMINAL=tmux|herdr                  终端后端（默认 tmux；herdr 侧二期 B2：status + ensure；
 #                                            ensure 须先 `session-start` 起专用 session 并在其 pane 内运行）
+#   NAO_HERDR_READY_TIMEOUT_MS=<ms>          herdr 就绪门 wall-clock 上限（默认 5000；只对 herdr 后端生效）
 #   NAO_TASKS_STATE=<path>                   任务状态文件（默认 docs/tasks-state.md，供残留检测/回收闸门）
 #   NAO_UPDATE_ON_ENSURE=0|false             ensure pm 的下游版本自检注入开关（默认开；0/false ⇒ 与本批之前逐字等价）
 #
@@ -124,9 +125,14 @@ TERM_HERDR_PROTOCOL="22"
 # BR6：起 herdr server 前必须清掉的**宿主终端句柄**。名字表放通用区（herdr 实现区禁出现该字面量：
 #   tests/t4/lib.sh::t4_scan_term_herdr_forbidden），由 `_term_herdr_exec` 的 server-start 模式消费。
 _TERM_HOST_HANDLE_VARS=(TMUX TMUX_PANE TMUX_TMPDIR)
-# B2：herdr 就绪门轮询（与测试侧同口径：50×100ms、5s 上限；**禁**固定 sleep 与 `agent wait --until idle`）
+# B2：herdr 就绪门轮询 —— **wall-clock 上限**（默认 5s，可用 NAO_HERDR_READY_TIMEOUT_MS 覆盖）
+#   轮询间隔 100ms + 每轮上限保护；**禁**固定 sleep 与 `agent wait --until idle`（已 idle 时 6ms 假阳性）。
 TERM_READY_POLL_MAX=50
 TERM_READY_POLL_INT=0.1
+TERM_READY_TIMEOUT_MS="${NAO_HERDR_READY_TIMEOUT_MS:-5000}"
+[[ "$TERM_READY_TIMEOUT_MS" =~ ^[0-9]+$ ]] || TERM_READY_TIMEOUT_MS=5000
+# B2：ghost pane 复用前只允许把命令送进**交互式 shell**（前台非 shell ⇒ 拒绝注入，fail loud）
+TERM_SHELL_NAMES=(bash zsh sh dash fish ksh mksh tcsh csh nu elvish xonsh)
 # herdr 快照缓存路径（#96 B1）：**每命令一份**。`$$` 在子 shell 里不变 ⇒ 快照由任一子 shell 建好后，
 #   其余子 shell 与父 shell 读同一份（status 另在入口显式 prime 一次，保证「每命令 ≤1 次 pane list」）。
 _TERM_SNAP_TOKEN="$$.$RANDOM$RANDOM"
@@ -367,6 +373,9 @@ _term_herdr_exec() {  # 唯一入口：--session 由此注入（调用方无法�
   herdr --session "$s" "$@"
 }
 
+# 路径归一（realpath -m：不要求存在；无 realpath 的平台退化为字面串）
+_term_path_norm() { realpath -m -- "${1-}" 2>/dev/null || printf '%s\n' "${1-}"; }
+
 # 前提闸门（herdr）：不满足 ⇒ exit 3（命令未执行）；**禁**从 `session list`/`pane current` 反推会话名
 _term_herdr_require() {
   command -v herdr >/dev/null 2>&1 || {
@@ -377,16 +386,21 @@ _term_herdr_require() {
     printf '需要 herdr pane：HERDR_ENV=1 缺失（herdr 后端只在其 pane 内运行；从外部推断会话名属猜测面，禁）\n' >&2
     exit 3
   fi
-  local s="${HERDR_SESSION:-}" sp="${HERDR_SOCKET_PATH:-}"
+  local s="${HERDR_SESSION:-}" sp="${HERDR_SOCKET_PATH:-}" root rootp spp
   if [[ -z "$s" || "$s" == "default" || ! "$s" =~ ^[A-Za-z0-9._-]+$ ]]; then
     printf '需要 herdr 会话：HERDR_SESSION=%s 不可用（须非空、≠default、^[A-Za-z0-9._-]+$）\n' "${s:-<空>}" >&2
     exit 3
   fi
-  case "$sp" in
-    */sessions/"$s"/*) ;;
-    *) printf '需要 herdr 会话目录：HERDR_SOCKET_PATH=%s 不在 */sessions/%s/* 下（stale/外贸 env ⇒ 拒绝，防串台）\n' "${sp:-<空>}" "$s" >&2
-       exit 3 ;;
-  esac
+  # BR6：socket 必须落在**目标根**下（不是「任意 */sessions/<名>/*」——后者对 stale/外贸 env 等于死守卫）。
+  #   根 = `${XDG_CONFIG_HOME:-$HOME/.config}/herdr`（与 herdr CLI 的会话目录推导同源）。
+  root="${XDG_CONFIG_HOME:-$HOME/.config}/herdr"
+  rootp="$(_term_path_norm "$root/sessions/$s")"
+  spp="$(_term_path_norm "$sp")"
+  if [[ -z "$sp" || "$spp" != "$rootp"/* ]]; then
+    printf '需要 herdr 会话目录：HERDR_SOCKET_PATH=%s 不在目标根 %s/ 下（stale/外贸 env ⇒ 拒绝，防串台）\n' \
+      "${sp:-<空>}" "$rootp" >&2
+    exit 3
+  fi
   local schema proto
   if ! schema="$(_term_herdr_exec api schema 2>/dev/null)"; then
     printf 'herdr api schema 不可用（server/CLI 异常）：无法校验 protocol ⇒ 拒绝执行\n' >&2
@@ -541,6 +555,18 @@ _term_herdr_workspace_id_for() {  # <label> → workspace_id（无则空）
   return 0
 }
 
+# 前台进程全部是交互式 shell 才允许复用（否则 `pane run` 会把命令注入用户正在跑的程序）
+_term_fg_list_is_shell() {  # <name...> → 0 全部在 TERM_SHELL_NAMES 白名单
+  local n sh_n hit
+  (( $# > 0 )) || return 1
+  for n in "$@"; do
+    hit=0
+    for sh_n in "${TERM_SHELL_NAMES[@]}"; do [[ "$n" == "$sh_n" ]] && { hit=1; break; }; done
+    (( hit )) || return 1
+  done
+  return 0
+}
+
 _term_herdr_spawn() {  # <name> <inner> <repo> [force] → SPAWN_RC_OK|FAIL
   local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="" pout="" pl="" obj js
   local pane="" wsid="" first="" nmatch=0 hit="" verdict="" seq="" launched=0
@@ -567,23 +593,28 @@ _term_herdr_spawn() {  # <name> <inner> <repo> [force] → SPAWN_RC_OK|FAIL
   fi
   if (( nmatch == 1 )); then
     pane="$hit"
-    verdict="$(term_liveness "$name" "$repo" | cut -f1)"
-    seq="$(term_liveness "$name" "$repo" | cut -f3)"
-    if [[ "$verdict" == "ghost" ]]; then
-      # label 在、agent 条目缺：**不是「已在运行」**（不静默跳过）；复用该 pane 重跑 agent
-      warn "幽灵 pane：$name 的 label 在、agent 条目缺（pane=$pane）⇒ 不判「已在运行」，复用该 pane 重跑 agent"
-    elif [[ "$seq" == "0" ]]; then
-      # stop→restart 回放的特征：agent 条目陈旧（seq=0）且 pane 不可寻址（实测 pane run ⇒ pane_not_found）
-      warn "restart 回放幽灵：$name 的 pane=$pane 陈旧（verdict=$verdict seq=0）⇒ 不判「已在运行」，关闭该幽灵 pane 后重建"
+    local vline fgname
+    local -a fgnames=()
+    vline="$(term_liveness "$name" "$repo")"
+    IFS=$'\t' read -r verdict _ seq _ <<< "$vline"
+    while IFS=$'\t' read -r fgname _; do
+      [[ -n "$fgname" ]] && fgnames+=("$fgname")
+    done < <(_term_herdr_argv "$pane")
+    if (( ${#fgnames[@]} == 0 )); then
+      # process-info 不可用 ⇒ `stop→restart` 回放出的幽灵 pane（pane list 有、pane run 报 pane_not_found）
+      warn "restart 回放幽灵：$name 的 pane=$pane process-info 不可用（verdict=$verdict seq=$seq）⇒ 不判「已在运行」，关闭该幽灵 pane 后重建"
       _term_herdr_exec pane close "$pane" >/dev/null 2>&1 || true
       pane=""
+    elif _term_fg_list_is_shell "${fgnames[@]}"; then
+      # 前台是交互式 shell ⇒ 可以安全把启动命令送进去；label 在、agent 无 = **不判「已在运行」**（不静默跳过）
+      warn "label 已在场但不在线（幽灵 pane / stale：$name ⇒ $pane，verdict=$verdict 前台=${fgnames[*]}）⇒ 不判「已在运行」，复用该 pane 重跑 agent"
     elif $force; then
-      # --force：显式要一个新会话（不复用旧 pane，避免改坏在场进程）
-      warn "同名 label 已在场（$name ⇒ $pane，verdict=$verdict）：--force ⇒ 新建 pane（随后同名 label 会有 2 个，status 将标歧义）"
+      # --force：显式要一个新会话；**不向在场程序注入按键**（会污染 vim/REPL/cat 的输入）
+      warn "前台非 shell（$name ⇒ $pane 前台=${fgnames[*]}）：--force ⇒ 新建 pane，不向在场程序注入按键（随后同名 label 会有 2 个，status 将标歧义）"
       pane=""
     else
-      warn "label 已在场但不在线：$name ⇒ $pane（verdict=$verdict seq=$seq）⇒ 不判「已在运行」；为免误伤在场进程，不复用也不重复建 label"
-      warn "  该怎么办：先人工核对该 pane（herdr --session ${HERDR_SESSION:-?} agent explain $pane；回收面归 B3），或加 --force 重建"
+      warn "前台非 shell（$name ⇒ $pane 前台=${fgnames[*]}）⇒ **不注入按键**、不判「已在运行」（向正在运行的程序写命令会污染其输入：vim/REPL/cat）"
+      warn "  该怎么办：人工核对后关闭该 pane（回收面归 B3），或加 --force 新建（会产生同名 label，需人工收口）"
       return "$SPAWN_RC_FAIL"
     fi
   fi
@@ -689,11 +720,19 @@ _term_herdr_ready_state() {  # <pane_id> <expected name>
 
 _term_herdr_wait_ready() {  # <pane_id> <name> → 0 就绪 / 1 超时（逐条报缺 + 指路）
   local pid="${1-}" want="${2-}" i max="${TERM_READY_POLL_MAX:-50}" int="${TERM_READY_POLL_INT:-0.1}"
+  local budget="${TERM_READY_TIMEOUT_MS:-5000}" start_ms now_ms elapsed
+  # wall-clock 上限（不是「50×0.1s 睡眠」—— 每轮含 3 次 CLI 调用，只数睡眠会 name-only 5s）
+  start_ms="$(date +%s%N)"
+  elapsed=0
   for ((i = 1; i <= max; i++)); do
     _term_herdr_ready_state "$pid" "$want" && return 0
-    (( i < max )) && sleep "$int"
+    now_ms="$(date +%s%N)"
+    elapsed=$(( (now_ms - start_ms) / 1000000 ))
+    (( elapsed >= budget )) && break
+    sleep "$int"
   done
-  warn "就绪门超时（${max}×${int}s）：$want（pane=$pid）未满足以下条件："
+  now_ms="$(date +%s%N)"; elapsed=$(( (now_ms - start_ms) / 1000000 ))
+  warn "就绪门超时（wall-clock 上限 ${budget}ms / ≤${max} 轮 × ${int}s，实际 ${elapsed}ms）：$want（pane=$pid）未满足以下条件："
   (( _TR_PANE )) || warn "  · pane 存在：pane list 无 $pid"
   [[ "$_TR_FG" == "pi" ]] || warn "  · 前台进程 name==pi：实际 ${_TR_FG:-<无前台进程>}"
   [[ "$_TR_ARGV" == "$want" ]] || warn "  · argv --name == $want：实际 ${_TR_ARGV:-<空>}（进程未起或 --name 不同）"
@@ -718,10 +757,9 @@ _term_herdr_session_start() {  # <session>
   fi
   root="${XDG_CONFIG_HOME:-$HOME/.config}/herdr"
   sock="$root/sessions/$s/herdr.sock"
-  case "$sock" in
-    "$root"/sessions/"$s"/*) ;;
-    *) printf 'herdr 会话目录异常：%s 不在 %s/sessions/%s/ 下（拒绝，防串台）\n' "$sock" "$root" "$s" >&2; return 1 ;;
-  esac
+  # 注：此处**不再**校验 `case "$sock"` —— sock 由 root+会话名拼出且会话名已禁 `/`/空白/glob，
+  #   那个 case 恒真（死守卫，QA P2-1）。防串台由：① 会话名守卫 ② `_term_herdr_exec` 的 `--session`
+  #   ③ `_term_herdr_require` 对 pane 内 `HERDR_SOCKET_PATH` 的**目标根**校验承担。
   prev="${HERDR_SESSION:-}"
   export HERDR_SESSION="$s"
   # 就绪判据 = **api snapshot**（真触 server）；`api schema` 是本地静态元数据（无 server 也 rc=0，禁作存活判据）

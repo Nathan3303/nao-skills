@@ -679,7 +679,10 @@ SH
 chmod +x "$B1BIN/herdr" "$B1BIN/tmux"
 REAL_TMUX_B1="$(command -v tmux || true)"
 t4_assert_ne "" "${REAL_TMUX_B1:-}" "B1④ 真 tmux 可用（桩要转发）"
-B1_ENV=(env NAO_TERMINAL=herdr HERDR_ENV=1 HERDR_SESSION=nao-b1-check HERDR_SOCKET_PATH=/tmp/b1/sessions/nao-b1-check/herdr.sock PATH="$B1BIN:$PATH")
+# P2-1（QA 第二轮）：HERDR_SOCKET_PATH 必须落在**目标根**（${XDG_CONFIG_HOME}/herdr/sessions/<名>/）下
+B1_CFG="$T4_CACHE_DIR/b1-cfg-$$"
+B1_ENV=(env NAO_TERMINAL=herdr HERDR_ENV=1 HERDR_SESSION=nao-b1-check \
+  XDG_CONFIG_HOME="$B1_CFG" HERDR_SOCKET_PATH="$B1_CFG/herdr/sessions/nao-b1-check/herdr.sock" PATH="$B1BIN:$PATH")
 
 : > "$B1_LOG"
 out="$(cd "$T4_ROOT" && "${B1_ENV[@]}" bash .agents/scripts/nao-fleet.sh check 2>&1)"; rc=$?

@@ -605,7 +605,9 @@ t4_assert_eq "$(grep -c '^tmux ' "$LAB/tmux-base.log" || true)" "$(grep -c '^tmu
   "B1③ status 的 tmux 总调用次数与基线一致"
 
 # ---- ② herdr 模式 status（端到端）：双向桩负控 + 四档非在线证据单列 ----
-HENV=(env HERDR_ENV=1 HERDR_SESSION=nao-b1-status HERDR_SOCKET_PATH="$LAB/cfg/sessions/nao-b1-status/herdr.sock")
+# P2-1：socket 必须落在目标根（XDG_CONFIG_HOME/herdr/sessions/<名>/）下 —— 夹具与之一致
+HENV=(env HERDR_ENV=1 HERDR_SESSION=nao-b1-status XDG_CONFIG_HOME="$LAB/cfg" \
+  HERDR_SOCKET_PATH="$LAB/cfg/herdr/sessions/nao-b1-status/herdr.sock")
 mkdir -p "$LAB/tmp"   # 私有 TMPDIR：快照临时文件必须落这里且跑完为空（P3-5 残留断言）
 : > "$LAB/tmux-calls.log"; : > "$LAB/node-calls.log"; : > "$LAB/herdr-calls.log"
 export NAO_TERMINAL=herdr
@@ -707,10 +709,15 @@ case "$cmd" in
       process-info)
         pid="${2:-}"; label="$(awk -F'|' -v p="$pid" '$1==p{print $2}' "$ST/panes")"
         fg="$(awk -F'|' -v p="$pid" '$1==p{print $3}' "$ST/panes")"
+        # phantom = stop→restart 回放出的不可寻址 pane（实测 pane run/process-info ⇒ pane_not_found）
+        if [ "$fg" = "phantom" ]; then
+          printf '{"error":{"code":"pane_not_found","message":"pane %s not found"}}\n' "$pid"
+          exit 1
+        fi
         if [ "$fg" = "pi" ]; then
           printf '{"result":{"process_info":{"foreground_processes":[{"argv":["/usr/bin/pi","--name","%s"],"name":"pi","pid":1}],"pane_id":"%s"}}}\n' "$label" "$pid"
         else
-          printf '{"result":{"process_info":{"foreground_processes":[{"argv":["/usr/bin/bash"],"name":"bash","pid":1}],"pane_id":"%s"}}}\n' "$pid"
+          printf '{"result":{"process_info":{"foreground_processes":[{"argv":["/usr/bin/%s"],"name":"%s","pid":1}],"pane_id":"%s"}}}\n' "${fg:-bash}" "${fg:-bash}" "$pid"
         fi ;;
       rename)
         pid="${1:-}"; label="${2:-}"
@@ -775,7 +782,8 @@ exit 0
 SH
 chmod +x "$B2ST_BIN/herdr"
 mkdir -p "$LAB/tmp"
-B2_ENV=(env HERDR_ENV=1 HERDR_SESSION=nao-b2-stub HERDR_SOCKET_PATH="$LAB/cfg/sessions/nao-b2-stub/herdr.sock" \
+B2_ENV=(env HERDR_ENV=1 HERDR_SESSION=nao-b2-stub XDG_CONFIG_HOME="$LAB/cfg" \
+  HERDR_SOCKET_PATH="$LAB/cfg/herdr/sessions/nao-b2-stub/herdr.sock" \
   HERDR_STUB_CWD="$LAB" \
   NAO_SKILLS="$LAB" TMPDIR="$LAB/tmp" PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" \
   PATH="$B2ST_BIN:$PATH")
@@ -793,9 +801,16 @@ b2_run() { # <onrun> <args...> → 清桩后跑 fleet（输出落 T4_OUT/T4_ERR�
 }
 
 # ---- B2① 反假阳性：已 idle 但 seq 不前进（ONRUN: idle|seq=0|skip=1|session 有）⇒ 就绪门超时 fail loud ----
-b2_run 'idle|0|1|sess-x' ensure rd-fe
+#   同时验 wall-clock 口径（P3-3）：用 NAO_HERDR_READY_TIMEOUT_MS=400 覆盖，避免本用例白等 5s。
+b2_reset
+t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|0|1|sess-x' \
+  NAO_HERDR_READY_TIMEOUT_MS=400 NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure rd-fe
+T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
 t4_assert_eq "0" "$T4_RC" "B2① 就绪超时 ⇒ ensure rc 仍 0（D3：跨后端 rc 语义一致）"
 t4_assert_contains "$T4_OUT_ANSI$T4_ERR_ANSI" "就绪门超时" "B2① 就绪超时 fail loud（打「就绪门超时」，不是静默）"
+t4_assert_contains "$T4_OUT_ANSI$T4_ERR_ANSI" "wall-clock 上限 400ms" \
+  "B2①/P3-3 超时按 **wall-clock 上限**报口径（且 NAO_HERDR_READY_TIMEOUT_MS 可覆盖）"
 t4_assert_contains "$T4_OUT_ANSI$T4_ERR_ANSI" "state_change_seq ≥ 1" "B2① 逐条报缺：state_change_seq（已 idle 但 seq 不前进）"
 t4_assert_not_contains "$T4_OUT_ANSI$T4_ERR_ANSI" "前台进程 name==pi：" "B2① 只报缺的那条（前台已是 pi，不得误报）"
 t4_assert_not_contains "$T4_OUT_ANSI$T4_ERR_ANSI" "agent_status == idle：" "B2① 只报缺的那条（状态已 idle，不得误报）"
@@ -851,6 +866,55 @@ sleep 0.6   # 等 status 的子进程/管道收尾（tmux-free，此处只避免
 t4_assert_eq "0" "$T4_RC" "B2③ 歧义场景 status rc=0（非 crash）"
 t4_assert_contains "$B2_OUT" "同名 label 多 pane" "B2③ status 单列「同名 label 多 pane」（终端证据异常节）"
 t4_assert_not_contains "$B2_OUT" "✓ rd-fe" "B2③ 歧义不得渲染成 ✓ 在线（不猜）"
+
+# ---- P2-1（QA 第二轮）：HERDR_SOCKET_PATH **目标根**校验（stale/外贸 env 必须 exit 3）----
+: > "$LAB/herdr-calls.log"
+BAD_ENV=(env HERDR_ENV=1 HERDR_SESSION=nao-b1-status XDG_CONFIG_HOME="$LAB/cfg" \
+  HERDR_SOCKET_PATH="/tmp/wrong-root/sessions/nao-b1-status/x.sock")
+t4_run_in_dir "$LAB" "${BAD_ENV[@]}" NAO_TERMINAL=herdr NAO_SKILLS="$LAB" TMPDIR="$LAB/tmp" \
+  PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" PATH="$LAB/bin:$PATH" \
+  timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" status
+t4_assert_eq "3" "$T4_RC" "P2-1 错误根的 HERDR_SOCKET_PATH ⇒ exit 3（stale/外贸 env 必拒，不假绿）"
+t4_assert_contains "$T4_ERR" "不在目标根" "P2-1 拒绝理由点名「目标根」（不是任意 */sessions/<名>/*）"
+t4_assert_contains "$T4_ERR" "$LAB/cfg/herdr/sessions/nao-b1-status" "P2-1 回显期望根（可定位）"
+t4_assert_eq "0" "$(grep -c '^herdr ' "$LAB/herdr-calls.log" || true)" \
+  "P2-1 根校验先于一切 herdr 调用（stale env 下零后端调用）"
+
+# ---- P2-2（QA 第二轮）：ghost 复用前前台必须是 shell；非 shell ⇒ 不注入 + fail loud ----
+for b2fg in cat vim sleep; do
+  b2_reset
+  printf 'w1:p1|rd-fe|%s|w1\n' "$b2fg" > "$B2ST_ST/panes"
+  : > "$B2ST_ST/agents"; : > "$B2ST_ST/ws"
+  t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-x' \
+    NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure rd-fe
+  B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  t4_assert_eq "0" "$T4_RC" "P2-2 前台=$b2fg：ensure rc=0（失败计 SPAWN_FAIL，不是 crash）"
+  t4_assert_contains "$B2_ERR" "前台非 shell" "P2-2 前台=$b2fg：必须点名「前台非 shell」（不得注入用户程序）"
+  t4_assert_contains "$B2_ERR" "$b2fg" "P2-2 前台=$b2fg：诊断回显实际前台进程名"
+  t4_assert_contains "$B2_ERR" "--force" "P2-2 前台=$b2fg：给出 --force 指路"
+  t4_assert_not_contains "$B2_OUT" "[herdr] 已拉起" "P2-2 前台=$b2fg：不得冒充成功"
+  t4_assert_eq "0" "$(grep -c 'pane run ' "$B2ST_ST/calls.log" || true)" \
+    "P2-2 前台=$b2fg：**零 pane run**（不把启动命令写进 cat/vim/sleep 的输入）"
+  t4_assert_eq "0" "$(grep -c 'pane close ' "$B2ST_ST/calls.log" || true)" \
+    "P2-2 前台=$b2fg：也不关闭在场 pane（不误伤用户程序；回收归 B3）"
+done
+
+# ---- P2-2b：restart 回放幽灵（process-info 不可用）⇒ 关闭并重建，且不注入 ----
+b2_reset
+printf 'w1:p1|rd-fe|phantom|w1\n' > "$B2ST_ST/panes"
+: > "$B2ST_ST/agents"; : > "$B2ST_ST/ws"
+t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-x' \
+  NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure rd-fe
+B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "0" "$T4_RC" "P2-2b 回放幽灵：ensure rc=0"
+t4_assert_contains "$B2_ERR" "restart 回放幽灵" "P2-2b process-info 不可用 ⇒ 判回放幽灵（不注入、不判 same）"
+t4_assert_eq "1" "$(grep -c 'pane close ' "$B2ST_ST/calls.log" || true)" \
+  "P2-2b 回放幽灵：关闭该幽灵 pane 恰 1 次（不可寻址故 close 安全）"
+t4_assert_contains "$B2_OUT" "已拉起 rd-fe" "P2-2b 回放幽灵：关闭后重建成功"
+t4_assert_eq "1" "$(grep -c 'pane run ' "$B2ST_ST/calls.log" || true)" \
+  "P2-2b 回放幽灵：只在**新** pane 上 run 一次"
 
 # ---- ④ BR7 忙闲映射 + 阶梯单测（抽取门面区到子进程；只灌纯依赖，不启 tmux）----
 FACADE_SRC="$T4_CACHE_DIR/b1-facade.sh"
@@ -909,7 +973,7 @@ CHILD
 } > "$T4_CACHE_DIR/b1-facade-test.sh"
 : > "$LAB/herdr-calls.log"
 fac_out="$(STUB_LOG="$LAB/herdr-calls.log" SNAP_DIR="$LAB/tmp" HERDR_ENV=1 HERDR_SESSION=nao-b1-unit \
-  HERDR_SOCKET_PATH="$LAB/cfg/sessions/nao-b1-unit/herdr.sock" NAO_TERMINAL=herdr \
+  XDG_CONFIG_HOME="$LAB/cfg" HERDR_SOCKET_PATH="$LAB/cfg/herdr/sessions/nao-b1-unit/herdr.sock" NAO_TERMINAL=herdr \
   PATH="$LAB/bin:$PATH" "$BASH_BIN" "$T4_CACHE_DIR/b1-facade-test.sh" 2>&1)"; fac_rc=$?
 t4_assert_eq "0" "$fac_rc" "B1④ 门面单测全绿（阶梯 + BR7 映射 + 快照缓存 + protocol 闸门）"
 t4_assert_contains "$fac_out" "FACADE_OK" "B1④ 门面单测自报 OK（明细：$(printf '%s' "$fac_out" | tail -1)）"
