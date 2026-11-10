@@ -106,6 +106,47 @@ cd <repo> && codegraph init                # 建索引（不带 -i；该 flag �
 - **`--card` 只作用于紧跟它的那个目标**：`ensure qa --card x.md` 是「常驻 `qa`」+「卡 `x.md`」两个会话，不会整批串味；命令末尾悬挂 `--card`、或把它递给 `check`/`status`/`close`，都按用法错误处理。
 - **卡正文就是系统提示**，属于**完全可信输入**（能写你仓库的人本来就能定义角色）。fleet 只校验目录、文件类型、大小与命名一致性，不做内容安全审查。卡同样可以被 pi-subagents 当项目 agent 用（加 `name:` 即可），但那条路径没有「环境锚点」行，卡正文别依赖 `@.agents/...` 引用才自洽。若你已在使用 overlay 清单（`NAO_SKILLS` 指向自己的清单目录），同一仓别两法并用。
 
+## 会话命名与多仓 scope（`--scope` / `.agents/fleet-scope`）
+
+舰队会话名是**路由标签**（不是身份证明），统一形如 `<core>[@<scope>]`：
+
+- `core` = `<role>[-<task>]` —— 常驻角色 id（或别名解析后的 id）或下游卡 `role`；`--task` 追加 `-<编号>`。
+- `scope` = 仓级命名空间 slug，**末位、`@` 分隔、非空才出现**。没有 scope 时名字与旧版逐字相同（这是零回归的前提）。
+- scope 语法：`^[a-z0-9][a-z0-9_-]{0,15}$`（≤16 字符、不以 `-` 结尾、不得以 `subagent-` / `nao-` 开头、禁 `@` `.` `:` 与空白）。
+- 预算：卡会话 `core` ≤32 字符，**总名长 ≤48**。
+- 名字只由脚本内唯一一对纯函数生成与解析（`fleet_name_build` / `fleet_name_parse`），语法冻结；二期只允许替换 scope 的来源与归一化实现。
+
+scope 从哪来（优先级从高到低）：
+
+1. `ensure --scope <slug>` —— 显式给定即**静默胜出**（覆盖文件；来源只在 `-v` 里打印）。
+2. `<目标仓>/.agents/fleet-scope` —— 单行文本，就一个 slug。读取对象是**目标仓**（`--card …@<仓>` 取卡的仓），不是调用者当前目录。
+3. 都没有 ⇒ 空（名字不带 `@`）。
+
+```bash
+# 两个仓同时跑同一套角色：各写各的 scope，名字就互不冲突
+cd ~/proj/api  && printf 'api\n'  > .agents/fleet-scope
+cd ~/proj/web  && printf 'web\n'  > .agents/fleet-scope
+cd ~/proj/api  && .agents/scripts/nao-fleet.sh ensure rd-be     # → rd-be@api
+cd ~/proj/web  && .agents/scripts/nao-fleet.sh ensure rd-be     # → rd-be@web
+```
+
+**两仓并发必须设 scope。** scope 相同（或都没设）时，第二仓 `ensure` 同一个 core 会 **fail loud** 并列出在场会话 —— 这是故意的：同名会话会互相顶掉，静默拉起等于给你一个「看起来有两个、其实只有一个」的舰队。
+
+失败一律 loud，不静默回落：
+
+- 文件缺失 ⇒ 空、静默（唯一允许的静默分支）。
+- 空文件 / 只有空白 ⇒ 拒绝（「声明了却没值」多半是 typo，静默回落会变成静默撞名）。
+- 多行 ⇒ 拒绝（歧义）；CRLF 会先剥 `\r` 再校验（换行风格归 `check` 管）。
+- 非法字符 / 超 16 / 尾 `-` / 保留前缀 ⇒ 拒绝并回显规则。
+- 不是普通文件（目录、fifo）/ 不可读 / symlink 逃出该仓 ⇒ 拒绝（与角色卡同一套边界口径）。
+- `--scope ""`（给了参数但是空）⇒ 拒绝；不用 scope 时**别写** `--scope`。
+
+回收与查看：
+
+- `status` **不读** scope 文件 —— 它从会话名 parse。带 scope 的会话行尾会多一个 `·scope=<x>` 标记；带 scope 的常驻会话显示为 `✓ rd-be 在线（--name rd-be@todo；…）·scope=todo`。
+- `close rd-be`（裸别名/裸派生名）= 用**调用者所在仓**的 scope；`close rd-be@todo`（全名）= 用它自己带的 scope，**忽略** scope 文件。
+- 同 core 的带 scope 会话不止一个、而你又只给了裸名 ⇒ 拒绝并列出候选（用全名指定，不猜）。
+
 ## tmux 布局
 
 舰队在你当前窗口内分屏，三种布局：

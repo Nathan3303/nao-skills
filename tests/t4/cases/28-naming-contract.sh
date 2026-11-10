@@ -248,8 +248,7 @@ else
 fi
 # ---- C3 负控 B：删一条 parse 调用 ⇒ ③代码调用点数必须掉 ----
 NEG_B="$T4_CACHE_DIR/c3-neg-b.sh"
-if MUT_OLD="$(grep -m1 -E 'fleet_name_parse "' "$SUBJECT")" \
-   MUT_RE='^[[:space:]]*pout="\$\(fleet_name_parse "\$n"\)"[[:space:]]*$' \
+if MUT_RE='^[[:space:]]*out="\$\(fleet_name_parse "\$n"\)"[[:space:]]*$' \
    awk '/^# >>> fleet-name-contract BEGIN/{f=1} /^# <<< fleet-name-contract END/{f=0}
         !f && $0 ~ ENVIRON["MUT_RE"] && !d { d=1; next } { print } END { exit (d?0:1) }' \
      "$SUBJECT" > "$NEG_B"; then
@@ -447,7 +446,9 @@ ensure_targets() { # <socket> <tmuxdir> <caller> <script> → 拼 "已拉起 行
     lines+="$(printf '%s\n' "$T4_OUT_ANSI" | grep -F -- '[tmux] 已拉起' || true)"$'\n'
   done
   names="$(cat "$PI_NAMES" 2>/dev/null || true)"
-  printf '%s\n%s\n' "$lines" "$names"
+  # 归一化夹具路径（$LAB 含每轮 mktemp 随机串）⇒ md5 跨轮稳定，可直接作为回执里的对照数字
+  #   （只替换夹具根，不动其余字节；两场用同一 $LAB，归一化前后都是同一口径）
+  printf '%s\n%s\n' "$lines" "$names" | sed -e "s|$LAB|<LAB>|g"
 }
 BLOB_A="$(ensure_targets "$SOCK_A" "$SOCK_A_DIR" "$CALLER_A" "$BASE_SCRIPT")"
 BLOB_B="$(ensure_targets "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh")"
