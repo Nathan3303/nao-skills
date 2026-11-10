@@ -4,6 +4,10 @@
 #   spawn（ensure）、回收（close/cleanup）、布局、check 的终端前提仍直接调 tmux，迁移归 B2/B3/B4。
 #   本台账 = 那些「已知且已归口」的函数；台账外任何新的裸 `tmux` 调用都会被
 #   `tests/t4/lib.sh::t4_scan_term_bare_calls` 判红。
+# B2（#96 二期）已落地：`ensure` 的 spawn 侧迁进门面（tmux 实现 = `# >>> term-impl-tmux (spawn)` 标记区，
+#   herdr 实现 = `term-facade-herdr` 区），故 `resolve_host_window` / `spawn_tmux` 两条**已删除**（8 → 6）。
+#   同批新增**生产侧起 server 入口** `session-start`（`_term_herdr_session_start`，清宿主终端句柄 + 枚举清
+#   `HERDR_*`；唯一 herdr 调用仍由 `_term_herdr_exec` 注入 `--session`）—— 它是**已实现项**，不是未实现台账项。
 #
 # 格式（TAB 分隔）：<函数名>  <归口批次>  <理由>
 # 校验（`t4_verify_term_ledger`，用例 06）：
@@ -16,13 +20,11 @@
 #   `command tmux …` / `bash -c "tmux …"` / 反引号 / 变量间接拼装**不纳管**（行级静态 lint 的已知漏判）。
 #   status 路径的「herdr 模式零 tmux 调用」由用例 28 的 PATH 桩**动态**断言兜住（比静态更硬）。
 #
-# baseline: 8
+# baseline: 6
 #
 pane_hosts_caller	B3	close 的「不杀自己」闸门（pane_pid 祖先链）；随 close 回收面一并迁门面
 pane_busy	B3	close 的「在跑 turn」pane 级补充信号（capture-pane）；herdr 侧改用 agent_status
 cmd_close	B3	回收落地（kill-pane / pane cwd 校正）；herdr 分支 B3 才实现
 apply_main_col	B4	main-col 布局（三期 workspace/tab 拓扑替换）
 apply_tmux_layout	B4	布局应用与窄列回退（三期布局面）
-resolve_host_window	B2	派生宿主窗口定位（spawn 前置；B2 起 pane 时替换）
-spawn_tmux	B2	唯一 split-window 调用点（spawn 落地）
 cmd_check	B4	check 的终端前提诊断行（`tmux display-message -p '#S'`）；B4 随 check 终端前提迁移

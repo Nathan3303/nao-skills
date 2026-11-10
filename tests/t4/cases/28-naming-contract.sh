@@ -485,8 +485,11 @@ t4_info "C2① status md5 = $MD5_A（两场相等；行数 $(printf '%s\n' "$OUT
 #      BR7 忙闲映射单测（term_deliverable）+ 快照缓存（多次 liveness 只 1 次 pane list / agent list）
 # ============================================================================
 REAL_TMUX28="$(command -v tmux)"
-# P3-5：本用例前后系统 /tmp 的快照文件数必须不变（并发/历史遗留不误伤，只判**本用例净增**）
-SNAP_BEFORE="$(ls /tmp/nao-fleet-term-snap.* 2>/dev/null | wc -l | tr -d ' ')"
+# P3-5（B2 订正）：改为**按本用例 PID + mtime 归属**判「系统 /tmp 净增」——全域计数在并发下会假红/假绿。
+#   归属通道：每次 fleet 调用都用 `bash -c 'echo $$; exec …'` 记下**最终进程 PID**（exec 不改 PID），
+#   快照文件名 = `nao-fleet-term-snap.<pid>.<rand>` ⇒ 只统计「窗口内新建 ∧ pid 属于本用例」的文件。
+B2_SNAP_TS="$(date +%s)"
+B2_PID_LOG="$LAB/fleet-pids.log"; : > "$B2_PID_LOG"; export B2_PID_LOG
 # ---- 桩：herdr（记录调用 + 供判定面夹具）· tmux 包装（记录后转发真 tmux）· node（记录后失败）----
 cat > "$LAB/bin/herdr" <<SH
 #!/usr/bin/env bash
@@ -608,7 +611,7 @@ mkdir -p "$LAB/tmp"   # 私有 TMPDIR：快照临时文件必须落这里且跑�
 export NAO_TERMINAL=herdr
 t4_run_in_dir "$LAB" "${HENV[@]}" NAO_TERMINAL=herdr NAO_SKILLS="$LAB" TMPDIR="$LAB/tmp" \
   PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" PATH="$LAB/bin:$PATH" \
-  timeout 180 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" status
+  timeout 180 "$BASH_BIN" -c 'printf "%s\n" "$$" >> "$B2_PID_LOG"; exec "$@"' _ "$LAB/.agents/scripts/nao-fleet.sh" status
 unset NAO_TERMINAL
 RC_H=$T4_RC; OUT_H="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"; ERR_H="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
 t4_assert_eq "0" "$RC_H" "B1② herdr 模式 status rc=0（桩 protocol 22）"
@@ -646,7 +649,7 @@ t4_assert_eq "0" "$(ls -A "$LAB/tmp" 2>/dev/null | wc -l | tr -d ' ')" \
 : > "$LAB/herdr-calls.log"
 t4_run_in_dir "$LAB" "${HENV[@]}" HERDR_STUB_EMPTY=1 NAO_TERMINAL=herdr NAO_SKILLS="$LAB" TMPDIR="$LAB/tmp" \
   PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" PATH="$LAB/bin:$PATH" \
-  timeout 180 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" status
+  timeout 180 "$BASH_BIN" -c 'printf "%s\n" "$$" >> "$B2_PID_LOG"; exec "$@"' _ "$LAB/.agents/scripts/nao-fleet.sh" status
 RC_E=$T4_RC
 t4_assert_eq "0" "$RC_E" "B1⑤ 空 label 夹具：status rc=0（快照为空是合法状态）"
 t4_assert_eq "1" "$(grep -c '^herdr .*pane list' "$LAB/herdr-calls.log" || true)" \
@@ -654,6 +657,200 @@ t4_assert_eq "1" "$(grep -c '^herdr .*pane list' "$LAB/herdr-calls.log" || true)
 t4_assert_eq "1" "$(grep -c '^herdr .*agent list' "$LAB/herdr-calls.log" || true)" \
   "B1⑤ 空 label 夹具：agent list 仍恰 1 次"
 t4_assert_eq "0" "$(ls -A "$LAB/tmp" 2>/dev/null | wc -l | tr -d ' ')" "B1⑤ 空 label 夹具：快照临时文件零残留"
+
+# ============================================================================
+# B2（#96 二期）：放置 / 就绪门 / 幽灵 pane / 同名歧义 —— 全部用**有状态** herdr 桩（不启真 server）
+#   桩状态：$ST/{panes,agents,ws,order.log,calls.log}；`pane run` 按 HERDR_STUB_ONRUN 追加 agent 条目，
+#   并记 order.log（用于断言「先 label(rename) 后 run」）。
+# ============================================================================
+B2ST="$LAB/b2-stub"; B2ST_BIN="$B2ST/bin"; B2ST_ST="$B2ST/st"
+mkdir -p "$B2ST_BIN" "$B2ST_ST"
+cat > "$B2ST_BIN/herdr" <<'SH'
+#!/usr/bin/env bash
+ST="${HERDR_STUB_STATE:?}"
+printf 'herdr %s\n' "$*" >> "$ST/calls.log"
+if [ "${1:-}" = "--session" ]; then shift 2; fi
+cmd="${1:-}"; shift || true
+json_panes() {
+  local first=1 pid label fg ws out=""
+  while IFS='|' read -r pid label fg ws; do
+    [ -n "$pid" ] || continue
+    if [ -n "${WSFILTER:-}" ] && [ "$ws" != "$WSFILTER" ]; then continue; fi
+    [ "$first" = 1 ] || out+=","
+    first=0
+    out+="{\"pane_id\":\"$pid\",\"label\":\"$label\",\"cwd\":\"${HERDR_STUB_CWD:-$ST/repo}\",\"foreground_cwd\":\"${HERDR_STUB_CWD:-$ST/repo}\",\"agent_status\":\"unknown\",\"terminal_id\":\"term_$pid\",\"workspace_id\":\"$ws\"}"
+  done < "$ST/panes" 2>/dev/null
+  printf '{"result":{"panes":[%s],"type":"pane_list"}}\n' "$out"
+}
+json_agents() {
+  local first=1 pid stat seq skip sess sessj out=""
+  while IFS='|' read -r pid stat seq skip sess; do
+    [ -n "$pid" ] || continue
+    [ "$first" = 1 ] || out+=","
+    first=0
+    if [ "$sess" = "-" ] || [ -z "$sess" ]; then sessj="null"; else sessj="{\"agent\":\"pi\",\"kind\":\"id\",\"value\":\"$sess\"}"; fi
+    if [ "$skip" = "1" ]; then skipj="true"; else skipj="false"; fi
+    out+="{\"agent\":\"pi\",\"agent_session\":$sessj,\"agent_status\":\"${stat:-unknown}\",\"pane_id\":\"$pid\",\"screen_detection_skipped\":$skipj,\"state_change_seq\":${seq:-0}}"
+  done < "$ST/agents" 2>/dev/null
+  printf '{"result":{"agents":[%s],"type":"agent_list"}}\n' "$out"
+}
+case "$cmd" in
+  --version) echo 'herdr 0.9.1' ;;
+  api) printf 'Herdr API schema\nprotocol: 22\n' ;;
+  pane)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      list)
+        WSFILTER=""
+        if [ "${1:-}" = "--workspace" ]; then WSFILTER="${2:-}"; fi
+        json_panes ;;
+      process-info)
+        pid="${2:-}"; label="$(awk -F'|' -v p="$pid" '$1==p{print $2}' "$ST/panes")"
+        fg="$(awk -F'|' -v p="$pid" '$1==p{print $3}' "$ST/panes")"
+        if [ "$fg" = "pi" ]; then
+          printf '{"result":{"process_info":{"foreground_processes":[{"argv":["/usr/bin/pi","--name","%s"],"name":"pi","pid":1}],"pane_id":"%s"}}}\n' "$label" "$pid"
+        else
+          printf '{"result":{"process_info":{"foreground_processes":[{"argv":["/usr/bin/bash"],"name":"bash","pid":1}],"pane_id":"%s"}}}\n' "$pid"
+        fi ;;
+      rename)
+        pid="${1:-}"; label="${2:-}"
+        printf 'rename %s %s\n' "$pid" "$label" >> "$ST/order.log"
+        awk -F'|' -v p="$pid" -v l="$label" 'BEGIN{OFS="|"} $1==p{$2=l} {print}' "$ST/panes" > "$ST/panes.new" 2>/dev/null || true
+        [ -f "$ST/panes.new" ] && mv "$ST/panes.new" "$ST/panes" ;;
+      run)
+        pid="${1:-}"
+        printf 'run %s\n' "$pid" >> "$ST/order.log"
+        awk -F'|' -v p="$pid" 'BEGIN{OFS="|"} $1==p{$3="pi"} {print}' "$ST/panes" > "$ST/panes.new" 2>/dev/null || true
+        [ -f "$ST/panes.new" ] && mv "$ST/panes.new" "$ST/panes"
+        if ! grep -q "^$pid|" "$ST/agents" 2>/dev/null; then
+          printf '%s|%s\n' "$pid" "${HERDR_STUB_ONRUN:-idle|1|1|sess-x}" >> "$ST/agents"
+        fi ;;
+      split)
+        n=$(( $(wc -l < "$ST/panes") + 1 )); ws="$(awk -F'|' 'NR==1{print $4}' "$ST/panes")"
+        new="$ws:p$n"
+        printf '%s||bash|%s\n' "$new" "$ws" >> "$ST/panes"
+        printf '{"result":{"pane":{"pane_id":"%s"}}}\n' "$new" ;;
+      close)
+        pid="${1:-}"
+        grep -v "^$pid|" "$ST/panes" > "$ST/panes.new" 2>/dev/null || true
+        [ -f "$ST/panes.new" ] && mv "$ST/panes.new" "$ST/panes" ;;
+      *) exit 1 ;;
+    esac ;;
+  agent)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      list) json_agents ;;
+      *) exit 1 ;;
+    esac ;;
+  workspace)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      list)
+        first=1; out=""
+        while IFS='|' read -r ws label; do
+          [ -n "$ws" ] || continue
+          [ "$first" = 1 ] || out+=","
+          first=0
+          out+="{\"workspace_id\":\"$ws\",\"label\":\"$label\",\"pane_count\":1}"
+        done < "$ST/ws" 2>/dev/null
+        printf '{"result":{"workspaces":[%s],"type":"workspace_list"}}\n' "$out" ;;
+      create)
+        label=""
+        while [ "$#" -gt 0 ]; do [ "$1" = "--label" ] && label="${2:-}"; shift; done
+        ws="w$(( $(wc -l < "$ST/ws" 2>/dev/null || echo 0) + 1 ))"
+        printf '%s|%s\n' "$ws" "$label" >> "$ST/ws"
+        printf '%s||bash|%s\n' "$ws:p1" "$ws" >> "$ST/panes"
+        printf '{"result":{"root_pane":{"pane_id":"%s:p1","workspace_id":"%s"},"workspace":{"workspace_id":"%s","label":"%s"}}}\n' "$ws" "$ws" "$ws" "$label" ;;
+      close)
+        ws="${1:-}"
+        grep -v "^$ws|" "$ST/ws" > "$ST/ws.new" 2>/dev/null || true
+        [ -f "$ST/ws.new" ] && mv "$ST/ws.new" "$ST/ws"
+        grep -v "|$ws$" "$ST/panes" > "$ST/panes.new" 2>/dev/null || true
+        [ -f "$ST/panes.new" ] && mv "$ST/panes.new" "$ST/panes" ;;
+      *) exit 1 ;;
+    esac ;;
+  *) exit 1 ;;
+esac
+exit 0
+SH
+chmod +x "$B2ST_BIN/herdr"
+mkdir -p "$LAB/tmp"
+B2_ENV=(env HERDR_ENV=1 HERDR_SESSION=nao-b2-stub HERDR_SOCKET_PATH="$LAB/cfg/sessions/nao-b2-stub/herdr.sock" \
+  HERDR_STUB_CWD="$LAB" \
+  NAO_SKILLS="$LAB" TMPDIR="$LAB/tmp" PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" \
+  PATH="$B2ST_BIN:$PATH")
+b2_reset() { # 清桩状态（每场景一份）
+  rm -rf "$B2ST_ST"; mkdir -p "$B2ST_ST"; : > "$B2ST_ST/panes"; : > "$B2ST_ST/agents"; : > "$B2ST_ST/ws"
+  : > "$B2ST_ST/order.log"; : > "$B2ST_ST/calls.log"
+}
+b2_run() { # <onrun> <args...> → 清桩后跑 fleet（输出落 T4_OUT/T4_ERR）
+  local onrun="$1"; shift
+  b2_reset
+  t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN="$onrun" \
+    NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" "$@"
+  T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+}
+
+# ---- B2① 反假阳性：已 idle 但 seq 不前进（ONRUN: idle|seq=0|skip=1|session 有）⇒ 就绪门超时 fail loud ----
+b2_run 'idle|0|1|sess-x' ensure rd-fe
+t4_assert_eq "0" "$T4_RC" "B2① 就绪超时 ⇒ ensure rc 仍 0（D3：跨后端 rc 语义一致）"
+t4_assert_contains "$T4_OUT_ANSI$T4_ERR_ANSI" "就绪门超时" "B2① 就绪超时 fail loud（打「就绪门超时」，不是静默）"
+t4_assert_contains "$T4_OUT_ANSI$T4_ERR_ANSI" "state_change_seq ≥ 1" "B2① 逐条报缺：state_change_seq（已 idle 但 seq 不前进）"
+t4_assert_not_contains "$T4_OUT_ANSI$T4_ERR_ANSI" "前台进程 name==pi：" "B2① 只报缺的那条（前台已是 pi，不得误报）"
+t4_assert_not_contains "$T4_OUT_ANSI$T4_ERR_ANSI" "agent_status == idle：" "B2① 只报缺的那条（状态已 idle，不得误报）"
+t4_assert_contains "$T4_OUT_ANSI$T4_ERR_ANSI" "agent explain" "B2① 超时给诊断指路 agent explain <pane>"
+t4_assert_not_contains "$T4_OUT_ANSI" "[herdr] 已拉起" "B2① 超时不得打印「[herdr] 已拉起」（不冒充成功）"
+t4_assert_contains "$T4_OUT_ANSI" "失败 1" "B2① 超时计入 SPAWN_FAIL（摘要行可见）"
+
+# ---- B2② 幽灵 pane（label 在、agent 无）⇒ 不判 same；复用 pane（不新建 label）且**先 rename 后 run** ----
+b2_reset
+printf 'w1:p1|rd-fe|bash|w1\n' > "$B2ST_ST/panes"
+: > "$B2ST_ST/agents"
+: > "$B2ST_ST/ws"
+t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-x' \
+  NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure rd-fe
+B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "0" "$T4_RC" "B2② 幽灵 pane：ensure rc=0"
+t4_assert_contains "$B2_ERR" "幽灵 pane" "B2② label 在、agent 条目缺 ⇒ 显式点名幽灵 pane（不静默跳过的可控证据）"
+t4_assert_not_contains "$B2_OUT$B2_ERR" "已在运行（" "B2② 幽灵 pane **不得**判「已在运行」跳过（label 命中 ≠ same）"
+t4_assert_contains "$B2_OUT" "已拉起 rd-fe" "B2② 幽灵 pane 复用后确实重跑 agent（成功行在位）"
+t4_assert_eq "1" "$(grep -c '^rename ' "$B2ST_ST/order.log" || true)" "B2② 复用路径 rename 恰 1 次（label 幂等重写）"
+t4_assert_eq "1" "$(grep -c '^run ' "$B2ST_ST/order.log" || true)" "B2② 复用路径 run 恰 1 次（不重复建 pane）"
+t4_assert_eq "0" "$(grep -c '^herdr pane split' "$B2ST_ST/calls.log" || true)" \
+  "B2② 幽灵复用不新建 pane（同名 label 仍唯一）"
+B2_RENAME_LINE="$(grep -n '^rename ' "$B2ST_ST/order.log" | head -1 | cut -d: -f1)"
+B2_RUN_LINE="$(grep -n '^run ' "$B2ST_ST/order.log" | head -1 | cut -d: -f1)"
+t4_assert_eq "1" "$([ -n "$B2_RENAME_LINE" ] && [ -n "$B2_RUN_LINE" ] && [ "$B2_RENAME_LINE" -lt "$B2_RUN_LINE" ] && echo 1 || echo 0)" \
+  "B2② **先 label(rename) 后启动(run)**（order 行号: rename=$B2_RENAME_LINE < run=$B2_RUN_LINE）"
+
+# ---- B2③ 同名 label 多 pane ⇒ warn 点名 + 不猜；status 单列歧义 ----
+b2_reset
+printf 'w1:p1|rd-fe|pi|w1\nw1:p2|rd-fe|pi|w1\n' > "$B2ST_ST/panes"
+printf 'w1:p1|idle|1|1|sess-a\nw1:p2|idle|1|1|sess-b\n' > "$B2ST_ST/agents"
+t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=herdr timeout 60 \
+  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure rd-fe
+B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "0" "$T4_RC" "B2③ 同名歧义：ensure rc=0（失败计 SPAWN_FAIL，不是 crash）"
+t4_assert_contains "$B2_ERR" "同名 label 命中多个 pane" "B2③ 命中多个 ⇒ warn 点名（不猜）"
+t4_assert_contains "$B2_ERR" "w1:p1 w1:p2" "B2③ warn 回显全部命中的 pane（可定位）"
+t4_assert_not_contains "$B2_OUT" "[herdr] 已拉起" "B2③ 歧义下不得擅自挑一个启动（无成功行）"
+t4_assert_contains "$B2_OUT" "失败 1" "B2③ 歧义计入 SPAWN_FAIL（摘要可见）"
+t4_assert_eq "0" "$(grep -cE '^herdr pane (rename|run|split)' "$B2ST_ST/calls.log" || true)" \
+  "B2③ 歧义下零放置动作（rename/run/split 都不发）"
+
+b2_reset
+printf 'w1:p1|rd-fe|pi|w1\nw1:p2|rd-fe|pi|w1\n' > "$B2ST_ST/panes"
+printf 'w1:p1|idle|1|1|sess-a\nw1:p2|idle|1|1|sess-b\n' > "$B2ST_ST/agents"
+t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=herdr timeout 60 \
+  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" status
+B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+sleep 0.6   # 等 status 的子进程/管道收尾（tmux-free，此处只避免与下段 tmux 用例抢输出文件）
+t4_assert_eq "0" "$T4_RC" "B2③ 歧义场景 status rc=0（非 crash）"
+t4_assert_contains "$B2_OUT" "同名 label 多 pane" "B2③ status 单列「同名 label 多 pane」（终端证据异常节）"
+t4_assert_not_contains "$B2_OUT" "✓ rd-fe" "B2③ 歧义不得渲染成 ✓ 在线（不猜）"
 
 # ---- ④ BR7 忙闲映射 + 阶梯单测（抽取门面区到子进程；只灌纯依赖，不启 tmux）----
 FACADE_SRC="$T4_CACHE_DIR/b1-facade.sh"
@@ -718,8 +915,27 @@ t4_assert_eq "0" "$fac_rc" "B1④ 门面单测全绿（阶梯 + BR7 映射 + 快
 t4_assert_contains "$fac_out" "FACADE_OK" "B1④ 门面单测自报 OK（明细：$(printf '%s' "$fac_out" | tail -1)）"
 t4_assert_eq "0" "$(ls -A "$LAB/tmp" 2>/dev/null | wc -l | tr -d ' ')" \
   "B1⑤ 门面子进程零残留（显式快照路径 + EXIT trap）"
-t4_assert_eq "$SNAP_BEFORE" "$(ls /tmp/nao-fleet-term-snap.* 2>/dev/null | wc -l | tr -d ' ')" \
-  "B1⑤ 本用例在系统 /tmp 的快照文件净增 = 0（P3-5 残留实测）"
+# B2 订正（P3-5）：**按本用例 PID + mtime 过滤**判净增（不再全域计数）
+b2_snap_ours() { # → 本用例窗口内新建、且 PID 属于本用例的 /tmp 快照文件
+  local f p
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    p="$(basename "$f" | sed -nE 's/^nao-fleet-term-snap\.([0-9]+)\..*/\1/p')"
+    [ -n "$p" ] || continue
+    grep -qxF "$p" "$B2_PID_LOG" && printf '%s\n' "$f"
+  done < <(find /tmp -maxdepth 1 -name 'nao-fleet-term-snap.*' -newermt "@$B2_SNAP_TS" 2>/dev/null)
+  return 0
+}
+t4_assert_eq "" "$(b2_snap_ours)" \
+  "B1⑤ 本用例自身的 /tmp 快照净增 = 0（PID+mtime 归属；并发/历史遗留不误伤）"
+# 变异自证：用**本用例已记录的 PID** 造一个窗口内新文件 ⇒ 同一判据必须命中（不是空转）
+B2_PROBE_PID="$(head -1 "$B2_PID_LOG" 2>/dev/null || true)"
+t4_assert_ne "" "$B2_PROBE_PID" "B1⑤ 归属判据有 PID 通道（否则变异自证无法构造）"
+B2_PROBE="/tmp/nao-fleet-term-snap.${B2_PROBE_PID}.b2probe"
+: > "$B2_PROBE"
+t4_assert_contains "$(b2_snap_ours)" "$B2_PROBE" "B1⑤ 变异自证：本用例 PID 的新快照文件必被归属判据命中（防恒绿）"
+rm -f "$B2_PROBE"
+t4_assert_eq "" "$(b2_snap_ours)" "B1⑤ 变异自证后还原：本用例自身净增仍为 0（无残留）"
 
 
 # ---------------------------------------------------------------- C2② ensure
