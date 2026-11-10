@@ -175,6 +175,21 @@ fi
 unset T4_CACHE_NO_CREATE
 source "$HERE/lib.sh"
 
+# 孤儿 sweep（#96 P2 缺陷修复）：herdr server 用 setsid 脱离进程组 ⇒ 失败/被中断的跑次会遗留常驻 server。
+# 起跑前清扫「死 run 遗留」并 stop；**不碰用户 ~/.config/herdr**、**不碰活 run 的 cache**（防并发互杀）。
+# tmux（默认）路径整段不执行 ⇒ 零新增输出（AC1.2）；herdr 侧只在真扫到东西时说一句话。
+if [ "$BACKEND" = "herdr" ]; then
+  source "$HERE/lib-backend.sh"
+  if be_sweep_orphans; then
+    if [ "${BE_SWEEP_EFFECT:-0}" -gt 0 ]; then
+      printf '孤儿 sweep: 停掉死 run 遗留的 herdr server %d 个（活 run 跳过 %d / 非实验根跳过 %d）\n' \
+        "$BE_SWEEP_EFFECT" "$BE_SWEEP_SKIPPED_LIVE" "$BE_SWEEP_SKIPPED_FOREIGN"
+    fi
+  else
+    printf '孤儿 sweep: WARN 有 %d 个遗留 server 停不掉（见上逐条点名；下次起跑重试）\n' "$BE_SWEEP_FAILED"
+  fi
+fi
+
 declare -A results
 
 for i in "${!CASE_IDS[@]}"; do
