@@ -586,8 +586,8 @@ t4_assert_eq "1" "$(grep -cF -- "$MINPI" "$T4_ROOT/.agents/scripts/nao-fleet.sh"
 #   ② 门面外禁裸后端调用（标记区 + 显式台账；负控四条：status 内注入 tmux / herdr 区外 herdr /
 #      herdr 区注入 TMUX_PANE / 台账 stale+typo+超 baseline+已在标记区）
 #   ③ herdr 实现区禁字（TMUX / terminal_title / pane_title —— BR2/BR6 机械兜）
-#   ④ check 生效后端行：**仅 herdr 模式加行**（tmux 路径零新增输出）；herdr 模式下 ensure/close/cleanup
-#      **exit 4 + 点名未实现**，且零后端调用（PATH 桩 0 命中）
+#   ④ check 生效后端行：**仅 herdr 模式加行**（tmux 路径零新增输出）；herdr 模式下 close/cleanup
+#      **已接门面（B3）**：用法守卫先于一切后端调用（PATH 桩 0 命中），空现场按「未运行/effect=0」幂等成功
 # ============================================================================
 FLEET_B1="$T4_ROOT/.agents/scripts/nao-fleet.sh"
 LEDGER_B1="$T4_ROOT/tests/t4/fixtures/term-legacy-allowlist.txt"
@@ -601,7 +601,7 @@ t4_assert_eq 'NAO_TERMINAL="${NAO_TERMINAL:-tmux}"' "$(grep -E '^NAO_TERMINAL=' 
   "B1① 唯一赋值点就是默认 tmux（未设/显式 =tmux 两种拼写走同一处）"
 
 # ---- ② 门面四函数 + 纯谓词：各恰 1 处定义（业务区只调它们）----
-for fn in term_require term_snapshot term_liveness term_argv term_deliverable term_spawn term_session_start; do
+for fn in term_require term_snapshot term_liveness term_argv term_deliverable term_spawn term_session_start term_reclaim term_cleanup; do
   t4_assert_eq "1" "$(grep -cE "^${fn}\\(\\) \\{" "$FLEET_B1" || true)" "B1② 门面函数 ${fn} 恰 1 处定义"
 done
 
@@ -610,8 +610,8 @@ t4_assert_eq "" "$(t4_scan_term_bare_calls "$FLEET_B1" "$LEDGER_B1")" \
   "B1② 真脚本：门面外 0 处裸后端调用（标记区 + 台账之外一律红）"
 t4_assert_eq "" "$(t4_verify_term_ledger "$FLEET_B1" "$LEDGER_B1")" \
   "B1② 台账可验：函数存在 · 仍含裸调用 · 去重 · 不超 baseline · 不收录渲染层/标记区内函数"
-t4_assert_contains "$(head -30 "$LEDGER_B1")" "baseline: 6" \
-  "B1②/B2 台账头写明 baseline（B2 已减 2 条：resolve_host_window / spawn_tmux；只减不增）"
+t4_assert_contains "$(head -30 "$LEDGER_B1")" "baseline: 3" \
+  "B1②/B3 台账头写明 baseline（B2 减 2 / B3 减 3：pane_hosts_caller · pane_busy · cmd_close；只减不增）"
 
 # ---- ② 负控 A：往 cmd_status 里塞裸 tmux 调用 ⇒ 必红并点名（渲染层强制门面化）----
 NEG_B1A="$T4_CACHE_DIR/b1-neg-a.sh"
@@ -655,7 +655,7 @@ t4_assert_contains "$(t4_verify_term_ledger "$FLEET_B1" "$NEG_LED")" "函数不�
 cp "$LEDGER_B1" "$NEG_LED"
 printf 'pi_pids_for\tB2\t已在 tmux 标记区内\n' >> "$NEG_LED"
 out="$(t4_verify_term_ledger "$FLEET_B1" "$NEG_LED")"
-t4_assert_contains "$out" "台账行数 7 超过 baseline 6" "B1②/B2 负控C3: 条目数超 baseline ⇒ 必红（B2: 6 条上限）"
+t4_assert_contains "$out" "台账行数 4 超过 baseline 3" "B1②/B3 负控C3: 条目数超 baseline ⇒ 必红（B3: 3 条上限；自造第 4 条即红）"
 t4_assert_contains "$out" "台账多余（该函数已在标记区内" "B1② 负控C4: 标记区内函数混进台账 ⇒ 必红"
 
 # ---- ④ check 生效后端行 + herdr 模式 fail loud（零后端调用）----
@@ -668,6 +668,10 @@ printf 'herdr %s\n' "\$*" >> "$B1_LOG"
 case "\$*" in
   *"api schema"*) printf 'Herdr API schema\nprotocol: 22\n'; exit 0 ;;
   *"--version"*)  echo 'herdr 0.9.1'; exit 0 ;;
+  *"pane list"*)  printf '{"result":{"panes":[],"type":"pane_list"}}\n'; exit 0 ;;
+  *"agent list"*) printf '{"result":{"agents":[],"type":"agent_list"}}\n'; exit 0 ;;
+  *"session list --json"*) printf '{"sessions":[]}\n'; exit 0 ;;
+  *"session stop"*|*"session delete"*) exit 0 ;;
 esac
 exit 0
 SH
@@ -681,8 +685,13 @@ REAL_TMUX_B1="$(command -v tmux || true)"
 t4_assert_ne "" "${REAL_TMUX_B1:-}" "B1④ 真 tmux 可用（桩要转发）"
 # P2-1（QA 第二轮）：HERDR_SOCKET_PATH 必须落在**目标根**（${XDG_CONFIG_HOME}/herdr/sessions/<名>/）下
 B1_CFG="$T4_CACHE_DIR/b1-cfg-$$"
+mkdir -p "$T4_CACHE_DIR/b1-pi-empty"
 B1_ENV=(env NAO_TERMINAL=herdr HERDR_ENV=1 HERDR_SESSION=nao-b1-check \
-  XDG_CONFIG_HOME="$B1_CFG" HERDR_SOCKET_PATH="$B1_CFG/herdr/sessions/nao-b1-check/herdr.sock" PATH="$B1BIN:$PATH")
+  XDG_CONFIG_HOME="$B1_CFG" HERDR_SOCKET_PATH="$B1_CFG/herdr/sessions/nao-b1-check/herdr.sock" \
+  PI_CODING_AGENT_DIR="$T4_CACHE_DIR/b1-pi-empty" PATH="$B1BIN:$PATH")
+# cleanup 不要求 pane 内 env（拆场是外部动作）：只给后端 + 私有根 + PATH 桩
+B3_CLEAN_ENV=(env NAO_TERMINAL=herdr XDG_CONFIG_HOME="$B1_CFG" \
+  PI_CODING_AGENT_DIR="$T4_CACHE_DIR/b1-pi-empty" PATH="$B1BIN:$PATH")
 
 : > "$B1_LOG"
 out="$(cd "$T4_ROOT" && "${B1_ENV[@]}" bash .agents/scripts/nao-fleet.sh check 2>&1)"; rc=$?
@@ -707,14 +716,34 @@ t4_assert_contains "$out" "herdr" "B2④ herdr 模式 ensure 走 herdr 分支（
 t4_assert_eq "0" "$(grep -c '^tmux ' "$B1_LOG" || true)" "B2④ herdr 模式 ensure 零 tmux 调用（后端隔离）"
 t4_assert_ge "1" "$(grep -c '^herdr ' "$B1_LOG" || true)" "B2④ herdr 模式 ensure 确有 herdr 调用（非空转）"
 
-# close / cleanup 仍归 B3 ⇒ exit 4 + 点名未实现 + 零后端调用
-for sub in close; do
+# B3（#96 二期）：close / cleanup 已接门面 —— 不再是 exit 4；空现场按幂等成功（未运行 / effect=0）
+: > "$B1_LOG"
+out="$(cd "$T4_ROOT" && "${B1_ENV[@]}" bash .agents/scripts/nao-fleet.sh close rd-fe 2>&1)"; rc=$?
+t4_assert_eq "0" "$rc" "B3④ herdr 模式 close 不再是 exit 4（回收面已接；空 label ⇒ 未运行 rc=0）"
+t4_assert_not_contains "$out" "在 herdr 后端未实现" "B3④ herdr 模式 close 不再点名「未实现」"
+t4_assert_contains "$out" "rd-fe 未运行（无需回收）" "B3④ close 空现场：幂等成功行（不谎报在线/失败）"
+t4_assert_ge "1" "$(grep -c '^herdr ' "$B1_LOG" || true)" "B3④ herdr 模式 close 确有 herdr 调用（非空转）"
+t4_assert_eq "0" "$(grep -c '^tmux ' "$B1_LOG" || true)" "B3④ herdr 模式 close 零 tmux 调用（后端隔离）"
+
+: > "$B1_LOG"
+out="$(cd "$T4_ROOT" && "${B3_CLEAN_ENV[@]}" bash .agents/scripts/nao-fleet.sh cleanup --session nao-b3-gate 2>&1)"; rc=$?
+t4_assert_eq "0" "$rc" "B3④ herdr 模式 cleanup --session 不再是 exit 4（幂等：effect=0）"
+t4_assert_contains "$out" "effect=0" "B3④ cleanup 空现场：明确报 effect=0（判 effect 不看 rc）"
+t4_assert_not_contains "$out" "在 herdr 后端未实现" "B3④ herdr 模式 cleanup 不再点名「未实现」"
+t4_assert_eq "0" "$(grep -c '^tmux ' "$B1_LOG" || true)" "B3④ herdr 模式 cleanup 零 tmux 调用（后端隔离）"
+# 用法守卫先于一切后端调用：缺 --session / default / -S 误用
+for b3guard in "" "default"; do
   : > "$B1_LOG"
-  err="$(cd "$T4_ROOT" && "${B1_ENV[@]}" bash .agents/scripts/nao-fleet.sh "$sub" rd-fe 2>&1 >/dev/null)"; rc=$?
-  t4_assert_eq "4" "$rc" "B1④ herdr 模式 $sub ⇒ exit 4（本后端未实现；与 1/3 互斥）"
-  t4_assert_contains "$err" "在 herdr 后端未实现" "B1④ herdr 模式 $sub 点名「未实现」（不静默回退 tmux）"
-  t4_assert_contains "$err" "NAO_TERMINAL=tmux" "B1④ herdr 模式 $sub 给可执行指路（回退 tmux）"
-  t4_assert_eq "0" "$(grep -cE '^(herdr|tmux) ' "$B1_LOG" || true)" "B1④ herdr 模式 $sub 零后端调用（闸门在一切副作用之前）"
+  if [ -z "$b3guard" ]; then
+    err="$(cd "$T4_ROOT" && "${B3_CLEAN_ENV[@]}" bash .agents/scripts/nao-fleet.sh cleanup 2>&1 >/dev/null)"; rc=$?
+    t4_assert_eq "2" "$rc" "B3④ herdr cleanup 缺 --session ⇒ rc=2（显式目标必给）"
+    t4_assert_contains "$err" "须显式 --session" "B3④ 缺参给可执行指路"
+  else
+    err="$(cd "$T4_ROOT" && "${B3_CLEAN_ENV[@]}" bash .agents/scripts/nao-fleet.sh cleanup --session "$b3guard" 2>&1 >/dev/null)"; rc=$?
+    t4_assert_eq "2" "$rc" "B3④ herdr cleanup --session default ⇒ rc=2（BR9）"
+    t4_assert_contains "$err" "≠default" "B3④ default 拒绝点名原因"
+  fi
+  t4_assert_eq "0" "$(grep -cE '^(herdr|tmux) ' "$B1_LOG" || true)" "B3④ herdr cleanup 守卫先于一切后端调用（桩 0 命中）"
 done
 
 # ---- B2（#96 二期）：session-start —— tmux 幂等无操作 / herdr 守卫（--session 必填 · ≠default）----
@@ -737,10 +766,10 @@ t4_assert_contains "$out" "herdr session=nao-b2-start" "B2④ session-start 回�
 t4_assert_eq "" "$(grep -v -- '--session nao-b2-start' "$B1_LOG" | grep '^herdr ' || true)" \
   "B2④ session-start 的每次 herdr 调用都带 --session nao-b2-start（唯一入口，禁串到 default）"
 : > "$B1_LOG"
-err="$(cd "$T4_ROOT" && "${B1_ENV[@]}" bash .agents/scripts/nao-fleet.sh cleanup -S /tmp/b1-sock 2>&1 >/dev/null)"; rc=$?
-t4_assert_eq "4" "$rc" "B1④ herdr 模式 cleanup ⇒ exit 4"
-t4_assert_contains "$err" "在 herdr 后端未实现" "B1④ herdr 模式 cleanup 点名「未实现」"
-t4_assert_eq "0" "$(grep -cE '^(herdr|tmux) ' "$B1_LOG" || true)" "B1④ herdr 模式 cleanup 零后端调用"
+err="$(cd "$T4_ROOT" && "${B3_CLEAN_ENV[@]}" bash .agents/scripts/nao-fleet.sh cleanup -S /tmp/b1-sock 2>&1 >/dev/null)"; rc=$?
+t4_assert_eq "2" "$rc" "B3④ herdr cleanup 给 -S ⇒ rc=2（-S 只属 tmux 实验场；按后端分派）"
+t4_assert_contains "$err" "用 --session" "B3④ -S 误用：指路 --session"
+t4_assert_eq "0" "$(grep -cE '^(herdr|tmux) ' "$B1_LOG" || true)" "B3④ -S 误用零后端调用（守卫在一切副作用之前）"
 
 # 非法后端取值 ⇒ fail loud（rc=2 用法守卫；禁静默回落 tmux）
 err="$(cd "$T4_ROOT" && env NAO_TERMINAL=bogus bash .agents/scripts/nao-fleet.sh status 2>&1 >/dev/null)"; rc=$?

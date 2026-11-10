@@ -6,15 +6,15 @@
 #   必须在 tmux 会话内（$TMUX 非空且 tmux 命令可用）· pi ≥ MIN_PI_VERSION（check 断言；阈值单源，见下方常量区）
 #   非 tmux ⇒ ensure/status/close 一律 exit 3 + 一行提示，且不建 session/pane/lock、不写状态（BR3）
 #   cleanup 豁免本前提：其正常场景就是「非 tmux 的隔离实验场」（env -u TMUX ... -S <socket>）
-#   herdr 后端（NAO_TERMINAL=herdr · #96 二期 B1/B2）：前提改为「herdr pane 内 + HERDR_SESSION 有效 + protocol 22」；
-#     B1 交付判定面（status），B2 交付放置/就绪面（ensure）—— ensure/status 可用，
-#     close/cleanup 仍 **exit 4 + 点名未实现**（回收归 B3），不静默回退 tmux。
-#     起 server 由独立入口 `session-start --session <名>` 负责（BR6：清宿主终端句柄 + 枚举清 HERDR_*）。
+#   herdr 后端（NAO_TERMINAL=herdr · #96 二期 B1/B2/B3）：前提改为「herdr pane 内 + HERDR_SESSION 有效 + protocol 22」；
+#     B1 判定面（status）· B2 放置/就绪面（ensure）· B3 回收面（close/cleanup）—— 全部走门面，不静默回退 tmux。
+#     起 server 由独立入口 `session-start --session <名>` 负责（BR6：清宿主终端句柄 + 枚举清 HERDR_*）；
+#     拆场由姊妹入口 `cleanup --session <名>` 负责（stop+delete，判 effect 不看 rc）。
 #
 # 退出码
 #   0 = 成功 · 1 = 已执行但失败 · 2 = 用法守卫（cleanup 的 -S / session-start 的 --session 守卫等）
 #   3 = 前提不满足（命令未执行；tmux 不在会话内 / herdr 缺会话或 protocol 不兼容）
-#   4 = 本后端未实现该子命令（命令未执行；herdr 后端的 close/cleanup）
+#   4 = 本后端未实现该子命令（命令未执行；B3 后**无**此类子命令，取值保留以维持 rc 语义稳定）
 #
 # 用法
 #   nao-fleet.sh check [--strict] [-v]            静态体检：roles.yaml/缩进/EOL/角色卡/交叉引用/PR 模板/白名单/布局/tmux+pi 前提
@@ -47,6 +47,10 @@
 #                                                 （跨仓定位；定位失败/名册报在线但无句柄 ⇒ 非 0 + 诊断）
 #                                                 （闸门：在跑 turn / tasks-state 未推进 → 拒绝，--force 跳过；
 #                                                  常驻缺席而其派生在场 ⇒ 目标歧义拒绝，T516 AC3）
+#                                                 herdr 后端：忙闲闸门 = agent_status（BR7）+ 名册第二信号（OR）；
+#                                                 unknown / 无 agent 条目 / 集成缺失 / 进程不可判 ⇒ 拒（fail-closed）
+#   nao-fleet.sh cleanup --session <名>           （herdr 后端）拆专用 session：session stop + delete，
+#                                                 判 **effect** 不看 rc（stop 非幂等）；--session 必填且 ≠default（BR9）
 #   nao-fleet.sh cleanup -S <socket>              终结实验场 tmux server（**强制**显式 -S socket；不看 $TMUX）
 #                                                 不带 -S / 命中生产默认 socket ⇒ exit 2 + 单行拒绝（真 server 不受影响）
 #                                                 ⚠ 生产默认 socket 判定 = $TMUX 句柄 + /tmp/tmux-<uid>/default（+$TMPDIR 变体），
@@ -67,7 +71,7 @@
 #   NAO_SKILLS=<dir>                          nao 机制包根目录（默认 <脚本>/../..；项目内 shim 会显式指向包根）
 #   NAO_MODEL_WHITELIST=<glob,...>            -m 白名单（默认空=不校验，支持 glob）
 #   NAO_CLOSE_BUSY_PATTERN=<ERE>             close 的在跑 turn 判定正则（默认内置 pi 状态行标记）
-#   NAO_TERMINAL=tmux|herdr                  终端后端（默认 tmux；herdr 侧二期 B2：status + ensure；
+#   NAO_TERMINAL=tmux|herdr                  终端后端（默认 tmux；herdr 侧 B1–B3：status / ensure / close / cleanup；
 #                                            ensure 须先 `session-start` 起专用 session 并在其 pane 内运行）
 #   NAO_HERDR_READY_TIMEOUT_MS=<ms>          herdr 就绪门 wall-clock 上限（默认 5000；只对 herdr 后端生效）
 #   NAO_TASKS_STATE=<path>                   任务状态文件（默认 docs/tasks-state.md，供残留检测/回收闸门）
@@ -230,16 +234,17 @@ require_tmux() {
 # =============================================================================
 # 终端后端门面（#96 二期 B1 · PRD 附二「门面 + 双实现并存」）
 #
-#   契约：**业务区只调** term_require / term_snapshot / term_liveness / term_argv
-#         （+ 纯谓词 term_deliverable）。后端差异只允许出现在本区间与
-#         `# >>> term-impl-tmux` 区间（静态 lint：tests/t4/lib.sh::t4_scan_term_bare_calls）。
+#   契约：**业务区只调** term_require / term_snapshot / term_liveness / term_argv /
+#         term_spawn / term_session_start / term_reclaim / term_cleanup（+ 纯谓词 term_deliverable）。
+#         后端差异只允许出现在本区间与 `# >>> term-impl-tmux` 区间
+#         （静态 lint：tests/t4/lib.sh::t4_scan_term_bare_calls）。
 #   默认值唯一：常量区的 `NAO_TERMINAL="${NAO_TERMINAL:-tmux}"` 是全脚本**唯一**赋值点。
 #   herdr 侧纪律（BR2/BR3/BR6）：身份取 pane.label（+ argv --name 交叉校验）、归属取
 #         pane.cwd/foreground_cwd（谓词复用 repo_contains_path）、忙闲取 agent_status +
 #         state_change_seq（权威源 = pane list / agent list；`agent explain` 只作诊断、禁作判据）；
 #         **一律不读终端标题**，也**不把宿主 tmux 的句柄变量当证据** —— 从 tmux shell 起的
 #         herdr server 会把外层句柄渗进 pane（spike 实测），拿来判身份必串台。
-#   rc 语义：4 = 本后端未实现该子命令（命令未执行）；1 = 已执行但失败；3 = 前提不满足。
+#   rc 语义：4 = 保留（B3 后无未实现子命令）；1 = 已执行但失败；3 = 前提不满足；2 = 用法守卫。
 # >>> term-facade BEGIN
 term_backend() {
   case "${NAO_TERMINAL:-}" in
@@ -248,12 +253,6 @@ term_backend() {
       printf '[fleet] NAO_TERMINAL=%s 非法（期望 tmux|herdr）\n' "${NAO_TERMINAL:-<空>}" >&2
       return 1 ;;
   esac
-}
-
-# 本后端未实现的子命令：**未执行** ⇒ rc=4（与 1「已执行但失败」/3「前提不满足」互斥）
-term_unimplemented() {  # <子命令>
-  printf '[fleet] %s 在 herdr 后端未实现（#96 二期 B2：spawn 已接 / 回收归 B3）。该怎么办：用 NAO_TERMINAL=tmux 回退执行本命令\n' "${1:-?}" >&2
-  exit 4
 }
 
 # ---- 1/4 前提闸门 ----
@@ -308,7 +307,7 @@ term_argv() {  # <pane_id> → 每行 "process-name<TAB>argv"
   esac
 }
 
-# ---- 5/6 放置（B2）：tmux = split-window / herdr = 现有 workspace 内 split + 先 label 后启动 ----
+# ---- 5/8 放置（B2）：tmux = split-window / herdr = 现有 workspace 内 split + 先 label 后启动 ----
 # 返回三态码（SPAWN_RC_*）：0 成功 · 2 跳过 · 3 失败（含就绪超时；调用方计入 SPAWN_FAIL）。
 term_spawn() {  # <name> <inner> <repo> [force]
   case "$(term_backend)" in
@@ -317,11 +316,30 @@ term_spawn() {  # <name> <inner> <repo> [force]
   esac
 }
 
-# ---- 6/6 起 server（B2 · BR6）：herdr 唯一生产入口；tmux 幂等无害（server 随会话自动起）----
+# ---- 6/8 起 server（B2 · BR6）：herdr 唯一生产入口；tmux 幂等无害（server 随会话自动起）----
 term_session_start() {  # <session>
   case "$(term_backend)" in
     tmux) printf '[fleet] tmux 后端无需 session-start（server 随会话自动起）\n'; return 0 ;;
     herdr) _term_herdr_session_start "${1-}" ;;
+  esac
+}
+
+# ---- 7/8 回收（B3）：句柄层（定位 / self 判据 / liveness / 忙闲证据 / 回收句柄）双实现 ----
+#   共用闸门层（tasks-state、subagent 拒收、目标解析、--force）仍在 cmd_close，**不动**。
+#   返回 0 = 已回收 / 未运行（幂等成功）；1 = 拒绝或已执行但失败（含 effect 未达成）。
+term_reclaim() {  # <name> <repo> <force> <core> <scope> <ensure-target>
+  case "$(term_backend)" in
+    tmux) _term_tmux_reclaim "${1-}" "${2-}" "${3-}" "${4-}" "${5-}" "${6-}" ;;
+    herdr) _term_herdr_reclaim "${1-}" "${2-}" "${3-}" "${4-}" "${5-}" "${6-}" ;;
+  esac
+}
+
+# ---- 8/8 拆场（B3 姊妹入口）：tmux = 终结隔离 server（socket 为显式目标）；herdr = session stop+delete ----
+#   herdr 的 stop **非幂等**（第二次 rc=1）⇒ 判 **effect** 不看 rc；default 一律拒（BR9）。
+term_cleanup() {  # <tmux-socket> <herdr-session>
+  case "$(term_backend)" in
+    tmux) _term_tmux_cleanup "${1-}" ;;
+    herdr) _term_herdr_cleanup "${2-}" ;;
   esac
 }
 
@@ -532,6 +550,312 @@ _term_herdr_liveness() {  # <name> [repo] → verdict/state/seq/hook（只读快
     if [[ -z "$v" ]]; then v="$rv"; state="$astat"; rq="$seq"; rh="$hook"; fi
   done <<< "$rows"
   printf '%s\t%s\t%s\t%s\n' "${v:-absent}" "$state" "$rq" "$rh"
+}
+
+# ---------------------------------------------------------------------------
+# B3（#96 二期）：回收面（close / cleanup）—— 句柄层双实现的 herdr 侧
+#   · 定位：pane label 精确匹配（跨仓，不按 repo 过滤，label 即路由标签）；>1 ⇒ warn 点名 + **不猜**
+#   · self 判据：(session, pane_id) 对 + process-info.shell_pid 祖先链（T530 三态 fail-closed）；
+#     不可判定时**只对**「(session,pane) 全等」（HERDR_PANE_ID）保守拒 —— 宁可少回收一次
+#   · 忙闲（BR7）：working/blocked ⇒ 拒；idle/done ⇒ 放行；unknown / 无 agent 条目 / 集成缺失 ⇒ 拒
+#     （fail-closed）+ `--force` + 指路；**保留名册第二信号（OR）**：prompt 后 ~300–400ms
+#     agent_status 仍 idle（实测 744ms 才见 working）⇒ 单信号会误杀
+#   · 回收句柄唯一 = `pane close`（**不做** kill -9 兜底）；effect 复核（新 pane list），不静默成功
+#   · 恢复窗口：process-info 明确 pane_not_found ⇒ **不回收**（不可寻址 ≠ 可回收）
+#   所有 herdr 调用仍只经 `_term_herdr_exec`（本区间不出现 tmux 句柄/标题字段名）。
+# ---------------------------------------------------------------------------
+_term_herdr_pane_shell_pid() {  # <pane_id> → shell_pid（无/不可解析 ⇒ 空）
+  local pid="${1-}" js v
+  [[ -n "$pid" ]] || return 0
+  js="$(_term_herdr_exec pane process-info --pane "$pid" 2>/dev/null)" || return 0
+  v="$(_term_json_raw "$js" shell_pid)"
+  [[ "$v" =~ ^[0-9]+$ ]] && printf '%s\n' "$v"
+  return 0
+}
+
+# shell_pid 是否本进程（$$）的祖先：0 = 是（自己）· 1 = 不是 · 2 = 不可判定（链断/ps 不可读）
+_term_herdr_shell_is_caller() {  # <shell_pid>
+  local p_pid="${1-}" cur
+  [[ "$p_pid" =~ ^[0-9]+$ ]] || return 2
+  cur="$$"
+  while [[ "$cur" =~ ^[0-9]+$ ]] && (( cur > 1 )); do
+    [[ "$cur" == "$p_pid" ]] && return 0
+    cur="$(ps -o ppid= -p "$cur" 2>/dev/null | tr -d '[:space:]')"
+    [[ -n "$cur" ]] || return 2
+  done
+  return 1
+}
+
+# F1 闸门（herdr 侧）：0 = 必须拒绝回收（判为调用者自身）· 1 = 放行
+_term_herdr_self_refuse() {  # <pane_id>
+  local pid="${1-}" sp rc=0
+  [[ -n "$pid" ]] || return 0
+  sp="$(_term_herdr_pane_shell_pid "$pid")"
+  _term_herdr_shell_is_caller "$sp" || rc=$?
+  case "$rc" in
+    0) return 0 ;;   # 确定的自身 pane ⇒ 拒
+    2) # 不可判定：保守侧只对「(session,pane) 全等」拒（当前已在 HERDR_SESSION 内 ⇒ 比 pane_id 即可）
+       [[ -n "${HERDR_PANE_ID:-}" && "$pid" == "$HERDR_PANE_ID" ]] && return 0
+       return 1 ;;
+    *) return 1 ;;   # 确定不是自己 ⇒ 放行
+  esac
+}
+
+# 忙闲证据（BR7 + 名册第二信号）：0 = 忙（理由落 _TERM_BUSY_WHY）· 1 = 可回收
+_term_herdr_busy() {  # <name> [repo]
+  local name="${1-}" repo="${2-}" vline verdict state seq hook why="" st
+  _TERM_BUSY_WHY=""
+  vline="$(term_liveness "$name")"
+  IFS=$'\t' read -r verdict state seq hook <<< "$vline"
+  case "$verdict" in
+    online)
+      if ! term_deliverable "$state"; then
+        why="agent_status=${state:-?}（BR7：working/blocked/unknown ⇒ 不可投递）"
+      fi ;;
+    ghost)               why="agent list 无该 pane 条目（幽灵 pane）⇒ 无忙闲证据，保守拒（BR7 无条目 ⇒ 不可投递）" ;;
+    integration-missing) why="集成缺失（agent_session 空或生命周期钩子权威缺）⇒ 状态不可信，保守拒" ;;
+    dead)                why="前台非 pi（可能刚退出/重启回放）⇒ 无 agent 生命周期证据，保守拒" ;;
+    mismatch)            why="身份不一致（pane label 与 argv --name 不符）⇒ 定位不确定，拒" ;;
+    ambiguous)           why="同名 label 命中多个 pane ⇒ 不猜" ;;
+    *)                   why="在线证据缺失（verdict=${verdict:-absent}）⇒ 保守拒" ;;
+  esac
+  if [[ -z "$why" ]]; then
+    # 第二信号（OR）：名册 thinking / tool:* 代表真在跑 turn；agent_status 有 ~0.3–0.75s 滞后窗口
+    st="$(intercom_status_for "$name" "$repo")"   # 按目标仓取（同名会话可能多仓并存）
+    case "$st" in
+      ""|idle|\?) ;;
+      *) why="pi-intercom 名册状态=$st（在跑 turn；agent_status 滞后窗口内的第二信号）" ;;
+    esac
+  fi
+  _TERM_BUSY_WHY="$why"
+  [[ -n "$why" ]]
+}
+
+# 单 pane 落地：唯一回收句柄 = pane close；effect 复核（新 pane list）⇒ 0 已消失 / 1 失败
+_term_herdr_close_pane() {  # <name> <pane> <repo> <cwd> <fgcwd>
+  local name="${1-}" pane="${2-}" repo="${3-}" cwdf="${4-}" fgcwd="${5-}" pcwd="" pl2="" close_rc=0
+  [[ -n "$pane" ]] || return 1
+  if ! _term_herdr_exec pane close "$pane" >/dev/null 2>&1; then close_rc=1; fi
+  if [[ -n "${_TERM_SNAP_FILE:-}" ]]; then rm -f "$_TERM_SNAP_FILE" 2>/dev/null || true; _TERM_SNAP_FILE=""; fi
+  if ! pl2="$(_term_herdr_exec pane list 2>/dev/null)"; then
+    warn "已对 $name 的 pane $pane 执行 pane close（rc=$close_rc），但 effect 不可复核（pane list 失败）⇒ 非 0"
+    warn "  该怎么办：\`herdr --session ${HERDR_SESSION:-<s>} pane list\` 核对后再定"
+    return 1
+  fi
+  if printf '%s' "$pl2" | grep -qF "\"pane_id\":\"$pane\""; then
+    warn "已定位到 $name 的 pane $pane 但回收失败（pane close rc=$close_rc，复核 pane 仍在）"
+    warn "  该怎么办：\`herdr --session ${HERDR_SESSION:-<s>} pane list\` 核对；必要时人工关闭该 pane（不自动重试，防误关）"
+    return 1
+  fi
+  pcwd="$fgcwd"; [[ "$pcwd" == "-" || -z "$pcwd" ]] && pcwd="$cwdf"
+  [[ "$pcwd" == "-" || -z "$pcwd" ]] && pcwd="$repo"
+  log "已回收 $name（herdr pane $pane）@ $pcwd"
+  return 0
+}
+
+# 单行快照行 → verdict（与 term_liveness 同一阶梯，供「同名多 pane」逐行判定）
+_term_herdr_row_verdict() {  # <name> <row>
+  local name="${1-}" line="${2-}" fg="" astat="" seq="" sess="" avname="" hook=""
+  IFS=$'\t' read -r _ _ _ _ _ fg astat seq sess avname hook <<< "$line"
+  if [[ "$seq" == "-" ]]; then printf 'ghost\n'
+  elif [[ "$fg" != "pi" ]]; then printf 'dead\n'
+  elif [[ -n "$avname" && "$avname" != "-" && "$avname" != "$name" ]]; then printf 'mismatch\n'
+  elif [[ -z "$sess" || "$sess" == "-" || "$hook" != "1" ]]; then printf 'integration-missing\n'
+  else printf 'online\n'; fi
+}
+
+# 同名 label 多 pane + --force：**逐 pane 按安全判据清理**（B2 转办 ②「重复 label 清理」）
+#   不猜「哪个是目标」；绝对护栏仍保留：调用者自身永不关、pane_not_found（恢复窗口）不关、
+#   身份不一致（argv --name ≠ label）不关；跳过任一个 ⇒ rc=1（部分完成不谎报全成功）。
+_term_herdr_reclaim_dup() {  # <name> <repo> <rows>
+  local name="${1-}" repo="${2-}" rows="${3-}" line pane cwdf fgcwd vd probe pstate pmsg rc=0 skipped=0
+  local astat="" rost="" rbusy=0
+  # P3-1（可观测性）：kill 路径的「可能丢失在跑 turn」必须**逐 pane 可归属**（不能汇总一句）。
+  #   判据与单 pane 路径同源：该 pane 的 agent_status ∈ working|blocked，或名册 busy（OR）。
+  #   名册信号是**名字级**（同名多 pane 共用 label）⇒ 无法区分具体 pane，warn 里如实标注。
+  rost="$(intercom_status_for "$name" "$repo")"
+  case "$rost" in ""|idle|\?) ;; *) rbusy=1 ;; esac
+  warn "同名 label 命中多个 pane：$name ⇒ $(printf '%s\n' "$rows" | cut -f2 | paste -sd, -)（--force：逐个按安全判据清理，不猜「哪个是目标」）"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    IFS=$'\t' read -r _ pane _ cwdf fgcwd _ astat _ _ _ _ <<< "$line"
+    vd="$(_term_herdr_row_verdict "$name" "$line")"
+    if [[ "$vd" == "mismatch" ]]; then
+      warn "跳过 pane $pane：身份不一致（pane label 与 argv --name 不符）⇒ 定位不确定，不关"
+      skipped=1; continue
+    fi
+    if _term_herdr_self_refuse "$pane"; then
+      warn "跳过 pane $pane：判为调用者自身（F1：绝不回收自己）"
+      skipped=1; continue
+    fi
+    probe="$(_term_herdr_probe_pane "$pane")"
+    pstate="${probe%%$'\t'*}"; pmsg="${probe#*$'\t'}"
+    [[ "$pmsg" == "$probe" ]] && pmsg=""
+    if [[ "$pstate" == "notfound" ]]; then
+      warn "跳过 pane $pane：明确 pane_not_found（stop→restart 回放/恢复窗口内 ⇒ 不得当可回收）"
+      skipped=1; continue
+    fi
+    [[ "$pstate" == "error" ]] && warn "--force 越过 process-info 不可判：pane $pane（${pmsg:-未知错误}）"
+    if [[ "$astat" == "working" || "$astat" == "blocked" ]]; then
+      warn "pane $pane：agent_status=$astat ⇒ **可能丢失在跑 turn**（--force 显式越过，仍按安全判据回收）"
+    elif (( rbusy )); then
+      warn "pane $pane：pi-intercom 名册状态=$rost ⇒ **可能丢失在跑 turn**（--force 显式越过；名册信号是名字级，无法区分 pane）"
+    fi
+    _term_herdr_close_pane "$name" "$pane" "$repo" "$cwdf" "$fgcwd" || rc=1
+  done <<< "$rows"
+  (( skipped )) && rc=1
+  return $rc
+}
+
+_term_herdr_reclaim() {  # <name> <repo> <force> <core> <scope> <ensure-target>
+  local name="${1-}" repo="${2-}" force="${3:-false}" core="${4-}" scope="${5-}" tgt="${6-}"
+  local rows="" nrows=0 pane="" cwdf="" fgcwd="" why="" probe="" pstate="" pmsg=""
+  # 快照不可用 ⇒ 不判「未运行」（否则 server 故障会被谎报成「无需回收」）
+  if ! term_snapshot >/dev/null 2>&1; then
+    warn "拒绝回收 $name：herdr pane/agent 快照不可用（server 未就绪？）⇒ 不回收"
+    warn "  该怎么办：核对 \`herdr --session ${HERDR_SESSION:-<s>} api snapshot\` 后再试"
+    return 1
+  fi
+  rows="$(term_snapshot 2>/dev/null | awk -F'\t' -v n="$name" '$1==n')" || rows=""
+  nrows="$(printf '%s\n' "$rows" | grep -c . || true)"
+  if (( nrows == 0 )); then
+    # 名册在 herdr 非身份权威（BR3），但「报在线却无 label」必须非静默（不谎报「未运行」）
+    if intercom_online "$name"; then
+      warn "无法回收 $name：pi-intercom 名册报在线，但 herdr pane label 无命中"
+      warn "  名册在 herdr 非身份权威（BR3）；请用 status / \`herdr --session ${HERDR_SESSION:-<s>} pane list\` 核对 label"
+      return 1
+    fi
+    log "$name 未运行（无需回收）"; return 0
+  fi
+  if (( nrows > 1 )); then
+    if [[ "$force" != true ]]; then
+      warn "拒绝回收 $name：同名 label 命中 $nrows 个 pane（$(printf '%s\n' "$rows" | cut -f2 | paste -sd, -)）⇒ 不猜"
+      warn "  该怎么办：先人工核对/清理重复 label（删掉多余 pane）后再回收"
+      warn "  确要清理重复 label（B2 转办②）：close --force $name（仍不关调用者自身 / 恢复窗口中的 pane）"
+      return 1
+    fi
+    _term_herdr_reclaim_dup "$name" "$repo" "$rows"
+    return $?
+  fi
+  IFS=$'\t' read -r _ pane _ cwdf fgcwd _ _ _ _ _ _ <<< "$rows"
+  # ---- 硬拒档（**--force 也不越过**）：身份不一致 = 定位到的不一定是目标会话 ----
+  local vline verdict state seq hook
+  vline="$(term_liveness "$name")"
+  IFS=$'\t' read -r verdict state seq hook <<< "$vline"
+  if [[ "$verdict" == "mismatch" ]]; then
+    warn "拒绝回收 $name：身份不一致（pane label 与 argv --name 不符）⇒ 定位不确定，--force 也不越过"
+    warn "  该怎么办：用 status / intercom list 核对目标会话名；先人工处理该 pane"
+    return 1
+  fi
+  # ---- self 判据（F1：绝不回收调用者自己）----
+  if _term_herdr_self_refuse "$pane"; then
+    warn "拒绝回收 $name：解析出的 pane $pane 判为调用者自身（shell_pid 祖先链命中，或不可判定且与 HERDR_PANE_ID 全等）"
+    warn "  该怎么办：确认目标会话名（status / intercom list）后再处理"
+    return 1
+  fi
+  # ---- 忙闲闸门（BR7 + 名册第二信号）----
+  if _term_herdr_busy "$name" "$repo"; then
+    why="$_TERM_BUSY_WHY"
+    if [[ "$force" != true ]]; then
+      warn "拒绝回收 $name：$why"
+      warn "  等它停；回执与产物核对见 checklists/pm.md「会话回收 / 收窗核对」（或 --force 强制：会丢失在跑 turn/打回上下文）"
+      return 1
+    fi
+    warn "--force 越过忙闲闸门：$name（$why）—— 明确按用户要求回收，可能丢失在跑 turn"
+  fi
+  # ---- 恢复窗口 / 回放幽灵：明确 pane_not_found ⇒ 不回收（不可寻址）----
+  probe="$(_term_herdr_probe_pane "$pane")"
+  pstate="${probe%%$'\t'*}"; pmsg="${probe#*$'\t'}"
+  [[ "$pmsg" == "$probe" ]] && pmsg=""
+  case "$pstate" in
+    notfound)
+      warn "拒绝回收 $name：pane=$pane 明确 pane_not_found（stop→restart 回放/恢复窗口内 ⇒ 不得当可回收）"
+      warn "  等恢复完成（status 判在线）后再回收；诊断：herdr --session ${HERDR_SESSION:-<s>} agent explain $pane"
+      return 1 ;;
+    error)
+      if [[ "$force" != true ]]; then
+        warn "拒绝回收 $name：process-info 不可判（${pmsg:-未知错误}）⇒ 不回收（宁可少关一个）"
+        warn "  该怎么办：稍后重试；确认该 pane 无用后再加 --force（显式越过，仍做 effect 复核）"
+        return 1
+      fi
+      warn "--force 越过 process-info 不可判：$name（${pmsg:-未知错误}）"
+      ;;
+  esac
+  # ---- 落地（唯一回收句柄 = pane close + effect 复核）----
+  _term_herdr_close_pane "$name" "$pane" "$repo" "$cwdf" "$fgcwd"
+}
+
+# 会话表（effect 判据的唯一来源）：成功输出 JSON；CLI 失败/空输出 ⇒ 1（**不自动起 server**）
+_term_herdr_session_json() {
+  local js
+  js="$(_term_herdr_exec session list --json 2>/dev/null)" || return 1
+  [[ -n "$js" ]] || return 1
+  printf '%s' "$js"
+}
+
+# 会话是否已消失（effect 判据）：0 = 已消失 · 1 = 仍可见 / 不可判（fail-closed）
+_term_herdr_session_absent() {  # <session>
+  local s="${1-}" js
+  [[ -n "$s" ]] || return 1
+  js="$(_term_herdr_session_json)" || return 1
+  if printf '%s' "$js" | grep -qF "\"name\":\"$s\""; then return 1; fi
+  return 0
+}
+
+# 拆场（herdr · 姊妹入口）：session stop + delete，**判 effect 不看 rc**（stop 非幂等：第二次 rc=1）。
+#   守卫与 session-start 同源：显式目标必给 / ≠default（BR9）/ 字符集 / 目标根在 herdr 根内。
+_term_herdr_cleanup() {  # <session>
+  local s="${1-}" root rootp sp spp dir prev rc=0
+  command -v herdr >/dev/null 2>&1 || {
+    printf '需要 herdr：herdr 后端要求 herdr ≥0.9.1 在 PATH（装好后重试，或 NAO_TERMINAL=tmux 回退）\n' >&2
+    return 2
+  }
+  case "$s" in
+    ""|"default")
+      printf '需要 herdr 会话名：%s 不可用（cleanup 必填 --session 且 ≠default —— default 是用户会话，BR9）\n' "${s:-<空>}" >&2
+      return 2 ;;
+  esac
+  if [[ ! "$s" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    printf '需要 herdr 会话名：%s 非法（^[A-Za-z0-9._-]+$）\n' "$s" >&2
+    return 2
+  fi
+  root="${XDG_CONFIG_HOME:-$HOME/.config}/herdr"
+  rootp="$(_term_path_norm "$root/sessions/$s")"
+  sp="${HERDR_SOCKET_PATH:-}"
+  if [[ -n "$sp" ]]; then
+    spp="$(_term_path_norm "$sp")"
+    if [[ "$spp" != "$rootp"/* ]]; then
+      printf '需要 herdr 会话目录：HERDR_SOCKET_PATH=%s 不在目标根 %s/ 下（stale/外贸 env ⇒ 拒绝，防误拆）\n' "$sp" "$rootp" >&2
+      return 3
+    fi
+  fi
+  dir="$root/sessions/$s"
+  prev="${HERDR_SESSION:-}"
+  export HERDR_SESSION="$s"
+  # P3-3（fail-closed）：effect 判据的来源不可用 ⇒ 拒绝（**不自动起 server**、零拆场动作）
+  if ! _term_herdr_session_json >/dev/null; then
+    printf '[fleet] cleanup 拒绝：herdr `session list` 不可用（无法判 effect；不自动起 server）\n' >&2
+    printf '[fleet] 该怎么办：核对 `herdr --session %s session list --json`；必要时先 session-start 起 server 再重试\n' "$s" >&2
+    if [[ -n "$prev" ]]; then export HERDR_SESSION="$prev"; else unset HERDR_SESSION; fi
+    return 1
+  fi
+  # 幂等前置：会话条目与目录都不存在 ⇒ effect=0，零动作
+  if _term_herdr_session_absent "$s" && [[ ! -e "$dir" ]]; then
+    printf '[fleet] herdr session=%s 已清理（effect=0；stop+delete 均无动作）\n' "$s"
+    if [[ -n "$prev" ]]; then export HERDR_SESSION="$prev"; else unset HERDR_SESSION; fi
+    return 0
+  fi
+  _term_herdr_exec session stop "$s" >/dev/null 2>&1 || true    # 非幂等 ⇒ 吞 rc，判 effect
+  _term_herdr_exec session delete "$s" >/dev/null 2>&1 || true
+  if _term_herdr_session_absent "$s" && [[ ! -e "$dir" ]]; then
+    printf '[fleet] 已终结 herdr session=%s（stop+delete；effect=已消失）\n' "$s"
+  else
+    rc=1
+    printf '[fleet] cleanup 失败：herdr session=%s 清理后仍可见（effect 未达成；rc 不作判据）\n' "$s" >&2
+    printf '[fleet] 该怎么办：`herdr session list` 核对；仍 running ⇒ `herdr --session %s session stop %s` 后重试\n' "$s" "$s" >&2
+  fi
+  if [[ -n "$prev" ]]; then export HERDR_SESSION="$prev"; else unset HERDR_SESSION; fi
+  return $rc
 }
 
 # ---------------------------------------------------------------------------
@@ -1421,6 +1745,7 @@ tmux_pane_live() {
 }
 # <<< term-impl-tmux END (pane 定位)
 
+# >>> term-impl-tmux BEGIN (回收 / 自身判定 / 忙闲)
 # 目标 pane 是否就是**调用者自己所在的 pane**（F1 不变量：close 任何路径不得回收调用者的 pane）。
 # T530 修正根因：旧判据是裸 pane id 比较（`"$pane" == "$TMUX_PANE"`）。pane id 是 **server 局部**
 #   命名空间（每个 server 的首块 pane 都是 %0）⇒ 跨 server 撞号时必然误判：隔离/custom socket 的
@@ -1465,6 +1790,146 @@ self_pane_refuse() {
     *) return 1 ;;                                                      # 确定不是 ⇒ 放行
   esac
 }
+
+# 该 pane 是否显示在跑 turn（启发式：扫末 12 行找状态行标记；回执/产物以 PM 核对清单为准）
+# ⚠️ 窗口不能只用末 3 行：pi 状态行（如 "⠦ Working"）上方还有分隔线，实测会落到第 4 行以外。
+# 真伪由 roster 状态(intercom_status_for)交叉；此处仅作 pane 级补充。
+pane_busy() {
+  local pane="$1" window
+  window="$(tmux capture-pane -p -t "$pane" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -12)"
+  [[ -n "$window" ]] || return 1
+  grep -qE "$CLOSE_BUSY_PATTERN" <<< "$window"
+}
+
+# 句柄层回收（B3）：tmux 实现。函数体**逐字**来自 B3 之前的 cmd_close（行为零回归；
+#   用例 28 的 B3 节以「提取段 md5 == golden md5」钉住），参数化只为让共用闸门层留在 cmd_close。
+_term_tmux_reclaim() {  # <name> <repo> <force> <core> <scope> <ensure-target>
+  local name="${1-}" repo="${2-}" force="${3:-false}" core="${4-}" scope="${5-}" tgt="${6-}"
+  local pane="" pids="" st="" bus="" pcwd=""
+  # ---- 宿主句柄定位（跨仓）：pane 按标题任意仓 basename / 名册 tmuxPane 不限定 cwd ----
+  pane="$(find_pane_for_any_repo "$name")"
+  # F1 不变量（T513-S2）：close 任何路径不得回收调用者自己的 pane/窗口。
+  #   根因：派生窗口若继承 $TMUX_PANE，子进程按该 pane 注册名册 ⇒ 层② 命中调用者自身；
+  #   本闸门是纵深防御——无论上游解析为何，命中即拒绝（不 kill-pane、不进入 pi_pids_for 兜底）。
+  #   T530：判据=进程归属三态（fail-closed，见 self_pane_refuse），不是裸 pane id 比较 —— pane id 是
+  #   server 局部命名空间，隔离 socket 的 %0 与默认 server 的 $TMUX_PANE=%0 撞号会被误判为「自己」而**误拒**。
+  #   不可判定时只对「撞号」保守拒绝：判不了自己 ⇒ 宁可少回收一次，不得误杀一个会话。
+  if [[ -n "$pane" ]] && self_pane_refuse "$pane"; then
+    warn "拒绝回收 $name：解析出的 pane $pane 判为调用者自身（pane_pid 祖先链命中，或祖先链不可判定且与 \$TMUX_PANE 撞号）"
+    warn "  名册 tmuxPane 可能因派生时继承 TMUX_PANE 而错注册；请用 intercom({action:'list'}) 核对目标会话后再处理"
+    return 1
+  fi
+  if [[ -z "$pane" ]]; then
+    # nao-<会话名> detached tmux 会话（不依赖 repo）
+    if command -v tmux >/dev/null 2>&1 && tmux has-session -t "=nao-$name" 2>/dev/null; then
+      if tmux kill-session -t "=nao-$name" 2>/dev/null; then log "已回收 $name（tmux 会话 nao-$name）@ $repo"; return 0; fi
+    fi
+    # 无任何可杀句柄：名册若报在线 ⇒ 定位失败，必须非静默（禁止「未运行」而 pane 仍在）
+    if intercom_online "$name"; then
+      warn "无法回收 $name：pi-intercom 名册报在线（cwd=${repo}）但未定位到存活 pane/会话"
+      warn "  标题契约 / 名册 tmuxPane 均未命中；tmuxPane 可能滞后或未注册"
+      warn "  请用 intercom({action:'list'}) 人工核对；确认已退出后忽略，或按 pane_id 手工处理"
+      return 1
+    fi
+    # T516 AC3（#1 错定缺陷的负向闸）：常驻精确句柄全缺席而其派生在场 ⇒ 目标歧义，
+    # 拒绝并指路（不得落入「未运行（无需回收）」静默 no-op）。
+    local -a dfield=()
+    mapfile -t dfield < <(derived_in_field "$core" "$scope")
+    if (( ${#dfield[@]} > 0 )); then
+      warn "拒绝回收 $name：常驻会话 nao-$name 不存在，但其派生在场：${dfield[*]}"
+      warn "  目标歧义（tmux 会话名前缀匹配曾误回收派生，T515 #1）：如需回收派生用 close <派生名>（如 close ${dfield[0]}）；如需拉起常驻用 ensure $tgt"
+      return 1
+    fi
+    # BR5（T529）：tmux 下必有句柄，不可判定不再发生 ⇒ 直接报「未运行」（无 offline 分支）
+    log "$name 未运行（无需回收）"; return 0
+  fi
+
+  # 闸门②：在跑 turn（pane 标记 + roster 状态双重信号）
+  bus=""
+  # 显式双分支赋值：pane 空闲时 bus 必须落为 ""。
+  # 曾用 `pane_busy "$pane" && bus=…`：pane_busy 为假时 && 短路，bus 在 set -u 下未绑定 → 行 1007 崩溃。
+  if pane_busy "$pane"; then
+    bus="tmux pane $pane 显示在跑 turn"
+  fi
+  st="$(intercom_status_for "$name")"
+  if [[ -z "$bus" ]]; then
+    case "$st" in
+      ""|idle|\?) ;;   # 无状态或空闲 → 不阻塞
+      *) bus="pi-intercom 名册状态=$st（在跑 turn）" ;;
+    esac
+  fi
+  if [[ -n "$bus" && "$force" != true ]]; then
+    warn "拒绝回收 $name：$bus"
+    warn "  等它停；回执与产物核对见 checklists/pm.md「会话回收 / 收窗核对」（或 --force 强制）"
+    return 1
+  fi
+
+  # 回收前以 pane 真实 cwd 校正日志中的仓（名册可能缺记录）
+  local pcwd
+  pcwd="$(tmux display-message -p -t "$pane" '#{pane_current_path}' 2>/dev/null || true)"
+  [[ -n "$pcwd" ]] && repo="$pcwd"
+  if tmux kill-pane -t "$pane" 2>/dev/null; then
+    log "已回收 $name（tmux pane $pane）@ $repo"; return 0
+  fi
+  pids="$(pi_pids_for "$name" "$repo" | tr '\n' ' ')"
+  if [[ -n "$pids" ]] && kill $pids 2>/dev/null; then
+    log "已回收 $name（结束进程: $pids）@ $repo"; return 0
+  fi
+  warn "已定位到 $name 的 pane $pane 但回收失败（pane 可能刚好退出；核对 pane 已消失后可忽略）"; return 1
+}
+
+# 实验场安全清理（T516 #2 · D2 形态 A）：终结指定实验场 server。
+# 守卫：① 无 -S ⇒ exit 2（默认 socket 是生产名册所在，禁止默认清理）；
+#       ② -S 指向默认 socket ⇒ exit 2（防呆：显式传入也不放行）；
+#       ③ socket 不存在 ⇒ 幂等成功（rc 0）；④ kill 失败 ⇒ 非 0 + 诊断，不谎报。
+# 拆场（B3）：tmux 实现 —— 函数体逐字来自 B3 之前的 cmd_cleanup（行为零回归；用例 28 的 B3 节钉 md5）。
+# 生产默认 socket 候选。T516 事故修正：判定**不得**依赖 `${TMUX_TMPDIR:-/tmp}` ——
+#   实验夹具为让 fleet 内部裸 `tmux` 落到夹具 server 会把 TMUX_TMPDIR 指向隔离目录，
+#   若据此判定，真实默认 socket 会被误判为「非默认」而遭清理 ⇒ 真 server 连坐自灭
+#   （2026-10-13 AC5e 负向用例实测杀掉调用者自己的 server）。恒含常量 /tmp/tmux-<uid>/default
+#   （id -u 失败也是安全路径）；回归脚本护栏用同一常量**独立复算**（双保险，互不依赖）。
+prod_sock_candidates() {  # 每行一个候选
+  local uid; uid="$(id -u)"
+  [[ -n "${TMUX:-}" ]] && printf '%s\n' "${TMUX%%,*}"
+  printf '%s\n' "/tmp/tmux-$uid/default" "${TMPDIR:-/tmp}/tmux-$uid/default"
+}
+_term_tmux_cleanup() {
+  local sock="${CLEANUP_SOCK:-}"
+  if [[ -z "$sock" ]]; then
+    printf '[fleet] cleanup 拒绝：未指定 -S <socket>。生产默认 socket 是生产名册所在，禁止默认清理；实验场清理用：env -u TMUX nao-fleet.sh cleanup -S <隔离socket>\n' >&2
+    return 2
+  fi
+  # F3-B3（arch 评审 · 低）：`-S` 若为符号链接/未归一化路径（`/tmp//…`、symlink）可绕过字符串比对
+  # ⇒ 比对前 readlink -f 归一化；readlink -f 不可用/不可解析时退回原串（保持原语义、无新依赖）。
+  local sock_cmp
+  sock_cmp="$(readlink -f -- "$sock" 2>/dev/null || true)"
+  [[ -n "$sock_cmp" ]] || sock_cmp="$sock"
+  local -a prod=() p
+  mapfile -t prod < <(prod_sock_candidates | awk '!seen[$0]++')
+  for p in "${prod[@]:-}"; do
+    if [[ "$sock_cmp" == "$p" ]]; then
+      printf '[fleet] cleanup 拒绝：-S 指向生产默认 socket（%s）；请用隔离 socket（须不同于生产候选：%s）\n' "$sock" "${prod[*]}" >&2
+      return 2
+    fi
+  done
+  [[ -n "${TMUX:-}" ]] && warn "当前在 tmux 客户端内：本次 -S 已显式（安全），但实验纪律建议先 env -u TMUX 再执行"
+  if [[ ! -S "$sock" ]]; then
+    log "socket 不存在（无 server，幂等清理）：$sock"; return 0
+  fi
+  # 陈旧 socket（kill-server 后残留的 socket 文件，无 server 监听）：清除文件即幂等成功
+  # （实测 tmux 3.7c 在 -S 自定义路径下 kill-server 不卸载 socket 文件 ⇒ 二次 cleanup 需兜底）
+  if ! tmux -S "$sock" ls >/dev/null 2>&1; then
+    rm -f "$sock" 2>/dev/null || true
+    log "socket 无 server 监听（残留），已清除：$sock"; return 0
+  fi
+  if tmux -S "$sock" kill-server 2>/dev/null; then
+    log "已终结实验场 tmux server：$sock"; return 0
+  fi
+  warn "cleanup 失败：tmux -S $sock kill-server 非 0（server 可能刚好退出；核对 socket 后重试）"
+  return 1
+}
+
+# <<< term-impl-tmux END (回收 / 自身判定 / 忙闲)
 
 # 名册中该会话的 tmux pane（注册时读 $TMUX_PANE；标题被改写仍有效）
 intercom_pane_for() {
@@ -1776,16 +2241,6 @@ visible_session_names() {
     # herdr：label 即会话名（结构化事实；名册不参与身份判定 —— 见 BR3/BR7）
     herdr) term_snapshot | awk -F'\t' 'NF && $1 != "" {print $1}' | awk '!seen[$0]++' ;;
   esac
-}
-
-# 该 pane 是否显示在跑 turn（启发式：扫末 12 行找状态行标记；回执/产物以 PM 核对清单为准）
-# ⚠️ 窗口不能只用末 3 行：pi 状态行（如 "⠦ Working"）上方还有分隔线，实测会落到第 4 行以外。
-# 真伪由 roster 状态(intercom_status_for)交叉；此处仅作 pane 级补充。
-pane_busy() {
-  local pane="$1" window
-  window="$(tmux capture-pane -p -t "$pane" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -12)"
-  [[ -n "$window" ]] || return 1
-  grep -qE "$CLOSE_BUSY_PATTERN" <<< "$window"
 }
 
 # 任务在 tasks-state 的归处：
@@ -2385,7 +2840,7 @@ cmd_check() {
     #   rc 口径（P3-4 订正）：显式指定 herdr 却**缺 herdr 可执行文件** ⇒ rc=1（明确错配，不能装没看见）；
     #   缺 `HERDR_SESSION`（未在 herdr pane 内，CI 常见）⇒ 只提示不置红（静态体检照跑）；
     #   `protocol≠22` ⇒ rc=1（唯一可置红的机械项）。
-    echo '  · 生效后端 NAO_TERMINAL=herdr（#96 二期 B2：status/ensure 走门面；session-start 起 server；close/cleanup 未实现 ⇒ exit 4）'
+    echo '  · 生效后端 NAO_TERMINAL=herdr（#96 二期 B3：status/ensure/close/cleanup 走门面；session-start 起 server；台账 3 条）'
     if command -v herdr >/dev/null 2>&1; then
       printf '  ✓ herdr 可用\n'
       if [[ -n "${HERDR_SESSION:-}" && "${HERDR_SESSION}" != "default" ]]; then
@@ -3004,6 +3459,32 @@ cmd_status() {
     echo '== 终端证据异常（herdr 后端：label 命中 ≠ 在线）=='
     printf '%s\n' "${term_abn[@]}"
   fi
+  # AC2.2 闭环（B3）：可投递标注 —— **独立节/独立行**，不改任何既有行格式（BR1 md5 仍逐字）
+  #   消费者 = close 忙闲闸门 + 本节；映射单源 = term_deliverable（idle/done 可投递，其余/unknown 不可）
+  if [[ "$backend" == "herdr" ]]; then
+    local -a dl=()
+    local -A dl_seen=()
+    local dn dv ds
+    for dn in "${ROLE_ORDER[@]}" "${field_names[@]}"; do
+      [[ -n "$dn" ]] || continue
+      if [[ -n "${dl_seen[$dn]:-}" ]]; then continue; fi   # ROLE_ORDER 与现场名册有交集 ⇒ 去重后再渲染
+      dl_seen["$dn"]=1
+      [[ -n "${abn_seen[$dn]:-}" ]] || continue     # 只对已算定证据的名字（全集）
+      dv="${hv[$dn]:-absent}"; ds="${hstate[$dn]:--}"
+      [[ "$dv" == "absent" ]] && continue
+      if [[ "$dv" == "online" ]] && term_deliverable "$ds"; then
+        dl+=("  · $dn：可投递（agent_status=$ds）")
+      elif [[ "$dv" == "online" ]]; then
+        dl+=("  · $dn：不可投递（agent_status=$ds；BR7 ⇒ 保守不可投递）")
+      else
+        dl+=("  · $dn：不可投递（$dv ⇒ 无在线证据）")
+      fi
+    done
+    if (( ${#dl[@]} > 0 )); then
+      echo '== 投递判定（BR7：idle/done 可投递；working/blocked/unknown 不可投递）=='
+      printf '%s\n' "${dl[@]}"
+    fi
+  fi
   # D5：未识别节（F3）—— 单列，不给可执行命令（T530「非静默」对偶）
   if (( ${#unrecognized[@]} > 0 )); then
     echo '== 角色未识别（疑似 fleet 遗留）=='
@@ -3199,127 +3680,17 @@ cmd_close() {
     [[ "$cls" == "nofile" ]] && log "未启用 $TASKS_STATE（跳过状态闸门）"
   fi
 
-  # ---- 宿主句柄定位（跨仓）：pane 按标题任意仓 basename / 名册 tmuxPane 不限定 cwd ----
-  pane="$(find_pane_for_any_repo "$name")"
-  # F1 不变量（T513-S2）：close 任何路径不得回收调用者自己的 pane/窗口。
-  #   根因：派生窗口若继承 $TMUX_PANE，子进程按该 pane 注册名册 ⇒ 层② 命中调用者自身；
-  #   本闸门是纵深防御——无论上游解析为何，命中即拒绝（不 kill-pane、不进入 pi_pids_for 兜底）。
-  #   T530：判据=进程归属三态（fail-closed，见 self_pane_refuse），不是裸 pane id 比较 —— pane id 是
-  #   server 局部命名空间，隔离 socket 的 %0 与默认 server 的 $TMUX_PANE=%0 撞号会被误判为「自己」而**误拒**。
-  #   不可判定时只对「撞号」保守拒绝：判不了自己 ⇒ 宁可少回收一次，不得误杀一个会话。
-  if [[ -n "$pane" ]] && self_pane_refuse "$pane"; then
-    warn "拒绝回收 $name：解析出的 pane $pane 判为调用者自身（pane_pid 祖先链命中，或祖先链不可判定且与 \$TMUX_PANE 撞号）"
-    warn "  名册 tmuxPane 可能因派生时继承 TMUX_PANE 而错注册；请用 intercom({action:'list'}) 核对目标会话后再处理"
-    return 1
-  fi
-  if [[ -z "$pane" ]]; then
-    # nao-<会话名> detached tmux 会话（不依赖 repo）
-    if command -v tmux >/dev/null 2>&1 && tmux has-session -t "=nao-$name" 2>/dev/null; then
-      if tmux kill-session -t "=nao-$name" 2>/dev/null; then log "已回收 $name（tmux 会话 nao-$name）@ $repo"; return 0; fi
-    fi
-    # 无任何可杀句柄：名册若报在线 ⇒ 定位失败，必须非静默（禁止「未运行」而 pane 仍在）
-    if intercom_online "$name"; then
-      warn "无法回收 $name：pi-intercom 名册报在线（cwd=${repo}）但未定位到存活 pane/会话"
-      warn "  标题契约 / 名册 tmuxPane 均未命中；tmuxPane 可能滞后或未注册"
-      warn "  请用 intercom({action:'list'}) 人工核对；确认已退出后忽略，或按 pane_id 手工处理"
-      return 1
-    fi
-    # T516 AC3（#1 错定缺陷的负向闸）：常驻精确句柄全缺席而其派生在场 ⇒ 目标歧义，
-    # 拒绝并指路（不得落入「未运行（无需回收）」静默 no-op）。
-    local -a dfield=()
-    mapfile -t dfield < <(derived_in_field "$core" "$scope")
-    if (( ${#dfield[@]} > 0 )); then
-      warn "拒绝回收 $name：常驻会话 nao-$name 不存在，但其派生在场：${dfield[*]}"
-      warn "  目标歧义（tmux 会话名前缀匹配曾误回收派生，T515 #1）：如需回收派生用 close <派生名>（如 close ${dfield[0]}）；如需拉起常驻用 ensure $tgt"
-      return 1
-    fi
-    # BR5（T529）：tmux 下必有句柄，不可判定不再发生 ⇒ 直接报「未运行」（无 offline 分支）
-    log "$name 未运行（无需回收）"; return 0
-  fi
-
-  # 闸门②：在跑 turn（pane 标记 + roster 状态双重信号）
-  bus=""
-  # 显式双分支赋值：pane 空闲时 bus 必须落为 ""。
-  # 曾用 `pane_busy "$pane" && bus=…`：pane_busy 为假时 && 短路，bus 在 set -u 下未绑定 → 行 1007 崩溃。
-  if pane_busy "$pane"; then
-    bus="tmux pane $pane 显示在跑 turn"
-  fi
-  st="$(intercom_status_for "$name")"
-  if [[ -z "$bus" ]]; then
-    case "$st" in
-      ""|idle|\?) ;;   # 无状态或空闲 → 不阻塞
-      *) bus="pi-intercom 名册状态=$st（在跑 turn）" ;;
-    esac
-  fi
-  if [[ -n "$bus" && "$force" != true ]]; then
-    warn "拒绝回收 $name：$bus"
-    warn "  等它停；回执与产物核对见 checklists/pm.md「会话回收 / 收窗核对」（或 --force 强制）"
-    return 1
-  fi
-
-  # 回收前以 pane 真实 cwd 校正日志中的仓（名册可能缺记录）
-  local pcwd
-  pcwd="$(tmux display-message -p -t "$pane" '#{pane_current_path}' 2>/dev/null || true)"
-  [[ -n "$pcwd" ]] && repo="$pcwd"
-  if tmux kill-pane -t "$pane" 2>/dev/null; then
-    log "已回收 $name（tmux pane $pane）@ $repo"; return 0
-  fi
-  pids="$(pi_pids_for "$name" "$repo" | tr '\n' ' ')"
-  if [[ -n "$pids" ]] && kill $pids 2>/dev/null; then
-    log "已回收 $name（结束进程: $pids）@ $repo"; return 0
-  fi
-  warn "已定位到 $name 的 pane $pane 但回收失败（pane 可能刚好退出；核对 pane 已消失后可忽略）"; return 1
+  # ---- 句柄层（B3）：tmux / herdr 双实现（定位 / self 判据 / liveness / 忙闲 / 回收句柄）----
+  #   共用闸门层（tasks-state / subagent 拒收 / 目标解析 / --force）已在上方，**不动**。
+  term_reclaim "$name" "$repo" "$force" "$core" "$scope" "$tgt"
+  return $?
 }
 
 # ---------------------------------------------------------------------------
-# 实验场安全清理入口（T516 #2 · D2 形态 A）：终结指定实验场 tmux server。
-# 守卫：① 无 -S ⇒ exit 2（默认 socket 是生产名册所在，禁止默认清理）；
-#       ② -S 指向默认 socket ⇒ exit 2（防呆：显式传入也不放行）；
-#       ③ socket 不存在 ⇒ 幂等成功（rc 0）；④ kill 失败 ⇒ 非 0 + 诊断，不谎报。
-# 生产默认 socket 候选。T516 事故修正：判定**不得**依赖 `${TMUX_TMPDIR:-/tmp}` ——
-#   实验夹具为让 fleet 内部裸 `tmux` 落到夹具 server 会把 TMUX_TMPDIR 指向隔离目录，
-#   若据此判定，真实默认 socket 会被误判为「非默认」而遭清理 ⇒ 真 server 连坐自灭
-#   （2026-10-13 AC5e 负向用例实测杀掉调用者自己的 server）。恒含常量 /tmp/tmux-<uid>/default
-#   （id -u 失败也是安全路径）；回归脚本护栏用同一常量**独立复算**（双保险，互不依赖）。
-prod_sock_candidates() {  # 每行一个候选
-  local uid; uid="$(id -u)"
-  [[ -n "${TMUX:-}" ]] && printf '%s\n' "${TMUX%%,*}"
-  printf '%s\n' "/tmp/tmux-$uid/default" "${TMPDIR:-/tmp}/tmux-$uid/default"
-}
+# 拆场入口（B3 · 双实现）：tmux = 终结实验场 server（-S 显式 socket）；herdr = session stop+delete。
+#   后端差异在门面后（_term_tmux_cleanup / _term_herdr_cleanup）；显式目标守卫在入口（rc=2）。
 cmd_cleanup() {
-  local sock="${CLEANUP_SOCK:-}"
-  if [[ -z "$sock" ]]; then
-    printf '[fleet] cleanup 拒绝：未指定 -S <socket>。生产默认 socket 是生产名册所在，禁止默认清理；实验场清理用：env -u TMUX nao-fleet.sh cleanup -S <隔离socket>\n' >&2
-    return 2
-  fi
-  # F3-B3（arch 评审 · 低）：`-S` 若为符号链接/未归一化路径（`/tmp//…`、symlink）可绕过字符串比对
-  # ⇒ 比对前 readlink -f 归一化；readlink -f 不可用/不可解析时退回原串（保持原语义、无新依赖）。
-  local sock_cmp
-  sock_cmp="$(readlink -f -- "$sock" 2>/dev/null || true)"
-  [[ -n "$sock_cmp" ]] || sock_cmp="$sock"
-  local -a prod=() p
-  mapfile -t prod < <(prod_sock_candidates | awk '!seen[$0]++')
-  for p in "${prod[@]:-}"; do
-    if [[ "$sock_cmp" == "$p" ]]; then
-      printf '[fleet] cleanup 拒绝：-S 指向生产默认 socket（%s）；请用隔离 socket（须不同于生产候选：%s）\n' "$sock" "${prod[*]}" >&2
-      return 2
-    fi
-  done
-  [[ -n "${TMUX:-}" ]] && warn "当前在 tmux 客户端内：本次 -S 已显式（安全），但实验纪律建议先 env -u TMUX 再执行"
-  if [[ ! -S "$sock" ]]; then
-    log "socket 不存在（无 server，幂等清理）：$sock"; return 0
-  fi
-  # 陈旧 socket（kill-server 后残留的 socket 文件，无 server 监听）：清除文件即幂等成功
-  # （实测 tmux 3.7c 在 -S 自定义路径下 kill-server 不卸载 socket 文件 ⇒ 二次 cleanup 需兜底）
-  if ! tmux -S "$sock" ls >/dev/null 2>&1; then
-    rm -f "$sock" 2>/dev/null || true
-    log "socket 无 server 监听（残留），已清除：$sock"; return 0
-  fi
-  if tmux -S "$sock" kill-server 2>/dev/null; then
-    log "已终结实验场 tmux server：$sock"; return 0
-  fi
-  warn "cleanup 失败：tmux -S $sock kill-server 非 0（server 可能刚好退出；核对 socket 后重试）"
-  return 1
+  term_cleanup "${CLEANUP_SOCK:-}" "${SESSION_ARG:-}"
 }
 
 # ---------------------------------------------------------------------------
@@ -3491,9 +3862,13 @@ while [[ $# -gt 0 ]]; do
     close)  CMD="close";  shift ;;
     cleanup) CMD="cleanup"; shift ;;
     session-start) CMD="session-start"; shift ;;
-    # B2 · --session：只用于 session-start（与 -S 同风格：给参但空 ⇒ 拒；缺参 ⇒ 拒）
+    # B2/B3 · --session：用于 session-start（起 server）/ cleanup（herdr 拆场）
+    #   与 -S 同风格：给参但空 ⇒ 拒；缺参 ⇒ 拒
     --session)
-      [[ "$CMD" == "session-start" ]] || die "--session 仅用于 session-start 子命令：nao-fleet.sh session-start --session <名>"
+      case "$CMD" in
+        session-start|cleanup) ;;
+        *) die "--session 仅用于 session-start / cleanup 子命令：nao-fleet.sh session-start --session <名>"
+      esac
       SESSION_ARG="${2:-}"
       [[ -n "$SESSION_ARG" ]] || die "--session 需要会话名参数（如 --session nao-fleet）"
       shift 2 ;;
@@ -3560,9 +3935,9 @@ if [[ "$CMD" == "session-start" && -z "$SESSION_ARG" ]]; then
 fi
 
 # 唯一运行前提闸门（BR1/BR3）：先于 load_manifest 与任何副作用；不满足 ⇒ exit 3（命令未执行）。
-# cleanup 豁免：其正常场景就是非 tmux 的隔离实验场（env -u TMUX ... -S <socket>）。
-# herdr 后端（#96 二期）：ensure 已接（B2）⇒ 走 term_require；close/cleanup 仍 exit 4 + 点名未实现
-#   （回收归 B3）；闸门在此之前 ⇒ 零后端调用（用例以 PATH 桩 0 命中断言）。
+# cleanup 豁免：其正常场景就是实验场拆场（tmux: env -u TMUX ... -S <socket> / herdr: --session <名>）。
+# herdr 后端（#96 二期 B1–B3）：ensure/status/close 走 term_require（pane + protocol 闸门）；
+#   闸门在此之前 ⇒ 零后端调用（用例以 PATH 桩 0 命中断言）。
 # session-start 自校验（herdr = 起 server，无需已在 pane 内；tmux = 幂等无操作）
 case "$CMD" in
   check)  : ;;   # cmd_check 自行先做文本契约体检，再 load_manifest（缩进违例时也能先出报告）
@@ -3570,16 +3945,30 @@ case "$CMD" in
   ensure|status)
     term_require; load_manifest ;;
   close)
-    if [[ "$NAO_TERMINAL" == "herdr" ]]; then term_unimplemented "close"; fi
-    require_tmux; load_manifest ;;
+    term_require; load_manifest ;;
   cleanup)
-    if [[ "$NAO_TERMINAL" == "herdr" ]]; then term_unimplemented "cleanup"; fi
-    : ;;  # cleanup 不需角色清单
+    : ;;  # cleanup 不需角色清单（也不要求已在 pane 内：拆场是外部动作）
 esac
 
 # -S 仅 cleanup 消费：其他子命令带上 -S 视为用法错误（避免静默吞参）
 if [[ -n "${CLEANUP_SOCK:-}" && "$CMD" != "cleanup" ]]; then
   die "-S 仅用于 cleanup 子命令（实验场安全清理）：nao-fleet.sh cleanup -S <socket>"
+fi
+# B3 · 拆场的显式目标按后端分派（用法守卫 rc=2；在一切后端调用之前）
+if [[ "$CMD" == "cleanup" ]]; then
+  if [[ "$(term_backend)" == "herdr" ]]; then
+    if [[ -n "${CLEANUP_SOCK:-}" ]]; then
+      printf '[fleet] herdr 后端的 cleanup 用 --session <名>（-S 仅用于 tmux 实验场 socket）\n' >&2
+      exit 2
+    fi
+    if [[ -z "${SESSION_ARG:-}" ]]; then
+      printf '[fleet] cleanup 拒绝：herdr 后端须显式 --session <名>（default 是用户会话，禁止；如 --session nao-fleet）\n' >&2
+      exit 2
+    fi
+  elif [[ -n "${SESSION_ARG:-}" ]]; then
+    printf '[fleet] --session 仅用于 herdr 后端（tmux cleanup 用 -S <隔离socket>）\n' >&2
+    exit 2
+  fi
 fi
 
 case "$CMD" in
@@ -3612,7 +4001,7 @@ case "$CMD" in
       grep -m1 -E '^  . codegraph ' "$REPFILE" || true
       # B1（BR1 六条机械保证之「check 打印生效后端」）：**仅 herdr 模式加行**；tmux 路径零新增输出
       if [[ "$NAO_TERMINAL" == "herdr" ]]; then
-        echo '  · 生效后端 NAO_TERMINAL=herdr（#96 二期 B2：status/ensure 走门面；session-start 起 server；close/cleanup 未实现 ⇒ exit 4）'
+        echo '  · 生效后端 NAO_TERMINAL=herdr（#96 二期 B3：status/ensure/close/cleanup 走门面；session-start 起 server；台账 3 条）'
       fi
     else
       cat "$REPFILE"
