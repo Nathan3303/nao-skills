@@ -18,14 +18,15 @@
 ## 二、目标指标
 
 - **假红归零**：身份/归属/就绪三类 flake 在连续 20 次门禁中 0 次（现状：`cases/19` 型曾单日 5 次）。
-- **猜测代码净减**：三层定位启发式与列宽算式退出生产路径（以 `nao-fleet.sh` 相关行数下降为度量）。
+- **猜测代码净减**：herdr 分支内 `pane_title` / `display-message` / `list-panes` 调用数 = **0**（grep 门禁，行数不作判据）。
 - **静默跳过归零**：多仓并发 `ensure` 不再出现「以为拉起来了其实没有」（改为 fail loud 或按仓分区成功）。
-- **双后端可互印**：同一提交集合在 tmux / herdr 两后端给出相同用例数与断言数。
+- **双后端可比对（替代原「数字可互印」）**：两后端各跑自己登记的用例集且 rc=0；**共享集**用例 ID 相同、**每例断言标题序列**与 golden 清单逐字一致；后端专有例登记于 `tests/t4/backends/<backend>.txt`（每条写理由 + 到期），未登记用例输出 **PENDING 并点名**，不得静默 SKIP；汇总行打印「共享 N / 本后端专有 M / PENDING K」。
+- **口径注**：用例数唯一出处 = `bash tests/t4/run.sh --list | tail -n +2 | wc -l`（当前 **25**，编号 01–10 + 12–26，无 11）。
 
 ## 三、范围 / 非范围
 
 **范围内**
-- 一期：测试基座双后端（`tmux -S` / herdr named session）+ 多仓命名空间分区。
+- 一期：后端抽象层（新增 `tests/t4/lib-backend.sh`）+ 后端自检例（新增 `27-backend-selftest.sh`）+ 多仓命名空间分区；**D 类 10 例（09/12/15/19/20/21/22/23/24/25）的迁移归二期**（与生产路径同批）。
 - 二期：生产路径的身份、归属、就绪、回收四段改用 herdr 结构化事实。
 - 三期：布局与多仓形态（workspace/tab 映射），herdr 转默认，tmux 降为 `NAO_TERMINAL=tmux` 回退。
 - 文档与前提：`AGENTS.md` 运行前提红线、`README`/`INSTALL` 安装前提、协议脚注。
@@ -53,15 +54,15 @@
 - **BR3 身份只取结构化字段**：`pane_id` / `terminal_id` / `agent_session.value` / `workspace.identity_cwd`。
 - **BR4 实验场必须 stop+delete**：只 `stop` 会回放上一轮 pane 布局（spike 实测）。
 - **BR5 不跨会话隐式操作**：不得从 herdr 外部控制聚焦会话；跨会话必须显式 `--session`。
-- **BR6 清环境渗透**：起 pane 前清 `HERDR_*` / `TMUX*`，否则 tmux 内起的 server 会把 `TMUX_PANE` 渗透给 pane 导致身份误判。
-- **BR7 状态映射固定**：`idle`/`done` = 可投递；`working`/`blocked` = 不可投递；`unknown` = 保守不可投递。
-- **BR8 命名空间按仓分区**：多仓并发时会话名/agent 名带仓标识，禁全局同名；同仓重复 ensure 仍按「已在运行」判重。
+- **BR6 清环境渗透（含反向护栏）**：起 server 前 `env -u TMUX -u TMUX_PANE -u TMUX_TMPDIR` 并**枚举清除** `HERDR_*`（`for v in $(env | grep -o '^HERDR_[A-Z_]*'); do unset "$v"; done`）。四条可执行判据：① pane 内 `env | grep -c '^TMUX'` == 0；② pane 内 `HERDR_SESSION` == 期望名 且 `HERDR_SOCKET_PATH` 前缀 == 实验根下该会话目录；③ 实验根只隔离 `XDG_CONFIG_HOME`（**不得**指 `XDG_STATE_HOME`，mise 等工具会写它）；④ 任何 herdr 调用缺 `--session` ⇒ **FAIL**（实测无 `--session` 时会静默读到用户 `default`）。
+- **BR7 状态映射（含权威源）**：`idle`/`done` = 可投递；`working`/`blocked` = 不可投递；`unknown` = 保守不可投递。**权威源 = `agent list`/`pane list` 的 `agent_status` + `state_change_seq`**；`agent explain` 仅诊断、不得作判据（实测与 `agent list` 双源矛盾）。`done` 保留在映射内但标注「**不可合成**（`pane report-agent` 拒绝 done），二期用真 turn 验证」。
+- **BR8 命名空间按仓分区（命名契约单一函数）**：多仓并发时会话名/agent 名带仓标识，禁全局同名；同仓重复 `ensure` 仍按「已在运行」判重。命名格式抽**单一函数**（二期重写同批函数时须逐字保持契约，避免返工）。
 - **BR9 不碰用户 default session**：测试与生产一律使用独立 session，`default` 的快照在实验前后必须逐字一致。
 
 ## 六、NFRs（业务基线，技术指标由 arch 转译）
 
 - **可回退**：任一期的失败都能单条 revert，或切 `NAO_TERMINAL=tmux` 回到改动前行为。
-- **可复现**：同一提交集合在两种后端给出相同用例数与断言数，差异必须可解释。
+- **可复现（替代原「数字可互印」）**：共享集用例 ID 相同且每例断言标题序列与 golden 逐字一致；专有例登记 + 到期；PENDING 点名；差异必须可解释。**不比断言总数**（数相等 ≠ 语义等价，且可用填充断言凑数）。
 - **依赖边界**：herdr ≥ 0.9.1 / protocol 22；协议或 API 破坏性变更必须 fail loud，不得静默降级。
 - **时延不劣化**：就绪判定不得劣于现状（tmux 侧 5s 有界）。
 - **隐私**：不得把用户 `default` session 的 pane 内容或结构写入仓库、日志或报告。
@@ -69,14 +70,14 @@
 
 ## 七、AC（分三期，逐条 Given/When/Then）
 
-**一期：测试基座双后端 + 命名空间分区**
-- AC1.1 Given 本机装有兼容 herdr 且 `NAO_TEST_TERMINAL=herdr`，When 跑 `npm test`，Then 全部用例在 herdr 命名会话上执行且 rc=0、SKIP=0。
-- AC1.2 Given 未设置 `NAO_TEST_TERMINAL`，When 跑 `npm test`，Then 行为与改动前逐字一致（用例数与断言数不变）。
-- AC1.3 Given herdr 实验场跑完，When 检查，Then `herdr session list` 只剩 `default`、无残留进程。
-- AC1.4 Given 两个用例并发跑在各自 herdr 实验场，When 同时执行，Then 互不可见（`terminal_id` 交集为空）。
-- AC1.5 Given herdr 未安装或 protocol 不兼容，When `NAO_TEST_TERMINAL=herdr`，Then 用例 SKIP 并给明确原因（不得 FAIL 冒充缺陷）。
-- AC1.6 Given 两个仓同时 `ensure rd-fe`，When 第二仓拉起，Then 不撞名（按仓分区）且各自 `status` 都能看到自己的会话。
-- AC1.7 Given 命名空间改动，When 用旧会话名执行 `status`/`close`，Then 旧名仍可用（向后兼容，逐字零回归）。
+**一期：后端抽象层 + 后端自检 + 命名空间分区（两步走）**
+- AC1.1 Given `NAO_TEST_TERMINAL=herdr`，When 跑 `npm test`，Then **登记集**（`tests/t4/backends/herdr.txt`）全部执行且 rc=0、SKIP=0；未登记用例输出 **PENDING 并点名**（不得静默 SKIP）。
+- AC1.2 Given 未设置 `NAO_TEST_TERMINAL`（默认 tmux），When 跑 `npm test`，Then 输出与改动前**逐字 diff 空**（含每例断言标题序列；旧会话名在 tmux 后端逐字不变）。
+- AC1.3 Given herdr 实验场跑完，When 检查，Then 实验根内 `sessions/` 为空 + 无残留 herdr/pi 进程 + 用户 `default` 在本次实验视角**不可见**（快照与 tmux pane 表 diff 空）。
+- AC1.4 Given 两个用例并发跑在各自 herdr 实验场，When 同时执行，Then 互不可见（`terminal_id` 交集为空）且会话名唯一化（含 `$$`）、各自 `HERDR_SESSION` 不同、起 server 前已清 env。
+- AC1.5 Given herdr 不可用，When `NAO_TEST_TERMINAL=herdr`，Then 分两类：**协议/版本不兼容**（判据 `herdr api schema` 的 `protocol: 22` + `herdr --version`）⇒ SKIP 并给原因；**stale `HERDR_SESSION` / 会话名冲突 / 实验根不在 cache 下** ⇒ **FAIL**（fail loud，不得 SKIP）。
+- AC1.6 Given 两个仓同时 `ensure rd-fe`，When 第二仓拉起，Then 不撞名（按仓分区）且各自 `status` 都能看到自己的会话；负控：并发 `ensure` 必须「按仓分区成功」，不得走「已在运行」静默跳过。
+- AC1.7 Given 后端抽象层，When 连跑 2 次，Then `NAO_TEST_TERMINAL` 两后端均 rc=0 且 effect=0（幂等），server 就绪用轮询（50×100ms、5s 上限、超时 fail loud），禁固定 sleep。
 
 **二期：生产身份、归属、就绪、回收**
 - AC2.1 Given herdr 后端，When `ensure` 起七角色，Then 每个 pane 的归属由 `workspace.identity_cwd` 或结构化 ID 判定，不读终端标题。
@@ -85,6 +86,7 @@
 - AC2.4 Given `close` 一个在跑 turn 的会话且未加 `--force`，When 执行，Then 拒绝并给可执行指路（语义与现状等价）。
 - AC2.5 Given 在 tmux 内起的 herdr server（环境渗透），When 跑舰队，Then 清 `HERDR_*`/`TMUX*` 或显式 `--session`，身份判定不受污染。
 - AC2.6 Given `NAO_TERMINAL=tmux`，When 跑全部命令，Then 与改动前逐字等价（零回归硬判据）。
+- AC2.7 Given D 类 10 例（09/12/15/19/20/21/22/23/24/25）迁到 herdr 后端，When 跑登记集，Then 全部全绿且**命名契约逐字保持**（与一期 BR8 的单一函数一致，不得改名）。
 
 **三期：布局与多仓形态，herdr 转默认**
 - AC3.1 Given 七角色，When `ensure`，Then 落在约定 workspace 的 tab 内，布局不依赖列宽算式。
@@ -113,3 +115,12 @@
 - **MoSCoW**：一期 Must（安全网）· 二期 Must（收益主体）· 三期 Should（布局与默认切换）。
 - **RICE**：Reach 28（4 仓 × 7 会话）· Impact 2 · Confidence 0.7（隔离/身份/就绪已实测，布局未验）· Effort 5（三期）⇒ **RICE ≈ 7.8**。
 - **Kano**：不 flake = 基本型；attach 看进度 = 期望型；worktree 绑定 workspace = 兴奋型。
+
+## 附一：arch 评审结论与 PM 裁定（2026-11-10）
+
+- **结论档**：有条件可行。评审要点已写回上文 §二/§三/§五/§六/§七（11 条必改项全采纳）。
+- **PM 四项裁定**：① AC1.1 采「登记集 + PENDING 点名」窄口径（全用例 herdr 绿在一期不可达，强达标只能靠 SKIP 掩盖）；② 原「旧名兼容」AC 删除（herdr 后端无旧会话，tmux 侧由 AC1.2 零回归覆盖，留着是自造永久债）；③ `done` 保留在映射内并标注「不可合成，二期用真 turn 验」，权威源钉 `agent list`/`pane list` 的 `agent_status` + `state_change_seq`；④ 双后端比对改 golden 断言标题序列，不比总数。
+- **一期两步走**：步 1 = 后端抽象层 `tests/t4/lib-backend.sh`（`be_start_server` / `be_ready` / `be_panes` / `be_pane_pid` / `be_run` / `be_teardown`，`NAO_TEST_TERMINAL=tmux|herdr|auto`，**`nao-fleet.sh` 零改动**）+ 自检例 `27-backend-selftest.sh`（隔离 / 零渗透 / stop+delete 幂等 / 零残留 / `default` 不可达）；步 2 = D 类迁移 + BR8 命名分区（迁移主要落二期）。
+- **最易引 flake 的两处（必须按此实现）**：① **server 就绪**禁用固定 sleep（实测 API 就绪仅 69ms）⇒ 50×100ms 轮询 + 5s 上限 + 超时 fail loud；② **拆场**：`stop` 非幂等（第二次 rc=1）且只 stop 不 delete 会回放上一轮布局 ⇒ 会话名带 `$$`+随机、stop 容忍非 0、delete 幂等、断言一律断 **effect** 不断 rc。
+- **三期三条硬判据**：① 实验根走私有 `XDG_CONFIG_HOME`，把「不碰用户 default」变成「碰不到」；实验前后 `api snapshot` 与 `tmux list-panes -a` 双快照 diff 空。② 双侧显式性 lint（tmux 裸调用必带 `-S`；herdr 裸调用必带 `--session`），各带人造违规负控。③ 所有 herdr 调用经唯一 helper，硬条件 `--session` 非空且 ≠ `default`、`HERDR_SOCKET_PATH` 前缀在实验根内，违反即 FAIL。
+- **口径纠错（PM 认账）**：本 PRD 初稿写「27 用例」无出处，实际 **25**（`run.sh --list`）；此后一切用例数以此命令为准。
