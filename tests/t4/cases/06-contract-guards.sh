@@ -402,6 +402,92 @@ t4_assert_eq "1" "$mut_rc" "AC5 #93 变异(丢 -a 判据): 复刻断言翻红（
 t4_assert_contains "$mut_out" "[FAIL] AC2: 恰 2 条命中" "AC5 #93 变异(丢 -a 判据): 点名计数断言翻红（命中了不纳管类）"
 rm -f "$MUT93"
 
+# --- #96 步 2b：herdr 侧行级 lint（命令行位 herdr 必须经唯一入口**且**带 --session）-------
+# 缺口（QA P3-3）：该守护原先只默认“lib-backend.sh + cases/27 自身”（`cases/27` 内联判据），
+#   其余用例目录零覆盖。本块把它提成 `lib.sh` 的公共 lint（`t4_scan_herdr_bare_calls`），并扩到
+#   **整个 cases 目录**，与上面的 tmux 侧 `t4_scan_host_pane_refs` 对称（同为行级/静态/只看命令位）。
+# 判据（与 cases/27 的两条静态断言同口径）：命中行必须**既在 `_be_herdr_exec` 函数体内、
+#   又带 `--session`** —— 二者是 AND：函数体外带 `--session` 仍是**旁路**（绕开清环境/私有根），
+#   函数体内缺 `--session` 仍会**静默打到用户 `default`**（实测）。白名单只有 `herdr --version`
+#   （纯本地元数据：无会话参数、不读写会话/用户文件；理由逐条写在 lib.sh 注释里）。
+HD_CASES="$T4_ROOT/tests/t4/cases"
+HD_VIOL="$(t4_scan_herdr_bare_calls "$HD_CASES")"
+t4_assert_eq "" "$HD_VIOL" \
+  "#96 护栏: 全 cases 目录 0 处命令位 herdr 绕过唯一入口或缺 --session（白名单除外）"
+t4_assert_eq "" "$(t4_scan_herdr_bare_calls "$T4_ROOT/tests/t4")" \
+  "#96 护栏: 含 lib-backend.sh 的同判据也 0 命中（唯一入口体内两条均带 --session，非靠函数体豁免兜住）"
+# 人造违规夹具（在 /tmp：$T4_CACHE_DIR 下）：四种形态必须命中并点名，三种合规形态必须放行。
+# 夹具正文用 @HERDR@ 占位再替换 —— 否则本用例自身源码会成为「命令行位裸 herdr」被自己扫到。
+FXH="$T4_CACHE_DIR/fxherdr-$$"
+rm -rf "$FXH"; mkdir -p "$FXH"
+printf '#!/usr/bin/env bash\nn="$(@HERDR@ workspace list | wc -l)"\n' > "$FXH/99-bare.sh"
+printf '#!/usr/bin/env bash\n@HERDR@ workspace list --session "$S"\n' > "$FXH/98-session-outside.sh"
+printf '#!/usr/bin/env bash\n_be_herdr_exec() {\n  local s="$1"; shift\n  exec @HERDR@ workspace list\n}\n' > "$FXH/96-entry-nosession.sh"
+printf '#!/usr/bin/env bash\n@HERDR@ --help\n' > "$FXH/94-help.sh"
+printf '#!/usr/bin/env bash\n_be_herdr_exec() {\n  local s="$1"; shift\n  exec @HERDR@ --session "$s" "$@"\n}\n' > "$FXH/97-entry-session.sh"
+printf '#!/usr/bin/env bash\n@HERDR@ --version\n' > "$FXH/95-version.sh"
+printf '#!/usr/bin/env bash\n# 注释里的 herdr workspace list 不纳管\n   # 缩进注释 @HERDR@ workspace list\n' > "$FXH/93-comment.sh"
+sed -i 's/@HERDR@/herdr/g' "$FXH"/*.sh
+HD_NEG="$(t4_scan_herdr_bare_calls "$FXH")"
+t4_assert_ne "" "$HD_NEG" "#96 护栏负控: 人造违规被命中（非空转）"
+t4_assert_eq "4" "$(printf '%s\n' "$HD_NEG" | grep -c .)" "#96 护栏负控: 恰 4 条命中（不漏判也不误判）"
+t4_assert_contains "$HD_NEG" "99-bare.sh" "#96 护栏负控: 点名裸调用（命令行位缺 --session）"
+t4_assert_contains "$HD_NEG" "98-session-outside.sh" "#96 护栏负控: 点名绕过唯一入口（函数体外即使带 --session 也算旁路）"
+t4_assert_contains "$HD_NEG" "96-entry-nosession.sh" "#96 护栏负控: 点名唯一入口体内缺 --session（不做函体豁免）"
+t4_assert_contains "$HD_NEG" "94-help.sh" "#96 护栏负控: 点名 herdr --help（白名单不是「所有 -- 旗标」）"
+t4_assert_not_contains "$HD_NEG" "97-entry-session.sh" "#96 护栏: 唯一入口体内带 --session ⇒ 放行（合规形态不误判）"
+t4_assert_not_contains "$HD_NEG" "95-version.sh" "#96 护栏正控: 仅 herdr --version ⇒ 白名单放行"
+t4_assert_not_contains "$HD_NEG" "93-comment.sh" "#96 护栏: 注释行（含缩进注释）不纳管"
+# 白名单正控（单文件目录）：只放 `herdr --version` ⇒ 0 命中；白名单不得是空转
+FXHWL="$T4_CACHE_DIR/fxherdrwl-$$"
+rm -rf "$FXHWL"; mkdir -p "$FXHWL"
+printf '#!/usr/bin/env bash\n@HERDR@ --version | sed -nE "s/^@HERDR@[[:space:]]+([0-9.]+)$/\\1/p"\n' > "$FXHWL/01-version.sh"
+sed -i 's/@HERDR@/herdr/g' "$FXHWL"/*.sh
+t4_assert_eq "" "$(t4_scan_herdr_bare_calls "$FXHWL")" "#96 护栏正控: 只 herdr --version ⇒ 判据放行（白名单命中即跳）"
+rm -rf "$FXHWL"
+# 变异自证（子进程只替换 lint，断言原样复刻）：改松 / 丢白名单 ⇒ 必当场红并点名
+MUT96="$T4_CACHE_DIR/mut96-$$.sh"
+cat > "$MUT96" <<'SH'
+#!/usr/bin/env bash
+source "$MUT_LIB" >/dev/null 2>&1
+kind="$1"; cases="$2"; fx="$3"
+case "$kind" in
+  allow-all) t4_scan_herdr_bare_calls() { :; } ;;
+  drop-whitelist) t4_scan_herdr_bare_calls() {
+      local dir="$1" f ln lnno body body_trim fstart fend inbody
+      local re='(^|[|;&(]|\$\(|\{)[[:space:]]*(exec[[:space:]]+)?(setsid[[:space:]]+)?herdr([[:space:]]|$)'
+      local sess='--session([[:space:]]|=|$)'
+      for f in "$dir"/*.sh; do
+        [ -f "$f" ] || continue
+        fstart="$(grep -n '^_be_herdr_exec()' "$f" 2>/dev/null | head -1 | cut -d: -f1)"
+        fend=""
+        [ -n "$fstart" ] && fend="$(awk -v s="$fstart" 'NR>s && /^}/ {print NR; exit}' "$f")"
+        while IFS= read -r ln; do
+          lnno="${ln%%:*}"; body="${ln#*:}"
+          body_trim="${body#"${body%%[![:space:]]*}"}"
+          case "$body_trim" in \#*) continue;; esac
+          inbody=0
+          if [ -n "$fstart" ] && [ "$lnno" -ge "$fstart" ] && { [ -z "$fend" ] || [ "$lnno" -le "$fend" ]; }; then inbody=1; fi
+          [ "$inbody" = "1" ] && grep -qE -- "$sess" <<< "$body" && continue
+          printf '%s:%s:%s\n' "$(basename "$f")" "$lnno" "$body_trim"
+        done < <(grep -nE "$re" "$f")
+      done
+    } ;;
+esac
+out="$(t4_scan_herdr_bare_calls "$fx")"
+t4_assert_ne "" "$out" "#96 护栏: 人造违规必红并点名"
+t4_assert_eq "4" "$(printf '%s\n' "$out" | grep -c .)" "#96 护栏: 恰 4 条命中"
+t4_assert_eq "" "$(t4_scan_herdr_bare_calls "$cases")" "#96 护栏: 全 cases 目录 0 命中"
+t4_exit
+SH
+mut_out="$(MUT_LIB="$T4_ROOT/tests/t4/lib.sh" bash "$MUT96" allow-all "$HD_CASES" "$FXH" 2>&1)"; mut_rc=$?
+t4_assert_eq "1" "$mut_rc" "#96 变异自证(允许裸调用): 复刻断言翻红（rc=1，不静默通过）"
+t4_assert_contains "$mut_out" "[FAIL] #96 护栏: 人造违规必红并点名" "#96 变异自证(允许裸调用): 点名翻红的是「人造违规必红」断言"
+mut_out="$(MUT_LIB="$T4_ROOT/tests/t4/lib.sh" bash "$MUT96" drop-whitelist "$HD_CASES" "$FXH" 2>&1)"; mut_rc=$?
+t4_assert_eq "1" "$mut_rc" "#96 变异自证(丢白名单): 复刻断言翻红（rc=1）"
+t4_assert_contains "$mut_out" "[FAIL] #96 护栏: 全 cases 目录 0 命中" "#96 变异自证(丢白名单): 点名翻红的是「全目录 0 命中」（cases/27 的 herdr --version 被误判）"
+rm -f "$MUT96"; rm -rf "$FXH"
+
 # --- M20261109：pi 版本阈值的**单一事实**（MIN_PI_VERSION）-------------------------
 # 判据：常量只有一份（脚本内该版本字面量恰 1 次）；比较阈值由它派生（无魔术数 4/1）；
 #       三处文案插值；活体负控抬到 9.9.9 后**文案与判据自洽**（不再出现「1.4.0 < 1.4.0」）。

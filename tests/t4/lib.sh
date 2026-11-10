@@ -178,6 +178,52 @@ t4_scan_host_pane_refs() { # $1=用例目录
   done
 }
 
+# #96 延长线（步 2b）herdr 侧行级 lint：命令行位出现 `herdr` 必须**既在唯一入口
+#   `_be_herdr_exec` 函数体内、又同串带 `--session`**（不在函数体 ⇒ 旁路；缺 `--session` ⇒
+#   实测会静默读到用户 `default` 会话）。与上面 `t4_scan_host_pane_refs` 对称：行级、静态、
+#   只看命令位（行首 / | ; & ( $( { 之后，可带 exec/setsid 前缀），注释行跳过，输出
+#   "basename:line:content"（同格式）。
+#   判定（违规 = 以下同时成立）：① 命令位命中 herdr ② **不满足**「命中行在 `_be_herdr_exec`
+#   函数体内」③ **不满足**「命中行带 `--session`」（② 与 ③ 是 AND 关系：任缺其一即违规 ——
+#   函数体外带 `--session` 仍是旁路，函数体内缺 `--session` 仍会打到用户会话）
+#   ④ 且不命中白名单。
+#   白名单（显式且最小，只有这一条，逐条给理由）：
+#     · `herdr --version` —— 纯本地元数据：不读会话、不连 server、不写任何用户文件，
+#       也因此无法经唯一入口注入 `--session`（唯一入口的契约正是「注入 --session」）。
+#       除它之外**没有**第二条：`--help` / 其它 `--` 旗标都不在白名单内（白名单不是「所有旗标」），
+#       新增条目必须在此逐条写理由 —— 禁止留「以后可能要加」的口子。
+#   函数体边界：文件内首个 `^_be_herdr_exec() {` 到其后首个 `^}`；一个文件最多认一个入口
+#   （多个入口 = 单点契约已破，属另案）。
+#   固有边界（行级静态，不解析引号/续行/数据流）：字符串字面量里的 `herdr …` 不纳管
+#   （本仓报错文案含该类文本）；跨行的 `herdr \` + 换行 `--session` 会误判为缺 `--session`
+#   （行级 lint 不拼接续行）；`--session` 写在同行注释里会被误当合规（不回看引号/注释归属）。
+#   覆盖面：tmux 侧那条守「裸 socket」，本 lint 守「绕过唯一入口 / 缺会话参数」—— 两者都**不**
+#   判 herdr 的语义正确性（隔离/私有根见 `lib-backend.sh` 与 `cases/27`）。
+t4_scan_herdr_bare_calls() { # $1=用例目录（扫其 *.sh）
+  local dir="$1" f ln lnno body body_trim fstart fend inbody
+  local re='(^|[|;&(]|\$\(|\{)[[:space:]]*(exec[[:space:]]+)?(setsid[[:space:]]+)?herdr([[:space:]]|$)'
+  local wl='herdr[[:space:]]+--version([[:space:]]|$)'
+  local sess='--session([[:space:]]|=|$)'
+  for f in "$dir"/*.sh; do
+    [ -f "$f" ] || continue
+    fstart="$(grep -n '^_be_herdr_exec()' "$f" 2>/dev/null | head -1 | cut -d: -f1)"
+    fend=""
+    [ -n "$fstart" ] && fend="$(awk -v s="$fstart" 'NR>s && /^}/ {print NR; exit}' "$f")"
+    while IFS= read -r ln; do
+      lnno="${ln%%:*}"; body="${ln#*:}"
+      body_trim="${body#"${body%%[![:space:]]*}"}"     # 缩进注释先 trim 再判注释符（与 #93 P3-2 同口径）
+      case "$body_trim" in \#*) continue;; esac
+      grep -qE -- "$wl" <<< "$body" && continue          # 白名单（只有 herdr --version）
+      inbody=0
+      if [ -n "$fstart" ] && [ "$lnno" -ge "$fstart" ] && { [ -z "$fend" ] || [ "$lnno" -le "$fend" ]; }; then
+        inbody=1
+      fi
+      [ "$inbody" = "1" ] && grep -qE -- "$sess" <<< "$body" && continue
+      printf '%s:%s:%s\n' "$(basename "$f")" "$lnno" "$body_trim"
+    done < <(grep -nE "$re" "$f")
+  done
+}
+
 # #93 语义化 lint：真实缺陷类「全 server 计数（`list-panes -a`）+ 顺序启发式挑尾（`| tail -1`）」。
 #   病根见 #84 P3-2：这类写法**普遍带 `-S`**（同一隔离 server 内跨块/跨次累积残留），
 #   上面那条「命令行位裸 tmux 必须 -S」的行级 lint 对它零覆盖。
