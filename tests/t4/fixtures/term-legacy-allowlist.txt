@@ -1,0 +1,28 @@
+# #96 二期 B1 · 门面外裸后端调用台账（**只减不增**）
+#
+# 背景：B1 只把 status 的判定面收进门面（term_require / term_snapshot / term_liveness / term_argv）；
+#   spawn（ensure）、回收（close/cleanup）、布局、check 的终端前提仍直接调 tmux，迁移归 B2/B3/B4。
+#   本台账 = 那些「已知且已归口」的函数；台账外任何新的裸 `tmux` 调用都会被
+#   `tests/t4/lib.sh::t4_scan_term_bare_calls` 判红。
+#
+# 格式（TAB 分隔）：<函数名>  <归口批次>  <理由>
+# 校验（`t4_verify_term_ledger`，用例 06）：
+#   ① 函数必须真实存在（typo ⇒ 红）
+#   ② 函数体必须**仍**含裸后端调用（已迁移却留条目 = stale ⇒ 红，强制只减不增）
+#   ③ 去重；④ 渲染层/门面函数（cmd_status / visible_session_names / pane_cwd_snapshot /
+#      running / term_*）**禁入**台账
+#   ⑤ 条目数只允许下降：`baseline` = 立台账时的条目数，超出 ⇒ 红。
+# 判据边界（与 t4_scan_host_pane_refs 同一前缀集，不另造正则）：`if ! tmux …` / `env tmux …` /
+#   `bash -c "tmux …"` / 反引号 / 变量间接拼装**不纳管**（行级静态 lint 的已知漏判）。
+#   status 路径的「herdr 模式零 tmux 调用」由用例 28 的 PATH 桩**动态**断言兜住（比静态更硬）。
+#
+# baseline: 8
+#
+pane_hosts_caller	B3	close 的「不杀自己」闸门（pane_pid 祖先链）；随 close 回收面一并迁门面
+pane_busy	B3	close 的「在跑 turn」pane 级补充信号（capture-pane）；herdr 侧改用 agent_status
+cmd_close	B3	回收落地（kill-pane / pane cwd 校正）；herdr 分支 B3 才实现
+apply_main_col	B4	main-col 布局（三期 workspace/tab 拓扑替换）
+apply_tmux_layout	B4	布局应用与窄列回退（三期布局面）
+resolve_host_window	B2	派生宿主窗口定位（spawn 前置；B2 起 pane 时替换）
+spawn_tmux	B2	唯一 split-window 调用点（spawn 落地）
+cmd_check	B4	check 的终端前提诊断行（`tmux display-message -p '#S'`）；B4 随 check 终端前提迁移
