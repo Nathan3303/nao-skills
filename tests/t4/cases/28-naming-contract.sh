@@ -22,6 +22,9 @@
 #   目标集 9 个（7 常驻 + `--task T1` + `--card`），**全不设 scope** ⇒ BR1 逐字等价。
 #   另守卫（Issue #78 P3-1 同口径）：fixture 正文 md5 必须 ≠ 被测脚本正文 md5（防自等价恒绿）。
 #
+# B3（#96 二期）节：herdr close / cleanup 回收面（忙闲闸门 BR7 / self 判据 / effect 判据 /
+#   同义反复防护：tmux 落地段 golden md5），详见文件末尾「B3」节头。
+#
 # C3 单写点 lint（静态、变异负控在 $T4_CACHE_DIR 的副本上做，绝不写工作区）：
 #   ① `grep -c 'exec pi --name'` == 1（唯一 exec 点）
 #   ② 契约块**外**正文 0 命中 `<name|disp|core>="?(${…}|$ident)-${?(task|TASK)`（禁名字**与** core 拼接）
@@ -1159,5 +1162,587 @@ t4_assert_not_contains "$(printf '%s\n' "$RBE_LINES" | grep -F -- '·scope=todo'
   "P3-3① ·scope 行只出现在带 scope 的那条上（不是裸名行被追加字段）"
 t4_assert_contains "$T4_OUT_ANSI" "rd-be@todo" \
   "P2-1 正控C：带 scope 常驻可在 status 定位（不整条消失）"
+
+
+# ============================================================================
+# B3（#96 二期 · 用例 28 内嵌节）：herdr 回收面 close / cleanup
+#   报告 = docs/reports/96b3-close-cleanup.md；本节独立可跑（`bash <本节所在文件>` 不单列，
+#   但断言全部后端无关：用有状态 herdr 桩，不启真 server / 不碰用户 default）。
+#   组：① BR1 tmux 逐字 golden md5 ② 忙闲闸门 BR7 ③ 名册第二信号 OR ④ 五档证据 fail-closed
+#       ⑤ self 三态 ⑥ 恢复窗口 ⑦ effect 判据 ⑧ cleanup 守卫与幂等
+# ============================================================================
+
+FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+BASH_BIN="$(command -v bash)"
+B3_LAB="$T4_CACHE_DIR/c29-$$"
+B3_ST="$B3_LAB/st"
+B3_BIN="$B3_LAB/bin"
+B3_CFG="$B3_LAB/cfg"
+B3_SESS="nao-b3-unit"
+B3_TASKS="$B3_LAB/tasks-state.md"
+
+rm -rf "$B3_LAB"; mkdir -p "$B3_LAB" "$B3_BIN" "$B3_CFG/herdr/sessions/$B3_SESS"
+cp -r "$T4_ROOT/.agents" "$B3_LAB/.agents" || t4_bad "夹具复制 .agents 失败"
+printf '# c29 tasks-state 夹具（T9001 = 进行态 ⇒ tasks-state 闸门仍咬）\n\n## 进行中\n\n| 任务 | 状态 |\n| :-- | :-- |\n| T9001 | active |\n' > "$B3_TASKS"
+# 名册探针桩：假 tsx 按 env 输出 roster（只读；不需要真 pi-intercom/tsx）
+mkdir -p "$B3_LAB/pi-roster/npm/node_modules/tsx/dist" "$B3_LAB/pi-roster/npm/node_modules/pi-intercom"
+cat > "$B3_LAB/pi-roster/npm/node_modules/tsx/dist/cli.mjs" <<'JS'
+process.stdout.write(process.env.NAO_QA_FAKE_ROSTER || "[]");
+JS
+printf '# c29 名册探针占位（假 tsx 忽略参数，只按 env 输出）\n' > "$B3_LAB/.agents/scripts/intercom-probe.mts"
+
+# ============================================================================
+# 有状态 herdr 桩：panes = pane_id|label|fg|cwd|ws；agents = pane_id|status|seq|skip|sess
+#   sessions = name|status；special fg：phantom（pane_not_found）/ internal / empty
+#   开关：HERDR_STUB_SELF=1（shell_pid=$PPID ⇒ 判「调用者自身」）· HERDR_STUB_SHELL_PID=<n>
+#         $ST/close_noop（close 无效）· $ST/delete_noop（delete 无效）
+# ============================================================================
+cat > "$B3_BIN/herdr" <<'SH'
+#!/usr/bin/env bash
+ST="${HERDR_STUB_STATE:?}"
+printf 'herdr %s\n' "$*" >> "$ST/calls.log"
+if [ "${1:-}" = "--session" ]; then shift 2; fi
+cmd="${1:-}"; shift || true
+pane_field() { # <pane_id> <field 1..5>
+  awk -F'|' -v p="$1" -v f="$2" '$1==p{print $f; exit}' "$ST/panes" 2>/dev/null
+}
+panes_json() {
+  local first=1 pid label fg cwd ws out=""
+  while IFS='|' read -r pid label fg cwd ws; do
+    [ -n "$pid" ] || continue
+    if [ -n "${WSFILTER:-}" ] && [ "$ws" != "$WSFILTER" ]; then continue; fi
+    [ "$first" = 1 ] || out+=","
+    first=0
+    out+="{\"pane_id\":\"$pid\",\"label\":\"$label\",\"cwd\":\"$cwd\",\"foreground_cwd\":\"$cwd\",\"agent_status\":\"unknown\",\"terminal_id\":\"term_$pid\",\"workspace_id\":\"${ws:-w1}\"}"
+  done < "$ST/panes" 2>/dev/null
+  printf '{"result":{"panes":[%s],"type":"pane_list"}}\n' "$out"
+}
+agents_json() {
+  local first=1 pid stat seq skip sess sessj skipj out=""
+  while IFS='|' read -r pid stat seq skip sess; do
+    [ -n "$pid" ] || continue
+    if [ "$sess" = "-" ] || [ -z "$sess" ]; then sessj="null"; else sessj="{\"agent\":\"pi\",\"kind\":\"id\",\"value\":\"$sess\"}"; fi
+    if [ "$skip" = "1" ]; then skipj="true"; else skipj="false"; fi
+    [ "$first" = 1 ] || out+=","
+    first=0
+    out+="{\"agent\":\"pi\",\"agent_session\":$sessj,\"agent_status\":\"${stat:-unknown}\",\"pane_id\":\"$pid\",\"screen_detection_skipped\":$skipj,\"state_change_seq\":${seq:-0}}"
+  done < "$ST/agents" 2>/dev/null
+  printf '{"result":{"agents":[%s],"type":"agent_list"}}\n' "$out"
+}
+sessions_json() {
+  local first=1 n s out=""
+  [ -f "$ST/sessions" ] || : > "$ST/sessions"
+  while IFS='|' read -r n s; do
+    [ -n "$n" ] || continue
+    [ "$first" = 1 ] || out+=","
+    first=0
+    if [ "$s" = "running" ]; then runj=true; else runj=false; fi
+    out+="{\"default\":$([ "$n" = default ] && echo true || echo false),\"name\":\"$n\",\"running\":$runj,\"session_dir\":\"$HERDR_STUB_CFG/herdr/sessions/$n\",\"socket_path\":\"$HERDR_STUB_CFG/herdr/sessions/$n/herdr.sock\"}"
+  done < "$ST/sessions"
+  printf '{"sessions":[%s]}\n' "$out"
+}
+case "$cmd" in
+  --version) echo 'herdr 0.9.1' ;;
+  api)
+    case "${1:-}" in
+      schema) printf 'Herdr API schema\nprotocol: 22\n' ;;
+      snapshot) printf '{"sessions":[],"type":"snapshot"}\n' ;;
+      *) exit 1 ;;
+    esac ;;
+  pane)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      list)
+        WSFILTER=""
+        if [ "${1:-}" = "--workspace" ]; then WSFILTER="${2:-}"; fi
+        panes_json ;;
+      process-info)
+        pid=""
+        while [ "$#" -gt 0 ]; do case "$1" in --pane) pid="${2:-}"; shift 2 ;; *) shift ;; esac; done
+        fg="$(pane_field "$pid" 3)"; label="$(pane_field "$pid" 2)"
+        [ -n "$pid" ] || { printf '{"error":{"code":"pane_not_found","message":"no pane"}}\n' >&2; exit 1; }
+        # 第 N 次起失败（模拟：快照取到 pi，落到回收前的 process-info 探针才失败）
+        cnt_file="$ST/pi-count.${pid//:/_}"
+        cnt=$(( $(cat "$cnt_file" 2>/dev/null || echo 0) + 1 )); echo "$cnt" > "$cnt_file"
+        if [ "${HERDR_STUB_PI_FAIL_FROM:-0}" != "0" ] && [ "$cnt" -ge "${HERDR_STUB_PI_FAIL_FROM:-0}" ]; then
+          if [ "${HERDR_STUB_PI_FAIL_KIND:-internal}" = "empty" ]; then exit 0; fi
+          printf '{"error":{"code":"internal_error","message":"boom"}}\n' >&2
+          exit 1
+        fi
+        case "$fg" in
+          phantom)
+            printf '{"error":{"code":"pane_not_found","message":"pane %s not found (replay)"}}\n' "$pid" >&2
+            exit 1 ;;
+          internal)
+            printf '{"error":{"code":"internal_error","message":"boom"}}\n' >&2
+            exit 1 ;;
+          empty) exit 0 ;;
+        esac
+        shell=""
+        if [ -f "$ST/selfpanes" ] && grep -qxF "$pid" "$ST/selfpanes"; then
+          shell="${HERDR_STUB_SELF_PID:-}"
+        elif [ "${HERDR_STUB_SELF:-0}" = "1" ]; then shell="$PPID"
+        elif [ -n "${HERDR_STUB_SHELL_PID:-}" ]; then shell="$HERDR_STUB_SHELL_PID"; fi
+        shellj=""; [ -n "$shell" ] && shellj=",\"shell_pid\":$shell"
+        if [ "$fg" = "pi" ]; then
+          printf '{"result":{"process_info":{"foreground_processes":[{"argv":["/usr/bin/pi","--name","%s"],"name":"pi","pid":1}],"pane_id":"%s"%s}}}\n' "$label" "$pid" "$shellj"
+        elif [ "$fg" = "pi-badname" ]; then
+          printf '{"result":{"process_info":{"foreground_processes":[{"argv":["/usr/bin/pi","--name","somebody-else"],"name":"pi","pid":1}],"pane_id":"%s"%s}}}\n' "$pid" "$shellj"
+        else
+          printf '{"result":{"process_info":{"foreground_processes":[{"argv":["/usr/bin/%s"],"name":"%s","pid":1}],"pane_id":"%s"%s}}}\n' "${fg:-bash}" "${fg:-bash}" "$pid" "$shellj"
+        fi ;;
+      close)
+        pid="${1:-}"
+        if [ -f "$ST/close_noop" ]; then exit 0; fi   # 无 effect：rc=0 但 pane 仍在
+        grep -v "^$pid|" "$ST/panes" > "$ST/panes.new" 2>/dev/null || true
+        [ -f "$ST/panes.new" ] && mv "$ST/panes.new" "$ST/panes" ;;
+      *) exit 1 ;;
+    esac ;;
+  agent)
+    case "${1:-}" in
+      list) agents_json ;;
+      *) exit 1 ;;
+    esac ;;
+  session)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      list)
+        sessions_json ;;
+      stop)
+        n="${1:-}"
+        st="$(awk -F'|' -v n="$n" '$1==n{print $2}' "$ST/sessions" 2>/dev/null)"
+        if [ "$st" != "running" ]; then
+          printf '{"error":{"code":"session_stop_failed","message":"session %s is not running"}}\n' "$n" >&2
+          exit 1
+        fi
+        awk -F'|' -v n="$n" 'BEGIN{OFS="|"} $1==n{$2="stopped"} {print}' "$ST/sessions" > "$ST/sessions.new"
+        mv "$ST/sessions.new" "$ST/sessions"
+        echo "stopped session $n" ;;
+      delete)
+        n="${1:-}"
+        if [ -f "$ST/delete_noop" ]; then echo "deleted session $n"; exit 0; fi
+        grep -v "^$n|" "$ST/sessions" > "$ST/sessions.new" 2>/dev/null || true
+        [ -f "$ST/sessions.new" ] && mv "$ST/sessions.new" "$ST/sessions"
+        rm -rf "$HERDR_STUB_CFG/herdr/sessions/$n" 2>/dev/null || true
+        echo "deleted session $n" ;;
+      *) exit 1 ;;
+    esac ;;
+  *) exit 1 ;;
+esac
+exit 0
+SH
+chmod +x "$B3_BIN/herdr"
+
+t4_assert_file "$FLEET" "被测脚本存在"
+t4_assert_file "$B3_BIN/herdr" "有状态 herdr 桩就绪（B3 全部断言不启真 server）"
+
+B3_ENV=(env HERDR_ENV=1 HERDR_SESSION="$B3_SESS" HERDR_PANE_ID="w9:p9"
+  XDG_CONFIG_HOME="$B3_CFG" HERDR_SOCKET_PATH="$B3_CFG/herdr/sessions/$B3_SESS/herdr.sock"
+  HERDR_STUB_STATE="$B3_ST" HERDR_STUB_CFG="$B3_CFG"
+  NAO_SKILLS="$B3_LAB" PI_CODING_AGENT_DIR="$B3_LAB/pi-roster"
+  NAO_TASKS_STATE="$B3_TASKS" PATH="$B3_BIN:$PATH")
+
+b3_reset() { # 清桩状态（每场景一份）
+  rm -rf "$B3_ST"; mkdir -p "$B3_ST"
+  : > "$B3_ST/panes"; : > "$B3_ST/agents"; : > "$B3_ST/sessions"; : > "$B3_ST/calls.log"
+}
+b3_panes() { printf '%s\n' "$@" > "$B3_ST/panes"; }
+b3_agents() { printf '%s\n' "$@" > "$B3_ST/agents"; }
+b3_run() { # <args...> → 输出落 T4_OUT/T4_ERR（ANSI 已剥）
+  t4_run_in_dir "$B3_LAB" "${B3_ENV[@]}" NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$FLEET" "$@"
+  T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+}
+b3_oe() { printf '%s\n%s' "$T4_OUT_ANSI" "$T4_ERR_ANSI"; }        # 合并视图（stdout+stderr）
+b3_calls() { grep -cE "$1" "$B3_ST/calls.log" 2>/dev/null || true; }
+b3_close_calls() { b3_calls '^herdr .*pane close( |$)'; }
+
+# ============================================================================
+# ① BR1 静态：tmux 落地段与 B3 之前**逐字**相等（golden md5；不是「把当前脚本当基线」）
+#   golden 取自 B3 之前的 main（e98ed49）：句柄层 9549f5… · cleanup 体 d89371… · socket 候选 e4950f…
+# ============================================================================
+GOLD_RECLAIM="9549f513b7a66fbced68bc1a1fa1dc10"
+GOLD_CLEANUP="d8937134bb3ed4ceca29fb581d4acf2c"
+GOLD_SOCK="e4950f3897670a97d7baaea8f54727c3"
+md5_of() { md5sum | awk '{print $1}'; }
+RECLAIM_MD5="$(awk '/^  # ---- 宿主句柄定位（跨仓）/{f=1} f{print} f&&/^}/{exit}' "$FLEET" | md5_of)"
+CLEANUP_MD5="$(awk '/^_term_tmux_cleanup\(\) \{/{f=1;next} f{print} f&&/^}/{exit}' "$FLEET" | md5_of)"
+SOCK_MD5="$(awk '/^prod_sock_candidates\(\) \{/{f=1;print;next} f{print} f&&/^}/{exit}' "$FLEET" | md5_of)"
+t4_assert_ne "" "$RECLAIM_MD5" "BR1 句柄层段可提取（非空 ⇒ 下面的 md5 断言不是空转）"
+t4_assert_eq "$GOLD_RECLAIM" "$RECLAIM_MD5" \
+  "BR1 tmux close 句柄层（定位→self→忙闲→kill）与 B3 之前逐字相等（md5 $RECLAIM_MD5）"
+t4_assert_eq "$GOLD_CLEANUP" "$CLEANUP_MD5" \
+  "BR1 tmux cleanup 体（-S 守卫/默认 socket 拒绝/kill-server）与 B3 之前逐字相等（md5 $CLEANUP_MD5）"
+t4_assert_eq "$GOLD_SOCK" "$SOCK_MD5" "BR1 生产默认 socket 候选表逐字相等（md5 $SOCK_MD5）"
+# 变异自证：在**被钉住的段内**改一个字符 ⇒ md5 必变（判据不是恒真）
+sed 's|if tmux kill-pane -t "$pane" 2>/dev/null; then|if tmux kill-pane -t "$pane"  2>/dev/null; then|' \
+  "$FLEET" > "$B3_LAB/mut-fleet.sh"
+t4_assert_ne "$RECLAIM_MD5" "$(awk '/^  # ---- 宿主句柄定位（跨仓）/{f=1} f{print} f&&/^}/{exit}' "$B3_LAB/mut-fleet.sh" | md5_of)" \
+  "BR1 变异自证：句柄层内多一个空格 ⇒ 同一 md5 判据必红（golden 不是空转）"
+
+# ---- 结构：移入的 tmux 函数在标记区内；cmd_close 只剩门面调用 ----
+B3_TMUX_BEGIN="$(grep -n '^# >>> term-impl-tmux BEGIN (回收 / 自身判定 / 忙闲)$' "$FLEET" | cut -d: -f1)"
+B3_TMUX_END="$(grep -n '^# <<< term-impl-tmux END (回收 / 自身判定 / 忙闲)$' "$FLEET" | cut -d: -f1)"
+t4_assert_ne "" "$B3_TMUX_BEGIN" "B3 新增 tmux 标记区存在（回收 / 自身判定 / 忙闲）"
+for fn in pane_hosts_caller self_pane_refuse pane_busy _term_tmux_reclaim _term_tmux_cleanup prod_sock_candidates; do
+  ln="$(grep -n "^${fn}() {" "$FLEET" | cut -d: -f1 | head -1)"
+  t4_assert_eq "1" "$([ -n "$ln" ] && [ "$ln" -gt "$B3_TMUX_BEGIN" ] && [ "$ln" -lt "$B3_TMUX_END" ] && echo 1 || echo 0)" \
+    "B3 ${fn} 定义在 tmux 标记区内（$ln ∈ ($B3_TMUX_BEGIN,$B3_TMUX_END)）"
+done
+t4_assert_eq "1" "$(grep -cE '^  term_reclaim "\$name" "\$repo" "\$force" "\$core" "\$scope" "\$tgt"$' "$FLEET" || true)" \
+  "B3 cmd_close 只调门面 term_reclaim（共用闸门层原地不动）"
+t4_assert_eq "1" "$(grep -cE '^  term_cleanup "\$\{CLEANUP_SOCK:-\}" "\$\{SESSION_ARG:-\}"$' "$FLEET" || true)" \
+  "B3 cmd_cleanup 只调门面 term_cleanup（后端差异在门面后）"
+
+# ============================================================================
+# ② 忙闲闸门（BR7）：working / blocked ⇒ 拒；idle ⇒ 放行；unknown ⇒ fail-closed；--force 越过且 warn
+# ============================================================================
+for b3st in working blocked; do
+  b3_reset
+  b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1"
+  b3_agents "w1:p1|$b3st|2|1|sess-a"
+  b3_run close rd-fe
+  t4_assert_eq "1" "$T4_RC" "B3② agent_status=$b3st ⇒ close 拒绝（rc=1）"
+  t4_assert_contains "$(b3_oe)" "拒绝回收 rd-fe" "B3② $b3st：warn 点名拒绝"
+  t4_assert_contains "$(b3_oe)" "agent_status=$b3st" "B3② $b3st：理由回显 agent_status（可定位）"
+  t4_assert_contains "$(b3_oe)" "不可投递" "B3② $b3st：按 BR7 明说「不可投递」"
+  t4_assert_contains "$(b3_oe)" "--force" "B3② $b3st：给可执行指路（--force）"
+  t4_assert_eq "0" "$(b3_close_calls)" "B3② $b3st：**零 pane close**（不误杀在跑 turn）"
+  t4_assert_eq "1" "$(grep -c '^w1:p1|' "$B3_ST/panes" || true)" "B3② $b3st：pane 仍在（未被动过）"
+done
+
+b3_reset
+b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1"
+b3_agents "w1:p1|idle|3|1|sess-a"
+b3_run close rd-fe
+t4_assert_eq "0" "$T4_RC" "B3② agent_status=idle ⇒ close 放行（rc=0）"
+t4_assert_contains "$T4_OUT_ANSI" "已回收 rd-fe（herdr pane w1:p1）@ $B3_LAB" \
+  "B3② idle：成功行含 pane 与**pane 真实 cwd**（不是名册 cwd）"
+t4_assert_eq "1" "$(b3_close_calls)" "B3② idle：pane close 恰 1 次（唯一回收句柄）"
+t4_assert_eq "0" "$(grep -c '^w1:p1|' "$B3_ST/panes" || true)" "B3② idle：pane 已从现场消失（effect 达成）"
+t4_assert_eq "0" "$(grep -c 'kill' "$B3_ST/calls.log" || true)" "B3② idle：无任何 kill 兜底（不做 kill -9）"
+
+b3_reset
+b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1"
+b3_agents "w1:p1|unknown|2|1|sess-a"
+b3_run close rd-fe
+t4_assert_eq "1" "$T4_RC" "B3② agent_status=unknown ⇒ 拒（fail-closed，rc=1）"
+t4_assert_contains "$(b3_oe)" "unknown" "B3② unknown：理由回显状态"
+t4_assert_contains "$(b3_oe)" "--force" "B3② unknown：给 --force 指路"
+t4_assert_eq "0" "$(b3_close_calls)" "B3② unknown：零 pane close（不把 unknown 当空闲）"
+b3_run close --force rd-fe
+t4_assert_eq "0" "$T4_RC" "B3② unknown + --force ⇒ 放行（显式越过）"
+t4_assert_contains "$T4_ERR_ANSI" "越过忙闲闸门" "B3② --force 越过时**明确 warn**（不静默强杀）"
+t4_assert_eq "1" "$(b3_close_calls)" "B3② --force 越过：pane close 恰 1 次"
+
+# ---- tasks-state 闸门（共用层未动）：T9001 进行态 ⇒ 无 --force 拒 ----
+b3_reset
+b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1"
+b3_agents "w1:p1|idle|3|1|sess-a"
+b3_run close --task T9001 rd-fe
+t4_assert_eq "1" "$T4_RC" "B3② tasks-state 进行态（T9001）⇒ close 拒（共用闸门层仍咬）"
+t4_assert_contains "$(b3_oe)" "tasks-state 中 T9001 仍在进行态" "B3② tasks-state 闸门理由在位"
+t4_assert_eq "0" "$(b3_close_calls)" "B3② tasks-state 闸门先于任何回收动作"
+
+# ============================================================================
+# ③ 第二信号（OR）：agent_status=idle 但名册 thinking ⇒ 拒（prompt 后 300–400ms 的滞后窗口）
+# ============================================================================
+if command -v node >/dev/null 2>&1; then
+  B3_ROSTER_BUSY="[{\"name\":\"rd-fe\",\"status\":\"thinking\",\"cwd\":\"$B3_LAB\",\"tmuxPane\":\"%9\"}]"
+  t4_assert_contains "$(NAO_QA_FAKE_ROSTER="$B3_ROSTER_BUSY" PI_CODING_AGENT_DIR="$B3_LAB/pi-roster" \
+    node "$B3_LAB/pi-roster/npm/node_modules/tsx/dist/cli.mjs" x 2>/dev/null)" '"status":"thinking"' \
+    "B3③ 名册桩可用（假 tsx 按 env 输出 roster；非空转）"
+  b3_reset
+  b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1"
+  b3_agents "w1:p1|idle|3|1|sess-a"
+  t4_run_in_dir "$B3_LAB" "${B3_ENV[@]}" NAO_TERMINAL=herdr NAO_QA_FAKE_ROSTER="$B3_ROSTER_BUSY" \
+    timeout 60 "$BASH_BIN" "$FLEET" close rd-fe
+  T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  t4_assert_eq "1" "$T4_RC" "B3③ agent_status=idle + 名册 thinking ⇒ 拒（第二信号 OR 生效）"
+  t4_assert_contains "$T4_ERR_ANSI" "名册状态=thinking" "B3③ 理由点名名册状态（不是靠运气）"
+  t4_assert_contains "$T4_ERR_ANSI" "第二信号" "B3③ 文案说明这是 agent_status 滞后窗口的第二信号"
+  t4_assert_eq "0" "$(b3_close_calls)" "B3③ 第二信号命中 ⇒ 零 pane close"
+  # 正控：名册 idle 不阻塞（OR 的另一侧）
+  B3_ROSTER_IDLE="[{\"name\":\"rd-fe\",\"status\":\"idle\",\"cwd\":\"$B3_LAB\",\"tmuxPane\":\"%9\"}]"
+  b3_reset
+  b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1"
+  b3_agents "w1:p1|idle|3|1|sess-a"
+  t4_run_in_dir "$B3_LAB" "${B3_ENV[@]}" NAO_TERMINAL=herdr NAO_QA_FAKE_ROSTER="$B3_ROSTER_IDLE" \
+    timeout 60 "$BASH_BIN" "$FLEET" close rd-fe
+  t4_assert_eq "0" "$T4_RC" "B3③ 正控：名册 idle ⇒ 不阻塞（idle 两侧都放行）"
+  t4_assert_eq "1" "$(b3_close_calls)" "B3③ 正控：名册 idle ⇒ 放行并回收"
+else
+  t4_degrade "缺 node ⇒ 名册第二信号（OR）未执行（默认豁免、full 计分；BR7）"
+fi
+
+# ============================================================================
+# ④ 定位/证据 fail-closed：幽灵 / 集成缺失 / 前台非 pi / 身份不一致 / 同名歧义 / 缺席
+# ============================================================================
+# 幽灵 pane（label 在、agent 无）⇒ 拒 + --force；--force 才回收
+b3_reset
+b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1"
+: > "$B3_ST/agents"
+b3_run close rd-fe
+t4_assert_eq "1" "$T4_RC" "B3④ 幽灵 pane（无 agent 条目）⇒ 拒（fail-closed）"
+t4_assert_contains "$(b3_oe)" "无该 pane 条目" "B3④ 幽灵：理由点名「无 agent 条目」"
+t4_assert_contains "$(b3_oe)" "--force" "B3④ 幽灵：给 --force 指路"
+t4_assert_eq "0" "$(b3_close_calls)" "B3④ 幽灵：零 pane close（账面不确定 ⇒ 不杀）"
+b3_run close --force rd-fe
+t4_assert_eq "0" "$T4_RC" "B3④ 幽灵 + --force ⇒ 放行（显式越过）"
+t4_assert_contains "$T4_ERR_ANSI" "越过忙闲闸门" "B3④ 幽灵 --force：明确 warn"
+
+# 集成缺失（agent_session 空 / 钩子权威缺）⇒ 拒 + --force
+for b3im in "w1:p1|idle|2|1|-" "w1:p1|idle|2|0|sess-a"; do
+  b3_reset
+  b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1"
+  b3_agents "$b3im"
+  b3_run close rd-fe
+  t4_assert_eq "1" "$T4_RC" "B3④ 集成缺失（$b3im）⇒ 拒（状态不可信，fail-closed）"
+  t4_assert_contains "$(b3_oe)" "集成缺失" "B3④ 集成缺失：理由点名缺陷类"
+  t4_assert_contains "$(b3_oe)" "--force" "B3④ 集成缺失：给 --force 指路"
+  t4_assert_eq "0" "$(b3_close_calls)" "B3④ 集成缺失：零 pane close"
+done
+
+# 前台非 pi（agent 条目在）⇒ 拒 + --force
+b3_reset
+b3_panes "w1:p1|rd-fe|bash|$B3_LAB|w1"
+b3_agents "w1:p1|idle|2|1|sess-a"
+b3_run close rd-fe
+t4_assert_eq "1" "$T4_RC" "B3④ 前台非 pi ⇒ 拒（无生命周期证据，fail-closed）"
+t4_assert_contains "$(b3_oe)" "前台非 pi" "B3④ 前台非 pi：理由点名"
+t4_assert_contains "$(b3_oe)" "--force" "B3④ 前台非 pi：给 --force 指路"
+t4_assert_eq "0" "$(b3_close_calls)" "B3④ 前台非 pi：零 pane close（不误关用户程序）"
+
+# 身份不一致（argv --name ≠ label）⇒ **--force 也不越过**（定位不确定 ≠ 可强杀）
+b3_reset
+b3_panes "w1:p1|rd-fe|pi-badname|$B3_LAB|w1"
+b3_agents "w1:p1|idle|2|1|sess-a"
+b3_run close rd-fe
+t4_assert_eq "1" "$T4_RC" "B3④ 身份不一致 ⇒ 拒（rc=1）"
+t4_assert_contains "$(b3_oe)" "身份不一致" "B3④ 身份不一致：理由点名（禁猜）"
+t4_assert_eq "0" "$(b3_close_calls)" "B3④ 身份不一致：零 pane close"
+b3_run close --force rd-fe
+t4_assert_eq "1" "$T4_RC" "B3④ 身份不一致 + --force ⇒ 仍拒（跨会话撞号的代价不可接受）"
+t4_assert_contains "$(b3_oe)" "身份不一致" "B3④ 身份不一致 + --force：仍点名同一硬拒理由"
+t4_assert_eq "0" "$(b3_close_calls)" "B3④ 身份不一致 + --force：零 pane close（宁可少关一个）"
+
+# 同名 label 多 pane ⇒ 点名 + 不猜
+b3_reset
+b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1" "w1:p2|rd-fe|pi|$B3_LAB|w1"
+b3_agents "w1:p1|idle|2|1|sess-a" "w1:p2|idle|2|1|sess-b"
+b3_run close rd-fe
+t4_assert_eq "1" "$T4_RC" "B3④ 同名 label 多 pane ⇒ 拒（不猜）"
+t4_assert_contains "$(b3_oe)" "同名 label 命中 2 个 pane" "B3④ 歧义：warn 点名命中数"
+t4_assert_contains "$(b3_oe)" "w1:p1,w1:p2" "B3④ 歧义：回显全部 pane（可定位）"
+t4_assert_eq "0" "$(b3_close_calls)" "B3④ 歧义：零 pane close"
+# B2 转办②（B3）：--force 逐 pane 按安全判据清理重复 label（不猜「哪个是目标」）
+b3_run close --force rd-fe
+t4_assert_eq "0" "$T4_RC" "B3④ 歧义 + --force ⇒ 逐 pane 清理成功（rc=0）"
+t4_assert_contains "$T4_ERR_ANSI" "逐个按安全判据清理" "B3④ 歧义 + --force：明确口径（逐个按安全判据）"
+t4_assert_eq "2" "$(b3_close_calls)" "B3④ 歧义 + --force：两个 pane 各关一次"
+t4_assert_eq "0" "$(grep -c '^w1:p' "$B3_ST/panes" || true)" "B3④ 歧义 + --force：重复 label 已清空"
+b3_reset
+b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1" "w1:p2|rd-fe|pi|$B3_LAB|w1"
+b3_agents "w1:p1|idle|2|1|sess-a" "w1:p2|idle|2|1|sess-b"
+printf 'w1:p1\n' > "$B3_ST/selfpanes"
+t4_run_in_dir "$B3_LAB" "${B3_ENV[@]}" NAO_TERMINAL=herdr HERDR_STUB_SELF_PID="$$" \
+  timeout 60 "$BASH_BIN" "$FLEET" close --force rd-fe
+T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "1" "$T4_RC" "B3④ 歧义 + --force + 含调用者自身 ⇒ rc=1（部分完成不谎报全成功）"
+t4_assert_contains "$T4_ERR_ANSI" "跳过 pane w1:p1：判为调用者自身" "B3④ 歧义 + --force：自身 pane 被跳过并点名"
+t4_assert_eq "1" "$(b3_close_calls)" "B3④ 自身跳过：只关另一个（恰好 1 次）"
+t4_assert_eq "1" "$(grep -c '^w1:p1|' "$B3_ST/panes" || true)" "B3④ 自身跳过：调用者 pane 仍在"
+b3_reset
+b3_panes "w1:p1|rd-fe|phantom|$B3_LAB|w1" "w1:p2|rd-fe|pi|$B3_LAB|w1"
+b3_agents "w1:p1|idle|2|1|sess-a" "w1:p2|idle|2|1|sess-b"
+b3_run close --force rd-fe
+t4_assert_eq "1" "$T4_RC" "B3④ 歧义 + --force + 含恢复窗口 pane ⇒ rc=1（部分完成）"
+t4_assert_contains "$(b3_oe)" "跳过 pane w1:p1：明确 pane_not_found" "B3④ 恢复窗口 pane 被跳过并点名"
+t4_assert_eq "1" "$(b3_close_calls)" "B3④ 恢复窗口跳过：只关另一个"
+t4_assert_eq "1" "$(grep -c '^w1:p1|' "$B3_ST/panes" || true)" "B3④ 恢复窗口 pane 仍在（未被当垃圾）"
+
+# 缺席 ⇒ 「未运行（无需回收）」rc=0（幂等成功；不谎报失败）
+b3_reset
+b3_run close rd-fe
+t4_assert_eq "0" "$T4_RC" "B3④ label 无命中 ⇒ 未运行（无需回收）rc=0"
+t4_assert_contains "$T4_OUT_ANSI" "rd-fe 未运行（无需回收）" "B3④ 缺席：幂等成功行在位"
+t4_assert_eq "0" "$(b3_close_calls)" "B3④ 缺席：零 pane close"
+
+# 名册报在线但 label 无命中 ⇒ 非静默（rc=1，不谎报「未运行」）
+if command -v node >/dev/null 2>&1; then
+  B3_ROSTER_ANY="[{\"name\":\"rd-fe\",\"status\":\"idle\",\"cwd\":\"$B3_LAB\",\"tmuxPane\":\"%9\"}]"
+  b3_reset
+  t4_run_in_dir "$B3_LAB" "${B3_ENV[@]}" NAO_TERMINAL=herdr NAO_QA_FAKE_ROSTER="$B3_ROSTER_ANY" \
+    timeout 60 "$BASH_BIN" "$FLEET" close rd-fe
+  T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  t4_assert_eq "1" "$T4_RC" "B3④ 名册报在线 + label 无命中 ⇒ 非 0（不得谎报「未运行」）"
+  t4_assert_contains "$T4_ERR_ANSI" "名册报在线" "B3④ 理由点名名册与 label 的分歧"
+  t4_assert_not_contains "$T4_OUT_ANSI" "未运行（无需回收）" "B3④ 分歧时不得打「未运行」成功行"
+  t4_assert_eq "0" "$(b3_close_calls)" "B3④ 分歧：零 pane close"
+fi
+
+# ============================================================================
+# ⑤ self 判据（F1）：自身 pane ⇒ 拒；不可判定 + (session,pane) 全等 ⇒ 保守拒
+# ============================================================================
+# 确定的自身：桩把 shell_pid 报成 fleet 的父进程（即 close 进程的祖先）⇒ 祖先链命中
+b3_reset
+b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1"
+b3_agents "w1:p1|idle|2|1|sess-a"
+# shell_pid = 本用例进程（fleet 的祖先）⇒ 祖先链必命中；这是真 PID 断言，不是桩假装
+t4_run_in_dir "$B3_LAB" "${B3_ENV[@]}" NAO_TERMINAL=herdr HERDR_STUB_SHELL_PID="$$" \
+  timeout 60 "$BASH_BIN" "$FLEET" close --force rd-fe
+T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "1" "$T4_RC" "B3⑤ 自身 pane（shell_pid 祖先链命中）⇒ 拒（--force 也不越过）"
+t4_assert_contains "$T4_ERR_ANSI" "调用者自身" "B3⑤ 自身：理由点名"
+t4_assert_eq "0" "$(b3_close_calls)" "B3⑤ 自身：零 pane close（不得自灭）"
+t4_assert_eq "1" "$(grep -c '^w1:p1|' "$B3_ST/panes" || true)" "B3⑤ 自身：pane 仍在"
+
+# 不可判定（process-info 无 shell_pid）+ 目标 pane == HERDR_PANE_ID ⇒ 保守拒
+b3_reset
+b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1"
+b3_agents "w1:p1|idle|2|1|sess-a"
+b3_run close --force rd-fe   # 基础 env 的 HERDR_PANE_ID=w9:p9 ⇒ 不撞号
+t4_assert_eq "0" "$T4_RC" "B3⑤ 不可判定 + 不撞号（w9:p9 ≠ w1:p1）⇒ 放行（不误拒）"
+t4_assert_eq "1" "$(b3_close_calls)" "B3⑤ 不撞号：正常回收"
+b3_reset
+b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1"
+b3_agents "w1:p1|idle|2|1|sess-a"
+t4_run_in_dir "$B3_LAB" "${B3_ENV[@]}" HERDR_PANE_ID="w1:p1" NAO_TERMINAL=herdr \
+  timeout 60 "$BASH_BIN" "$FLEET" close --force rd-fe
+T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "1" "$T4_RC" "B3⑤ 不可判定 + (session,pane) 全等 ⇒ 保守拒（T530 三态）"
+t4_assert_contains "$T4_ERR_ANSI" "调用者自身" "B3⑤ 全等：理由点名"
+t4_assert_eq "0" "$(b3_close_calls)" "B3⑤ 全等：零 pane close"
+
+# ============================================================================
+# ⑥ 恢复窗口：process-info 明确 pane_not_found ⇒ **不回收**（不可寻址 ≠ 可回收）
+# ============================================================================
+b3_reset
+b3_panes "w1:p1|rd-fe|phantom|$B3_LAB|w1"
+b3_agents "w1:p1|idle|2|1|sess-a"
+b3_run close --force rd-fe
+t4_assert_eq "1" "$T4_RC" "B3⑥ stop→restart 回放/恢复窗口（pane_not_found）⇒ 拒（--force 也不越过）"
+t4_assert_contains "$(b3_oe)" "pane_not_found" "B3⑥ 明确点名 pane_not_found（判据不是「任意错误」）"
+t4_assert_contains "$(b3_oe)" "不得当可回收" "B3⑥ 文案钉住语义（恢复中 ≠ 可回收）"
+t4_assert_eq "0" "$(b3_close_calls)" "B3⑥ 零 pane close（不把恢复中的 pane 当垃圾）"
+
+# 其它 process-info 错误（internal / 空输出）：快照取到 pi，落到回收前的探针才失败
+#   ⇒ 拒（不可判 ⇒ 宁可少关一个）；--force 显式越过且明确 warn
+for b3bad in internal empty; do
+  b3_reset
+  b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1"
+  b3_agents "w1:p1|idle|2|1|sess-a"
+  t4_run_in_dir "$B3_LAB" "${B3_ENV[@]}" NAO_TERMINAL=herdr HERDR_STUB_PI_FAIL_FROM=2 \
+    HERDR_STUB_PI_FAIL_KIND="$b3bad" timeout 60 "$BASH_BIN" "$FLEET" close rd-fe
+  T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  t4_assert_eq "1" "$T4_RC" "B3⑥ process-info $b3bad ⇒ 拒（不可判 ⇒ 宁可少关一个）"
+  t4_assert_contains "$T4_ERR_ANSI" "process-info 不可判" "B3⑥ $b3bad：理由点名不可判"
+  t4_assert_contains "$T4_ERR_ANSI" "--force" "B3⑥ $b3bad：给 --force 指路"
+  t4_assert_eq "0" "$(b3_close_calls)" "B3⑥ $b3bad：零 pane close"
+  b3_reset
+  b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1"
+  b3_agents "w1:p1|idle|2|1|sess-a"
+  t4_run_in_dir "$B3_LAB" "${B3_ENV[@]}" NAO_TERMINAL=herdr HERDR_STUB_PI_FAIL_FROM=2 \
+    HERDR_STUB_PI_FAIL_KIND="$b3bad" timeout 60 "$BASH_BIN" "$FLEET" close --force rd-fe
+  T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  t4_assert_eq "0" "$T4_RC" "B3⑥ $b3bad + --force ⇒ 越过（显式）并回收"
+  t4_assert_contains "$T4_ERR_ANSI" "越过 process-info 不可判" "B3⑥ $b3bad + --force：明确 warn"
+  t4_assert_eq "1" "$(b3_close_calls)" "B3⑥ $b3bad + --force：pane close 恰 1 次"
+  t4_assert_eq "3" "$(cat "$B3_ST/pi-count.w1_p1" 2>/dev/null)" \
+    "B3⑥ $b3bad：第 1 次（快照）取到 pi，第 2/3 次（self / 回收探针）失败 ⇒ 探针分支被真实覆盖"
+done
+
+# ============================================================================
+# ⑦ effect 判据：pane close 无效 ⇒ 非 0 + 诊断 + 不重试；cleanup 连跑 2 次 effect=0
+# ============================================================================
+b3_reset
+b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1"
+b3_agents "w1:p1|idle|2|1|sess-a"
+: > "$B3_ST/close_noop"
+b3_run close rd-fe
+t4_assert_eq "1" "$T4_RC" "B3⑦ pane close 无 effect（rc=0 但 pane 仍在）⇒ **非 0**（不静默成功）"
+t4_assert_contains "$(b3_oe)" "复核 pane 仍在" "B3⑦ 诊断点名「effect 复核」结果"
+t4_assert_contains "$(b3_oe)" "pane close rc=0" "B3⑦ 回显 pane close 的 rc（0 也不当成功）"
+t4_assert_eq "1" "$(b3_close_calls)" "B3⑦ 不自动重试（防误关；恰 1 次 close 尝试）"
+t4_assert_eq "1" "$(grep -c '^w1:p1|' "$B3_ST/panes" || true)" "B3⑦ 无 effect：pane 仍在（如实报告）"
+
+# cleanup：运行中会话 ⇒ stop+delete ⇒ effect 达成
+b3_reset
+printf 'default|stopped\n%s|running\n' "$B3_SESS" > "$B3_ST/sessions"
+mkdir -p "$B3_CFG/herdr/sessions/$B3_SESS"
+b3_run cleanup --session "$B3_SESS"
+t4_assert_eq "0" "$T4_RC" "B3⑦ cleanup（running）⇒ rc=0（effect 达成）"
+t4_assert_contains "$T4_OUT_ANSI" "已终结 herdr session=$B3_SESS" "B3⑦ cleanup：成功行点名会话"
+t4_assert_eq "1" "$(b3_calls "^herdr .*session stop( |$)")" "B3⑦ cleanup：session stop 恰 1 次"
+t4_assert_eq "1" "$(b3_calls "^herdr .*session delete( |$)")" "B3⑦ cleanup：session delete 恰 1 次"
+t4_assert_eq "0" "$(grep -c "^$B3_SESS|" "$B3_ST/sessions" || true)" "B3⑦ cleanup：会话条目已消失（effect）"
+t4_assert_eq "1" "$([ ! -e "$B3_CFG/herdr/sessions/$B3_SESS" ] && echo 1 || echo 0)" "B3⑦ cleanup：会话目录已删除（effect）"
+: > "$B3_ST/calls.log"
+b3_run cleanup --session "$B3_SESS"
+t4_assert_eq "0" "$T4_RC" "B3⑦ cleanup 第二次 ⇒ rc=0（幂等）"
+t4_assert_contains "$T4_OUT_ANSI" "effect=0" "B3⑦ 第二次明确报 effect=0"
+t4_assert_eq "0" "$(b3_calls '^herdr .*session (stop|delete)( |$)')" \
+  "B3⑦ 第二次零 stop/delete 调用（先判 effect 再动手）"
+
+# stop 非幂等（rc=1）不算失败：仅 delete 生效 ⇒ rc=0
+b3_reset
+printf 'default|stopped\n%s|stopped\n' "$B3_SESS" > "$B3_ST/sessions"
+mkdir -p "$B3_CFG/herdr/sessions/$B3_SESS"
+b3_run cleanup --session "$B3_SESS"
+t4_assert_eq "0" "$T4_RC" "B3⑦ stop rc=1（已 stopped）不算失败：判 effect ⇒ rc=0"
+t4_assert_contains "$T4_OUT_ANSI" "已终结 herdr session=$B3_SESS" "B3⑦ stop 非幂等：仍报成功（effect 达成）"
+t4_assert_eq "1" "$(b3_calls "^herdr .*session stop( |$)")" "B3⑦ 确实尝试过 stop（rc 被吞但动作在）"
+
+# delete 无 effect（会话仍可见）⇒ rc=1 + 诊断（不谎报成功）
+b3_reset
+printf 'default|stopped\n%s|running\n' "$B3_SESS" > "$B3_ST/sessions"
+mkdir -p "$B3_CFG/herdr/sessions/$B3_SESS"
+: > "$B3_ST/delete_noop"
+b3_run cleanup --session "$B3_SESS"
+t4_assert_eq "1" "$T4_RC" "B3⑦ delete 无 effect ⇒ rc=1（非 0 + 诊断，不谎报）"
+t4_assert_contains "$T4_ERR_ANSI" "effect 未达成" "B3⑦ 失败诊断点名 effect 未达成"
+t4_assert_contains "$T4_ERR_ANSI" "rc 不作判据" "B3⑦ 口径可见：判 effect 不看 rc"
+
+# ============================================================================
+# ⑧ 守卫：cleanup 拒 default / 显式目标必给 / -S 与 --session 按后端分派 / tmux 侧逐字不变
+# ============================================================================
+b3_reset
+b3_run cleanup
+t4_assert_eq "2" "$T4_RC" "B3⑧ herdr cleanup 缺 --session ⇒ rc=2（显式目标必给）"
+t4_assert_contains "$T4_ERR_ANSI" "须显式 --session" "B3⑧ 缺参：可执行指路"
+t4_assert_eq "0" "$(b3_calls '^herdr ')" "B3⑧ 缺参：零后端调用（守卫先于一切副作用）"
+b3_run cleanup --session default
+t4_assert_eq "2" "$T4_RC" "B3⑧ cleanup --session default ⇒ rc=2（BR9：绝不碰用户会话）"
+t4_assert_contains "$T4_ERR_ANSI" "≠default" "B3⑧ default：理由点名"
+t4_assert_eq "0" "$(b3_calls '^herdr ')" "B3⑧ default：零后端调用"
+b3_run cleanup -S /tmp/b3-x.sock
+t4_assert_eq "2" "$T4_RC" "B3⑧ herdr cleanup 给 -S ⇒ rc=2（-S 只属 tmux 实验场）"
+t4_assert_contains "$T4_ERR_ANSI" "用 --session" "B3⑧ -S 误用：指路 --session"
+t4_assert_eq "0" "$(b3_calls '^herdr ')" "B3⑧ -S 误用：零后端调用"
+# HERDR_SOCKET_PATH 不在目标根 ⇒ rc=3（stale/外贸 env 必拒，防误拆）
+b3_reset
+printf 'default|stopped\n%s|running\n' "$B3_SESS" > "$B3_ST/sessions"
+t4_run_in_dir "$B3_LAB" "${B3_ENV[@]}" HERDR_SOCKET_PATH="/tmp/wrong-root/sessions/x/y.sock" \
+  NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$FLEET" cleanup --session "$B3_SESS"
+T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "3" "$T4_RC" "B3⑧ 错误根的 HERDR_SOCKET_PATH ⇒ rc=3（stale/外贸 env 必拒）"
+t4_assert_contains "$T4_ERR_ANSI" "不在目标根" "B3⑧ rc=3：拒绝理由点名目标根"
+t4_assert_eq "0" "$(b3_calls "^herdr .*session (stop|delete)( |$)")" "B3⑧ rc=3：零拆场动作"
+# tmux 侧守卫逐字不变：cleanup 无 -S ⇒ rc=2；--session 误用 ⇒ rc=2
+t4_run_in_dir "$B3_LAB" env -u NAO_TERMINAL -u HERDR_ENV -u HERDR_SESSION PATH="$B3_BIN:$PATH" \
+  timeout 60 "$BASH_BIN" "$FLEET" cleanup
+t4_assert_eq "2" "$T4_RC" "B3⑧ tmux cleanup 缺 -S ⇒ rc=2（既有守卫零回归）"
+t4_run_in_dir "$B3_LAB" env -u NAO_TERMINAL -u HERDR_ENV -u HERDR_SESSION PATH="$B3_BIN:$PATH" \
+  timeout 60 "$BASH_BIN" "$FLEET" cleanup --session nao-x
+t4_assert_eq "2" "$T4_RC" "B3⑧ tmux cleanup 误用 --session ⇒ rc=2（按后端分派，不静默吞参）"
+
 
 t4_exit
