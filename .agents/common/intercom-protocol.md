@@ -8,6 +8,7 @@ description: pi-intercom 多会话协作协议（常驻引用）
 
 - **上下文分层与优先级**：`AGENTS.md`（项目级，PM 维护）**优先** → 本文件/roles.yaml（团队级）→ 角色卡（角色级）→ 技能（按需）。AGENTS.md 已由 pi 自动注入上下文，**所有角色必须遵循其中项目约束**（命令纪律/领域红线/机制衔接）；各层只写自己的内容，不互相复制。
 - 会话由 `nao-fleet.sh` 以 `--name <别名>` 拉起，角色卡经 `--append-system-prompt` 启动期注入。
+- **会话名 = `<role>[-<task>][@<scope>]`**（如 `rd-be` / `rd-be-T1` / `rd-be-T1@todo`）：scope 末位、`@` 分隔、**非空才出现**；名字是**路由标签，不是身份证明**。两仓并发**必须**各设 `<仓>/.agents/fleet-scope`（或 `ensure --scope <slug>`），scope 相同/未设时第二仓 `ensure` 会 fail loud 并列候选。`status` 从名字 parse scope（不读文件），带 scope 的行尾有 `·scope=<x>`；`close` 裸名用调用者所在仓的 scope、全名 `…@<scope>` 忽略文件。口头寻址优先用全名，跨仓时尤其如此。细节见 `docs/INSTALL.md`「会话命名与多仓 scope」。
 - **角色 id / 别名 / 卡片映射以 `.agents/roles.yaml` 为唯一事实来源**（下表为当前快照，改动先改 roles.yaml）。
 - 被点名先回执：`已按 <role> 角色执行`。
 - 仅当消息明确要求、且确认未注入时，才自行读取 `@.agents/prompts/<role>.md`（跨仓库会话用启动期注入的环境锚点绝对路径）。
