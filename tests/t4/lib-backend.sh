@@ -64,6 +64,23 @@ _be_guard_herdr_root() {
   return 0
 }
 
+# sun_path 108 前置护栏（P3-2 · QA 实测）：`T4_CACHE_DIR` 过长时 herdr 在 bind 阶段抛
+#   `Error: local socket name length exceeds capacity of sun_path`，栈深且会被上层误读成
+#   「rc=9 / 兜底未点火」。⇒ 在 be_init 就 fail loud，给**当前长度 + 上限 + 可执行改法**。
+#   判据用**最长**那个 socket：`herdr-client.sock`（实测会话目录里还有 `herdr.sock`，更短）。
+#   sun_path = 108 含结尾 NUL ⇒ 可用上限 107；建议留余量到 ≤100（换机/换 herdr 版本不会擦边）。
+_be_guard_sun_path() {
+  local sock len hard=107 advice=100
+  sock="$BE_CFGROOT/herdr/sessions/$BE_SESSION/herdr-client.sock"
+  len=${#sock}
+  [ "$len" -le "$hard" ] && return 0
+  be_guard_fail "herdr socket 路径过长（sun_path 上限 108 含结尾 NUL ⇒ 可用 ${hard}；建议 ≤${advice} 留余量）
+  当前长度: ${len} 字符（超限 $((len - hard))）
+  超限路径: ${sock}
+  改法    : 把 T4_CACHE_DIR 换短（如 T4_CACHE_DIR=/tmp/t4），或缩短会话名（当前 ${#BE_SESSION} 字符）"
+  return 1
+}
+
 # tmux socket 必须在实验根内，且不得命中生产默认候选（#84 血训：绝不裸打生产 server）
 _be_guard_tmux_sock() {
   local p tm="${TMUX:-}"
@@ -146,6 +163,7 @@ be_init() { # <lab-root> [session]
       # 每次 be_init 都按 lab 根重算私有根（禁 `${BE_CFGROOT:-}` 粘连上一场；显式覆盖用 NAO_T4_BE_CFGROOT）
       BE_CFGROOT="${NAO_T4_BE_CFGROOT:-$BE_LAB/config}"
       _be_guard_herdr_root || return 1
+      _be_guard_sun_path || return 1
       be_guard_session "$BE_SESSION" || return 1
       ;;
   esac

@@ -22,6 +22,7 @@
 #   全程 `env -u TMUX -u TMUX_PANE -u TMUX_TMPDIR` + `HERDR_*` 枚举清除（由 lib-backend 单点完成）；
 #   等待一律轮询（`be_wait_until`），无固定 sleep。变异自证只动 `$T4_CACHE_DIR` 的 lib **副本**。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
+BE_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"   # 静态自检要扫本文件
 
 # 变异自证用：允许指向 **副本**（护栏改松后子进程跑本用例必须翻红并点名）
 BE_LIB="${T4_BACKEND_LIB:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib-backend.sh}"
@@ -61,6 +62,18 @@ if [ "$GUARD_ONLY" = "1" ]; then
           be_init "$GUARD_LAB/lab4" "nao-t4-27-guard4" 2>&1)"; rc=$?
   t4_assert_ne "0" "$rc" "护栏④：实验根不在 \$T4_CACHE_DIR 下 ⇒ be_init FAIL（AC1.5 第二类）"
   t4_assert_contains "$out" "实验根不在" "护栏④：拒绝理由点名「实验根不在」（含 cache 根对照）"
+  # 护栏⑤（P3-2）：实验根过深 ⇒ 前置拒绝并把 sun_path 上限 + 改法说清（不许退化成「rc=9 兜底未点火」误导）
+  long_cache="$T4_CACHE_PARENT/nao-t4-$(printf 'y%.0s' $(seq 1 60))"
+  cache_saved="$BE_CACHE_ROOT"
+  BE_CACHE_ROOT="$long_cache"
+  out="$(NAO_TEST_TERMINAL=herdr be_init "$long_cache/lab" "nao-t4-27-long-$$" 2>&1)"; rc=$?
+  BE_CACHE_ROOT="$cache_saved"
+  t4_assert_ne "0" "$rc" "护栏⑤：实验根过深（sun_path 108 上限）⇒ be_init 直接拒绝（不等到 bind 才炸）"
+  t4_assert_contains "$out" "sun_path" "护栏⑤：报错点名 sun_path 上限（不再是裸 Error 栈）"
+  t4_assert_contains "$out" "108" "护栏⑤：报错给出上限数值（108 含结尾 NUL）"
+  t4_assert_contains "$out" "T4_CACHE_DIR" "护栏⑤：报错给出可执行改法（换短 T4_CACHE_DIR / 缩短会话名）"
+  t4_assert_contains "$out" "当前长度" "护栏⑤：报错给出当前长度（可判定超多少）"
+  t4_assert_not_contains "$out" "rc=9" "护栏⑤：不再是「rc=9 兜底未点火」那种误导定位"
   t4_exit
 fi
 
@@ -104,17 +117,36 @@ FXG="$LAB/lint"
 mkdir -p "$FXG"; cp "$BE_LIB" "$FXG/lib-backend.sh"
 viol="$(t4_scan_host_pane_refs "$FXG")"
 t4_assert_eq "" "$viol" "静态①：lib-backend 无命令行位裸 tmux 调用（复用 #84 行级 lint；tmux 恒经 _be_tmux 带 -S）"
-# herdr 裸调用点位：行级静态只认**命令位**（行首 / `;` 之后，可带 exec/setsid 前缀）；
+# herdr 裸调用点位：行级静态只认**命令位**（行首 / `;` / `$(` / `{` 之后，可带 exec/setsid 前缀）；
 #   字符串字面量里的 `herdr xxx` 不纳管（本文件报错文案含该类文本）—— 与 #84 行级 lint 同口径。
-herdr_raw="$(grep -nE '(^|;)[[:space:]]*(exec[[:space:]]+)?(setsid[[:space:]]+)?herdr([[:space:]]|$)' "$BE_LIB" \
-             | grep -vE '^[0-9]+:[[:space:]]*#')"
-t4_assert_ge "2" "$(printf '%s\n' "$herdr_raw" | grep -c .)" "静态②：herdr 裸调用点位可被检出（非空转；口径 = 命令位）"
+# BR6④ 口径（P3-3 修正）：调用必须带 `--session`（经唯一入口 `_be_herdr_exec` 注入）；
+#   **白名单只此一条**：`herdr --version`（纯本地元数据：无会话参数、不读写任何会话/用户文件），
+#   且必须**恰好 1 处**（多一处即白名单被滥用 ⇒ 红）。其余任何命令位裸调用 ⇒ 红。
+HRE='(^|;|\$\(|\{)[[:space:]]*(exec[[:space:]]+)?(setsid[[:space:]]+)?herdr([[:space:]]|$)'
+HWL='herdr[[:space:]]+--version([[:space:]]|$)'
+herdr_raw="$(grep -nE "$HRE" "$BE_LIB" | grep -vE '^[0-9]+:[[:space:]]*#')"
+t4_assert_ge "2" "$(printf '%s\n' "$herdr_raw" | grep -c .)" "静态②：lib-backend 的 herdr 裸调用点位可被检出（非空转；口径 = 命令位）"
 t4_assert_eq "0" "$(printf '%s\n' "$herdr_raw" | grep -v -- '--session' | grep -c .)" \
-  "静态②：herdr 裸调用点位 0 处缺 --session（--session 由唯一入口注入）"
+  "静态②：lib-backend 的裸调用点位 0 处缺 --session（--session 由唯一入口注入）"
 be_fstart="$(grep -n '^_be_herdr_exec()' "$BE_LIB" | cut -d: -f1)"
 be_fend="$(awk -v s="${be_fstart:-0}" 'NR>s && /^}/ {print NR; exit}' "$BE_LIB")"
 be_outside="$(printf '%s\n' "$herdr_raw" | cut -d: -f1 | awk -v s="${be_fstart:-0}" -v e="${be_fend:-0}" '$1<s||$1>e')"
-t4_assert_eq "" "$be_outside" "静态②：裸 herdr 调用全部在 _be_herdr_exec 函数体内（唯一入口，无旁路）"
+t4_assert_eq "" "$be_outside" "静态②：lib-backend 的裸 herdr 调用全部在 _be_herdr_exec 函数体内（唯一入口，无旁路）"
+# 用例侧：白名单显式且**只此一条**（P3-3 实测缺口：cases/27 有 1 处 `herdr --version` 未走唯一入口）
+case_raw="$(grep -nE "$HRE" "$BE_SELF" | grep -vE '^[0-9]+:[[:space:]]*#')"
+case_wl="$(printf '%s\n' "$case_raw" | grep -E "$HWL")"
+case_other="$(printf '%s\n' "$case_raw" | grep -vE "$HWL")"
+t4_assert_eq "1" "$(printf '%s\n' "$case_wl" | grep -c .)" \
+  "静态②：cases/27 的 herdr 白名单恰好 1 处（herdr --version：纯元数据、无会话参数）"
+t4_assert_eq "" "$case_other" "静态②：cases/27 除白名单外无命令位裸 herdr 调用（其余一律经唯一入口）"
+# 双向负控：① 伪造 `herdr workspace list` 裸调用 ⇒ 同一判据必红 ② 只放 `herdr --version` ⇒ 判据放行
+NEG1="$LAB/lint-herdr-neg-bare.sh"; NEG2="$LAB/lint-herdr-neg-wl.sh"
+printf 'herdr workspace list\n' > "$NEG1"
+printf 'herdr --version\n' > "$NEG2"
+t4_assert_eq "1" "$(grep -E "$HRE" "$NEG1" | grep -vE "$HWL" | grep -c .)" \
+  "静态② 负控：伪造裸 herdr 调用 ⇒ 判据命中 1 处（非白名单 ⇒ 必红）"
+t4_assert_eq "0" "$(grep -E "$HRE" "$NEG2" | grep -vE "$HWL" | grep -c .)" \
+  "静态② 正控：仅 herdr --version ⇒ 判据放行（白名单不是空转）"
 t4_assert_eq "0" "$(grep -cE '(^|[[:space:];|&(])sleep[[:space:]]+[0-9]' "$BE_LIB" || true)" \
   "静态③：无固定 sleep（禁固定等待；就绪/等待只用轮询间隔）"
 t4_assert_contains "$(grep -E 'BE_POLL_MAX|BE_POLL_INT' "$BE_LIB")" 'BE_POLL_MAX:-50' \
@@ -235,8 +267,10 @@ if [ "$BE_NAME" = "herdr" ]; then
   t4_assert_eq "1" "$(be_orphan_server_count "$SWEEP_LAB/config")" "孤儿 sweep②：该实验根下 server 数 = 1（与 PM 实测同形）"
   be_sweep_orphans; sw_rc=$?
   t4_assert_eq "0" "$sw_rc" "孤儿 sweep③：sweep rc=0（失败逐条点名，不静默）"
-  t4_assert_eq "1" "$BE_SWEEP_EFFECT" "孤儿 sweep③：sweep effect=1（真停掉该遗留 server，按 effect 判）"
-  t4_assert_eq "0" "$(be_orphan_server_count "$SWEEP_LAB/config")" "孤儿 sweep③：sweep 后该 root 的 server 数 = 0"
+  # P3-1（QA · 假红修正）：sweep 语义是「清**所有**死残留」⇒ 断「本 run 自己的 root 归零 + effect 非零」，
+  #   **不**断绝对值 —— 否则把用例与「环境里恰好只有我这一个残留」耦合（直跑遇到别的死残留就假红）。
+  t4_assert_ge "1" "${BE_SWEEP_EFFECT:-0}" "孤儿 sweep③：sweep effect ≥ 1（实际 ${BE_SWEEP_EFFECT:-0}；真停掉了死残留，不断绝对值）"
+  t4_assert_eq "0" "$(be_orphan_server_count "$SWEEP_LAB/config")" "孤儿 sweep③：本 run 自己的 root 已归零（server 数 = 0）"
   be_sweep_orphans; sw_rc2=$?
   t4_assert_eq "0" "$BE_SWEEP_EFFECT" "孤儿 sweep④：幂等 —— 连跑 2 次 effect=0（rc=$sw_rc2）"
   t4_assert_eq "0" "$(ls -A "$SWEEP_LAB/config/herdr/sessions" 2>/dev/null | grep -c . || true)" \
