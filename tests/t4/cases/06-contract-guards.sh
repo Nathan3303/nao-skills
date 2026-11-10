@@ -710,6 +710,14 @@ t4_assert_eq "0" "$(grep -cE '^(herdr|tmux) ' "$B1_LOG" || true)" "B1④ herdr �
 err="$(cd "$T4_ROOT" && env NAO_TERMINAL=bogus bash .agents/scripts/nao-fleet.sh status 2>&1 >/dev/null)"; rc=$?
 t4_assert_eq "2" "$rc" "B1④ NAO_TERMINAL=bogus ⇒ rc=2（fail loud，不静默回落）"
 t4_assert_contains "$err" "NAO_TERMINAL=bogus 非法" "B1④ 非法后端回显取值与期望值域"
+# P3-2（PM 拍板）：`NAO_TERMINAL=`（空串）= 未设（`:-` 是 shell 标准语义）⇒ tmux 默认，不是错配；
+#   大小写敏感：`=TMUX` 仍 rc=2。两条一起钉住「空串放过、拼错不放」。
+out="$(cd "$T4_ROOT" && env NAO_TERMINAL= PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" bash .agents/scripts/nao-fleet.sh check 2>&1)"; rc=$?
+t4_assert_eq "0" "$rc" "B1④ NAO_TERMINAL=（空串）= 未设 ⇒ 按 tmux 默认跑（rc=0）"
+t4_assert_eq "0" "$(printf '%s\n' "$out" | grep -c 'NAO_TERMINAL' || true)" \
+  "B1④ 空串取值不得被当成 herdr/非法（输出零 NAO_TERMINAL 字样 = 走 tmux 默认路径）"
+err="$(cd "$T4_ROOT" && env NAO_TERMINAL=TMUX bash .agents/scripts/nao-fleet.sh status 2>&1 >/dev/null)"; rc=$?
+t4_assert_eq "2" "$rc" "B1④ NAO_TERMINAL=TMUX（大小写不符）⇒ rc=2（空串放过、拼错不放）"
 rm -rf "$B1BIN" "$B1_LOG" "$NEG_B1A" "$NEG_B1B" "$NEG_B1C" "$NEG_B1D" "$NEG_LED"
 
 t4_exit

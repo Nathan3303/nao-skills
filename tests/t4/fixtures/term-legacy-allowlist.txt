@@ -13,7 +13,7 @@
 #      running / term_*）**禁入**台账
 #   ⑤ 条目数只允许下降：`baseline` = 立台账时的条目数，超出 ⇒ 红。
 # 判据边界（与 t4_scan_host_pane_refs 同一前缀集，不另造正则）：`if ! tmux …` / `env tmux …` /
-#   `bash -c "tmux …"` / 反引号 / 变量间接拼装**不纳管**（行级静态 lint 的已知漏判）。
+#   `command tmux …` / `bash -c "tmux …"` / 反引号 / 变量间接拼装**不纳管**（行级静态 lint 的已知漏判）。
 #   status 路径的「herdr 模式零 tmux 调用」由用例 28 的 PATH 桩**动态**断言兜住（比静态更硬）。
 #
 # baseline: 8

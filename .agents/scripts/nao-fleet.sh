@@ -255,7 +255,9 @@ term_snapshot() {
     tmux) _term_tmux_snapshot ;;
     herdr)
       local f="${_TERM_SNAP_FILE:-${_TERM_SNAP_PATH:-${TMPDIR:-/tmp}/nao-fleet-term-snap.$$}}"
-      if [[ -s "$f" ]]; then _TERM_SNAP_FILE="$f"; cat "$f"; return 0; fi
+      # 判据用「文件存在」而非「非空」：**无 label 会话时快照合法为空** —— 用 -s 会每调用重建
+      #   （QA P3-1 实测 status 退化成 pane list ×7 / agent list ×7）。
+      if [[ -e "$f" ]]; then _TERM_SNAP_FILE="$f"; cat "$f"; return 0; fi
       # 上一轮被 SIGKILL/timeout 杀掉时会留下同名快照（EXIT trap 不执行）⇒ 只在**重建**时清 >2h 的陈迹
       find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'nao-fleet-term-snap.*' -mmin +120 -delete 2>/dev/null || true
       if ! _term_herdr_snapshot > "$f"; then
@@ -1223,7 +1225,7 @@ pi_pids_for() {
 }
 
 # tmux 侧 argv：只有命令名（无完整 argv）⇒ argv 列留空；**不得**用 ps 兜底（pid 竞态 + 判据不同源）
-__term_tmux_argv() {  # <pane_id> → 每行 "process-name<TAB>"
+_term_tmux_argv() {  # <pane_id> → 每行 "process-name<TAB>"
   local p="${1-}" c
   [[ -n "$p" ]] || return 0
   command -v tmux >/dev/null 2>&1 || return 0
@@ -2002,7 +2004,10 @@ cmd_check() {
 
   echo "== 运行前提（tmux 内 + pi ≥$MIN_PI_VERSION；AC1/AC3）=="
   if [[ "$(term_backend 2>/dev/null)" == "herdr" ]]; then
-    # B1：仅 herdr 模式加行（tmux 路径零新增输出 —— BR1/AC2.6）；check 常在 CI 跑 ⇒ 探不到只提示不置红
+    # B1：仅 herdr 模式加行（tmux 路径零新增输出 —— BR1/AC2.6）。
+    #   rc 口径（P3-4 订正）：显式指定 herdr 却**缺 herdr 可执行文件** ⇒ rc=1（明确错配，不能装没看见）；
+    #   缺 `HERDR_SESSION`（未在 herdr pane 内，CI 常见）⇒ 只提示不置红（静态体检照跑）；
+    #   `protocol≠22` ⇒ rc=1（唯一可置红的机械项）。
     echo '  · 生效后端 NAO_TERMINAL=herdr（#96 二期 B1：status 走门面；ensure/close/cleanup 未实现 ⇒ exit 4）'
     if command -v herdr >/dev/null 2>&1; then
       printf '  ✓ herdr 可用\n'
@@ -2429,62 +2434,6 @@ cmd_status() {
       *) scoped_resident["$p_role"]="${scoped_resident[$p_role]:-}$p_scope " ;;
     esac
   done
-  if [[ "$backend" == "herdr" ]]; then
-    echo "== 角色会话在线状态（本表按 herdr pane label + agent 状态判定；权威源 = pane list / agent list）=="
-  else
-    echo "== 角色会话在线状态（权威名单见 intercom({action:'list'})；本表按 tmux 终端标题/名册判定）=="
-  fi
-  local a_ok a_sc a_nm
-  for a in "${ROLE_ORDER[@]}"; do
-    a_ok=0
-    if running "$a" "${ROLE_WS[$a]:-}"; then
-      printf '  ✓ %-14s 在线（--name %s；卡片 %s）\n' "$a" "$a" "${ROLE_CARDS[$a]}"
-      a_ok=1
-    fi
-    # P3-2（同族静默漏行）：裸名与带 scope **同场时两条都要显示** —— 旧写法用 elif 只留裸名，
-    #   带 scope 那条就整条消失（P1 只覆盖「仅带 scope」）。scope 空 ⇒ 本段零输出（BR1 逐字不变）。
-    # P3-3①：显示行里的名字走 builder（§0⑤「builder 之外禁名字拼接」）。
-    if [[ -n "${scoped_resident[$a]:-}" ]]; then
-      for a_sc in ${scoped_resident[$a]}; do
-        a_nm="$(fleet_name_build resident "$a" "$a_sc")"
-        printf '  ✓ %-14s 在线（--name %s；卡片 %s）·scope=%s\n' \
-          "$a" "$a_nm" "${ROLE_CARDS[$a]}" "$a_sc"
-      done
-      a_ok=1
-    fi
-    (( a_ok )) || printf '  · %-14s 未运行（ensure 拉起）\n' "$a"
-  done
-  # D5：分节标题示例带上全名写法 —— **仅当在场确有带 scope 的会话**（scope 为空时逐字保留旧标题 ⇒ BR1）
-  if (( any_scoped )); then
-    echo "== 任务派生会话（--task 拉起，如 rd-be-T1 / rd-be-T1@todo）=="
-  else
-    echo "== 任务派生会话（--task 拉起，如 rd-be-T1 / rd-infra-T1）=="
-  fi
-  # T534：先建归属快照（本仓锚 / pane cwd / 名册 cwd），再逐会话**先定归属、后判本仓台账**
-  #   （他仓不查本仓 tasks-state，杜绝误读；本仓行 cls tag 逐字不变）
-  local roots_blob="" rl
-  while IFS= read -r rl; do [[ -n "$rl" ]] && roots_blob+="$rl"$'\n'; done < <(repo_anchor_roots)
-  local -A pane_cwds=() roster_cwds=()
-  local pn pname pcwd rn rcwd prev
-  # M20261101：pane_cwd_snapshot 字段序 = `会话名<TAB>pane_id<TAB>cwd` ⇒ 必须按**会话名**建键
-  #   （与下面 pane_cwds["$dname"] 的查询口径一致）。此前误读成 `pane_id<TAB>…`，键成了 pane_id
-  #   ⇒ 查询恒空、「pane cwd 优先」层从未生效。同名多 pane（分屏）仍拼接多行后再判定（BR5）。
-  while IFS=$'\t' read -r pname pn pcwd; do
-    [[ -n "$pname" ]] || continue
-    prev="${pane_cwds[$pname]:-}"
-    pane_cwds["$pname"]="$prev$pcwd"$'\n'
-  done < <(pane_cwd_snapshot)
-  # 名册 cwd 只在 tmux 后端参与归属回退；herdr 侧**只用结构化事实**（roster 仅 -v 差异日志用），
-  #   否则名册陈旧/双源矛盾会把 B1 要根除的旧病带回来（arch 1b-3 / 验收补项）。
-  if [[ "$backend" == "tmux" ]]; then
-    while IFS=$'\t' read -r rn rcwd; do
-      [[ -n "$rn" ]] || continue
-      [[ -n "${roster_cwds[$rn]:-}" ]] || roster_cwds["$rn"]="$rcwd"
-    done < <(intercom_roster 2>/dev/null || true)
-  fi
-
-  local found=0 role id cls tag verdict obase scope_tag
-  local -a unrecognized=()
   # ---- B1（herdr）：逐名在线证据一次算定（只读快照，零后端调用）----
   #   单列缺陷类（幽灵 pane / 集成缺失 / 前台非 pi / 身份不一致）不得静默退化成 unknown；
   #   `label` 命中 ≠ same/在线（BR1/AC2.1）。tmux 侧本表恒空 ⇒ 输出逐字不变。
@@ -2519,6 +2468,69 @@ cmd_status() {
       esac
     done
   fi
+  if [[ "$backend" == "herdr" ]]; then
+    echo "== 角色会话在线状态（本表按 herdr pane label + agent 状态判定；权威源 = pane list / agent list）=="
+  else
+    echo "== 角色会话在线状态（权威名单见 intercom({action:'list'})；本表按 tmux 终端标题/名册判定）=="
+  fi
+  local a_ok a_sc a_nm
+  for a in "${ROLE_ORDER[@]}"; do
+    a_ok=0
+    if running "$a" "${ROLE_WS[$a]:-}"; then
+      printf '  ✓ %-14s 在线（--name %s；卡片 %s）\n' "$a" "$a" "${ROLE_CARDS[$a]}"
+      a_ok=1
+    fi
+    # P3-2（同族静默漏行）：裸名与带 scope **同场时两条都要显示** —— 旧写法用 elif 只留裸名，
+    #   带 scope 那条就整条消失（P1 只覆盖「仅带 scope」）。scope 空 ⇒ 本段零输出（BR1 逐字不变）。
+    # P3-3①：显示行里的名字走 builder（§0⑤「builder 之外禁名字拼接」）。
+    if [[ -n "${scoped_resident[$a]:-}" ]]; then
+      for a_sc in ${scoped_resident[$a]}; do
+        a_nm="$(fleet_name_build resident "$a" "$a_sc")"
+        # P1（QA 第二轮 · AC2.1 语义破口）：herdr 模式下带 scope 的名字来自 pane.label —— **不是证据**。
+        #   tmux 侧该名单来自标题/会话/名册（是证据），可直接打 ✓；herdr 侧必须过门面在线判定，
+        #   否则 ghost / dead / mismatch / integration-missing 会被打成「✓ 在线」，
+        #   与紧随其后的「终端证据异常」节自相矛盾。非在线交给那一节单列。
+        if [[ "$backend" == "herdr" && "${hv[$a_nm]:-absent}" != "online" ]]; then
+          continue
+        fi
+        printf '  ✓ %-14s 在线（--name %s；卡片 %s）·scope=%s\n' \
+          "$a" "$a_nm" "${ROLE_CARDS[$a]}" "$a_sc"
+        a_ok=1
+      done
+    fi
+    (( a_ok )) || printf '  · %-14s 未运行（ensure 拉起）\n' "$a"
+  done
+  # D5：分节标题示例带上全名写法 —— **仅当在场确有带 scope 的会话**（scope 为空时逐字保留旧标题 ⇒ BR1）
+  if (( any_scoped )); then
+    echo "== 任务派生会话（--task 拉起，如 rd-be-T1 / rd-be-T1@todo）=="
+  else
+    echo "== 任务派生会话（--task 拉起，如 rd-be-T1 / rd-infra-T1）=="
+  fi
+  # T534：先建归属快照（本仓锚 / pane cwd / 名册 cwd），再逐会话**先定归属、后判本仓台账**
+  #   （他仓不查本仓 tasks-state，杜绝误读；本仓行 cls tag 逐字不变）
+  local roots_blob="" rl
+  while IFS= read -r rl; do [[ -n "$rl" ]] && roots_blob+="$rl"$'\n'; done < <(repo_anchor_roots)
+  local -A pane_cwds=() roster_cwds=()
+  local pn pname pcwd rn rcwd prev
+  # M20261101：pane_cwd_snapshot 字段序 = `会话名<TAB>pane_id<TAB>cwd` ⇒ 必须按**会话名**建键
+  #   （与下面 pane_cwds["$dname"] 的查询口径一致）。此前误读成 `pane_id<TAB>…`，键成了 pane_id
+  #   ⇒ 查询恒空、「pane cwd 优先」层从未生效。同名多 pane（分屏）仍拼接多行后再判定（BR5）。
+  while IFS=$'\t' read -r pname pn pcwd; do
+    [[ -n "$pname" ]] || continue
+    prev="${pane_cwds[$pname]:-}"
+    pane_cwds["$pname"]="$prev$pcwd"$'\n'
+  done < <(pane_cwd_snapshot)
+  # 名册 cwd 只在 tmux 后端参与归属回退；herdr 侧**只用结构化事实**（roster 仅 -v 差异日志用），
+  #   否则名册陈旧/双源矛盾会把 B1 要根除的旧病带回来（arch 1b-3 / 验收补项）。
+  if [[ "$backend" == "tmux" ]]; then
+    while IFS=$'\t' read -r rn rcwd; do
+      [[ -n "$rn" ]] || continue
+      [[ -n "${roster_cwds[$rn]:-}" ]] || roster_cwds["$rn"]="$rcwd"
+    done < <(intercom_roster 2>/dev/null || true)
+  fi
+
+  local found=0 role id cls tag verdict obase scope_tag
+  local -a unrecognized=()
   for dname in "${field_names[@]}"; do
     [[ -n "$dname" ]] || continue
     # ---- P1 常驻↔派生切分：一律经 fleet_name_parse；**禁** `[[ x == "$role-"* ]]` + `${x#"$role"-}` 切片 ----

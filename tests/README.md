@@ -121,7 +121,7 @@ NOTE = 用例产出的**事实性说明**（合法的能力/前提说明，不�
 - `lib.sh::t4_verify_term_ledger <script> <台账>`：台账每行可验 —— 函数存在 · 函数体**仍**含裸后端调用（stale ⇒ 红）·
   去重 · 条目数 ≤ 文件头 `baseline`（**只减不增**）· 不收录渲染层/门面函数、不收录已在标记区内的函数。
 - 台账：`tests/t4/fixtures/term-legacy-allowlist.txt`（B1 立账 8 条，归口 B2/B3/B4）。B2/B3 每迁一个函数就删一条。
-- **判据边界**：与 `t4_scan_host_pane_refs` 同一命令行位前缀集，`if ! tmux …` / `env tmux …` / 变量间接不纳管；
+- **判据边界**：与 `t4_scan_host_pane_refs` 同一命令行位前缀集，`if ! tmux …` / `env tmux …` / `command tmux …` / 变量间接不纳管；
   status 路径的「herdr 模式零 tmux 调用」由用例 28 的 PATH 桩**动态**断言（比静态更硬）。
 
 ## 设计要点
