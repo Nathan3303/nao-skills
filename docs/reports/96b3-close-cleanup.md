@@ -55,6 +55,10 @@ herdr 后端第一次**真的回收会话**：`close` 的句柄层（定位 / se
 - `--force`：**逐 pane 按安全判据清理**（不猜「哪个是目标」）。绝对护栏保留：
   调用者自身不关 · `pane_not_found`（恢复窗口）不关 · `mismatch`（身份不一致）不关。
   跳过任一个 ⇒ rc=1（**部分完成不谎报全成功**），其余照常回收。
+- **kill 路径逐条可归属（第二轮 QA P3-1）**：多 pane `--force` 清理时，若某 pane 的
+  `agent_status ∈ working|blocked`，或名册 busy，则**每个 pane 各打一条** warn
+  「pane `<id>`：… ⇒ **可能丢失在跑 turn**（--force 显式越过）」；名册信号是名字级，
+  warn 里如实标注「无法区分 pane」，不假装精确。不汇总成一句。
 - `status` 已单列「同名 label 多 pane」（B1），本批不动其行格式。
 
 ### 2.5 `cleanup`（herdr 姊妹入口）
@@ -62,6 +66,8 @@ herdr 后端第一次**真的回收会话**：`close` 的句柄层（定位 / se
 - **`session stop` + `session delete`**；**判 effect 不看 rc**：`stop` 非幂等（第二次 rc=1，实测），
   `delete` 幂等；effect 判据 = `session list --json` 无该名 **且** `$XDG_CONFIG_HOME/herdr/sessions/<名>` 已消失。
 - 幂等前置：两项都满足 ⇒ 直接 `effect=0` rc=0（零动作）。
+- **fail-closed（第二轮 QA P3-3）**：`session list` 不可用（无法判 effect）⇒ **拒绝**（rc=1）、
+  **不自动起 server**、零 `stop`/`delete` 动作；`close` 侧的对应分支 = 快照不可用 ⇒ 拒（rc=1）、零 `pane close`。
 - 守卫（与 `session-start` 同源）：显式 `--session` 必给 · ≠`default`（BR9）· `^[A-Za-z0-9._-]+$` ·
   `HERDR_SOCKET_PATH`（若设置）必须在 `${XDG_CONFIG_HOME:-$HOME/.config}/herdr/sessions/<名>/` 下（否则 rc=3）。
 - 不要求「在 herdr pane 内」（拆场是外部动作）；`cleanup` 仍豁免终端前提。
@@ -130,6 +136,10 @@ sessions/ 目录为空（总计 0）· herdr/pi 残留进程 0 · `herdr session
 - `idle` ⇒ 放行（桩 + 真机各一；真机两角色如实回收）。
 - `unknown` / 无 agent 条目 / 集成缺失 / 前台非 pi ⇒ 拒（fail-closed）+ `--force` + 指路；桩各一组。
 - `--force` 越过忙闲闸门 ⇒ 成功且**明确 warn**（桩：unknown + `--force`）。
+- **多 pane `--force` 逐条 warn（P3-1）**：两个同 label pane 分别为 `working` / `blocked` ⇒
+  两条独立 warn（`pane w1:p1：agent_status=working ⇒ **可能丢失在跑 turn**` /
+  `pane w1:p2：agent_status=blocked ⇒ …`），且都照常回收；名册 busy 变体同样逐 pane 两条 +「名册信号是名字级」标注；
+  idle 双 pane 负控 ⇒ 零「可能丢失在跑 turn」（不误报）。
 - **第二信号**：桩构造 `agent_status=idle` + 名册 `thinking` ⇒ **拒**，理由含
   `名册状态=thinking` 与「第二信号」（确定性用例，不靠运气）；名册 `idle` ⇒ 放行（OR 另一侧正控）。
   真机 3/3 次「prompt 后立刻 close」在忙闲检查点已见 `agent_status=working`（拒），
@@ -149,6 +159,13 @@ sessions/ 目录为空（总计 0）· herdr/pi 残留进程 0 · `herdr session
 - `session stop` rc=1（已 stopped）但 delete 生效 ⇒ rc=0（判 effect）。
 - `session delete` 无 effect（条目仍可见）⇒ rc=1 + 点名「effect 未达成」。
 
+### ⑥b fail-closed 分支（第二轮 QA P3-3）
+
+- 桩造 `pane list` 失败（快照不可用）⇒ `close` **rc=1** + 「快照不可用 / 不回收」；零 `pane close`、
+  **零 `server` 调用**（不自动起 server）、pane 未被触碰。
+- 桩造 `session list --json` 失败 ⇒ `cleanup` **拒绝 rc=1** + 「不自动起 server」；零 `stop`/`delete`、
+  会话目录仍在（零拆场动作）。正常路径（`session list` 可用）仍 `effect=0`/`effect=已消失` 放行。
+
 ### ⑤ 台账 6 → 3 + 只减不增
 
 `t4_verify_term_ledger` / `t4_scan_term_bare_calls` / `t4_scan_term_herdr_forbidden` 三支 lint 输出**空**；
@@ -158,9 +175,9 @@ sessions/ 目录为空（总计 0）· herdr/pi 残留进程 0 · `herdr session
 
 - `bash .agents/scripts/nao-fleet.sh check`：**rc=0 ×2，输出逐字相同**
   （`check: OK · roles=7 · files=54 · layout=main-row2` + codegraph 齐备行）。
-- `npm test`：**rc=0**；运行时 `[PASS]` 行 **1522**（改动前基线 1347 ⇒ **+175**）；
+- `npm test`：**rc=0**；运行时 `[PASS]` 行 **1544**（改动前基线 1347 ⇒ **+197**）；
   `[FAIL]` 0；`RESULT: PASS（SKIP=0 · DEGRADE=0 · NOTE=2 · NOTE白名单=2）`。
-  增量按用例：06 **184 → 197（+13）**；28 **183 → 345（+162，含内嵌 B3 节）**。
+  增量按用例：06 **184 → 197（+13）**；28 **183 → 367（+184，含内嵌 B3 节 + 第二轮 P3 用例）**。
 - `NAO_TEST_TERMINAL=herdr bash tests/t4/run.sh`：**rc=0**；`[PASS]` 行 **640**（基线 627 ⇒ **+13**，全部来自 06）；
   后端索引 **共享 15 / 本后端专有 1 / PENDING 11**（登记集未改；B3 节随用例 28 在 tmux 全量跑，用例 28 仍 PENDING —— 同 B1/B2 先例，D 类迁移归 B4）。
 - **BR1 零回归**：`status` 全文 md5 = **144f3447c9ff406d6aed828d9c9720e5**（未设 / 显式 `=tmux` / C2 golden 三者相等）；
@@ -174,12 +191,28 @@ sessions/ 目录为空（总计 0）· herdr/pi 残留进程 0 · `herdr session
 
 见回执：HEAD sha / `git status --porcelain` 空 / `git diff --shortstat main...HEAD`。
 
-## 四、遗留与观察（三出口）
+## 四、第二轮 QA（P3）裁定与本批处置
 
-1. **`pane report-agent` 在 herdr 0.9.1 不能合成忙闲状态**（本批实测）：无论 `--source` 用 `pi` / `herdr:pi` /
-   自造 ID，`agent list` 的 `agent_status` 与 `state_change_seq` 均不变（`agent explain` 仍报
-   `full_lifecycle_hook_authority`）。**接受（含到期 2027-01-31）**：本批 busy 证据改用**真 turn**（`agent prompt`）；
-   `report-agent` 的合成路径不可依赖，若后续版本修好可复用。文档（PRD 附二「未验」）无需改。
+**PM 裁定（2026-11-10）：P3-1 / P3-3 / P3-5 本批修；P3-2 / P3-4 / P3-6 接受。**
+
+- **P3-1（必修 · 可观测性）已修**：多 pane `--force` 清理时，对每个 `agent_status ∈ working|blocked` 的 pane
+  与「名册 busy」逐条 warn「可能丢失在跑 turn」（pane id 可归属，不汇总）；idle 双 pane 负控零误报。
+- **P3-3（必修 · fail-closed 无用例）已补**：`pane list` 不可用 ⇒ `close` 拒（rc=1、零 `pane close`、不起 server）；
+  `session list` 不可用 ⇒ `cleanup` 拒（rc=1、零 `stop`/`delete`、不起 server、目录未动）。
+- **P3-5（必修 · provenance 可核性）已修**：用例内 golden 常量前写明**旧函数名**（句柄层段 B3 前在 `cmd_close` 体内，
+  cleanup 体旧名 `cmd_cleanup`）与三条 `git show e98ed49:… | awk … | md5sum` 复算命令，后来人可自证 `9549f5…/d89371…/e4950f…`。
+- **P3-2 接受（含到期 2027-01-31）**：就绪门 5s 在并发重载下真机超时 1 次（缺 `agent_session` +
+  `screen_detection_skipped=false`，约 1s 后就绪；`SPAWN_FAIL=1`、rc=0 符合 D3）⇒ 环境敏感，
+  `NAO_HERDR_READY_TIMEOUT_MS` 可覆盖；不调宽默认值（避免掩盖真慢启动）。
+- **P3-4 接受（覆盖边界）**：`pane release-agent` CLI 在 herdr 0.9.1 不可用 ⇒ 真机无法构造「集成缺失」，
+  该档仅**桩覆盖**（`agent_session` 空 / `screen_detection_skipped=false` 两组）；真机侧由 `close` 拒收 + effect 复核兜住。
+- **P3-6 接受**：`/tmp` 旧草稿（旧版缺陷证据，HEAD 不复现）已删除，避免误导后来人。
+
+**其他观察：**
+
+1. **`pane report-agent` 对已接 `full_lifecycle_hook_authority` 的 pi pane 是静默 no-op**
+   （rc=0 / 空输出 / 状态与 seq 不变；本批实测 `--source` = `pi` / `herdr:pi` / 自造均无效）。PRD BR7 已按
+   **条件式**订正（PM commit `d32f97a`）：仅未接 authority 的桩 pane 可合成。本批 busy 证据因此用**真 turn**。
 2. **真机「prompt 后立刻 close」在忙闲检查点已见 `working`**（3/3）。第二信号（名册 `thinking`/`tool:*`）
    仍保留为滞后窗口兜底，并由桩用例**确定性**覆盖（`agent_status=idle` + 名册 `thinking` ⇒ 拒）。
    **接受**：属时序观测量，不是行为缺陷；不为此加 sleep 或放宽闸门。

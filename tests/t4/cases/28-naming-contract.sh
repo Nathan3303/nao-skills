@@ -1174,7 +1174,7 @@ t4_assert_contains "$T4_OUT_ANSI" "rd-be@todo" \
 
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
 BASH_BIN="$(command -v bash)"
-B3_LAB="$T4_CACHE_DIR/c29-$$"
+B3_LAB="$T4_CACHE_DIR/c28b3-$$"
 B3_ST="$B3_LAB/st"
 B3_BIN="$B3_LAB/bin"
 B3_CFG="$B3_LAB/cfg"
@@ -1253,6 +1253,10 @@ case "$cmd" in
     sub="${1:-}"; shift || true
     case "$sub" in
       list)
+        if [ "${HERDR_STUB_PANE_LIST_FAIL:-0}" = "1" ]; then
+          printf '{"error":{"code":"internal_error","message":"pane list unavailable"}}\n' >&2
+          exit 1
+        fi
         WSFILTER=""
         if [ "${1:-}" = "--workspace" ]; then WSFILTER="${2:-}"; fi
         panes_json ;;
@@ -1307,6 +1311,10 @@ case "$cmd" in
     sub="${1:-}"; shift || true
     case "$sub" in
       list)
+        if [ "${HERDR_STUB_SESSION_LIST_FAIL:-0}" = "1" ]; then
+          printf '{"error":{"code":"internal_error","message":"session list unavailable"}}\n' >&2
+          exit 1
+        fi
         sessions_json ;;
       stop)
         n="${1:-}"
@@ -1361,6 +1369,16 @@ b3_close_calls() { b3_calls '^herdr .*pane close( |$)'; }
 # ① BR1 静态：tmux 落地段与 B3 之前**逐字**相等（golden md5；不是「把当前脚本当基线」）
 #   golden 取自 B3 之前的 main（e98ed49）：句柄层 9549f5… · cleanup 体 d89371… · socket 候选 e4950f…
 # ============================================================================
+# golden 复算（旧版 = B3 之前 e98ed49；函数名在 B3 前后不同，故注释写明旧名，后来人可自行复算）：
+#   句柄层（B3 前位于 **cmd_close** 体内；B3 后同段在 _term_tmux_reclaim 体内）：
+#     git show e98ed49:.agents/scripts/nao-fleet.sh \
+#       | awk '/^  # ---- 宿主句柄定位（跨仓）/{f=1} f{print} f&&/^}/{exit}' | md5sum   ⇒ 9549f513…
+#   cleanup 体（B3 前函数名 **cmd_cleanup**；B3 后改名 _term_tmux_cleanup，判据跳过函数头行）：
+#     git show e98ed49:.agents/scripts/nao-fleet.sh \
+#       | awk '/^cmd_cleanup\(\) \{/{f=1;next} f{print} f&&/^}/{exit}' | md5sum              ⇒ d8937134…
+#   socket 候选（函数名未变）：
+#     git show e98ed49:.agents/scripts/nao-fleet.sh \
+#       | awk '/^prod_sock_candidates\(\) \{/{f=1;print;next} f{print} f&&/^}/{exit}' | md5sum ⇒ e4950f38…
 GOLD_RECLAIM="9549f513b7a66fbced68bc1a1fa1dc10"
 GOLD_CLEANUP="d8937134bb3ed4ceca29fb581d4acf2c"
 GOLD_SOCK="e4950f3897670a97d7baaea8f54727c3"
@@ -1542,6 +1560,38 @@ t4_assert_eq "0" "$T4_RC" "B3④ 歧义 + --force ⇒ 逐 pane 清理成功（rc
 t4_assert_contains "$T4_ERR_ANSI" "逐个按安全判据清理" "B3④ 歧义 + --force：明确口径（逐个按安全判据）"
 t4_assert_eq "2" "$(b3_close_calls)" "B3④ 歧义 + --force：两个 pane 各关一次"
 t4_assert_eq "0" "$(grep -c '^w1:p' "$B3_ST/panes" || true)" "B3④ 歧义 + --force：重复 label 已清空"
+t4_assert_not_contains "$T4_ERR_ANSI" "可能丢失在跑 turn" \
+  "P3-1 负控：两个 idle pane 的 --force 清理不误报「可能丢失在跑 turn」"
+# P3-1（第二轮 QA · 必修）：working + blocked 各一个 ⇒ 逐 pane 点名 warn（不能汇总一句）
+b3_reset
+b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1" "w1:p2|rd-fe|pi|$B3_LAB|w1"
+b3_agents "w1:p1|working|2|1|sess-a" "w1:p2|blocked|3|1|sess-b"
+b3_run close --force rd-fe
+t4_assert_eq "0" "$T4_RC" "P3-1 多 pane + --force（working+blocked）⇒ 按安全判据回收（rc=0）"
+t4_assert_contains "$T4_ERR_ANSI" "pane w1:p1：agent_status=working ⇒ **可能丢失在跑 turn**" \
+  "P3-1 working pane 逐条 warn（pane 可归属）"
+t4_assert_contains "$T4_ERR_ANSI" "pane w1:p2：agent_status=blocked ⇒ **可能丢失在跑 turn**" \
+  "P3-1 blocked pane 逐条 warn（pane 可归属）"
+t4_assert_eq "2" "$(printf '%s\n' "$T4_ERR_ANSI" | grep -c '可能丢失在跑 turn' || true)" \
+  "P3-1 恰 2 条「可能丢失在跑 turn」（每条可归属，不是汇总一句）"
+t4_assert_eq "2" "$(b3_close_calls)" "P3-1 working/blocked 各一个：两 pane 都被回收（--force 显式）"
+# P3-1 第二信号（OR）在 dup 路径同样逐 pane warn（名册是名字级 ⇒ 如实标注无法区分 pane）
+if command -v node >/dev/null 2>&1; then
+  B3_ROSTER_DUP="[{\"name\":\"rd-fe\",\"status\":\"tool:bash\",\"cwd\":\"$B3_LAB\",\"tmuxPane\":null}]"
+  b3_reset
+  b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1" "w1:p2|rd-fe|pi|$B3_LAB|w1"
+  b3_agents "w1:p1|idle|2|1|sess-a" "w1:p2|idle|3|1|sess-b"
+  t4_run_in_dir "$B3_LAB" "${B3_ENV[@]}" NAO_TERMINAL=herdr NAO_QA_FAKE_ROSTER="$B3_ROSTER_DUP" \
+    timeout 60 "$BASH_BIN" "$FLEET" close --force rd-fe
+  T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  t4_assert_eq "0" "$T4_RC" "P3-1 名册 busy + --force：两个都关（rc=0）—— 门禁不拦 --force"
+  t4_assert_contains "$T4_ERR_ANSI" "pane w1:p1：pi-intercom 名册状态=tool:bash ⇒ **可能丢失在跑 turn**" \
+    "P3-1 名册 busy：pane w1:p1 逐条 warn"
+  t4_assert_contains "$T4_ERR_ANSI" "pane w1:p2：pi-intercom 名册状态=tool:bash ⇒ **可能丢失在跑 turn**" \
+    "P3-1 名册 busy：pane w1:p2 逐条 warn"
+  t4_assert_contains "$T4_ERR_ANSI" "名册信号是名字级" "P3-1 名册 warn 如实标注不可区分 pane（不假装精确）"
+fi
 b3_reset
 b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1" "w1:p2|rd-fe|pi|$B3_LAB|w1"
 b3_agents "w1:p1|idle|2|1|sess-a" "w1:p2|idle|2|1|sess-b"
@@ -1658,6 +1708,41 @@ for b3bad in internal empty; do
   t4_assert_eq "3" "$(cat "$B3_ST/pi-count.w1_p1" 2>/dev/null)" \
     "B3⑥ $b3bad：第 1 次（快照）取到 pi，第 2/3 次（self / 回收探针）失败 ⇒ 探针分支被真实覆盖"
 done
+
+# ============================================================================
+# ⑥b P3-3（第二轮 QA · 必修）：fail-closed 分支有用例
+#   快照不可用 ⇒ close 拒；session list 不可用 ⇒ cleanup 拒；两者都**不自动起 server**、零后端动作
+# ============================================================================
+b3_reset
+b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1"
+b3_agents "w1:p1|idle|2|1|sess-a"
+t4_run_in_dir "$B3_LAB" "${B3_ENV[@]}" NAO_TERMINAL=herdr HERDR_STUB_PANE_LIST_FAIL=1 \
+  timeout 60 "$BASH_BIN" "$FLEET" close rd-fe
+T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "1" "$T4_RC" "P3-3 快照不可用 ⇒ close 拒（rc=1，fail-closed）"
+t4_assert_contains "$T4_ERR_ANSI" "快照不可用" "P3-3 close：理由点名「快照不可用」（不谎报未运行）"
+t4_assert_contains "$T4_ERR_ANSI" "不回收" "P3-3 close：明确不回收"
+t4_assert_eq "0" "$(b3_close_calls)" "P3-3 close：零 pane close（零后端动作）"
+t4_assert_eq "0" "$(b3_calls '^herdr .* server( |$)')" \
+  "P3-3 close：**不自动起 server**（调用日志零 server）"
+t4_assert_eq "1" "$(grep -c '^w1:p1|' "$B3_ST/panes" || true)" "P3-3 close：pane 未被触碰"
+
+b3_reset
+printf 'default|stopped\n%s|running\n' "$B3_SESS" > "$B3_ST/sessions"
+mkdir -p "$B3_CFG/herdr/sessions/$B3_SESS"
+t4_run_in_dir "$B3_LAB" "${B3_ENV[@]}" NAO_TERMINAL=herdr HERDR_STUB_SESSION_LIST_FAIL=1 \
+  timeout 60 "$BASH_BIN" "$FLEET" cleanup --session "$B3_SESS"
+T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "1" "$T4_RC" "P3-3 session list 不可用 ⇒ cleanup 拒（rc=1）"
+t4_assert_contains "$T4_ERR_ANSI" "cleanup 拒绝" "P3-3 cleanup：理由点名「拒绝」"
+t4_assert_contains "$T4_ERR_ANSI" "不自动起 server" "P3-3 cleanup：文案明说不自动起 server"
+t4_assert_eq "0" "$(b3_calls '^herdr .*session (stop|delete)( |$)')" \
+  "P3-3 cleanup：零 stop/delete（零拆场动作）"
+t4_assert_eq "0" "$(b3_calls '^herdr .* server( |$)')" "P3-3 cleanup：不自动起 server"
+t4_assert_eq "1" "$([ -d "$B3_CFG/herdr/sessions/$B3_SESS" ] && echo 1 || echo 0)" \
+  "P3-3 cleanup：会话目录仍在（未被动过）"
 
 # ============================================================================
 # ⑦ effect 判据：pane close 无效 ⇒ 非 0 + 诊断 + 不重试；cleanup 连跑 2 次 effect=0

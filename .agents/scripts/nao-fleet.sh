@@ -669,10 +669,16 @@ _term_herdr_row_verdict() {  # <name> <row>
 #   身份不一致（argv --name ≠ label）不关；跳过任一个 ⇒ rc=1（部分完成不谎报全成功）。
 _term_herdr_reclaim_dup() {  # <name> <repo> <rows>
   local name="${1-}" repo="${2-}" rows="${3-}" line pane cwdf fgcwd vd probe pstate pmsg rc=0 skipped=0
+  local astat="" rost="" rbusy=0
+  # P3-1（可观测性）：kill 路径的「可能丢失在跑 turn」必须**逐 pane 可归属**（不能汇总一句）。
+  #   判据与单 pane 路径同源：该 pane 的 agent_status ∈ working|blocked，或名册 busy（OR）。
+  #   名册信号是**名字级**（同名多 pane 共用 label）⇒ 无法区分具体 pane，warn 里如实标注。
+  rost="$(intercom_status_for "$name" "$repo")"
+  case "$rost" in ""|idle|\?) ;; *) rbusy=1 ;; esac
   warn "同名 label 命中多个 pane：$name ⇒ $(printf '%s\n' "$rows" | cut -f2 | paste -sd, -)（--force：逐个按安全判据清理，不猜「哪个是目标」）"
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
-    IFS=$'\t' read -r _ pane _ cwdf fgcwd _ _ _ _ _ _ <<< "$line"
+    IFS=$'\t' read -r _ pane _ cwdf fgcwd _ astat _ _ _ _ <<< "$line"
     vd="$(_term_herdr_row_verdict "$name" "$line")"
     if [[ "$vd" == "mismatch" ]]; then
       warn "跳过 pane $pane：身份不一致（pane label 与 argv --name 不符）⇒ 定位不确定，不关"
@@ -690,6 +696,11 @@ _term_herdr_reclaim_dup() {  # <name> <repo> <rows>
       skipped=1; continue
     fi
     [[ "$pstate" == "error" ]] && warn "--force 越过 process-info 不可判：pane $pane（${pmsg:-未知错误}）"
+    if [[ "$astat" == "working" || "$astat" == "blocked" ]]; then
+      warn "pane $pane：agent_status=$astat ⇒ **可能丢失在跑 turn**（--force 显式越过，仍按安全判据回收）"
+    elif (( rbusy )); then
+      warn "pane $pane：pi-intercom 名册状态=$rost ⇒ **可能丢失在跑 turn**（--force 显式越过；名册信号是名字级，无法区分 pane）"
+    fi
     _term_herdr_close_pane "$name" "$pane" "$repo" "$cwdf" "$fgcwd" || rc=1
   done <<< "$rows"
   (( skipped )) && rc=1
@@ -774,12 +785,19 @@ _term_herdr_reclaim() {  # <name> <repo> <force> <core> <scope> <ensure-target>
   _term_herdr_close_pane "$name" "$pane" "$repo" "$cwdf" "$fgcwd"
 }
 
+# 会话表（effect 判据的唯一来源）：成功输出 JSON；CLI 失败/空输出 ⇒ 1（**不自动起 server**）
+_term_herdr_session_json() {
+  local js
+  js="$(_term_herdr_exec session list --json 2>/dev/null)" || return 1
+  [[ -n "$js" ]] || return 1
+  printf '%s' "$js"
+}
+
 # 会话是否已消失（effect 判据）：0 = 已消失 · 1 = 仍可见 / 不可判（fail-closed）
 _term_herdr_session_absent() {  # <session>
   local s="${1-}" js
   [[ -n "$s" ]] || return 1
-  js="$(_term_herdr_exec session list --json 2>/dev/null)" || return 1
-  [[ -n "$js" ]] || return 1
+  js="$(_term_herdr_session_json)" || return 1
   if printf '%s' "$js" | grep -qF "\"name\":\"$s\""; then return 1; fi
   return 0
 }
@@ -814,6 +832,13 @@ _term_herdr_cleanup() {  # <session>
   dir="$root/sessions/$s"
   prev="${HERDR_SESSION:-}"
   export HERDR_SESSION="$s"
+  # P3-3（fail-closed）：effect 判据的来源不可用 ⇒ 拒绝（**不自动起 server**、零拆场动作）
+  if ! _term_herdr_session_json >/dev/null; then
+    printf '[fleet] cleanup 拒绝：herdr `session list` 不可用（无法判 effect；不自动起 server）\n' >&2
+    printf '[fleet] 该怎么办：核对 `herdr --session %s session list --json`；必要时先 session-start 起 server 再重试\n' "$s" >&2
+    if [[ -n "$prev" ]]; then export HERDR_SESSION="$prev"; else unset HERDR_SESSION; fi
+    return 1
+  fi
   # 幂等前置：会话条目与目录都不存在 ⇒ effect=0，零动作
   if _term_herdr_session_absent "$s" && [[ ! -e "$dir" ]]; then
     printf '[fleet] herdr session=%s 已清理（effect=0；stop+delete 均无动作）\n' "$s"
