@@ -51,11 +51,11 @@
 
 - **BR1 零回归优先**：tmux 后端在每期验收时逐字等价；三期验收通过前不得削弱它。
 - **BR2 禁读终端标题**：herdr 后端不得用终端标题做身份或就绪判定。
-- **BR3 身份只取结构化字段**：`pane_id` / `terminal_id` / `agent_session.value` / `workspace.identity_cwd`。
+- **BR3 身份只取结构化字段（2026-11-10 按 herdr 0.9.1 实测订正）**：会话名取 `pane.label`（spawn 前写入，交叉校验 `process-info.argv --name`）；仓归属取 `pane.cwd` / `foreground_cwd` + 现有 `repo_contains_path`（谓词不变）；跨系统同人取 `agent_session.value`；存活取 `process-info.foreground_processes[].name=="pi"` ∧ `agent list` 有条目。**`workspace.identity_cwd` 在 0.9.1 API 中不存在**（仅出现在持久化 snapshot 结构），原表述作废；`pane_id` / `terminal_id` 均为 **server 局部** ⇒ 所有 key 必须是 `(session, pane_id)`。
 - **BR4 实验场必须 stop+delete**：只 `stop` 会回放上一轮 pane 布局（spike 实测）。
 - **BR5 不跨会话隐式操作**：不得从 herdr 外部控制聚焦会话；跨会话必须显式 `--session`。
 - **BR6 清环境渗透（含反向护栏）**：起 server 前 `env -u TMUX -u TMUX_PANE -u TMUX_TMPDIR` 并**枚举清除** `HERDR_*`（`for v in $(env | grep -o '^HERDR_[A-Z_]*'); do unset "$v"; done`）。四条可执行判据：① pane 内 `env | grep -c '^TMUX'` == 0；② pane 内 `HERDR_SESSION` == 期望名 且 `HERDR_SOCKET_PATH` 前缀 == 实验根下该会话目录；③ 实验根只隔离 `XDG_CONFIG_HOME`（**不得**指 `XDG_STATE_HOME`，mise 等工具会写它）；④ 任何 herdr 调用缺 `--session` ⇒ **FAIL**（实测无 `--session` 时会静默读到用户 `default`）；**唯一白名单 = `herdr --version`**（纯元数据、不触会话，QA P3-3 实测无用户文件改动），其余调用点必须在唯一入口内。
-- **BR7 状态映射（含权威源）**：`idle`/`done` = 可投递；`working`/`blocked` = 不可投递；`unknown` = 保守不可投递。**权威源 = `agent list`/`pane list` 的 `agent_status` + `state_change_seq`**；`agent explain` 仅诊断、不得作判据（实测与 `agent list` 双源矛盾）。`done` 保留在映射内但标注「**不可合成**（`pane report-agent` 拒绝 done），二期用真 turn 验证」。
+- **BR7 状态映射（含权威源）**：`idle`/`done` = 可投递；`working`/`blocked` = 不可投递；`unknown` = 保守不可投递。**权威源 = `agent list`/`pane list` 的 `agent_status` + `state_change_seq`**；`agent explain` 仅诊断、不得作判据（实测与 `agent list` 双源矛盾）。`done` **对 pi 不可达**（2026-11-10 实测：herdr 集成只发 `idle|working|blocked`，`PaneAgentState` 枚举无 `done`，`pane report-agent` 亦拒收）⇒ 保留该分支但标注「**无 pi 路径，死分支**」，**禁止在用例里伪造 `done` 当验收**。
 - **BR8 命名空间按仓分区（命名契约单一函数）**：多仓并发时会话名/agent 名带仓标识，禁全局同名；同仓重复 `ensure` 仍按「已在运行」判重。命名格式抽**单一函数**（二期重写同批函数时须逐字保持契约，避免返工）。
 - **BR9 不碰用户 default session**：测试与生产一律使用独立 session，`default` 的快照在实验前后必须逐字一致。
 
@@ -80,13 +80,13 @@
 - AC1.7 Given 后端抽象层，When 连跑 2 次，Then `NAO_TEST_TERMINAL` 两后端均 rc=0 且 effect=0（幂等），server 就绪用轮询（50×100ms、5s 上限、超时 fail loud），禁固定 sleep。
 
 **二期：生产身份、归属、就绪、回收**
-- AC2.1 Given herdr 后端，When `ensure` 起七角色，Then 每个 pane 的归属由 `workspace.identity_cwd` 或结构化 ID 判定，不读终端标题。
+- AC2.1 Given herdr 后端，When `ensure` 起七角色，Then 每个 pane 的会话身份取 `pane.label`（+ `process-info.argv --name` 交叉校验）、仓归属取 `pane.cwd`/`foreground_cwd`，**不读终端标题**；label 在而 agent 无（幽灵 pane）⇒ 不判在线；`agent_session=null`（集成缺失）⇒ 点名 fail loud，不得退化成 unknown 静默。
 - AC2.2 Given 某会话完成一轮，When `status` 判在线与忙闲，Then 按 BR7 映射给出可投递/不可投递，`unknown` 判不可投递。
 - AC2.3 Given 等待就绪，When pi 启动，Then 先观测到离开 `idle` 再等 `idle`（禁假阳性），超时有界并 fail loud。
 - AC2.4 Given `close` 一个在跑 turn 的会话且未加 `--force`，When 执行，Then 拒绝并给可执行指路（语义与现状等价）。
 - AC2.5 Given 在 tmux 内起的 herdr server（环境渗透），When 跑舰队，Then 清 `HERDR_*`/`TMUX*` 或显式 `--session`，身份判定不受污染。
 - AC2.6 Given `NAO_TERMINAL=tmux`，When 跑全部命令，Then 与改动前逐字等价（零回归硬判据）。
-- AC2.7 Given D 类 10 例（09/12/15/19/20/21/22/23/24/25）迁到 herdr 后端，When 跑登记集，Then 全部全绿且**命名契约逐字保持**（与一期 BR8 的单一函数一致，不得改名）。
+- AC2.7 Given D 类 10 例，When 二期完成，Then **5 例迁 shared（19/20/21/23/24）** + **3 例迁 own（09/15/22，到期 2027-06-30 且逐条写理由）** + **12/25 不迁（tmux 专有：12 = 派生落点/宿主窗口属三期布局，25 = tmux 宽度算式）**，并在 `herdr.txt` 注释区写明「tmux 专有，三期重判」；命名契约**逐字保持**（一期 BR8 单一函数，不得改名）。**2026-11-10 订正：原「10 例全迁」不可达，PM 未核实即写入，作废。**
 
 **三期：布局与多仓形态，herdr 转默认**
 - AC3.1 Given 七角色，When `ensure`，Then 落在约定 workspace 的 tab 内，布局不依赖列宽算式。
@@ -115,6 +115,16 @@
 - **MoSCoW**：一期 Must（安全网）· 二期 Must（收益主体）· 三期 Should（布局与默认切换）。
 - **RICE**：Reach 28（4 仓 × 7 会话）· Impact 2 · Confidence 0.7（隔离/身份/就绪已实测，布局未验）· Effort 5（三期）⇒ **RICE ≈ 7.8**。
 - **Kano**：不 flake = 基本型；attach 看进度 = 期望型；worktree 绑定 workspace = 兴奋型。
+
+## 附二：二期设计评审与 PM 裁定（2026-11-10）
+
+- **结论**：有条件可行。二期拆 **4 步**（B1 门面 + `status` 只读判定面 → B2 `ensure`/spawn + 就绪 → B3 `close`/`cleanup` 回收 → B4 D 类迁移 + 登记集 + `check` 终端前提）。
+- **模式**：门面 + 双实现并存，**默认 tmux 保持到三期**。BR1 六条机械保证：默认值唯一（grep 恰好 1 处）· 后端差异只允许出现在 `term_*` 门面（业务区禁裸调用，扩 lint）· 未设与 `=tmux` 两种拼写都对 C2 golden md5 · 双向 PATH 桩负控 · 三期只改那 1 行 · `check` 打印生效后端（仅 herdr 模式加行）。
+- **PM 六项裁定**：D1 AC2.7 按 5 shared / 3 own / 2 不迁订正 · D2 二期只做最小放置（专用 session 现有 workspace 内起 pane + 写 label），workspace/tab 拓扑留三期 · D3 就绪超时计入 `SPAWN_FAIL` + warn + 摘要，**rc 保持 0**（跨后端 rc 语义必须一致；rc 统一另立观察项）· D4 集成缺失 ⇒ `status` warn + 不可投递，`ensure` die · D5 herdr 模式不保留 `NAO_CLOSE_BUSY_PATTERN` · D6 BR3 按实测字段订正。
+- **反假阳性硬判据**：**禁用 `agent wait --until idle` 作就绪门**（实测已 idle 时 6ms 返回、working 时也 rc=0）⇒ 就绪门 = 全条件与（pane 存在 ∧ `foreground==pi` ∧ `argv --name` 匹配 ∧ `agent_session≠null` ∧ `status==idle` ∧ `state_change_seq ≥ 1` ∧ `screen_detection_skipped`），50×100ms + 5s 上限 + 超时 fail loud 逐条报缺。
+- **新增缺陷类（herdr 特有）**：**幽灵 pane** —— `stop→restart` 回放后 label 仍在但 `agent_session=None`、`agent list` 空（实测）⇒ `label 命中 ≠ same`，否则 `ensure` 会静默跳过。
+- **生产路径环境渗透**：herdr server 若从 tmux shell 起会把 `TMUX/TMUX_PANE` 传给 pane ⇒ ① 蒙过 `require_tmux` ② pi 的 intercom 注册写入伪 `tmuxPane`，反过来让 tmux 侧舰队定位到它（跨后端串台/误 kill）⇒ BR6 扩到生产 + herdr 分支源码禁出现 `TMUX`/`TMUX_PANE`（grep 门禁）。
+- **未验**：`blocked` 态真机触发 · label ≤48 上限 · 三期 worktree 下 `cwd` 归属 · herdr 长期稳定性 · `pane close` 对 `blocked` 会话行为。
 
 ## 附一：arch 评审结论与 PM 裁定（2026-11-10）
 
