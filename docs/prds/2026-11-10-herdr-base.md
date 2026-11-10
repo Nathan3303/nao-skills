@@ -120,7 +120,7 @@
 
 - **结论档**：有条件可行。评审要点已写回上文 §二/§三/§五/§六/§七（11 条必改项全采纳）。
 - **PM 四项裁定**：① AC1.1 采「登记集 + PENDING 点名」窄口径（全用例 herdr 绿在一期不可达，强达标只能靠 SKIP 掩盖）；② 原「旧名兼容」AC 删除（herdr 后端无旧会话，tmux 侧由 AC1.2 零回归覆盖，留着是自造永久债）；③ `done` 保留在映射内并标注「不可合成，二期用真 turn 验」，权威源钉 `agent list`/`pane list` 的 `agent_status` + `state_change_seq`；④ 双后端比对改 golden 断言标题序列，不比总数。
-- **一期两步走**：步 1 = 后端抽象层 `tests/t4/lib-backend.sh`（`be_start_server` / `be_ready` / `be_panes` / `be_pane_pid` / `be_run` / `be_teardown`，`NAO_TEST_TERMINAL=tmux|herdr|auto`，**`nao-fleet.sh` 零改动**）+ 自检例 `27-backend-selftest.sh`（隔离 / 零渗透 / stop+delete 幂等 / 零残留 / `default` 不可达）；步 2 = D 类迁移 + BR8 命名分区（迁移主要落二期）。
+- **一期两步走（2026-11-10 订正：D 类 10 例迁移归二期，以 §三 范围与 AC2.7 为准；一期步 2 = BR8 命名分区 + herdr lint 扩全目录）**：步 1 = 后端抽象层 `tests/t4/lib-backend.sh`（`be_start_server` / `be_ready` / `be_panes` / `be_pane_pid` / `be_run` / `be_teardown`，`NAO_TEST_TERMINAL=tmux|herdr|auto`，**`nao-fleet.sh` 零改动**）+ 自检例 `27-backend-selftest.sh`（隔离 / 零渗透 / stop+delete 幂等 / 零残留 / `default` 不可达）；步 2 = D 类迁移 + BR8 命名分区（迁移主要落二期）。
 - **最易引 flake 的两处（必须按此实现）**：① **server 就绪**禁用固定 sleep（实测 API 就绪仅 69ms）⇒ 50×100ms 轮询 + 5s 上限 + 超时 fail loud；② **拆场**：`stop` 非幂等（第二次 rc=1）且只 stop 不 delete 会回放上一轮布局 ⇒ 会话名带 `$$`+随机、stop 容忍非 0、delete 幂等、断言一律断 **effect** 不断 rc。
 - **三期三条硬判据**：① 实验根走私有 `XDG_CONFIG_HOME`，把「不碰用户 default」变成「碰不到」；实验前后 `api snapshot` 与 `tmux list-panes -a` 双快照 diff 空。② 双侧显式性 lint（tmux 裸调用必带 `-S`；herdr 裸调用必带 `--session`），各带人造违规负控。③ 所有 herdr 调用经唯一 helper，硬条件 `--session` 非空且 ≠ `default`、`HERDR_SOCKET_PATH` 前缀在实验根内，违反即 FAIL。
 - **口径纠错（PM 认账）**：本 PRD 初稿写「27 用例」无出处，实际 **25**（`run.sh --list`）；此后一切用例数以此命令为准。
