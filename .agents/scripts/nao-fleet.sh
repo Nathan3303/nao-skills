@@ -472,7 +472,9 @@ fleet_scope_problem() {
 
 # ⓪ core 构造：<role> [task] → stdout `<role>` 或 `<role>-<task>`
 #   core 是名字的前半段（§0），与 scope 无关。同样是**唯一**构造点：C3② 的 lint 把 `core=` 也纳入
-#   扫描面（合法拼法只有这里），任何 `core="$x-$task"` 形态都会红 —— 这样「core 手拼」不再是盲区。
+#   扫描面（合法拼法只有这里）。lint 判据 = `<name|disp|core>="?${x}?-${?task`（花括号可省），
+#   故 `core="$NAME-$task"` / `core="${NAME}-${task}"` / `core="$NAME-${task}"` / `core="${NAME}-$task"`
+#   四种形态**都会红**（用例 28 的形态矩阵断言守住这 6 种写法）。
 fleet_core_build() {
   local role="${1-}" task="${2-}"
   [[ -n "$role" ]] || { printf 'fleet_core_build：role 为空\n' >&2; return 1; }
@@ -996,14 +998,15 @@ running() {
 #   absent   = 拉起
 #   repo 未知（pane/名册均无 cwd）时不得凭空判冲突 ⇒ 落 absent（与旧行为一致，不新增误拒）。
 running_verdict() {  # <name> [repo] → same | conflict:<候选…> | absent
-  local name="$1" repo="${2:-}" out k r t s core n p2 k2 r2 t2 s2 core2 rcwd cand=""
+  local name="$1" repo="${2:-}" out k r t s ckey ckey2 n p2 k2 r2 t2 s2 rcwd cand=""
   local have_snap=0 sname spane scwd
   local -A pmap=()
   if running "$name" "$repo"; then printf 'same\n'; return 0; fi
   out="$(fleet_name_parse "$name")"
   [[ "$out" == "OK "* ]] || { printf 'absent\n'; return 0; }
   IFS=',' read -r k r t s <<< "${out#OK }"
-  core="$r"; if [[ -n "$t" ]]; then core="$r/$t"; fi
+  # 比较键（**不是** §0 的 core）：用 '/' 分隔 role 与 task，避免与 `-` 拼接的 core 混淆
+  ckey="$r"; if [[ -n "$t" ]]; then ckey="$r/$t"; fi
   # 注意：候选**可以就是目标同名**（同名不同仓 = scope 未设的典型撞名）—— running 已按目标仓判过缺席，
   #   走到这里就说明「场里有这个名、但不是本仓的那一个」⇒ 靠下面的仓比较定冲突，不能先按名字跳过。
   while IFS= read -r n; do
@@ -1011,8 +1014,8 @@ running_verdict() {  # <name> [repo] → same | conflict:<候选…> | absent
     p2="$(fleet_name_parse "$n")"
     [[ "$p2" == "OK "* ]] || continue
     IFS=',' read -r k2 r2 t2 s2 <<< "${p2#OK }"
-    core2="$r2"; if [[ -n "$t2" ]]; then core2="$r2/$t2"; fi
-    [[ "$core2" == "$core" ]] || continue
+    ckey2="$r2"; if [[ -n "$t2" ]]; then ckey2="$r2/$t2"; fi
+    [[ "$ckey2" == "$ckey" ]] || continue
     # 冲突判据（AC1.6）：**scope 不同 ⇒ 各自可见，不是冲突**（这正是 scope 的用途）；
     #   只有「同 scope（含都未设）+ 仓不同」才是静默撞名 ⇒ fail loud 列候选。
     #   仓未知（pane-only 无名册 cwd）时不凭空判冲突（与旧行为一致，不新增误拒）。
@@ -2588,8 +2591,13 @@ cmd_ensure() {
     chk_p="$(fleet_name_parse "$chk_full")"
     (( chk_added )) && unset 'FLEET_ROLE_KIND[$chk_role]'
     if [[ "$chk_p" != "OK "* ]]; then
+      # P3-b：按**原因**分支（别把「卡 core 超 32」说成「总长 > 48」——35 并不 > 48，
+      #   且那种情形缩 scope 是死路：scope 只占 '@' 之后那段，救不回 core）。
+      if [[ "$kind" == "card" ]] && (( ${#chk_core} > 32 )); then
+        die "ensure 中止：卡会话 core 超上限 —— core「$chk_core」共 ${#chk_core} 字符 > 32（卡 core 上限 32；scope ≤16；总长上限 48）。该怎么办：缩短 --task 编号（当前 ${#task} 字符）或改用更短的卡 role（卡 role 本身 ≤32 由卡校验兜）"
+      fi
       maxs=$(( 48 - ${#chk_core} - 1 )); (( maxs < 0 )) && maxs=0
-      die "ensure 中止：目标名超预算 —— 「$chk_full」共 ${#chk_full} 字符 > 48。名字 = <core>[@<scope>]：core ≤32（仅卡；派生 = <role>-<task> 不限 core，但 full 仍 ≤48）、scope ≤16、**总长 ≤48**（含 '@'）。该怎么办：缩短 --task 编号（当前 core ${#chk_core} 字符）或缩短 scope（当前 ${#scope} 字符，core 不变时最多 $maxs 字符）"
+      die "ensure 中止：目标名超预算 —— 「$chk_full」共 ${#chk_full} 字符 > 48。名字 = <core>[@<scope>]：core ≤48（卡 core 另限 ≤32）、scope ≤16、**总长 ≤48**（含 '@'）。该怎么办：缩短 --task 编号（当前 core ${#chk_core} 字符）或缩短 scope（当前 ${#scope} 字符，core 不变时最多 $maxs 字符）"
     fi
   done
   # ==== 相位 2：拉起（宿主窗口解析、判重、codegraph 状态、spawn 逐目标不变）====

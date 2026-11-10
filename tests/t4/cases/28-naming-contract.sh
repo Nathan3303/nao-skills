@@ -24,8 +24,10 @@
 #
 # C3 单写点 lint（静态、变异负控在 $T4_CACHE_DIR 的副本上做，绝不写工作区）：
 #   ① `grep -c 'exec pi --name'` == 1（唯一 exec 点）
-#   ② 契约块**外**正文 0 命中 `(name|disp|core)="?${…}-${?(task|TASK)`（禁名字**与** core 拼接）
-#      判据边界（P3-3② 选 ①）：只匹配「`${…}` + `-` + `${…task…}`」这种**拼接形态**；
+#   ② 契约块**外**正文 0 命中 `<name|disp|core>="?(${…}|$ident)-${?(task|TASK)`（禁名字**与** core 拼接）
+#      判据边界（P3-3② 选 ① · P3-a 收紧）：左右两段都**允许花括号与不花括号**（`${NAME}` / `$NAME`），
+#      左段另允许数组下标（`${t_names[$i]}`）；左边界要求非标识符字符（防 `basename=` 误报）。
+#      即只匹配「左段 + `-` + `${?task…`」这种**拼接形态**；
 #      `core="${1-}"` / `core="$p_role"` / `core="$(fleet_core_build …)"` 这类纯赋值与
 #      唯一构造点**不匹配** ⇒ 不会把合法用法误判成违规。已知盲区：拼接不落在 `name|disp|core`
 #      这三个变量名上（如 `c="$r-$t"`）—— 已全部改走 `fleet_core_build`，故本轮 0 命中。
@@ -227,7 +229,7 @@ lint1() { grep -c 'exec pi --name' "$1" || true; }                     # ① 唯
 lint2() {                                                              # ② 契约块外的名字拼接
   awk -v b="$CONTRACT_BEGIN" -v e="$CONTRACT_END" '
     $0 ~ b { f=1; next } $0 ~ e { f=0; next } f { next } { print }' "$1" \
-    | grep -cE '(name|disp|core)="?\$\{[^}]+\}-\$\{?(task|TASK)' || true
+    | grep -cE '(^|[^A-Za-z0-9_])(name|disp|core)="?(\$\{[^}]+\}|\$[A-Za-z_][A-Za-z0-9_]*)?-\$(\{)?(task|TASK)' || true
 }
 lint3() { grep -c 'fleet_name_parse' "$1" || true; }                   # ③ 接线可见面（含说明行）
 lint3c() { grep -cE 'fleet_name_parse "' "$1" || true; }               # ③ 代码调用点数
@@ -250,17 +252,42 @@ if mutate_file "$SUBJECT" "$NEG_A" \
 else
   t4_bad "C3 负控A 变异锚点未命中（用例锚点须跟随实现）"
 fi
-# ---- C3 负控 A2（P3-3②）：`core=` 手拼在 builder 外 ⇒ ②也必须红（旧 lint 只认 name|disp ⇒ 盲区）----
+# ---- C3 负控 A2（P3-3② / P3-a）：`core=` 手拼在 builder 外 ⇒ ②必须红 ----
+#   **必须用无花括号形**：历史缺陷（7b08214 的 :2277/:2282/:2552）就是 `core="$NAME-$task"` 这种写法；
+#   用花括号形做负控 = 「只证明能抓到自己写得出的那种」，正是 P3-a 判「声明比判据强」的根因。
 NEG_A2="$T4_CACHE_DIR/c3-neg-a2.sh"
 if mutate_file "$SUBJECT" "$NEG_A2" \
     '  local force="$1" task="$2" target="${3:-}"' \
     '  local force="$1" task="$2" target="${3:-}"
-  core="${NAME}-${task}"'; then
+  core="$NAME-$task"'; then
   t4_assert_ne "0" "$(lint2 "$NEG_A2")" \
-    "C3 负控A2 手写 \`core=\"\${NAME}-\${task}\"\` ⇒ ②红（core 不再是盲区）"
+    "C3 负控A2 手写 \`core=\"\$NAME-\$task\"\`（无花括号形，与历史缺陷同形）⇒ ②红"
 else
   t4_bad "C3 负控A2 变异锚点未命中（用例锚点须跟随实现）"
 fi
+# ---- C3② 形态矩阵（P3-a）：拼接写法必须**全抓**（修复前：花括号形 1/1、无括号形全 0）----
+NEG_MX="$T4_CACHE_DIR/c3-neg-matrix.sh"
+if mutate_file "$SUBJECT" "$NEG_MX" \
+    '  local force="$1" task="$2" target="${3:-}"' \
+    '  local force="$1" task="$2" target="${3:-}"
+  core="${NAME}-${task}"
+  core="$NAME-$task"
+  core="$NAME-${task}"
+  core="${NAME}-$task"
+  name="$NAME-$task"
+  disp="$NAME-$task"
+  core="${t_names[$i]}-${task}"
+  core="$card_role-$task"'; then
+  t4_assert_eq "8" "$(lint2 "$NEG_MX")" \
+    "C3② 形态矩阵：8 种拼接写法全抓（花括号 2 · 无括号 3 · 混合 1 · 数组下标 1 · 卡 role 1）⇒ 判据与声明一致"
+  t4_assert_eq "0" "$(lint2 "$SUBJECT")" "C3② 形态矩阵对照：真脚本仍 0（不误报合法构造）"
+else
+  t4_bad "C3② 形态矩阵锚点未命中（用例锚点须跟随实现）"
+fi
+# ---- C3② 正控：唯一构造点自身 / 合法赋值不得被误判 ----
+t4_assert_eq "0" \
+  "$(awk '/^fleet_core_build\(\)/{f=1} f{print} f&&/^}/{exit}' "$SUBJECT" | lint2 /dev/stdin)" \
+  "C3② 正控 fleet_core_build 自身 0 命中（判据只认拼接形态，不误判 printf 里的合法拼法）"
 # ---- C3 负控 B：删一条 parse 调用 ⇒ ③代码调用点数必须掉 ----
 NEG_B="$T4_CACHE_DIR/c3-neg-b.sh"
 if MUT_RE='^[[:space:]]*out="\$\(fleet_name_parse "\$n"\)"[[:space:]]*$' \
@@ -506,6 +533,7 @@ t4_assert_ne "0" "$T4_RC" "P2-1 负控A：\`--task\` 43 位（总名 49 > 48）�
 t4_assert_contains "$T4_ERR_ANSI" "目标名超预算" "P2-1 负控A：die 点名「目标名超预算」"
 t4_assert_contains "$T4_ERR_ANSI" "49 字符 > 48" "P2-1 负控A：die 回显当前长度与上限（49 > 48）"
 t4_assert_contains "$T4_ERR_ANSI" "该怎么办" "P2-1 负控A：die 给改法（该怎么办：缩短 --task 编号或 scope）"
+t4_assert_contains "$T4_ERR_ANSI" "缩短 scope" "P3-b 负控A：**总长超限**分支必须提示可缩 scope（与负控C 的「不提示」成对）"
 t4_assert_eq "$BEFORE_N" "$(pane_count_b)" "P2-1 负控A：零副作用（建 pane 之前就 die，pane 数不变）"
 
 # ---- 负控：卡 core 32 + scope 16 = 49 ⇒ die（两者各自合法，合起来超限）----
@@ -515,6 +543,19 @@ run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" \
 t4_assert_ne "0" "$T4_RC" "P2-1 负控B：卡 core 32 + scope 16（总名 49）⇒ 拒绝（rc≠0）"
 t4_assert_contains "$T4_ERR_ANSI" "49 字符 > 48" "P2-1 负控B：die 回显当前长度（32+1+16=49）"
 t4_assert_eq "$BEFORE_N" "$(pane_count_b)" "P2-1 负控B：零副作用（pane 数不变）"
+
+# ---- 负控C（P3-b）：卡 core 32 + `--task T1` ⇒ core 35 > **32**（卡 core 上限）----
+#   拒绝是正确的，但文案若说成「35 字符 > 48」就是**事实错**（35 并不 > 48），且「缩 scope」是死路
+#   （scope 只占 '@' 之后那段）⇒ 必须按原因分支给文案。
+BEFORE_N="$(pane_count_b)"
+run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" \
+  ensure --card ".agents/prompts/$CARD32.md" --task T1
+t4_assert_ne "0" "$T4_RC" "P2-1 负控C（P3-b）：卡 core 32 + --task T1（core 35）⇒ 拒绝（rc≠0）"
+t4_assert_contains "$T4_ERR_ANSI" "卡会话 core 超上限" "P3-b 负控C：die 点名原因是**卡 core 上限**（不是总长）"
+t4_assert_contains "$T4_ERR_ANSI" "35 字符 > 32" "P3-b 负控C：die 回显 core 长度与正确上限（35 > 32）"
+t4_assert_not_contains "$T4_ERR_ANSI" "35 字符 > 48" "P3-b 负控C：不得把 35 说成「35 字符 > 48」（事实错）"
+t4_assert_not_contains "$T4_ERR_ANSI" "缩短 scope" "P3-b 负控C：不提示缩 scope（死路：scope 只占 @ 之后那段）"
+t4_assert_eq "$BEFORE_N" "$(pane_count_b)" "P3-b 负控C：零副作用（pane 数不变）"
 
 # ---- 正控：48 字符边界仍能起（task 42）----
 run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task "$T42" rd-be

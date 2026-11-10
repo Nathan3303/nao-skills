@@ -16,4 +16,6 @@
 - 命名预算不自洽（QA P2-1）：卡 core 32 + `@` + scope 16 = 49 > 48 时名字可拉起但 `status` 整条消失 ⇒ 已改为 `ensure` 相位 1 用 `fleet_name_parse` 复核 builder 输出，非 `OK` 且建 pane 之前 `die`（用例 28「P2-1」组：49 拒 / 48 起 + 可见）。
 - 常驻「裸名 + 带 scope」同场时带 scope 那条不显示（QA P3-2）⇒ 已改为两条都显示（用例 28「P3-2」组）。
 - `status` 显示行手拼名字（QA P3-3①）⇒ 已改走 `fleet_name_build`。
-- C3② lint 对 `core=` 盲区（QA P3-3②）⇒ 已扩展扫描面到 `(name|disp|core)`，并把所有 core 拼接收进 `fleet_core_build`（负控 A2 证明旧盲区会红）。
+- C3② lint 对 `core=` 盲区（QA P3-3②）⇒ 已扩展扫描面到 `(name|disp|core)`，并把所有 core 拼接收进 `fleet_core_build`。
+- **上一条第一版仍「声明比判据强」**（QA P3-a）：判据只认花括号形 `${x}-${task}`，而历史缺陷的真实写法是 `core="$NAME-$task"`（无花括号）⇒ 对 `7b08214` 只报 1 条。现已改为 `(^|[^A-Za-z0-9_])(name|disp|core)="?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?-\$(\{)?(task|TASK)`，六种拼接写法**全抓**（用例 28 的「形态矩阵」断言），真脚本仍 0；负控 A2 已改成**无花括号形**（与历史缺陷同形）。
+- 超预算 die 文案的事实错（QA P3-b）：卡 core 32 + `--task T1` 曾被写成「35 字符 > 48」并指路「缩 scope」（死路）⇒ 现按原因分支：卡 `core > 32` 走独立文案（只提示缩短 `--task` / 换更短的卡 role），总长超限才提示缩 scope。
