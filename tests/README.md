@@ -13,11 +13,15 @@ bash tests/t4/run.sh                           # 跑全部（默认严格：T2 �
 bash tests/t4/run.sh --case 03                 # 单跑
 T4_ALLOW_MISSING=1 bash tests/t4/run.sh        # 宽松：缺产物=BLOCKED（仅显式 1）
 T4_REQUIRE_FULL=1 bash tests/t4/run.sh         # 发布前置：SKIP/DEGRADE>0 或非白名单 NOTE 即 FAIL
+NAO_TEST_TERMINAL=herdr bash tests/t4/run.sh   # 后端自检：只跑登记集（tests/t4/backends/herdr.txt），未登记点名 PENDING
+NAO_TEST_TERMINAL=herdr bash tests/t4/run.sh --case 27   # 后端抽象层自检（隔离 / 零渗透 / 拆场幂等 / 零残留）
 npm test                                       # 唯一机械门禁 = test:agents + test:t4
 npm run test:t4:full                           # 发布前置双轴（= 上面两个环境变量 · 单环境）
 npm run test:t4:full:dual                      # 发布前置**双环境** gate（两组串跑，任一红即红）
 ```
 
+- **后端登记集与后端自检（#96 一期步 1）**：开关 `NAO_TEST_TERMINAL=tmux|herdr|auto`（**未设 = tmux**；`auto` 一期解为 tmux，herdr 转默认归三期）。**只有 herdr** 走登记集：唯一准入清单 = `tests/t4/backends/herdr.txt`（每行 `<编号> <shared|own> <到期> <理由>`，登记集非法 ⇒ rc=1），**登记集内的用例才跑**；未登记的用例输出 `[PENDING]` 并点名（**不得静默 SKIP**），汇总多打一行 `后端索引（herdr）：共享 N / 本后端专有 M / PENDING K`。D 类 10 例（09/12/15/19/20/21/22/23/24/25）**本批不登记**（迁移归二期，PRD #96 §三）。tmux（默认）路径**不加载登记集、不新增任何输出行**（AC1.2「逐字 diff 空」靠此保证）。
+  后端自检用例 = `cases/27`，被测对象是 `tests/t4/lib-backend.sh`（**测试侧**抽象，生产 `nao-fleet.sh` 本批零改动）：两个实验场（herdr = 各自私有 `XDG_CONFIG_HOME` 根 / tmux = 各自隔离 socket）互不可见（`terminal_id` 交集空）+ 零渗透（pane 内 `env | grep -c '^TMUX'`==0 · `HERDR_SESSION` · `HERDR_SOCKET_PATH` 前缀在实验根内 · **只隔离 `XDG_CONFIG_HOME`，`XDG_STATE_HOME` 必须透传**）+ `stop` 容忍非 0 + `delete` 幂等（**判据 = effect，不信 rc**）+ 零残留（`sessions/` 空 / 无 server / 无进程）+ `default` 不可达。就绪一律 **50×100ms 轮询 + 5s 上限**（禁固定 sleep，超时 fail loud）。herdr 调用**只有** `_be_herdr_exec` 一个入口，`--session` 由它注入（「缺 `--session` ⇒ FAIL」护栏带**变异自证**：副本追加恒放行 ⇒ 子进程跑本用例必红并点名「护栏①」）。
 - **默认严格**：`T4_ALLOW_MISSING` 默认 `0` —— 依赖的 T2 产物缺失即 FAIL；宽松模式**只有显式 `T4_ALLOW_MISSING=1`** 才启用（缺产物记 BLOCKED）。
 - **`T4_REQUIRE_FULL=1`**（与上者正交，只管 SKIP/DEGRADE/NOTE 三轴）：汇总层 **SKIP 计数 + DEGRADE 计数必须均为 `0`，且非白名单 NOTE 计数必须为 `0`** —— SKIP 含从用例输出解析的**行首** `[SKIP]` / `SKIP:` 行；DEGRADE 为能力降级标记；NOTE 按 tag 白名单判定（见下节）。发布用 `npm run test:t4:full:dual`（单环境退用 `npm run test:t4:full`）。
 - **双环境 gate**：`npm run test:t4:full:dual`（`tests/t4/run-dual.sh`）= 同参数两组串跑 —— 组1 保留 `$TMUX_PANE`（撞号态）/ 组2 `env -u TMUX_PANE`（未设态）；**任一非 0 ⇒ 整体非 0**，输出标明组别与失败组。约 2× 单轮耗时；`npm test` 默认路径**不含** dual（不变慢）。
@@ -76,6 +80,7 @@ npm run test:t4:full:dual                      # 发布前置**双环境** gate�
 | 24 | `ensure` 多目标**每 pane 用其目标自己的卡**（Issue #75）：`arch rd-fe rd-infra` 与 `rd-be qa` 两组逐 pane 断言「会话名 = 目标」+「提示文件 = 该目标卡正文逐字 + 锚点」+「文件名由该卡 stem 生成」+ 三个提示文件互不相同；单目标 / `--card` 完整路径 / 同批混合三条路径命令行**逐字重建 diff 为空**（override 与相对名两条通道不混用）；负控 = 改回全局 `PROMPT` 回落（副本两处 sed）⇒ 本用例翻红并点名 AC1，还原复绿 | AC1–AC4 · #75 | `tmux`（隔离 socket，缺则 SKIP）；桩 `pi`（记 argv+END 后长驻）+ 桩 `tmux`（`split-window` 命令串落盘后转发）⇒ 不依赖真实 pi 会话/`tsx`/网络 |
 | 25 | 布局守卫容量判据（#82 B · #84 C：`pct`/`min` **从脚本 `*_DEFAULT` 常量抽取**，副本改默认值 ⇒ 公式断言仍绿、拍板表自跳过）：从**真脚本**抽取 `main_row2_geom`/`main_row2_min_col` 实跑边界（n=7/8/9/10 ⇒ 137/184/184/230 + 阈值两侧逐值）· 语义断言 n = 宿主窗口实际 pane 数（`list-panes`，非 `ROLE_ORDER`）· 活体 7 目标 = 8 pane（183 列 warn / 184 列零 warn）· 变异负控把守卫实参改 `n-1`（模拟「按角色数」）⇒ 判定改变，断言可捕获 | #82 AC2 | `tmux`（隔离 socket；缺则 SKIP）+ 桩 `pi`；零网络（`NAO_UPDATE_ON_ENSURE=0`） |
 | 26 | 真 `pi` 冒烟受限重试护栏（#86 A）：`t4_pi_smoke` 只在**首次 rc=124 或 0 字节**时重试一次（首次 120s / 重试 180s，可 env 覆盖）；info 行恒含**两次 attempt 的 rc + 字节数**（`pi-smoke:` 可 grep）；负控按**实际调用次数**证「非超时失败不重试」（`fail` 桩 exit 7 + 20B 输出 ⇒ 1 次）、「No API key 不重试」、以及「两次超时仍返回 4（调用方 SKIP，full 轴照旧计分）」；末组断言 `cases/02` 真跑路径确实经该护栏（防空转）；**R6 wired 负控**（P1 回归守卫）：以整例子进程跑 `cases/02` —— 假 `pi` 恒失败、无凭据两态都须 **SKIP（77）** 且 SKIP 文案带 rc/字节数（数据通道 = `$ef.info`，不插值全局），并用「`exit 77`→`exit 1`」变异证明该断言非空转 | #86 AC1–AC3 · P1 | 无（纯 bash 桩；不跑真 pi / 不联网 / 不依赖 tmux，~4s） |
+| 27 | 后端抽象层自检（`tests/t4/lib-backend.sh`，生产脚本零改动）：两实验场互不可见（`terminal_id` 交集空 / 会话名含 `$$` / A 增建 pane 不动 B）· 零渗透（`^TMUX`==0 · `HERDR_SESSION` · `HERDR_SOCKET_PATH` 前缀 · 只隔离 `XDG_CONFIG_HOME` 且 `XDG_STATE_HOME` 透传）· `stop` 容忍非 0 + `delete` 幂等（effect 判据）· 零残留（`sessions/` 空 / 无 server / 无进程）· `default` 不可达 · 护栏「缺 `--session` ⇒ FAIL」变异自证 · 静态守卫（裸 tmux 恒带 `-S` / 裸 herdr 恒带 `--session` / 无固定 sleep） | #96 一期 AC1.4/AC1.5/AC1.7 · BR4/BR6/BR9 | `tmux`（缺则 SKIP）或 `herdr`（缺则 SKIP；另需 `protocol 22`）；零网络、无真 `pi` |
 
 ## NOTE 白名单（T531 · `t4_note <tag> <msg>`）
 
