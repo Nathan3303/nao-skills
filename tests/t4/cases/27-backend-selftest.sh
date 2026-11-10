@@ -74,6 +74,7 @@ if [ "$GUARD_ONLY" = "1" ]; then
   t4_assert_contains "$out" "T4_CACHE_DIR" "护栏⑤：报错给出可执行改法（换短 T4_CACHE_DIR / 缩短会话名）"
   t4_assert_contains "$out" "当前长度" "护栏⑤：报错给出当前长度（可判定超多少）"
   t4_assert_not_contains "$out" "rc=9" "护栏⑤：不再是「rc=9 兜底未点火」那种误导定位"
+  rm -rf "$long_cache"                     # 长路径夹具不留在 /tmp（be_init 会先建 lab 根再判护栏）
   t4_exit
 fi
 
