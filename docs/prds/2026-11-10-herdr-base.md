@@ -54,7 +54,7 @@
 - **BR3 身份只取结构化字段**：`pane_id` / `terminal_id` / `agent_session.value` / `workspace.identity_cwd`。
 - **BR4 实验场必须 stop+delete**：只 `stop` 会回放上一轮 pane 布局（spike 实测）。
 - **BR5 不跨会话隐式操作**：不得从 herdr 外部控制聚焦会话；跨会话必须显式 `--session`。
-- **BR6 清环境渗透（含反向护栏）**：起 server 前 `env -u TMUX -u TMUX_PANE -u TMUX_TMPDIR` 并**枚举清除** `HERDR_*`（`for v in $(env | grep -o '^HERDR_[A-Z_]*'); do unset "$v"; done`）。四条可执行判据：① pane 内 `env | grep -c '^TMUX'` == 0；② pane 内 `HERDR_SESSION` == 期望名 且 `HERDR_SOCKET_PATH` 前缀 == 实验根下该会话目录；③ 实验根只隔离 `XDG_CONFIG_HOME`（**不得**指 `XDG_STATE_HOME`，mise 等工具会写它）；④ 任何 herdr 调用缺 `--session` ⇒ **FAIL**（实测无 `--session` 时会静默读到用户 `default`）。
+- **BR6 清环境渗透（含反向护栏）**：起 server 前 `env -u TMUX -u TMUX_PANE -u TMUX_TMPDIR` 并**枚举清除** `HERDR_*`（`for v in $(env | grep -o '^HERDR_[A-Z_]*'); do unset "$v"; done`）。四条可执行判据：① pane 内 `env | grep -c '^TMUX'` == 0；② pane 内 `HERDR_SESSION` == 期望名 且 `HERDR_SOCKET_PATH` 前缀 == 实验根下该会话目录；③ 实验根只隔离 `XDG_CONFIG_HOME`（**不得**指 `XDG_STATE_HOME`，mise 等工具会写它）；④ 任何 herdr 调用缺 `--session` ⇒ **FAIL**（实测无 `--session` 时会静默读到用户 `default`）；**唯一白名单 = `herdr --version`**（纯元数据、不触会话，QA P3-3 实测无用户文件改动），其余调用点必须在唯一入口内。
 - **BR7 状态映射（含权威源）**：`idle`/`done` = 可投递；`working`/`blocked` = 不可投递；`unknown` = 保守不可投递。**权威源 = `agent list`/`pane list` 的 `agent_status` + `state_change_seq`**；`agent explain` 仅诊断、不得作判据（实测与 `agent list` 双源矛盾）。`done` 保留在映射内但标注「**不可合成**（`pane report-agent` 拒绝 done），二期用真 turn 验证」。
 - **BR8 命名空间按仓分区（命名契约单一函数）**：多仓并发时会话名/agent 名带仓标识，禁全局同名；同仓重复 `ensure` 仍按「已在运行」判重。命名格式抽**单一函数**（二期重写同批函数时须逐字保持契约，避免返工）。
 - **BR9 不碰用户 default session**：测试与生产一律使用独立 session，`default` 的快照在实验前后必须逐字一致。
@@ -66,7 +66,7 @@
 - **依赖边界**：herdr ≥ 0.9.1 / protocol 22；协议或 API 破坏性变更必须 fail loud，不得静默降级。
 - **时延不劣化**：就绪判定不得劣于现状（tmux 侧 5s 有界）。
 - **隐私**：不得把用户 `default` session 的 pane 内容或结构写入仓库、日志或报告。
-- **离线可用**：`check` / `npm test` 在无网环境仍可跑（herdr 实验场不依赖网络）。
+- **离线可用（口径订正）**：`check` / `npm test` 在无网环境仍可跑。注意 herdr **自身**会 `curl herdr.dev`（更新检查 / agent 检测），离线时只多几行失败日志、不中断（QA P3-5 实测），且拆场后这些 curl 可能比 server 多活约 20s（`--max-time` 上限自行退出）⇒ **不得声称「herdr 实验场零网络」**，只承诺「用例判据不依赖网络」。
 
 ## 七、AC（分三期，逐条 Given/When/Then）
 
