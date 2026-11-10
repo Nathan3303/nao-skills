@@ -17,40 +17,36 @@
 #   AC8③ overlay 兼容：扫描目录 realpath == $PROMPTS_DIR realpath ⇒ 该节整体跳过（不恒红）
 #   AC8④ 卡集前缀嵌套：check 报 error 点名；status 用最长匹配不误杀
 #
-# 夹具纪律同用例 20：隔离 socket + env -u TMUX + 桩 pi（不拉真会话）+ 名册空化（PI_CODING_AGENT_DIR 空目录）。
+# 夹具纪律（B4 · 后端无关）：夹具经 `tests/t4/lib-backend.sh`（`be_*`）建，pane/身份/socket 与
+#   会话根由后端抽象单点决定；herdr 侧用 `tests/t4/fixtures/herdr-double`（确定性替身，见其文件头），
+#   因此本用例在两种后端都零真会话、零网络、可确定复现。名册仍空化（PI_CODING_AGENT_DIR 空目录）。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
+source "$T4_ROOT/tests/t4/lib-backend.sh"
 
-command -v tmux >/dev/null 2>&1 \
-  || t4_skip "环境缺少 tmux（T537 AC2 需真 tmux 断言 pane/session 零副作用）"
-
+BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
+if [ "$BE_NAME" = "tmux" ]; then
+  command -v tmux >/dev/null 2>&1 \
+    || t4_skip "环境缺少 tmux（tmux 后端需真隔离 socket 断言 pane/session 零副作用）"
+fi
 BASH_BIN="$(command -v bash)"
 LAB="$T4_CACHE_DIR/lab21-$$"
-SOCKDIR="$LAB/sock"
-SOCK="$SOCKDIR/tmux-$(id -u)/default"
-FTMUX="$SOCK,0,0"
 
-GUARD=0
-_TM="${TMUX:-}"
-for p in "/tmp/tmux-$(id -u)/default" "${TMPDIR:-/tmp}/tmux-$(id -u)/default" "${_TM%%,*}"; do
-  [ -n "$p" ] && [ "$SOCK" = "$p" ] && GUARD=1
-done
-[[ "$SOCK" == "$LAB"/* ]] || GUARD=1
-if [ "$GUARD" != 0 ]; then
-  t4_bad "护栏触发：夹具 SOCK=$SOCK 不在 \$LAB 下或与生产默认候选冲突"
-  t4_exit
-fi
 FIXTURE_TOP="$(git -C "$T4_CACHE_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
 if [ -n "$FIXTURE_TOP" ]; then
   t4_bad "夹具根落在 git 仓内（$FIXTURE_TOP）⇒ 锚根判定会被污染"
   t4_exit
 fi
-t4_ok "护栏：隔离 socket + 夹具根不在任何 git 仓内"
 
 # ---- 夹具 ----
-mkdir -p "$LAB" "$SOCKDIR/tmux-$(id -u)" "$LAB/bin" "$LAB/pi-empty"
-chmod 700 "$SOCKDIR/tmux-$(id -u)"
+mkdir -p "$LAB" "$LAB/bin" "$LAB/pi-empty"
 cp -r "$T4_ROOT/.agents" "$LAB/.agents" || { t4_bad "夹具复制 .agents 失败"; t4_exit; }
 cp "$T4_ROOT/.agents/scripts/nao-fleet.sh" "$LAB/.agents/scripts/nao-fleet.sh"
+# herdr 侧把替身放到 PATH 前缀（tmux 侧不调用 herdr ⇒ 对既有行为零影响）
+PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
+BE_CACHE_ROOT="$T4_CACHE_DIR"
+be_init "$LAB" "lab" || { t4_bad "be_init 失败（后端=$BE_NAME）"; t4_exit; }
+be_ensure_scene || { t4_bad "be_ensure_scene 失败（后端=$BE_NAME）"; t4_exit; }
+t4_ok "护栏：后端=$BE_NAME · 夹具根=$LAB（不在任何 git 仓内）· 场已起"
 # 被测项目（下游仓）与机制包（$LAB）**分居两目录**：卡夹具（含 fifo/目录）只落在项目侧，
 # 否则 `check` 的交叉引用扫描会去 grep fifo 而阻塞（与被测特性无关的夹具污染）。
 PROJ="$LAB/proj"
@@ -97,18 +93,13 @@ exit 0
 SH
 chmod +x "$LAB/bin/pi"
 
-TX() { tmux -S "$SOCK" "$@"; }
-TX new-session -d -s lab -x 240 -y 60 -c "$LAB" >/dev/null 2>&1
-sleep 0.3
-CALLER="$(TX list-panes -t lab -F '#{pane_id}' | head -1)"
-TX setenv -g PATH "$LAB/bin:$PATH" >/dev/null 2>&1
+CALLER="$(be_caller_pane)"
 BASE="$(basename "$LAB")"
-t4_assert_ne "" "$CALLER" "夹具：隔离 tmux server + 调用者 pane 建立（$CALLER）"
+t4_assert_ne "" "$CALLER" "夹具：调用者 pane 建立（$CALLER；后端=$BE_NAME）"
 
 t521_teardown() {
-  [ -n "${SOCK:-}" ] && [ -d "${LAB:-/nonexistent}" ] || return 0
-  ( cd "$LAB" 2>/dev/null || cd /tmp
-    env -u TMUX "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" cleanup -S "$SOCK" >/dev/null 2>&1 ) || true
+  [ -n "${LAB:-}" ] && [ -d "$LAB" ] || return 0
+  be_teardown >/dev/null 2>&1 || true
   return 0
 }
 t521_exit_trap() {
@@ -121,19 +112,21 @@ t521_exit_trap() {
 trap t521_exit_trap EXIT
 
 # ---- 调用封装：cwd 可指定（check 分级用独立项目目录）----
-run_fleet_in() { # <dir> <args...>
+# 业务 env 由本用例 export；后端句柄（TMUX/TMUX_PANE 或 HERDR_*/XDG_CONFIG_HOME）由 be_run_fleet 注入
+export NAO_SKILLS="$LAB" PI_CODING_AGENT_DIR="$PI_AGENT_DIR"
+export NAO_TASKS_STATE="$LAB/tasks.md"
+export PATH="$LAB/bin:$PATH"
+run_fleet_in() { # <dir> <args...> → T4_RC/T4_OUT/T4_ERR（*_ANSI 去色）＋ BE_*
   local dir="$1"; shift
-  t4_run_in_dir "$dir" env -u TMUX -u TMUX_PANE TMUX="$FTMUX" TMUX_PANE="$CALLER" \
-    TMUX_TMPDIR="$SOCKDIR" NAO_SKILLS="$LAB" PI_CODING_AGENT_DIR="$PI_AGENT_DIR" \
-    NAO_QA_FAKE_ROSTER="$ROSTER_JSON" \
-    NAO_TASKS_STATE="$LAB/tasks.md" PATH="$LAB/bin:$PATH" \
-    timeout 90 bash "$LAB/.agents/scripts/nao-fleet.sh" "$@"
-  T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
-  T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  export NAO_QA_FAKE_ROSTER="$ROSTER_JSON"
+  be_run_fleet "$dir" "$@"
+  T4_RC="$BE_RC"; T4_OUT="$BE_OUT"; T4_ERR="$BE_ERR"
+  T4_OUT_ANSI="$BE_OUT_ANSI"; T4_ERR_ANSI="$BE_ERR_ANSI"
 }
 run_fleet() { run_fleet_in "$PROJ" "$@"; }
-pane_count() { TX list-panes -a -F '#{pane_id}' 2>/dev/null | grep -c . || true; }
-session_list() { TX list-sessions -F '#{session_name}' 2>/dev/null | sort | tr '\n' ' ' || true; }
+pane_count() { be_pane_count; }
+# 「零副作用」签名：pane 集 + 会话/workspace 集（tmux = session 名；herdr = workspace id）
+scene_signature() { be_scene_signature; }
 # 只统计**本用例卡夹具**生成的提示文件（`build_system_prompt` 按卡 basename 命名）：
 #   本机/并行用例的常驻会话也会在 /tmp/nao-fleet-* 落文件，全局快照会被污染（假红）。
 prompt_files() {
@@ -147,14 +140,14 @@ prompt_files() {
 ac2_case() { # <label> <预期 stderr 子串> <args...>
   local label="$1" want="$2"; shift 2
   local pc sl pf
-  pc="$(pane_count)"; sl="$(session_list)"; pf="$(prompt_files)"
+  pc="$(pane_count)"; sl="$(scene_signature)"; pf="$(prompt_files)"
   run_fleet ensure "$@"
   t4_assert_ne "0" "$T4_RC" "AC2 $label ⇒ rc≠0"
   t4_assert_eq "1" "$(printf '%s\n' "$T4_ERR" | grep -c .)" "AC2 $label ⇒ stderr 恰单行"
   t4_assert_contains "$T4_ERR_ANSI" "$want" "AC2 $label ⇒ 原因点名：$want"
   t4_assert_contains "$T4_ERR_ANSI" "该怎么办" "AC2 $label ⇒ 文案含「该怎么办」"
   t4_assert_eq "$pc" "$(pane_count)" "AC2 $label ⇒ pane 数不变（零副作用）"
-  t4_assert_eq "$sl" "$(session_list)" "AC2 $label ⇒ tmux session 列表不变"
+  t4_assert_eq "$sl" "$(scene_signature)" "AC2 $label ⇒ 现场签名不变（pane 集 + 会话/workspace 集）"
   t4_assert_eq "$pf" "$(prompt_files)" "AC2 $label ⇒ 无 prompt 临时文件残留"
 }
 
@@ -176,14 +169,13 @@ t4_assert_contains "$T4_OUT" "--card" "AC5⑤ 帮助含 --card"
 t4_assert_contains "$T4_OUT" "下游仓自定义角色会话" "AC5⑤ 帮助含一句用途说明"
 
 # ============================================================ AC8① status 未识别节（D5）
-TX new-session -d -s fx-ghost -x 200 -y 50 -c "$PROJ" >/dev/null 2>&1 || true
-sleep 0.3
-P_GHOST="$(TX list-panes -t fx-ghost -F '#{pane_id}' | head -1)"
-TX select-pane -t "$P_GHOST" -T "π - ghost-reviewer-T9009 - $BASE" >/dev/null 2>&1 || true
-TX new-session -d -s fx-plain -x 200 -y 50 -c "$PROJ" >/dev/null 2>&1 || true
-sleep 0.3
-P_PLAIN="$(TX list-panes -t fx-plain -F '#{pane_id}' | head -1)"
-TX select-pane -t "$P_PLAIN" -T "π - helper - $BASE" >/dev/null 2>&1 || true
+# AC8① 夹具：两个「卡已消失」的会话（身份/归属按后端各自的结构化面建；herdr 需在线证据 ⇒ 走 be_fixture_session）
+P_GHOST="$(be_new_pane "$PROJ")"
+t4_assert_ne "" "$P_GHOST" "夹具：角色未识别 pane 建立（ghost-reviewer-T9009）"
+be_fixture_session "$P_GHOST" "ghost-reviewer-T9009" "$(basename "$PROJ")" || t4_bad "夹具：ghost-reviewer-T9009 身份写入失败"
+P_PLAIN="$(be_new_pane "$PROJ")"
+t4_assert_ne "" "$P_PLAIN" "夹具：floor pane 建立（helper）"
+be_fixture_session "$P_PLAIN" "helper" "$(basename "$PROJ")" || t4_bad "夹具：helper 身份写入失败"
 if [ "$TSX_OK" = "1" ]; then
   ROSTER_JSON="$(mk_roster "$PROJ" ghost-reviewer-T9009 helper)"
 else
@@ -199,10 +191,12 @@ fi
 t4_assert_contains "$L_GHOST" "卡被删除/改名" "AC8① 指路：卡被删除/改名"
 t4_assert_not_contains "$L_GHOST" "close --task" "AC8① 该行不给可执行回收命令"
 t4_assert_contains "$L_GHOST" "不给回收命令" "AC8① 明示本行不提供回收命令"
-t4_assert_eq "" "$(printf '%s\n' "$T4_OUT" | grep -F "helper" || true)" \
-  "AC8① floor：非任务号形状的名字不误收（不猜）"
-TX kill-session -t fx-ghost >/dev/null 2>&1 || true
-TX kill-session -t fx-plain >/dev/null 2>&1 || true
+# floor 判据只看「角色未识别」节（投递判定节按设计会列所有在线 label —— 那不是「误收」）
+UNREC_SEC="$(printf '%s\n' "$T4_OUT" | sed -n '/== 角色未识别/,/^== /p')"
+t4_assert_contains "$UNREC_SEC" "ghost-reviewer-T9009" "AC8① floor 前置：未识别节确实存在且含目标行"
+t4_assert_eq "" "$(printf '%s\n' "$UNREC_SEC" | grep -F "helper" || true)" \
+  "AC8① floor：非任务号形状的名字不误收（不猜；只看「角色未识别」节）"
+be_kill_pane "$P_GHOST"; be_kill_pane "$P_PLAIN"
 
 # ============================================================ AC8② check 分级（内容 warn / 机制 error）
 P1="$LAB/proj-content"     # 仅内容类问题 ⇒ warn 不红 rc
@@ -235,10 +229,9 @@ t4_assert_ne "0" "$T4_RC" "AC8④ 卡集前缀嵌套 ⇒ check rc=1"
 t4_assert_contains "$T4_OUT_ANSI" "卡集前缀嵌套：rev 与 rev-deep" "AC8④ 嵌套报 error 并点名两卡"
 
 # AC8④ status 最长匹配不误杀（rev 与 rev-deep 并存，会话名 rev-deep-T9001）
-TX new-session -d -s fx-nest -x 200 -y 50 -c "$P3" >/dev/null 2>&1 || true
-sleep 0.3
-P_NEST="$(TX list-panes -t fx-nest -F '#{pane_id}' | head -1)"
-TX select-pane -t "$P_NEST" -T "π - rev-deep-T9001 - $(basename "$P3")" >/dev/null 2>&1 || true
+P_NEST="$(be_new_pane "$P3")"
+t4_assert_ne "" "$P_NEST" "夹具：嵌套卡 pane 建立（rev-deep-T9001）"
+be_fixture_session "$P_NEST" "rev-deep-T9001" "$(basename "$P3")" || t4_bad "夹具：rev-deep-T9001 身份写入失败"
 if [ "$TSX_OK" = "1" ]; then ROSTER_JSON="$(mk_roster "$P3" rev-deep-T9001)"; fi
 run_fleet_in "$P3" status
 L_NEST="$(printf '%s\n' "$T4_OUT" | grep -F "rev-deep-T9001" || true)"
@@ -247,7 +240,7 @@ if [ "$TSX_OK" = "1" ]; then
   t4_assert_contains "$L_NEST" "! 残留" "AC8④ 无 tasks-state 记录 ⇒ 标「残留」"
   t4_assert_contains "$L_NEST" "close --task T9001 rev-deep" "AC8④ 最长匹配下给出正确可执行命令"
 fi
-TX kill-session -t fx-nest >/dev/null 2>&1 || true
+be_kill_pane "$P_NEST"
 
 # ============================================================ AC8③ overlay 兼容（realpath 相等 ⇒ 整节跳过）
 run_fleet_in "$LAB" check -v

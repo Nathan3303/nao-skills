@@ -38,26 +38,20 @@ SELF="${BASH_SOURCE[0]}"
 SUBJECT="${T519_SUBJECT:-$T4_ROOT/.agents/scripts/nao-fleet.sh}"
 MUTATION_CHILD="${T519_MUTATION_CHILD:-0}"
 
-# ---- 能力门 1：tmux（三态夹具都建立在 pane cwd 上；缺则整例 SKIP）----
-command -v tmux >/dev/null 2>&1 \
-  || t4_skip "环境缺少 tmux（T535 需真 tmux 隔离 socket 构造 pane 归属三态）"
+# ---- 能力门（B4：后端无关）----
+# tmux 后端需真隔离 socket；herdr 后端用 `tests/t4/fixtures/herdr-double`（确定性替身，见其文件头），
+# 不依赖真 herdr/真 pi ⇒ 两种后端都零真会话、零网络。
+source "$T4_ROOT/tests/t4/lib-backend.sh"
+BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
+if [ "$BE_NAME" = "tmux" ]; then
+  command -v tmux >/dev/null 2>&1 \
+    || t4_skip "环境缺少 tmux（tmux 后端需真隔离 socket 构造 pane 归属三态）"
+fi
+PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
 
-# ---- 夹具路径 + 硬护栏（先于一切 tmux 操作）----
+# ---- 夹具路径（后端场由 be_init 单点决定：tmux 隔离 socket / herdr 私有根）----
 LAB="$T4_CACHE_DIR/lab19-$$"
 OTHER="$T4_CACHE_DIR/otherrepo19-$$"
-SOCKDIR="$LAB/sock"
-SOCK="$SOCKDIR/tmux-$(id -u)/default"
-FTMUX="$SOCK,0,0"
-GUARD=0
-_TM="${TMUX:-}"
-for p in "/tmp/tmux-$(id -u)/default" "${TMPDIR:-/tmp}/tmux-$(id -u)/default" "${_TM%%,*}"; do
-  [ -n "$p" ] && [ "$SOCK" = "$p" ] && GUARD=1
-done
-[[ "$SOCK" == "$LAB"/* ]] || GUARD=1
-if [ "$GUARD" != 0 ]; then
-  t4_bad "护栏触发：夹具 SOCK=$SOCK 不在 \$LAB 下或与生产默认候选冲突"
-  t4_exit
-fi
 
 # BR5：夹具根不得落在任何 git 仓内（否则 toplevel 锚把「他仓」拉回本仓 ⇒ ② 假绿）
 FIXTURE_TOP="$(git -C "$T4_CACHE_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
@@ -73,11 +67,10 @@ if [ -f "$PI_AGENT_DIR/npm/node_modules/tsx/dist/cli.mjs" ] && command -v node >
   TSX_OK=1
 fi
 
-# ---- 收尾：EXIT trap 链（先机制 cleanup -S，再复刻 lib 缓存清理语义；BR5 保真退出码）----
+# ---- 收尾：EXIT trap 链（先拆后端场，再复刻 lib 缓存清理语义；BR5 保真退出码）----
 t519_teardown() {
-  [ -n "${SOCK:-}" ] && [ -d "$LAB" ] || return 0
-  ( cd "$LAB" 2>/dev/null || cd /tmp
-    env -u TMUX "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" cleanup -S "$SOCK" >/dev/null 2>&1 ) || true
+  [ -n "${LAB:-}" ] && [ -d "$LAB" ] || return 0
+  be_teardown >/dev/null 2>&1 || true
   return 0
 }
 t519_exit_trap() {
@@ -90,17 +83,7 @@ t519_exit_trap() {
 trap t519_exit_trap EXIT
 
 # ---- 夹具构造 ----
-mkdir -p "$LAB" "$OTHER" "$SOCKDIR/tmux-$(id -u)"
-chmod 700 "$SOCKDIR/tmux-$(id -u)"                 # tmux 3.7+ 校验默认 socket 目录权限（0700）
-# #90 P3-①：pane 启动器 —— 标题**只经 argv 传入**（`"$1"`），不做任何字符串内插/转义
-#   ⇒ 标题含单引号 / 双引号 / `$` / 空格都安全（旧写法把 title 拼进 `bash -c` 脚本串，含 `'` 即破）。
-PANE_LAUNCH="$LAB/pane-title.sh"
-cat > "$PANE_LAUNCH" <<'SH'
-#!/usr/bin/env bash
-printf '\033]0;%s\007' "$1"
-exec sleep 1800
-SH
-chmod +x "$PANE_LAUNCH"
+mkdir -p "$LAB" "$OTHER"
 cp -r "$T4_ROOT/.agents" "$LAB/.agents" || { t4_bad "夹具复制 .agents 失败"; t4_exit; }
 cp "$SUBJECT" "$LAB/.agents/scripts/nao-fleet.sh" || { t4_bad "夹具写入被测脚本失败（$SUBJECT）"; t4_exit; }
 # 名册假探针（只读 env；绝不接触真实 pi-intercom 名册/broker）；pretty-print 逐字段一行
@@ -128,42 +111,22 @@ UNK_NAME="rd-infra-T9003"
 
 # ---- 调用 / 观察封装 ----
 RC=0; OUT=""
-run_status() {  # [roster-json] [agent-dir] [被测脚本]；$TMUX 指向隔离 server
-  local roster="${1:-"[]"}" agent="${2:-$PI_AGENT_DIR}" script="${3:-$LAB/.agents/scripts/nao-fleet.sh}" of="$LAB/out.$$"
-  ( cd "$LAB" && timeout 90 env -u TMUX -u TMUX_PANE TMUX="$FTMUX" \
-      TMUX_TMPDIR="$SOCKDIR" \
-      NAO_SKILLS="$LAB" NAO_TASKS_STATE="$TASKS_FIX" \
-      PI_CODING_AGENT_DIR="$agent" NAO_QA_FAKE_ROSTER="$roster" \
-      PATH="$REAL_PATH" \
-      "$BASH_BIN" "$script" status ) >"$of" 2>&1
-  RC=$?
-  OUT="$(cat "$of")"; rm -f "$of"
+# 后端句柄（TMUX/TMUX_PANE 或 HERDR_*/XDG_CONFIG_HOME）由 be_run_fleet 单点注入；
+#   本用例只补业务 env（机制包根 / tasks-state / 名册镜像 / agent-dir）。
+export NAO_SKILLS="$LAB" NAO_TASKS_STATE="$TASKS_FIX"
+run_status() {  # [roster-json] [agent-dir] [被测脚本]
+  local roster="${1:-"[]"}" agent="${2:-$PI_AGENT_DIR}" script="${3:-$LAB/.agents/scripts/nao-fleet.sh}"
+  export PI_CODING_AGENT_DIR="$agent" NAO_QA_FAKE_ROSTER="$roster"
+  BE_FLEET_SCRIPT="$script" be_run_fleet "$LAB" status
+  RC=$BE_RC; OUT=$BE_OUT
 }
 mk_session() { printf '{"name":"%s","cwd":"%s","status":"%s"}' "$1" "$2" "${3:-idle}"; }
 roster() { local s="[" e; for e in "$@"; do s="$s$e,"; done; printf '%s' "${s%,}]"; }
-TX() { tmux -S "$SOCK" "$@"; }
-# #90：标题**由 pane 内进程自己一次性输出 OSC 0** 后常驻 idle —— 不再用 `select-pane -T`。
-#   根因（负载下 6/6 复现）：`select-pane -T` 设的 pane_title 会被 pane 内 shell 的 prompt
-#   （PS1 里的 `\e]0;\u@\h:\w`）随后重设回 `user@host:/cwd`；负载高时 prompt 重绘晚到，
-#   竞态由「我们赢」翻成「prompt 赢」⇒ 标题契约丢失 ⇒ fleet 无法把 pane 映射到会话名 ⇒
-#   pane cwd 权威失效 ⇒ 回落到名册 cwd（AC3 冲突场景于是被判「本仓」）。
-#   状态稳定后 pid 换成 `sleep`（不再有进程改标题）⇒ 标题恒定。
-# 有界等待（AC4）：等 pane_title == 期望契约，上限 5s（50×0.1s）；等不到 ⇒ return 8（调用方判红）。
-wait_title() {  # <pane_id> <expected> → 0 就绪 / 1 超时
-  local p="$1" want="$2" i got
-  for i in $(seq 1 50); do
-    got="$(TX display-message -p -t "$p" '#{pane_title}' 2>/dev/null)"
-    [ "$got" = "$want" ] && return 0
-    sleep 0.1
-  done
-  return 1
-}
-start_pane() {  # <session> <cwd> <pane-title-契约>；echo pane_id（标题未就绪 ⇒ 空 + rc=8）
-  local sess="$1" dir="$2" title="$3" p
-  TX new-session -d -s "$sess" -x 200 -y 50 -c "$dir" "$PANE_LAUNCH" "$title" >/dev/null 2>&1 || return 9
-  p="$(TX list-panes -t "$sess" -F '#{pane_id}' 2>/dev/null | head -1)"
+start_pane() {  # <cwd> <会话名> [仓标签]；echo pane_id（建 pane + 写身份，后端无关）
+  local dir="$1" name="$2" repo="${3:-$(basename "$1")}" p
+  p="$(be_new_pane "$dir")" || return 9
   [ -n "$p" ] || return 9
-  wait_title "$p" "$title" || return 8
+  be_fixture_session "$p" "$name" "$repo" || return 9
   printf '%s' "$p"
 }
 line_of() {  # <会话名> ⇒ 该会话在 status 派生区的整行（空 = 未列出）
@@ -171,8 +134,11 @@ line_of() {  # <会话名> ⇒ 该会话在 status 派生区的整行（空 = �
 }
 
 # ---- 夹具：先只建本仓 pane（cwd = LAB）⇒ 单仓场景；再补他仓 pane 与不可判定会话 ----
-P_LOCAL="$(start_pane fxlocal "$LAB" "π - $LOCAL_NAME - $LAB_BASE")"
-t4_assert_ne "" "$P_LOCAL" "夹具：本仓派生 pane 建立且标题契约就绪（π - $LOCAL_NAME - $LAB_BASE；等不到标题 ⇒ 空 ⇒ 本断言红）"
+# 场（server/session 根）由 be_ensure_scene 起；后端差异只在 lib-backend 内。
+be_init "$LAB" "lab" || { t4_bad "be_init 失败（后端=$BE_NAME）"; t4_exit; }
+be_ensure_scene || { t4_bad "be_ensure_scene 失败（后端=$BE_NAME）"; t4_exit; }
+P_LOCAL="$(start_pane "$LAB" "$LOCAL_NAME" "$LAB_BASE")"
+t4_assert_ne "" "$P_LOCAL" "夹具：本仓派生 pane 建立且身份就绪（$LOCAL_NAME @ $LAB_BASE；后端=$BE_NAME）"
 
 R_LOCAL="$(roster "$(mk_session "$LOCAL_NAME" "$LAB")")"
 R_MULTI="[]"
@@ -188,17 +154,42 @@ t4_assert_contains "$L_LOCAL" "! 残留" "① 本仓会话 tag 走 ! 分支（�
 t4_assert_contains "$L_LOCAL" "close --task T9001 rd-infra" "① 本仓会话行含可执行 close --task <编号> <别名>"
 
 # ---- 夹具：补他仓 pane（cwd = 仓外目录）+ 不可判定会话 ----
-P_OTHER="$(start_pane fxother "$OTHER" "π - $OTHER_NAME - $OTHER_BASE")"
-t4_assert_ne "" "$P_OTHER" "夹具：他仓派生 pane 建立且标题就绪（pane cwd = 仓外目录 $OTHER_BASE）"
-# 不可判定会话：legacy `nao-*` detached 会话（无标题契约 ⇒ 无 pane cwd），名册亦无 cwd
-# ③ legacy `nao-*` detached 会话：标题**显式**设成非契约形态（同样由进程 OSC 0 输出，恒定），
-#   不再依赖 shell prompt 偶然不回写标题。这样「无 pane cwd 可用」是确定性事实，不是竞态产物。
-TX new-session -d -s "nao-$UNK_NAME" -x 200 -y 50 -c "$LAB" "$PANE_LAUNCH" "legacy-detached" >/dev/null 2>&1 || true
-P_UNK="$(TX list-panes -t "nao-$UNK_NAME" -F '#{pane_id}' 2>/dev/null | head -1)"
-t4_assert_ne "" "${P_UNK:-}" "夹具：不可判定会话 pane 建立"
-wait_title "${P_UNK:-%0}" "legacy-detached" \
-  && t4_ok "夹具：不可判定会话标题 = legacy-detached（非契约，确定性）" \
-  || t4_bad "夹具：不可判定会话标题未在 5s 内就绪（等不到 ⇒ 红）"
+P_OTHER="$(start_pane "$OTHER" "$OTHER_NAME" "$OTHER_BASE")"
+t4_assert_ne "" "$P_OTHER" "夹具：他仓派生 pane 建立且身份就绪（pane cwd = 仓外目录 $OTHER_BASE）"
+# ③ 不可判定归属（两路 cwd 皆无）：**tmux 专有**夹具 —— legacy `nao-*` detached 会话（无标题契约
+#   ⇒ 无 pane cwd）+ 名册无 cwd。herdr 侧该态**结构上不可达**：身份 = pane.label，归属 = pane.cwd，
+#   每个在线 pane 必有 cwd（本仓/他仓两态穷尽）⇒ 该组按后端门控，绝不伪造 third state。
+if [ "$BE_NAME" = "tmux" ]; then
+  t4_note backend-gate "③ 不可判定归属是 tmux 专有夹具（herdr 的 label+cwd 把归属穷尽为本仓/他仓两态）"
+  # 仅 tmux 分支用：隔离 socket 的直连（`-S` 是 #84 采样纪律；herdr 侧不出现该函数）
+  TX() { tmux -S "$BE_SOCK" "$@"; }
+  PANE_LAUNCH="$LAB/pane-title.sh"
+  cat > "$PANE_LAUNCH" <<'SH'
+#!/usr/bin/env bash
+# #90 P3-①：标题只经 argv 传入；进程自己输出 OSC 0 后 exec sleep（不再有 shell prompt 改标题）
+printf '\033]0;%s\007' "$1"
+exec sleep 1800
+SH
+  chmod +x "$PANE_LAUNCH"
+  wait_title() { # <pane_id> <expected> → 0 就绪 / 1 超时（50×0.1s 有界）
+    local p="$1" want="$2" i got
+    for i in $(seq 1 50); do
+      got="$(TX display-message -p -t "$p" '#{pane_title}' 2>/dev/null)"
+      [ "$got" = "$want" ] && return 0
+      sleep 0.1
+    done
+    return 1
+  }
+  TX new-session -d -s "nao-$UNK_NAME" -x 200 -y 50 -c "$LAB" "$PANE_LAUNCH" "legacy-detached" >/dev/null 2>&1 || true
+  P_UNK="$(TX list-panes -t "nao-$UNK_NAME" -F '#{pane_id}' 2>/dev/null | head -1)"
+  t4_assert_ne "" "${P_UNK:-}" "夹具：不可判定会话 pane 建立"
+  wait_title "${P_UNK:-%0}" "legacy-detached" \
+    && t4_ok "夹具：不可判定会话标题 = legacy-detached（非契约，确定性）" \
+    || t4_bad "夹具：不可判定会话标题未在 5s 内就绪（等不到 ⇒ 红）"
+else
+  P_UNK=""
+  t4_ok "夹具：herdr 侧不建「不可判定归属」pane（该态结构上不可达，见上）"
+fi
 
 if [ "$TSX_OK" = "1" ]; then
   # ② 名册 cwd 与 pane 同为他仓目录；③ 名册条目在但 cwd 为空（pane/名册均无 cwd ⇒ unknown）
@@ -221,14 +212,21 @@ t4_assert_match "$L_OTHER" "^  ~ $OTHER_NAME" "② 他仓会话行走 ~"
 t4_assert_contains "$L_OTHER" "他仓" "② 他仓会话行含「他仓」"
 t4_assert_contains "$L_OTHER" "$OTHER_BASE" "② 他仓会话行点名他仓仓名（$OTHER_BASE）"
 t4_assert_not_contains "$L_OTHER" "close --task" "② 他仓会话整行不含可执行 close --task"
-L_UNK="$(line_of "$UNK_NAME")"
-t4_assert_match "$L_UNK" "^  \? $UNK_NAME" "③ 归属不可判定会话行走 ?"
-t4_assert_contains "$L_UNK" "归属不可判定" "③ 归属不可判定行含「归属不可判定」"
-t4_assert_not_contains "$L_UNK" "close --task" "③ 归属不可判定整行不含可执行 close --task"
-
-# 单仓断言在混合场景的对照（~/? 行只应来自他仓/不可判定两态，恰 2 行）
-t4_assert_eq "2" "$(printf '%s\n' "$OUT" | grep -cE '^  [~?] ' || true)" \
-  "②③ 混合场景恰有 2 条 ~/? 行（他仓 + 不可判定，各 1）"
+if [ "$BE_NAME" = "tmux" ]; then
+  L_UNK="$(line_of "$UNK_NAME")"
+  t4_assert_match "$L_UNK" "^  \? $UNK_NAME" "③ 归属不可判定会话行走 ?"
+  t4_assert_contains "$L_UNK" "归属不可判定" "③ 归属不可判定行含「归属不可判定」"
+  t4_assert_not_contains "$L_UNK" "close --task" "③ 归属不可判定整行不含可执行 close --task"
+  # 单仓断言在混合场景的对照（~/? 行只应来自他仓/不可判定两态，恰 2 行）
+  t4_assert_eq "2" "$(printf '%s\n' "$OUT" | grep -cE '^  [~?] ' || true)" \
+    "②③ 混合场景恰有 2 条 ~/? 行（他仓 + 不可判定，各 1）"
+else
+  # herdr：归属只有本仓/他仓两态 ⇒ 混合场景恰 1 条 ~ 行、零 ? 行
+  t4_assert_eq "1" "$(printf '%s\n' "$OUT" | grep -cE '^  ~ ' || true)" \
+    "② 混合场景恰有 1 条 ~ 行（他仓；herdr 无第三态）"
+  t4_assert_eq "0" "$(printf '%s\n' "$OUT" | grep -cE '^  \? ' || true)" \
+    "③ herdr 侧零 ? 行（归属两态穷尽，不伪造第三态）"
+fi
 OUT_MIXED="$OUT"   # AC5① 基线对照（此时夹具仅 3 个 pane，旧版/新版应逐字一致）
 
 # ============================================================ AC1/AC2/AC4 pane-only（名册不可用）
@@ -248,10 +246,14 @@ L_OTHER_NO="$(line_of "$OTHER_NAME")"
 t4_assert_match "$L_OTHER_NO" "^  ~ $OTHER_NAME" "AC2 名册不可用 pane cwd 在他仓 ⇒ 仍判他仓"
 t4_assert_contains "$L_OTHER_NO" "$OTHER_BASE" "AC2 他仓行点名他仓仓名（$OTHER_BASE）"
 t4_assert_not_contains "$L_OTHER_NO" "close --task" "AC2 他仓 pane 整行不含可执行 close --task"
-L_UNK_NO="$(line_of "$UNK_NAME")"
-t4_assert_match "$L_UNK_NO" "^  \? $UNK_NAME" "AC4 两路 cwd 皆无 ⇒ 仍走 ?（fail-closed 未退化）"
-t4_assert_contains "$L_UNK_NO" "归属不可判定" "AC4 不可判定行含「归属不可判定」"
-t4_assert_not_contains "$L_UNK_NO" "close --task" "AC4 不可判定整行不给可执行 close --task"
+if [ "$BE_NAME" = "tmux" ]; then
+  L_UNK_NO="$(line_of "$UNK_NAME")"
+  t4_assert_match "$L_UNK_NO" "^  \? $UNK_NAME" "AC4 两路 cwd 皆无 ⇒ 仍走 ?（fail-closed 未退化）"
+  t4_assert_contains "$L_UNK_NO" "归属不可判定" "AC4 不可判定行含「归属不可判定」"
+  t4_assert_not_contains "$L_UNK_NO" "close --task" "AC4 不可判定整行不给可执行 close --task"
+else
+  t4_ok "AC4 herdr 侧无「两路 cwd 皆无」态可构造（pane.cwd 为结构化必有字段；tmux 侧已覆盖 fail-closed）"
+fi
 
 # ============================================================ AC5① 名册正常路径零回归（对固定基线 fixture 逐字等价）
 # 只比**名册可用且 pane/名册一致**的场景（冲突/无名册场景正是 M20261101 要改的行为，不入零回归对照）。
@@ -287,7 +289,7 @@ SUBJ_MD5="$(md5sum < "$SUBJECT" | awk '{print $1}')"
 FIXTURE_HDR_LINES=10
 FIX_BODY_MD5="$(tail -n +$((FIXTURE_HDR_LINES + 1)) "$BASELINE_FIXTURE" 2>/dev/null | md5sum | awk '{print $1}')"
 SUBJ_BODY_MD5="$(tail -n +2 "$SUBJECT" | md5sum | awk '{print $1}')"
-if [ "$TSX_OK" = "1" ]; then
+if [ "$TSX_OK" = "1" ] && [ "$BE_NAME" = "tmux" ]; then
   run_status "$R_MULTI" "$PI_AGENT_DIR" "$BASE_SCRIPT"
   t4_assert_eq "0" "$RC" "AC5① 基线（fixture $BASELINE_SHA）status rc=0"
   # P3-2（QA）：FAIL 文案要能直接指导「怎么办」+ 给出定位差异的行，不只两个 md5
@@ -308,13 +310,17 @@ if [ "$TSX_OK" = "1" ]; then
   if [ "$FIX_BODY_MD5" = "$SUBJ_BODY_MD5" ]; then
     t4_note baseline-selfequiv "AC5① 本轮为自等价（护栏触发：fixture 正文 == 被测脚本正文）⇒ 该组对照是恒绿同义反复，不得当零回归证据；更新 fixture 请保留旧基线文件并用新 <sha> 文件名"
   fi
+elif [ "$BE_NAME" != "tmux" ]; then
+  # 基线 fixture 是 **tmux 时代**的整脚本（`require_tmux`），herdr 侧无法执行 ⇒ 按后端门控；
+  # fixture 存在/非空/来源头三条断言已在上面跑过（后端无关）。
+  t4_note backend-gate "AC5① 基线逐字对照以 tmux 为对照载体（fixture = tmux 时代整脚本）；herdr 的零回归由用例 28 的双拼写 md5 + 用例 28 B3 段承担"
 else
   t4_degrade "缺 tsx/node（$PI_AGENT_DIR/npm/node_modules/tsx）⇒ AC5① 名册正常路径逐字等价对照降级（fixture 存在/非空/来源头三条断言已跑）"
 fi
 
 # ============================================================ AC3 冲突优先级（pane 优先于名册）
 CONFLICT_NAME="qa-T9004"
-P_CONFLICT="$(start_pane fxconflict "$OTHER" "π - $CONFLICT_NAME - $OTHER_BASE")"
+P_CONFLICT="$(start_pane "$OTHER" "$CONFLICT_NAME" "$OTHER_BASE")"
 t4_assert_ne "" "$P_CONFLICT" "AC3 夹具：冲突 pane 建立且标题就绪（pane cwd = 他仓 $OTHER_BASE）"
 if [ "$TSX_OK" = "1" ]; then
   R_CONFLICT="$(roster "$(mk_session "$LOCAL_NAME" "$LAB")" \

@@ -1,16 +1,23 @@
-# herdr 后端登记集 —— PRD #96 一期 AC1.1（Issue #96 · `NAO_TEST_TERMINAL=herdr`）
+# herdr 后端登记集 —— PRD #96 AC1.1/AC2.7（Issue #96 · `NAO_TEST_TERMINAL=herdr` · B4 终态）
 #
-# 格式：`<用例编号>  <shared|own>  <到期>  <理由>`
+# 格式：`<用例编号>  <shared|own>  <到期>  <理由>`（**每条一行**；续行一律用 `#` 注释，解析器只认单行条目）
 #   shared = 与 tmux 后端**共享**（后端无关：断言面不依赖 tmux / herdr）
 #   own    = **本后端专有**（理由必写；到期 = 复核日期，逾期须重判是否仍专有）
 # 语义（run.sh 单点实现）：登记集内的用例才跑；**未登记**的用例输出 `[PENDING]` 并点名 ——
 #   不得静默 SKIP（PRD §二 目标指标 + 附一裁定①）。登记集非法（未知编号 / 重复 / 列不合法）⇒ rc=1。
 # 维护：改本文件必须同步 `tests/README.md`「后端登记集」小节（登记集是 herdr 侧的**唯一**准入清单）。
 #
-# 为什么不登记 D 类 10 例（09/12/15/19/20/21/22/23/24/25）：它们的断言面建在 tmux 语义上
-#   （宿主窗口 / pane 标题契约 / 名册 cwd / `close` 前提 …），**迁移归二期**（PRD §三 范围）且
-#   要与生产路径同批改。现在登记只会把 tmux 断言面硬套到 herdr 上、靠 SKIP 掩盖（附一裁定①：不采全绿口径）。
+# **tmux 专有（不登记 · 三期重判）**：`12` = 派生落点/宿主窗口属三期布局（AC3.1）；`25` = tmux 宽度算式 +
+#   活体 pane 数（三期布局不依赖列宽算式）。二者由下面 `# tmux-only:` 机器可读声明表达 ⇒ 运行期输出
+#   `[TMUX-ONLY]` 并单列计数（**不是 PENDING、也不是 SKIP**）。三期落地后重判是否迁入本表。
+# tmux-only: 12 25
 #
+# 后端侧证据口径（B4）：shared/own 用例的**夹具**统一经 `tests/t4/lib-backend.sh`（`be_*`）单点建；
+#   herdr 侧的后端证据由 `tests/t4/fixtures/herdr-double`（确定性替身：pane.label / pane.cwd /
+#   process-info.argv / agent_status / state_change_seq 可编排）提供，**不依赖真 herdr / 真 pi**
+#   ⇒ 门禁不因 herdr pre-1.0 行为漂移而 flake（与 B1/B2/B3 用 PATH 桩测 herdr 分支同口径）。
+#
+# 后端无关（不接触任何后端）：
 01  shared  —  后端无关（夹具项目 + shim `check`，不接触 tmux/herdr）
 02  shared  —  后端无关（真 `pi` 注册 / manifest 契约，不接触 tmux/herdr）
 03  shared  —  后端无关（未物化 `DEGRADED` + D7 防重入，不接触 tmux/herdr）
@@ -26,4 +33,21 @@
 17  shared  —  后端无关（角色→子代理单一事实：只读 Node 探针）
 18  shared  —  后端无关（codegraph 四态检测：纯 bash + 夹具 stub）
 26  shared  —  后端无关（真 `pi` 冒烟重试护栏：纯 bash 桩，不建 server）
+#
+# 二期 B4：D 类 10 例按 AC2.7 分流（5 shared / 3 own / 2 tmux 专有）
+#   19/20/21/23/24 的断言面 = 我们自己的输出 / argv / 文件内容 ⇒ shared；夹具经 `be_*`，
+#   个别 tmux 语义断言在用例内 `backend-gate` 点名门控（每处都写明「为什么本后端不可达」）。
+#
+19  shared  2027-06-30  归属三态（本仓/他仓/不可判定）+ pane cwd 权威 + 单行谓词双向变异；断言面 = 我们的 status 输出/close 文案。门控两处：AC5① 基线对照以 tmux 时代整脚本为载体；③ 不可判定归属的 tmux detached 夹具在 herdr 结构上不可达（label+cwd 穷尽两态）。到期复核：三期后 herdr 是否出现第三态
+20  shared  2027-06-30  `ensure --card` 主路径 / 语法绑定 / 一次性会话回收；断言面 = 交给后端的 argv + 提示文件内容 + status/close 文案。门控一处：AC1①「与调用者同窗口」属 tmux 布局语义（herdr 二期只做最小放置，workspace/tab 属 AC3.1）。到期复核：三期改为「落在约定 tab」
+21  shared  2027-06-30  下游卡零副作用（八种失败输入）+ check 分级 + status 未识别节；断言面 = rc/stderr/pane 集/会话集签名 + 文案（签名由 be_scene_signature：tmux=pane+session / herdr=pane+workspace）。到期复核：无（两后端同形）
+23  shared  2027-06-30  `ensure pm` 版本自检注入：命令行逐字节契约 + 反向对照；断言面 = 「交给后端的原始命令串」（tmux 桩 split-window / herdr 替身 pane run 同一落盘口径）。后端差异仅外层包装（tmux `bash -lc %q(inner)` / herdr `inner`）与 argv 级证据面（herdr 走替身 process-info，已 backend-gate 点名）。到期复核：无
+24  shared  2027-06-30  多目标 ensure 每个 pane 用目标自己的卡（`--card` 完整路径通道）+ 全局 PROMPT 负控；判据同 23（逐字节命令行 + 提示文件内容 + 变异负控）。到期复核：无
+09  own     2027-06-30  T509 别名解析 / check 守卫 / close 跨仓回收；核心是 tmux 专有缺陷类（pane id server 局部命名空间撞号负控、legacy `nao-<名>` detached、跨 server 见证、自 pane 祖先链双驱动）。herdr 侧保留等价组（(session,pane) 语义：跨仓真回收 + `HERDR_PANE_ID` 不可判定档保守拒）。到期复核：herdr 是否需要「跨 session 撞号」护栏
+15  own     2027-06-30  subagent-* 在 status/close 的显式排除 + 父 pane 存活；T2/T3/T4/T8 夹具建在「父+子代理共用同一 tmuxPane」「仅被子代理 tmuxPane 认领的孤儿 pi pane」上（tmux 未归属启发式）。herdr 身份 = pane.label，该态不可达（backend-gate 点名）⇒ 改用 label 夹具覆盖同组判据（计数/排除/前缀边界/close 拒绝文案）。到期复核：三期多仓并发下 label 归属
+22  own     2027-06-30  ensure 三态输出互斥 + 摘要三类计数；失败注入靠后端桩（tmux `split-window` / herdr 替身 `pane run`），且 herdr 失败**保留 pane**（先建后注入，不自动 kill）⇒ pane 增量判据不同；三态本身两后端同形（1/1/1 计数守恒）。到期复核：herdr 是否引入统一 rc 语义（观察项）
+28  own     2027-06-30  舰队命名契约（BR8）：C1 codec / C2 golden diff 空 / C3 单写点 lint；golden 对照以 tmux 为对照载体（基线 fixture = tmux 时代整脚本 + `bash -lc` 落地段 md5）。herdr 零回归由同用例「双拼写 md5 + B3 段」承担（不立 second source）；B1 记的账，B4 归口。到期复核：三期转默认后是否需独立 golden
+29  own     2027-06-30  herdr 就绪门反假阳性：已 idle 但 `state_change_seq` 不前进 ⇒ 必须超时 fail loud（禁 `agent wait` 作就绪门）；依赖 herdr 的 agent 会话证据（agent_session / seq / 钩子权威），tmux 侧无此语义。到期复核：herdr 是否提供「有界 wait + 已迁移」原生原语
+30  own     2027-06-30  herdr 幽灵 pane：label 在、agent 条目缺 ⇒ status 不判在线、ensure 不判「已在运行」（可寻址则复用重跑）；label ∧ agent 二元证据是 herdr 专有面。到期复核：herdr 是否提供显式「pane 存活 vs agent 会话」双字段
+31  own     2027-06-30  herdr 集成缺失：`agent_session` 空 / 钩子权威缺 ⇒ 点名不可投递 + ensure fail loud（不退化成 idle/unknown）；BR7 权威源只存在于 herdr。到期复核：herdr 是否把集成状态并入 protocol 契约
 27  own     2027-01-31  后端自检：只验测试侧抽象层 `lib-backend.sh`；herdr 专有断言由 `BE_BACKEND` 门控。到期复核：三期 herdr 转默认后，本用例的 tmux 分支同步升级，届时重判是否升为 shared

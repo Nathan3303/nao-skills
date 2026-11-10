@@ -1,4 +1,4 @@
-# #96 二期 B1 · 门面外裸后端调用台账（**只减不增**）
+# #96 二期 · 门面外裸后端调用台账（**只减不增**）
 #
 # 背景：B1 只把 status 的判定面收进门面（term_require / term_snapshot / term_liveness / term_argv）；
 #   spawn（ensure）、回收（close/cleanup）、布局、check 的终端前提仍直接调 tmux，迁移归 B2/B3/B4。
@@ -11,6 +11,14 @@
 # B3（#96 二期）已落地：`close` / `cleanup` 的句柄层迁进门面（`term_reclaim` / `term_cleanup`；tmux 实现 =
 #   `# >>> term-impl-tmux (回收 / 自身判定 / 忙闲)` 标记区，herdr 实现 = `term-facade-herdr` 区）⇒
 #   `pane_hosts_caller` / `pane_busy` / `cmd_close` 三条**已删除**（6 → 3，只剩 B4 的三条）。
+# B4（#96 二期）已落地：三条**全部清零**（3 → 0），台账自此为空：
+#   · `apply_main_col` / `apply_tmux_layout` ⇒ 整段进 `# >>> term-impl-tmux (布局 / 窄列回退)` 标记区
+#     （布局是**后端专有证据层**，不是业务区；三期 workspace/tab 拓扑替换整个标记区）。
+#     零行为改动：只是标记注释（BR1 的 tmux 落地段逐字 md5 由用例 28 B3① 钉住）。
+#   · `cmd_check` ⇒ 唯一裸调用 `tmux display-message -p '#S'` 换成门面 `term_session_name`
+#     （tmux 实现 `_term_tmux_current_session` 在 `# >>> term-impl-tmux (会话名 / 未归属)` 区内；
+#     herdr 实现直接回 `HERDR_SESSION`）。tmux 侧输出逐字不变（`${tv:-?}` 与旧 `|| echo '?'` 同义）。
+#   新增/改动任何裸后端调用都必须先进门面标记区，**不得**往本台账加行（只减不增是断言，不是口头约定）。
 #
 # 格式（TAB 分隔）：<函数名>  <归口批次>  <理由>
 # 校验（`t4_verify_term_ledger`，用例 06）：
@@ -23,8 +31,4 @@
 #   `command tmux …` / `bash -c "tmux …"` / 反引号 / 变量间接拼装**不纳管**（行级静态 lint 的已知漏判）。
 #   status 路径的「herdr 模式零 tmux 调用」由用例 28 的 PATH 桩**动态**断言兜住（比静态更硬）。
 #
-# baseline: 3
-#
-apply_main_col	B4	main-col 布局（三期 workspace/tab 拓扑替换）
-apply_tmux_layout	B4	布局应用与窄列回退（三期布局面）
-cmd_check	B4	check 的终端前提诊断行（`tmux display-message -p '#S'`）；B4 随 check 终端前提迁移
+# baseline: 0

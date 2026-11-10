@@ -23,42 +23,34 @@
 #   - 桩 `tmux`（把 `split-window` 的**末位实参原样落盘**后转发真 tmux）⇒ 断言取 fleet 交给 tmux 的原始字节
 #   - 夹具根不得落在任何 git 仓内；收尾走机制 `cleanup -S <隔离 socket>`
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
+source "$T4_ROOT/tests/t4/lib-backend.sh"
 
-command -v tmux >/dev/null 2>&1 \
-  || t4_skip "环境缺少 tmux（Issue #75 需真 tmux 隔离 socket 观察 ensure 命令行）"
-
+BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
+if [ "$BE_NAME" = "tmux" ]; then
+  command -v tmux >/dev/null 2>&1 \
+    || t4_skip "环境缺少 tmux（tmux 后端需真隔离 socket 观察 ensure 命令行）"
+fi
 BASH_BIN="$(command -v bash)"
-REAL_TMUX="$(command -v tmux)"
+# 变异子进程会继承父进程的 PATH（含 $LAB/bin 桩 tmux）⇒ 必须优先用父进程解析好的真 tmux，
+#   否则桩会 exec 自己（实测：子进程里 split.log 递归，用例挂死）。
+REAL_TMUX="${NAO_T24_REAL_TMUX:-$(command -v tmux || true)}"
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 MUT_CHILD="${T524_MUTATION_CHILD:-0}"
 LAB="$T4_CACHE_DIR/lab24-$$"
-SOCKDIR="$LAB/sock"
-SOCK="$SOCKDIR/tmux-$(id -u)/default"
-FTMUX="$SOCK,0,0"
 SPLIT_LOG="$LAB/split.log"
 PI_LOG="$LAB/fake-pi.log"
 
-# ---- 硬护栏（先于一切 tmux 操作）：socket 不得命中生产候选，夹具根不得落 git 仓内 ----
-GUARD=0
-_TM="${TMUX:-}"
-for p in "/tmp/tmux-$(id -u)/default" "${TMPDIR:-/tmp}/tmux-$(id -u)/default" "${_TM%%,*}"; do
-  [ -n "$p" ] && [ "$SOCK" = "$p" ] && GUARD=1
-done
-[[ "$SOCK" == "$LAB"/* ]] || GUARD=1
-if [ "$GUARD" != 0 ]; then
-  t4_bad "护栏触发：夹具 SOCK=$SOCK 不在 \$LAB 下或与生产默认候选冲突"
-  t4_exit
-fi
+# ---- 硬护栏（先于一切后端操作）：夹具根不得落 git 仓内（socket/私有根护栏由 be_init 单点负责）----
 FIXTURE_TOP="$(git -C "$T4_CACHE_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
 if [ -n "$FIXTURE_TOP" ]; then
   t4_bad "夹具根落在 git 仓内（$FIXTURE_TOP）⇒ 锚根/归属判定会被污染；请把 TMPDIR 指到仓外"
   t4_exit
 fi
-t4_ok "护栏：隔离 socket + 夹具根不在任何 git 仓内"
+t4_ok "护栏：夹具根不在任何 git 仓内（后端场护栏由 be_init 负责）"
 
 # ---- 夹具 ----
-mkdir -p "$LAB" "$SOCKDIR/tmux-$(id -u)" "$LAB/bin" "$LAB/pi-empty"
-chmod 700 "$SOCKDIR/tmux-$(id -u)"
+mkdir -p "$LAB" "$LAB/bin" "$LAB/pi-empty"
+PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
 cp -r "$T4_ROOT/.agents" "$LAB/.agents" || { t4_bad "夹具复制 .agents 失败"; t4_exit; }
 # 被测脚本默认取夹具副本（与仓库工作区逐字节一致 ⇒ 变异只在副本上做，仓库只读）
 FLEET_BIN="${T524_FLEET:-$LAB/.agents/scripts/nao-fleet.sh}"
@@ -106,20 +98,17 @@ exec "${NAO_T24_REAL_TMUX:?}" "$@"
 SH
 chmod +x "$LAB/bin/tmux"
 
-TX() { "$REAL_TMUX" -S "$SOCK" "$@"; }
-TX new-session -d -s lab -x 240 -y 80 -c "$LAB" >/dev/null 2>&1
-sleep 0.3
-CALLER="$(TX list-panes -t lab -F '#{pane_id}' | head -1)"
-TX setenv -g PATH "$LAB/bin:$PATH" >/dev/null 2>&1   # 新 pane 用桩 pi / 桩 tmux
 BASE="$(basename "$LAB")"
+BE_CACHE_ROOT="$T4_CACHE_DIR"
+be_init "$LAB" "lab" || { t4_bad "be_init 失败（后端=$BE_NAME）"; t4_exit; }
+be_ensure_scene || { t4_bad "be_ensure_scene 失败（后端=$BE_NAME）"; t4_exit; }
+CALLER="$(be_caller_pane)"
+t4_assert_ne "" "$CALLER" "夹具：调用者 pane 建立（$CALLER；后端=$BE_NAME）"
 
-t4_assert_ne "" "$CALLER" "夹具：隔离 tmux server + 调用者 pane 建立（$CALLER）"
-
-# ---- 收尾：先机制 cleanup -S，再复刻 lib 缓存清理语义（保真退出码）----
+# ---- 收尾：先拆后端场，再复刻 lib 缓存清理语义（保真退出码）----
 t524_teardown() {
-  [ -n "${SOCK:-}" ] && [ -d "${LAB:-/nonexistent}" ] || return 0
-  ( cd "$LAB" 2>/dev/null || cd /tmp
-    env -u TMUX TMUX_TMPDIR="$SOCKDIR" "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" cleanup -S "$SOCK" >/dev/null 2>&1 ) || true
+  [ -n "${LAB:-}" ] && [ -d "$LAB" ] || return 0
+  be_teardown >/dev/null 2>&1 || true
   return 0
 }
 t524_exit_trap() {
@@ -132,17 +121,17 @@ t524_exit_trap() {
 trap t524_exit_trap EXIT
 
 # ---- 调用封装 ----
+export NAO_SKILLS="$LAB" PI_CODING_AGENT_DIR="$LAB/pi-empty"
+export NAO_T24_REAL_TMUX="${REAL_TMUX:-}" PATH="$LAB/bin:$PATH"
+export T4_HERDR_SPAWN_LOG="$SPLIT_LOG"
 run_fleet() { # <args...> → T4_RC / T4_OUT / T4_ERR（*_ANSI = 去色后版本）
-  t4_run_in_dir "$LAB" env -u TMUX -u TMUX_PANE TMUX="$FTMUX" TMUX_PANE="$CALLER" \
-    TMUX_TMPDIR="$SOCKDIR" NAO_SKILLS="$LAB" PI_CODING_AGENT_DIR="$LAB/pi-empty" \
-    NAO_T24_REAL_TMUX="$REAL_TMUX" PATH="$LAB/bin:$PATH" \
-    timeout 90 bash "$FLEET_BIN" "$@"
-  T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
-  T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  BE_FLEET_SCRIPT="$FLEET_BIN" be_run_fleet "$LAB" "$@"
+  T4_RC="$BE_RC"; T4_OUT="$BE_OUT"; T4_ERR="$BE_ERR"
+  T4_OUT_ANSI="$BE_OUT_ANSI"; T4_ERR_ANSI="$BE_ERR_ANSI"
 }
 split_count() { [ -f "$SPLIT_LOG" ] && wc -l < "$SPLIT_LOG" || echo 0; }
 new_split() { [ -f "$SPLIT_LOG" ] && sed -n "$(( $1 + 1 )),\$p" "$SPLIT_LOG" || true; }
-launch_lines() { grep -cF -- '[tmux] 已拉起' <<< "$T4_OUT_ANSI" || true; }
+launch_lines() { grep -cF -- "[$BE_NAME] 已拉起" <<< "$T4_OUT_ANSI" || true; }
 unwrap() { printf '%s' "$1" | tr -d '\\'; }
 diff_assert() {
   local exp="$1" act="$2" tag="$3" d
@@ -180,7 +169,11 @@ expected_inner() { # <repo> <name> <prompt_file>
   printf 'cd %s && export CODEGRAPH_TELEMETRY=0 && exec pi --name %s --append-system-prompt %s' \
     "$(printf %q "$1")" "$(printf %q "$2")" "$(printf %q "$3")"
 }
-expected_wrapped() { printf 'bash -lc %s' "$(printf %q "$(expected_inner "$1" "$2" "$3")")"; }
+# 后端差异只在「外层包装」：tmux split-window 收 `bash -lc %q(inner)`；herdr pane run 收 inner 本体
+expected_wrapped() {
+  if [ "$BE_NAME" = "tmux" ]; then printf 'bash -lc %s' "$(printf %q "$(expected_inner "$1" "$2" "$3")")"
+  else printf '%s' "$(expected_inner "$1" "$2" "$3")"; fi
+}
 
 # ============================================================ 静态接线（修复形状）
 t4_assert_eq "0" "$(grep -cF -- '${PROMPT:-}' "$FLEET_BIN" || true)" \
