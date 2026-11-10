@@ -12,7 +12,10 @@
 #   ② AC1 同场景 stdout 无输出（提示走 stderr）、且不含「未运行（无需回收）」（无副作用谎报）
 #   ③ AC1 提示 = 单行且含 `tmux new -s nao`
 #   ④ AC4 静态：`nao-fleet.sh` 内 `grep -c '无法确认在线'` = 0（T523 分支已删）
-#   ⑤ AC2 静态：宿主阶梯删除面 grep = 0（NAO_TERMINAL/xdg-terminal-exec/hyprctl/swaymsg/xdotool/wmctrl/screen_*）
+#   ⑤ AC2 静态：宿主阶梯删除面 grep = 0（xdg-terminal-exec/hyprctl/swaymsg/xdotool/wmctrl/screen_*）
+#      **2026-11-10 #96 二期 B1 订正**：`NAO_TERMINAL` 已由 PM 设计**改作终端后端开关**
+#      （tmux|herdr，默认 tmux），不再是「终端模拟器选择」⇒ 从本判据的交替式中移出，
+#      另加一条「旧宿主阶梯取值域（screen/xdg/hypr/…）仍为 0」把原语义钉住。
 #   ⑥ AC4 tmux 内 + 名册可用且为空 + 无句柄 ⇒ rc=0 + 「未运行（无需回收）」（不过度矫正为恒失败）
 #   ⑦ AC4 --force 不改变末段：rc 与 ⑥ 逐值一致、仍含「未运行（无需回收）」
 #
@@ -48,8 +51,20 @@ t4_assert_eq "1" "$(printf '%s\n' "$T4_ERR" | grep -c .)" "③ 提示恰为单�
 # ---------------------------------------------------------------- ④⑤ 静态归零
 t4_assert_eq "0" "$(grep -c '无法确认在线' "$FLEET" 2>/dev/null || true)" \
   "④ AC4：nao-fleet.sh 内「无法确认在线状态」分支已删（grep=0）"
-t4_assert_eq "0" "$(grep -cE 'NAO_TERMINAL|xdg-terminal-exec|hyprctl|swaymsg|xdotool|wmctrl|screen_present|screen_token_for|spawn_screen|spawn_xdg_window|spawn_tmux_attach|wait_for_tmux_client|app_class_visible|wait_for_app_class|spawn_fork_window' "$FLEET" 2>/dev/null || true)" \
-  "⑤ AC2：宿主阶梯删除面在脚本内 grep=0"
+t4_assert_eq "0" "$(grep -cE 'xdg-terminal-exec|hyprctl|swaymsg|xdotool|wmctrl|screen_present|screen_token_for|spawn_screen|spawn_xdg_window|spawn_tmux_attach|wait_for_tmux_client|app_class_visible|wait_for_app_class|spawn_fork_window' "$FLEET" 2>/dev/null || true)" \
+  "⑤ AC2：宿主阶梯删除面在脚本内 grep=0（#96 B1 起 NAO_TERMINAL 已改作后端开关，移出本交替式）"
+t4_assert_eq "0" "$(grep -cE 'NAO_TERMINAL=(screen|xdg|hypr|sway|foot|ghostty|ptyxis|kitty|alacritty|wezterm|wmctrl|xdotool)' "$FLEET" 2>/dev/null || true)" \
+  "⑤ AC2：旧宿主阶梯的 NAO_TERMINAL 取值域仍为 0（原语义不被改名带走；含历史真实值 ghostty/ptyxis）"
+# 负控（P3-3 · QA 第二轮）：历史真实值来自 cda59b0 的 NAO_TERMINAL_ALLOWED=(tmux foot ghostty ptyxis screen)
+#   ⇒ 注入 ghostty / ptyxis 必须被上面那条断言抓到（否则「旧值域仍为 0」是空话）。
+for _v in ghostty ptyxis; do
+  _fx="$T4_CACHE_DIR/f13-term-$_v.sh"
+  cp "$FLEET" "$_fx"
+  printf '\nNAO_TERMINAL=%s\n' "$_v" >> "$_fx"
+  t4_assert_eq "1" "$(grep -cE 'NAO_TERMINAL=(screen|xdg|hypr|sway|foot|ghostty|ptyxis|kitty|alacritty|wezterm|wmctrl|xdotool)' "$_fx" || true)" \
+    "⑤ 负控：注入 NAO_TERMINAL=$_v ⇒ 取值域断言必中（判据非空转）"
+  rm -f "$_fx"
+done
 
 # ---------------------------------------------------------------- ⑥⑦ tmux 内末段（名册可用且为空）
 if [ "$tsx_ok" = "1" ]; then

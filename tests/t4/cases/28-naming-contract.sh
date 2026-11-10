@@ -475,6 +475,253 @@ t4_assert_eq "$MD5_A" "$MD5_B" \
   "C2① 名册离线正常路径：新版 status 全文与基线逐字等价（md5 $MD5_A；scope 为空 ⇒ 零回归）"
 t4_info "C2① status md5 = $MD5_A（两场相等；行数 $(printf '%s\n' "$OUT_B" | wc -l | tr -d ' ')）"
 
+# ============================================================================
+# #96 二期 B1：BR1 机械保证（动态面）+ herdr 判定面（幽灵 pane / 集成缺失 / BR7 映射）
+#   ① 双拼写 md5：未设 NAO_TERMINAL 与显式 =tmux 两次 invocation 的 status 全文 md5 相等，
+#      且都等于 C2 golden（基线 fixture 的 md5）—— 默认值唯一 ⇒ 两种拼写不可分叉
+#   ② 双向 PATH 桩负控：tmux 模式下 herdr 桩 0 命中；herdr 模式下 tmux 桩 0 命中（+ node 探针 0 命中）
+#   ③ tmux 侧调用次数零漂移：基线脚本与新脚本的 status 逐子命令计数相等（C2 只比 md5，抓不到次数）
+#   ④ herdr 判定面：label 命中 ≠ 在线 —— ghost / integration-missing / dead / mismatch 各一档；
+#      BR7 忙闲映射单测（term_deliverable）+ 快照缓存（多次 liveness 只 1 次 pane list / agent list）
+# ============================================================================
+REAL_TMUX28="$(command -v tmux)"
+# P3-5：本用例前后系统 /tmp 的快照文件数必须不变（并发/历史遗留不误伤，只判**本用例净增**）
+SNAP_BEFORE="$(ls /tmp/nao-fleet-term-snap.* 2>/dev/null | wc -l | tr -d ' ')"
+# ---- 桩：herdr（记录调用 + 供判定面夹具）· tmux 包装（记录后转发真 tmux）· node（记录后失败）----
+cat > "$LAB/bin/herdr" <<SH
+#!/usr/bin/env bash
+printf 'herdr %s\n' "\$*" >> "$LAB/herdr-calls.log"
+shift 2   # --session <s>
+case "\$1" in
+  --version) echo 'herdr 0.9.1'; exit 0 ;;
+  api) printf 'Herdr API schema\nprotocol: %s\n' "\${HERDR_STUB_PROTOCOL:-22}"; exit 0 ;;
+  pane)
+    case "\$2" in
+      list)
+        if [ "\${HERDR_STUB_EMPTY:-0}" = "1" ]; then
+          printf '%s\n' '{"result":{"panes":[{"agent":"pi","agent_session":{"agent":"pi","kind":"id","value":"sess-x"},"agent_status":"idle","cwd":"LABROOT","foreground_cwd":"LABROOT","pane_id":"w9:p1","terminal_id":"term_9"}],"type":"pane_list"}}'
+          exit 0
+        fi
+        cat <<'J'
+{"result":{"panes":[
+{"agent":"pi","agent_session":{"agent":"pi","kind":"id","value":"sess-rd-fe"},"agent_status":"idle","cwd":"LABROOT","foreground_cwd":"LABROOT","label":"rd-fe","pane_id":"w1:p1","terminal_id":"term_1"},
+{"agent_status":"unknown","cwd":"LABROOT","foreground_cwd":"LABROOT","label":"rd-be-T9","pane_id":"w1:p2","terminal_id":"term_2"},
+{"agent":"pi","agent_session":null,"agent_status":"idle","cwd":"LABROOT","foreground_cwd":"LABROOT","label":"qa-T9","pane_id":"w1:p3","terminal_id":"term_3"},
+{"agent":"pi","agent_session":{"agent":"pi","kind":"id","value":"sess-pm"},"agent_status":"idle","cwd":"LABROOT","foreground_cwd":"LABROOT","label":"pm","pane_id":"w1:p4","terminal_id":"term_4"},
+{"agent":"pi","agent_session":{"agent":"pi","kind":"id","value":"sess-ri"},"agent_status":"idle","cwd":"LABROOT","foreground_cwd":"LABROOT","label":"rd-infra-T9","pane_id":"w1:p5","terminal_id":"term_5"},
+{"agent_status":"unknown","cwd":"LABROOT","foreground_cwd":"LABROOT","label":"rd-be@todo","pane_id":"w1:p6","terminal_id":"term_6"},
+{"agent":"pi","agent_session":null,"agent_status":"idle","cwd":"LABROOT","foreground_cwd":"LABROOT","label":"qa@todo","pane_id":"w1:p7","terminal_id":"term_7"}
+],"type":"pane_list"}}
+J
+        ;;
+      process-info)
+        case "\${4:-}" in
+          w1:p1) printf '{"result":{"process_info":{"foreground_processes":[{"argv":["/usr/bin/pi","--name","rd-fe"],"name":"pi","pid":11}],"pane_id":"w1:p1"}}}\n' ;;
+          w1:p2) printf '{"result":{"process_info":{"foreground_processes":[{"argv":["sleep","600"],"name":"sleep","pid":12}],"pane_id":"w1:p2"}}}\n' ;;
+          w1:p3) printf '{"result":{"process_info":{"foreground_processes":[{"argv":["/usr/bin/pi","--name","qa-T9"],"name":"pi","pid":13}],"pane_id":"w1:p3"}}}\n' ;;
+          w1:p4) printf '{"result":{"process_info":{"foreground_processes":[{"argv":["/usr/bin/bash"],"name":"bash","pid":14}],"pane_id":"w1:p4"}}}\n' ;;
+          w1:p5) printf '{"result":{"process_info":{"foreground_processes":[{"argv":["/usr/bin/pi","--name","somebody-else"],"name":"pi","pid":15}],"pane_id":"w1:p5"}}}\n' ;;
+          w1:p6) printf '{"result":{"process_info":{"foreground_processes":[{"argv":["sleep","600"],"name":"sleep","pid":16}],"pane_id":"w1:p6"}}}\n' ;;
+          w1:p7) printf '{"result":{"process_info":{"foreground_processes":[{"argv":["/usr/bin/pi","--name","qa@todo"],"name":"pi","pid":17}],"pane_id":"w1:p7"}}}\n' ;;
+          *) printf '{"result":{"process_info":{"foreground_processes":[],"pane_id":"%s"}}}\n' "\${4:-?}" ;;
+        esac
+        ;;
+      *) exit 1 ;;
+    esac ;;
+  agent)
+    case "\$2" in
+      list)
+        if [ "\${HERDR_STUB_EMPTY:-0}" = "1" ]; then
+          printf '%s\n' '{"result":{"agents":[{"agent":"pi","agent_session":{"agent":"pi","kind":"id","value":"sess-x"},"agent_status":"idle","pane_id":"w9:p1","screen_detection_skipped":true,"state_change_seq":1}],"type":"agent_list"}}'
+          exit 0
+        fi
+        cat <<'J'
+{"result":{"agents":[
+{"agent":"pi","agent_session":{"agent":"pi","kind":"id","value":"sess-rd-fe"},"agent_status":"idle","pane_id":"w1:p1","screen_detection_skipped":true,"state_change_seq":3},
+{"agent":"pi","agent_session":null,"agent_status":"idle","pane_id":"w1:p3","screen_detection_skipped":false,"state_change_seq":2},
+{"agent":"pi","agent_session":{"agent":"pi","kind":"id","value":"sess-pm"},"agent_status":"idle","pane_id":"w1:p4","screen_detection_skipped":true,"state_change_seq":1},
+{"agent":"pi","agent_session":{"agent":"pi","kind":"id","value":"sess-ri"},"agent_status":"working","pane_id":"w1:p5","screen_detection_skipped":true,"state_change_seq":4},
+{"agent":"pi","agent_session":null,"agent_status":"idle","pane_id":"w1:p7","screen_detection_skipped":false,"state_change_seq":5}
+],"type":"agent_list"}}
+J
+        ;;
+      *) exit 1 ;;
+    esac ;;
+esac
+exit 0
+SH
+sed -i "s#LABROOT#$LAB#g" "$LAB/bin/herdr"
+cat > "$LAB/bin/tmux" <<SH
+#!/usr/bin/env bash
+printf 'tmux %s\n' "\$*" >> "$LAB/tmux-calls.log"
+exec "$REAL_TMUX28" "\$@"
+SH
+cat > "$LAB/bin/node" <<SH
+#!/usr/bin/env bash
+printf 'node %s\n' "\$*" >> "$LAB/node-calls.log"
+exit 1
+SH
+chmod +x "$LAB/bin/herdr" "$LAB/bin/tmux" "$LAB/bin/node"
+
+# ---- ① 双拼写 md5（未设 vs 显式 =tmux；两次 invocation 必须逐字同源）----
+: > "$LAB/herdr-calls.log"
+unset NAO_TERMINAL
+run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" status
+RC_DEF=$T4_RC; OUT_DEF="$T4_OUT_ANSI"
+export NAO_TERMINAL=tmux
+run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" status
+RC_TMUX=$T4_RC; OUT_TMUX="$T4_OUT_ANSI"
+unset NAO_TERMINAL
+MD5_DEF="$(printf '%s' "$OUT_DEF" | md5sum | awk '{print $1}')"
+MD5_TMUX="$(printf '%s' "$OUT_TMUX" | md5sum | awk '{print $1}')"
+t4_assert_eq "0" "$RC_DEF" "B1① 未设 NAO_TERMINAL ⇒ status rc=0"
+t4_assert_eq "0" "$RC_TMUX" "B1① 显式 NAO_TERMINAL=tmux ⇒ status rc=0"
+t4_assert_eq "$MD5_DEF" "$MD5_TMUX" "B1① 双拼写 status 全文 md5 相等（默认值唯一 ⇒ 不可分叉）"
+t4_assert_eq "$MD5_A" "$MD5_DEF" "B1① 未设拼写 == C2 golden（基线 fixture 场）"
+t4_assert_eq "$MD5_A" "$MD5_TMUX" "B1① =tmux 拼写 == C2 golden（基线 fixture 场）"
+t4_info "B1① 双拼写 md5：未设=$MD5_DEF · =tmux=$MD5_TMUX · C2 golden=$MD5_A"
+t4_assert_eq "0" "$(grep -c '^herdr ' "$LAB/herdr-calls.log" || true)" \
+  "B1② tmux 模式 status：herdr 桩 0 命中（tmux 后端不碰 herdr）"
+
+# ---- ③ tmux 调用次数零漂移（逐子命令计数：基线 vs 新版，同一套夹具 pane）----
+count_tmux_calls() { # <log> <子命令> → 次数
+  awk -v s="$2" '$1 == "tmux" { for (i = 2; i <= NF; i++) if ($i == s) { n++; break } } END { print n + 0 }' "$1"
+}
+: > "$LAB/tmux-calls.log"
+run_in "$SOCK_A" "$SOCK_A_DIR" "$CALLER_A" "$BASE_SCRIPT" status
+cp "$LAB/tmux-calls.log" "$LAB/tmux-base.log"
+: > "$LAB/tmux-calls.log"
+run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" status
+cp "$LAB/tmux-calls.log" "$LAB/tmux-new.log"
+for sub in list-panes list-sessions display-message capture-pane has-session; do
+  t4_assert_eq "$(count_tmux_calls "$LAB/tmux-base.log" "$sub")" \
+    "$(count_tmux_calls "$LAB/tmux-new.log" "$sub")" \
+    "B1③ status 的 \`tmux $sub\` 调用次数与基线一致（C2 只比 md5，抓不到次数漂移）"
+done
+t4_assert_eq "$(grep -c '^tmux ' "$LAB/tmux-base.log" || true)" "$(grep -c '^tmux ' "$LAB/tmux-new.log" || true)" \
+  "B1③ status 的 tmux 总调用次数与基线一致"
+
+# ---- ② herdr 模式 status（端到端）：双向桩负控 + 四档非在线证据单列 ----
+HENV=(env HERDR_ENV=1 HERDR_SESSION=nao-b1-status HERDR_SOCKET_PATH="$LAB/cfg/sessions/nao-b1-status/herdr.sock")
+mkdir -p "$LAB/tmp"   # 私有 TMPDIR：快照临时文件必须落这里且跑完为空（P3-5 残留断言）
+: > "$LAB/tmux-calls.log"; : > "$LAB/node-calls.log"; : > "$LAB/herdr-calls.log"
+export NAO_TERMINAL=herdr
+t4_run_in_dir "$LAB" "${HENV[@]}" NAO_TERMINAL=herdr NAO_SKILLS="$LAB" TMPDIR="$LAB/tmp" \
+  PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" PATH="$LAB/bin:$PATH" \
+  timeout 180 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" status
+unset NAO_TERMINAL
+RC_H=$T4_RC; OUT_H="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"; ERR_H="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "0" "$RC_H" "B1② herdr 模式 status rc=0（桩 protocol 22）"
+t4_assert_eq "0" "$(grep -c '^tmux ' "$LAB/tmux-calls.log" || true)" \
+  "B1② herdr 模式 status：tmux 桩 0 命中（后端隔离）"
+t4_assert_eq "0" "$(grep -c '^node ' "$LAB/node-calls.log" || true)" \
+  "B1② herdr 模式 status：名册探针（node）0 命中（身份/归属/忙闲全来自结构化事实）"
+t4_assert_contains "$OUT_H" "✓ rd-fe " "B1④ 在线档：label + argv --name + agent_session + hook 权威 ⇒ ✓ 在线"
+t4_assert_contains "$OUT_H" "== 终端证据异常（herdr 后端：label 命中 ≠ 在线）==" "B1④ 非在线证据单列成节"
+t4_assert_contains "$OUT_H" "rd-be-T9 幽灵 pane" "B1④ 幽灵 pane：label 在、agent 条目缺 ⇒ 单列（不得当「已在运行」）"
+t4_assert_contains "$OUT_H" "qa-T9 集成缺失" "B1④ 集成缺失：agent_session 空 ⇒ 单列"
+t4_assert_contains "$OUT_H" "qa-T9 集成缺失" "B1④ 集成缺失点名会话"
+t4_assert_contains "$OUT_H" "不可投递" "B1④ 集成缺失 ⇒ 明确「不可投递」（不退化成 unknown 静默）"
+t4_assert_contains "$OUT_H" "pm 前台非 pi" "B1④ dead 档：agent 条目在但前台非 pi ⇒ 非在线（不得谎报在线）"
+t4_assert_contains "$OUT_H" "rd-infra-T9 身份不一致" "B1④ mismatch 档：label 与 argv --name 不符 ⇒ 非在线（禁猜）"
+t4_assert_not_contains "$OUT_H" "✓ rd-be-T9" "B1④ 幽灵 pane 不得渲染成在线"
+t4_assert_not_contains "$OUT_H" "✓ qa-T9" "B1④ 集成缺失不得渲染成在线"
+t4_assert_eq "1" "$(grep -c '^herdr .*pane list' "$LAB/herdr-calls.log" || true)" \
+  "B1④ 每命令恰 1 次 pane list（快照单点，禁逐名调用）"
+t4_assert_eq "1" "$(grep -c '^herdr .*agent list' "$LAB/herdr-calls.log" || true)" \
+  "B1④ 每命令恰 1 次 agent list（权威源单点）"
+# P1（QA 第二轮 · AC2.1 语义破口）：带 scope 的名字来自 pane.label —— **不是证据**。
+#   非在线四档必须**不得**被常驻区打成「✓ 在线」，只能出现在「终端证据异常」节。
+t4_assert_not_contains "$OUT_H" "✓ rd-be " "B1① 带 scope 幽灵（rd-be@todo）不得渲染成 ✓ 在线"
+t4_assert_not_contains "$OUT_H" "--name rd-be@todo；" "B1① 带 scope 幽灵不得出现「在线（--name rd-be@todo）」行"
+t4_assert_not_contains "$OUT_H" "✓ qa " "B1① 带 scope 集成缺失（qa@todo）不得渲染成 ✓ 在线"
+t4_assert_not_contains "$OUT_H" "--name qa@todo；" "B1① 带 scope 集成缺失不得出现「在线（--name qa@todo）」行"
+t4_assert_contains "$OUT_H" "rd-be@todo 幽灵 pane" "B1① 带 scope 幽灵单列在「终端证据异常」节（非静默）"
+t4_assert_contains "$OUT_H" "qa@todo 集成缺失" "B1① 带 scope 集成缺失单列（含「不可投递」）"
+t4_assert_contains "$OUT_H" "· rd-be " "B1① 该角色退化为「· 未运行」（不再谎报在线）"
+t4_assert_eq "0" "$(ls -A "$LAB/tmp" 2>/dev/null | wc -l | tr -d ' ')" \
+  "B1⑤ 快照临时文件零残留（私有 TMPDIR 跑完为空）"
+
+# ---- P3-1（QA 第二轮）：**无 label 会话**时快照合法为空 ⇒ 缓存判据不得靠「非空」
+: > "$LAB/herdr-calls.log"
+t4_run_in_dir "$LAB" "${HENV[@]}" HERDR_STUB_EMPTY=1 NAO_TERMINAL=herdr NAO_SKILLS="$LAB" TMPDIR="$LAB/tmp" \
+  PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" PATH="$LAB/bin:$PATH" \
+  timeout 180 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" status
+RC_E=$T4_RC
+t4_assert_eq "0" "$RC_E" "B1⑤ 空 label 夹具：status rc=0（快照为空是合法状态）"
+t4_assert_eq "1" "$(grep -c '^herdr .*pane list' "$LAB/herdr-calls.log" || true)" \
+  "B1⑤ 空 label 夹具：pane list 仍恰 1 次（缓存判据用「文件存在」而非「非空」）"
+t4_assert_eq "1" "$(grep -c '^herdr .*agent list' "$LAB/herdr-calls.log" || true)" \
+  "B1⑤ 空 label 夹具：agent list 仍恰 1 次"
+t4_assert_eq "0" "$(ls -A "$LAB/tmp" 2>/dev/null | wc -l | tr -d ' ')" "B1⑤ 空 label 夹具：快照临时文件零残留"
+
+# ---- ④ BR7 忙闲映射 + 阶梯单测（抽取门面区到子进程；只灌纯依赖，不启 tmux）----
+FACADE_SRC="$T4_CACHE_DIR/b1-facade.sh"
+awk '/^# >>> term-facade BEGIN/{f=1; next} /^# <<< term-facade END/{f=0} f' \
+  "$LAB/.agents/scripts/nao-fleet.sh" > "$FACADE_SRC"
+t4_assert_ne "0" "$(wc -l < "$FACADE_SRC" | tr -d ' ')" \
+  "B1④ 门面区可抽取（# >>> term-facade BEGIN … END，非空 ⇒ 四函数可独立单测）"
+{
+  printf '#!/usr/bin/env bash\nset -uo pipefail\n'
+  printf 'warn() { printf "[warn] %%s\\n" "$*" >&2; }\n'
+  printf 'die() { printf "[die] %%s\\n" "$*" >&2; exit 1; }\n'
+  printf 'require_tmux() { return 0; }\n'
+  printf 'TERM_HERDR_PROTOCOL=%s\n' "$(sed -n 's/^TERM_HERDR_PROTOCOL="\([^"]*\)"$/\1/p' "$LAB/.agents/scripts/nao-fleet.sh" | head -1)"
+  printf 'VERBOSE=false\n'
+  awk '/^nao_phys_path\(\)/{f=1} f{print} f&&/^}/{exit}' "$LAB/.agents/scripts/nao-fleet.sh"
+  awk '/^repo_contains_path\(\)/{print; exit}' "$LAB/.agents/scripts/nao-fleet.sh"
+  cat "$FACADE_SRC"
+  cat <<'CHILD'
+# P3-5（QA 第二轮 · 测试卫生）：子进程显式给快照路径 + EXIT trap ⇒ 不在 /tmp 留
+#   `nao-fleet-term-snap.<pid>`（生产 status 正常退出会删；子进程不设就是泄漏源）。
+_TERM_SNAP_PATH="${SNAP_DIR:?}/snap.$$"
+trap 'rm -f "$_TERM_SNAP_PATH"' EXIT
+FAIL=0; OK=0
+chk() { if [ "$2" = "$3" ]; then OK=$((OK+1)); else FAIL=$((FAIL+1)); printf '  ✗ %s want=[%s] got=[%s]\n' "$1" "$2" "$3"; fi; }
+v() { term_liveness "$1" | cut -f1; }
+chk "在线档（label+argv+session+hook）" "online" "$(v rd-fe)"
+chk "在线档状态取 agent list（idle）" "online	idle	3	1" "$(term_liveness rd-fe)"
+chk "幽灵 pane（label 在、agent 条目缺）" "ghost" "$(v rd-be-T9)"
+chk "集成缺失（agent_session 空）" "integration-missing" "$(v qa-T9)"
+chk "前台非 pi ⇒ dead（不谎报在线）" "dead" "$(v pm)"
+chk "argv --name 不符 ⇒ mismatch" "mismatch" "$(v rd-infra-T9)"
+chk "无 label 命中 ⇒ absent" "absent	-	-	-" "$(term_liveness no-such-session)"
+chk "BR7 idle 可投递" "0" "$(term_deliverable idle; echo $?)"
+chk "BR7 done 可投递（无 pi 路径的死分支，保留兼容）" "0" "$(term_deliverable done; echo $?)"
+chk "BR7 working 不可投递" "1" "$(term_deliverable working; echo $?)"
+chk "BR7 blocked 不可投递" "1" "$(term_deliverable blocked; echo $?)"
+chk "BR7 unknown 保守不可投递" "1" "$(term_deliverable unknown; echo $?)"
+chk "BR7 空值保守不可投递" "1" "$(term_deliverable ''; echo $?)"
+# 快照缓存：上面已调用 term_liveness 7 次 ⇒ pane list / agent list 各仍只 1 次
+# P2（QA 第二轮）：tmux 分支分派名必须真实存在（此前 `__term_tmux_argv` 双下划线 ⇒ rc=127，
+#   无生产调用者所以 BR1 不红，但 B2 一接就在 set -e 下中断）。三个分派各一条，抓错名。
+_term_tmux_argv() { printf 'STUB\t%s\n' "$1"; }
+_term_tmux_liveness() { printf 'online\t-\t-\t-\n'; }
+_term_tmux_snapshot() { printf 'x\tp\t-\t/tmp\t-\t-\t-\t-\t-\t-\t-\n'; }
+chk "tmux 分派 term_argv" "STUB	p1" "$(NAO_TERMINAL=tmux term_argv p1)"
+chk "tmux 分派 term_liveness" "online" "$(NAO_TERMINAL=tmux term_liveness x | cut -f1)"
+chk "tmux 分派 term_snapshot" "x" "$(NAO_TERMINAL=tmux term_snapshot | cut -f1)"
+chk "快照缓存：pane list 恰 1 次" "1" "$(grep -c '^herdr .*pane list' "$STUB_LOG" || true)"
+chk "快照缓存：agent list 恰 1 次" "1" "$(grep -c '^herdr .*agent list' "$STUB_LOG" || true)"
+# 前提闸门：protocol != 22 ⇒ exit 3（fail loud，不静默降级）
+( HERDR_STUB_PROTOCOL=21; export HERDR_STUB_PROTOCOL; term_require >/dev/null 2>&1 )
+chk "protocol 21 ⇒ exit 3" "3" "$?"
+if [ "$FAIL" -gt 0 ]; then printf 'FACADE_FAIL ok=%d bad=%d\n' "$OK" "$FAIL"; exit 1; fi
+printf 'FACADE_OK %d\n' "$OK"
+CHILD
+} > "$T4_CACHE_DIR/b1-facade-test.sh"
+: > "$LAB/herdr-calls.log"
+fac_out="$(STUB_LOG="$LAB/herdr-calls.log" SNAP_DIR="$LAB/tmp" HERDR_ENV=1 HERDR_SESSION=nao-b1-unit \
+  HERDR_SOCKET_PATH="$LAB/cfg/sessions/nao-b1-unit/herdr.sock" NAO_TERMINAL=herdr \
+  PATH="$LAB/bin:$PATH" "$BASH_BIN" "$T4_CACHE_DIR/b1-facade-test.sh" 2>&1)"; fac_rc=$?
+t4_assert_eq "0" "$fac_rc" "B1④ 门面单测全绿（阶梯 + BR7 映射 + 快照缓存 + protocol 闸门）"
+t4_assert_contains "$fac_out" "FACADE_OK" "B1④ 门面单测自报 OK（明细：$(printf '%s' "$fac_out" | tail -1)）"
+t4_assert_eq "0" "$(ls -A "$LAB/tmp" 2>/dev/null | wc -l | tr -d ' ')" \
+  "B1⑤ 门面子进程零残留（显式快照路径 + EXIT trap）"
+t4_assert_eq "$SNAP_BEFORE" "$(ls /tmp/nao-fleet-term-snap.* 2>/dev/null | wc -l | tr -d ' ')" \
+  "B1⑤ 本用例在系统 /tmp 的快照文件净增 = 0（P3-5 残留实测）"
+
+
 # ---------------------------------------------------------------- C2② ensure
 # 同一 $LAB 上两场顺序跑：基线场填 A，收场后新版场填 B（名字全不带 scope）
 ensure_targets() { # <socket> <tmuxdir> <caller> <script> → 拼 "已拉起 行 + --name 值"
