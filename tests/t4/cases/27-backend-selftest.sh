@@ -2,7 +2,7 @@
 # 用例 27 —— 后端抽象层自检（PRD #96 一期**步 1** · AC1.4/AC1.5/AC1.7 · BR4/BR6/BR9 · 附一）
 #
 # 被测对象：`tests/t4/lib-backend.sh`（**测试侧**后端抽象；生产 `nao-fleet.sh` 本批**零改动**）
-# 后端开关：`NAO_TEST_TERMINAL=tmux|herdr|auto`（默认 tmux；auto 一期 = tmux）
+# 后端开关：`NAO_TEST_TERMINAL=tmux|herdr|auto`（#96 三期 P2：未设 = **herdr**，与生产默认一致；auto = herdr）
 #
 # 断言映射（PRD #96 §七 AC / §五 BR）：
 #   AC1.7 就绪与幂等：`be_start_server` 已就绪 ⇒ effect=0；就绪 = **50×100ms 轮询 + 5s 上限**

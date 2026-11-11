@@ -105,7 +105,12 @@ diag_n(){ strip_ansi <<< "${1:-}" | grep '\[fleet\]' | grep -vcE 'CodeGraph|已�
 
 # ---- 夹具构造 --------------------------------------------------------------
 STUBBIN="$LAB/bin"; FIXHOME="$LAB/home"
-TX(){ tmux -S "$SOCK" "$@"; }
+# 夹具 tmux 配置（#96 P2-P3-5）：**不读宿主/系统配置**（`-f` 隔离 `~/.tmux.conf` 与 `/etc/tmux.conf`），
+#   并**显式**钉 `pane-base-index 1` —— 几何 golden（`1:52x34@0,0 …`）依赖 1 起索引；tmux 内建默认是 0，
+#   3.8 之前的发行版常见 `/etc` 或用户配置才把它设成 1 ⇒ 不钉就会「换台机器全红」。`-f` 只在起 server
+#   那一次生效，故每个 TX 都带上（server 已在跑时该选项被忽略，无副作用）。
+TMUX_CONF="$LAB/tmux.conf"
+TX(){ tmux -f "$TMUX_CONF" -S "$SOCK" "$@"; }
 cleanup_fleet(){ ( cd "$LAB" 2>/dev/null || cd /tmp; env -u TMUX "$BASH_BIN" "$FLEET" cleanup -S "$SOCK" >/dev/null 2>&1 || true ); }
 CLIENT_PIDS=()
 teardown(){
@@ -120,6 +125,7 @@ trap teardown EXIT
 setup_lab(){
   rm -rf "$LAB"
   mkdir -p "$SOCKDIR/tmux-$(id -u)" "$STUBBIN" "$FIXHOME" "$LAB/.codegraph"
+  printf 'set -g pane-base-index 1\n' > "$TMUX_CONF"   # 夹具确定性：显式 1，不依赖宿主/系统 tmux 配置
   chmod 700 "$SOCKDIR/tmux-$(id -u)"     # tmux 3.7+ 校验默认 socket 目录权限（0700）
   cp -r "$ROOT/.agents/." "$LAB/.agents/" || { echo "夹具复制失败" >&2; exit 2; }
   # 基线复现：允许用修复前的 nao-fleet.sh 替换夹具内被测脚本（默认 = 仓内当前脚本）

@@ -12,7 +12,8 @@
 #                                                  #   另有 `# tmux-only:` 声明（12/25）⇒ 输出 [TMUX-ONLY] 并单列计数（不进 PENDING）
 #   NAO_TEST_TERMINAL=tmux bash tests/t4/run.sh    # 默认后端（未设同义）：全量跑，行为与 #96 改动前逐字一致
 #
-# 后端开关（PRD #96 一期 AC1.1 / AC1.2）：NAO_TEST_TERMINAL=tmux|herdr|auto（未设 = tmux，auto 一期 = tmux）。
+# 后端开关（PRD #96 一期 AC1.1/AC1.2 · 三期 P2 默认翻 herdr）：NAO_TEST_TERMINAL=tmux|herdr|auto
+#   （**未设 = herdr**，与生产默认一致；auto = herdr；`NAO_TERMINAL=tmux npm test` 亦可走回退通道）。
 #   **仅 herdr** 启用「登记集 + PENDING 点名」：登记文件 `tests/t4/backends/herdr.txt`（每条 = 编号/共享或专有/到期/理由）。
 #   未登记的用例输出 `[PENDING]` 并点名（**不得静默 SKIP**）；登记集非法（未知编号/重复/缺列）⇒ rc=1 硬错。
 #   tmux（默认）路径**不加载登记集、不新增任何输出行** —— AC1.2 的「逐字 diff 空」靠此保证。
@@ -95,14 +96,25 @@ if [ -n "$arg_err" ]; then
   exit 1
 fi
 
-# ---------------------------------------------------------------- 后端开关（PRD #96 一期）
-# 未设 = tmux（默认）；auto 一期解为 tmux（herdr 转默认归三期）。非法取值 fail loud，不猜。
-BACKEND="${NAO_TEST_TERMINAL:-tmux}"
-case "$BACKEND" in
-  tmux|herdr) ;;
-  auto) BACKEND="tmux" ;;
-  *) printf '参数错误: NAO_TEST_TERMINAL=%s 非法（期望 tmux|herdr|auto）\n' "$BACKEND" >&2; exit 1 ;;
+# ---------------------------------------------------------------- 后端开关（PRD #96 · 三期 P2 默认翻 herdr）
+# 取值来源（优先级从高到低）：NAO_TEST_TERMINAL > NAO_TERMINAL > **生产默认 herdr**。
+#   ⇒ `npm test`（什么都不设）= herdr（与生产默认一致，AC3.3 的「未设 ⇒ herdr」在门禁上成立）；
+#     `NAO_TERMINAL=tmux npm test` / `NAO_TEST_TERMINAL=tmux npm test` = 回退通道全量跑。
+#   `auto` 三期起 = 生产默认 = herdr。非法取值 fail loud，不猜、不静默回落。
+RAW_BACKEND="${NAO_TEST_TERMINAL:-${NAO_TERMINAL:-herdr}}"
+case "$RAW_BACKEND" in
+  tmux|herdr) BACKEND="$RAW_BACKEND" ;;
+  auto) BACKEND="herdr" ;;
+  *) printf '参数错误: 后端取值 %s 非法（NAO_TEST_TERMINAL / NAO_TERMINAL 期望 tmux|herdr|auto）\n' "$RAW_BACKEND" >&2; exit 1 ;;
 esac
+
+# #96 三期 P2（默认翻 herdr）· **测试不依赖默认值**
+#   生产默认已 = herdr ⇒ 若用例靠「未设」搭车，同一份用例会在不同机器/不同默认下走不同后端（不可复现）。
+#   在这里按 BACKEND **显式导出**：每个用例脚本继承一个确定的 NAO_TERMINAL（arch 原则：CI 固定后端）。
+#   唯一允许 unset 的地方是「验默认值」的那几段（cases/06 默认值段、cases/28 B1① 反向断言），
+#   它们必须包在 `# >>> default-value-probe BEGIN/END` 标记块内 —— 静态断言（cases/06）扫全部用例，
+#   标记块外的 `unset NAO_TERMINAL` / `env -u NAO_TERMINAL` / `NAO_TERMINAL=` 一律 0 命中。
+export NAO_TERMINAL="$BACKEND"
 
 # 登记集（仅 herdr 加载；tmux 路径零新增行为/零新增输出）
 #   `# tmux-only: <id...>` 注释声明 = 该用例**本后端不适用**（结构上是另一后端的断言面），

@@ -401,6 +401,32 @@ t4_scan_term_herdr_forbidden() { # <script>
   done <<< "$rs"
 }
 
+# 三期 P2（默认翻 herdr）静态面：**用例不得依赖生产默认值**。
+#   默认已 = herdr ⇒ 靠「未设」搭车的用例会在不同机器/不同默认下走不同后端（不可复现）。基线由
+#   `run.sh` 按 `NAO_TEST_TERMINAL` **显式导出** `NAO_TERMINAL`；允许 unset/清空的**唯一**位置 =
+#   「验默认值」段，且必须包在 `# >>> default-value-probe BEGIN` / END 标记块内。
+#   本函数逐行扫全部用例：标记块外的 `unset NAO_TERMINAL` / `env -u NAO_TERMINAL` / 空串赋值 = 违规输出。
+t4_scan_nao_terminal_default_probe() { # <目录（其下 *.sh）>
+  local target="$1"
+  local -a files=()
+  if [ -d "$target" ]; then files=("$target"/*.sh)
+  elif [ -f "$target" ]; then files=("$target")
+  else printf '路径不存在: %s\n' "$target"; return 0; fi
+  awk '
+    FNR == 1 { inblk = 0 }
+    /^[[:space:]]*# >>> default-value-probe BEGIN/ { inblk = 1; next }
+    /^[[:space:]]*# >>> default-value-probe END/   { inblk = 0; next }
+    inblk { next }
+    /^[[:space:]]*#/ { next }
+    /(^|[^A-Za-z0-9_])unset[[:space:]]+(-v[[:space:]]+)?NAO_TERMINAL([[:space:]]|;|$)/ {
+      printf "%s:%d [unset] %s\n", FILENAME, FNR, $0; next }
+    /-u[[:space:]]+NAO_TERMINAL([[:space:]]|$)/ {
+      printf "%s:%d [env -u] %s\n", FILENAME, FNR, $0; next }
+    /NAO_TERMINAL=(["]{0,2})([[:space:]]|$)/ {
+      printf "%s:%d [空串] %s\n", FILENAME, FNR, $0; next }
+  ' "${files[@]}"
+}
+
 t4_fixture() { # 输出一个 git 初始化过的临时项目目录
   local d
   d="$(mktemp -d "$T4_CACHE_DIR/fx.XXXXXX")" || t4_blocked "无法创建临时夹具目录"

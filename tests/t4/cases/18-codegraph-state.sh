@@ -35,6 +35,9 @@ t4_assert_file "$FLEET" "被测脚本存在（nao-fleet.sh）"
 t4_assert_file "$SKILL" "技能文件存在（codegraph.md）"
 
 # ---------------------------------------------------------------- 夹具
+# #96 P2-P3-4（会咬「两后端各跑一次」）：夹具必须**每次重建** —— A4 会 `mkdir -p .codegraph`，
+#   若沿用同一 user-provided cache，第二次跑时 A3「无索引」就会被上一轮的 .codegraph 污染 ⇒ 假红。
+rm -rf "$T4_CACHE_DIR/c18"
 FX="$T4_CACHE_DIR/c18/repo"
 AG="$T4_CACHE_DIR/c18/home/.pi/agent"
 STUB="$T4_CACHE_DIR/c18/bin"      # 只放 codegraph stub

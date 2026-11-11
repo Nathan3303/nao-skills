@@ -283,7 +283,7 @@ if ! C09_P1="$(stage_pane "$C09_NAME1" "$C09_SESS")"; then
 fi
 C09_R1="[{\"name\":\"$C09_NAME1\",\"id\":\"$C09_NAME1\",\"status\":\"idle\",\"cwd\":\"$OTHER\",\"tmuxPane\":\"$C09_P1\"}]"
 T4_OUT=""; T4_ERR=""; T4_RC=0
-t4_run_in_dir "$FX_N" env -u TMUX_PANE TMUX="$C09_TMUX_REAL" NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$C09_R1" \
+t4_run_in_dir "$FX_N" env -u TMUX_PANE NAO_TERMINAL=tmux TMUX="$C09_TMUX_REAL" NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$C09_R1" \
   bash "$FX_N/.agents/scripts/nao-fleet.sh" close --task T509R qa
 t4_assert_eq "0" "$T4_RC" "AC3①: 真回收 rc=0（跨仓 pane $C09_P1）"
 if c09_reclaimed "$C09_P1"; then
@@ -302,7 +302,7 @@ fi
 C09_R2="[{\"name\":\"$C09_NAME2\",\"id\":\"$C09_NAME2\",\"status\":\"idle\",\"cwd\":\"$OTHER\",\"tmuxPane\":\"$C09_P2\"}]"
 t4_info "撞号负控：\$TMUX_PANE=$C09_P2（与实际调用者 pane 无关的陈旧句柄） vs 目标 pane $C09_P2"
 T4_OUT=""; T4_ERR=""; T4_RC=0
-t4_run_in_dir "$FX_N" env TMUX="$C09_TMUX_REAL" TMUX_PANE="$C09_P2" NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$C09_R2" \
+t4_run_in_dir "$FX_N" env NAO_TERMINAL=tmux TMUX="$C09_TMUX_REAL" TMUX_PANE="$C09_P2" NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$C09_R2" \
   bash "$FX_N/.agents/scripts/nao-fleet.sh" close --task T509S qa
 t4_assert_eq "0" "$T4_RC" "AC3②: pane id 与 \$TMUX_PANE 撞号不得误拒回收（rc=0）"
 t4_assert_not_contains "$T4_OUT$T4_ERR" "拒绝回收" "AC3②: 不得报「拒绝回收」（撞号不是「调用者自己的 pane」）"
@@ -322,7 +322,7 @@ cat > "$C09_SELF_DRIVER" <<'EOS'
 # F1 自 pane 负控驱动：在目标 pane **内部**执行 close（调用者进程树挂在 pane_pid 下）
 exec >"$C09_SELF_OUT" 2>&1
 cd "$C09_FX" || exit 9
-NAO_QA_FAKE_ROSTER="$(cat "$C09_ROSTER_FILE")" NAO_SKILLS="$C09_FX" NAO_TASKS_STATE="$C09_FX/.none.md" \
+NAO_TERMINAL=tmux NAO_QA_FAKE_ROSTER="$(cat "$C09_ROSTER_FILE")" NAO_SKILLS="$C09_FX" NAO_TASKS_STATE="$C09_FX/.none.md" \
   bash "$C09_FX/.agents/scripts/nao-fleet.sh" close --task "$C09_TASK" qa
 printf '\n__RC__=%s\n' "$?"
 EOS
@@ -393,7 +393,7 @@ else
   C09_R4="[{\"name\":\"$C09_NAME4\",\"id\":\"$C09_NAME4\",\"status\":\"idle\",\"cwd\":\"$OTHER\",\"tmuxPane\":\"$C09_P4\"}]"
   t4_info "不可判定负控：ps 不可读 + \$TMUX_PANE=%9（与目标 $C09_P4 不撞号）⇒ 必须放行"
   T4_OUT=""; T4_ERR=""; T4_RC=0
-  t4_run_in_dir "$FX_N" env PATH="$C09_FAKEBIN:$PATH" TMUX="$C09_TMUX_REAL" TMUX_PANE="%9" \
+  t4_run_in_dir "$FX_N" env PATH="$C09_FAKEBIN:$PATH" NAO_TERMINAL=tmux TMUX="$C09_TMUX_REAL" TMUX_PANE="%9" \
     NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$C09_R4" \
     bash "$FX_N/.agents/scripts/nao-fleet.sh" close --task T509V qa
   t4_assert_eq "0" "$T4_RC" "AC3④: 不可判定且不撞号 ⇒ close 放行（rc=0）"

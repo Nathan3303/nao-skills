@@ -17,10 +17,10 @@ NAO_TEST_TERMINAL=herdr bash tests/t4/run.sh   # 后端自检：只跑登记集�
 NAO_TEST_TERMINAL=herdr bash tests/t4/run.sh --case 27   # 后端抽象层自检（隔离 / 零渗透 / 拆场幂等 / 零残留）
 npm test                                       # 唯一机械门禁 = test:agents + test:t4
 npm run test:t4:full                           # 发布前置双轴（= 上面两个环境变量 · 单环境）
-npm run test:t4:full:dual                      # 发布前置**双环境** gate（两组串跑，任一红即红）
+npm run test:t4:full:dual                      # 发布前置**双后端** gate（tmux / herdr 各一组串跑，任一红即红）
 ```
 
-- **后端登记集与后端自检（#96 · 一期建机制 / 二期 B4 终态）**：开关 `NAO_TEST_TERMINAL=tmux|herdr|auto`（**未设 = tmux**；`auto` 一期解为 tmux，herdr 转默认归三期）。**只有 herdr** 走登记集：唯一准入清单 = `tests/t4/backends/herdr.txt`（每行 `<编号> <shared|own> <到期> <理由>`，登记集非法 ⇒ rc=1），**登记集内的用例才跑**；未登记且未声明的用例输出 `[PENDING]` 并点名（**不得静默 SKIP**）。
+- **后端登记集与后端自检（#96 · 一期建机制 / 二期 B4 终态 / 三期 P2 默认翻 herdr）**：开关 `NAO_TEST_TERMINAL=tmux|herdr|auto`（**未设 = herdr**，与生产默认一致；`auto` = herdr；回退全量跑用 `NAO_TERMINAL=tmux npm test`）。**只有 herdr** 走登记集：唯一准入清单 = `tests/t4/backends/herdr.txt`（每行 `<编号> <shared|own> <到期> <理由>`，登记集非法 ⇒ rc=1），**登记集内的用例才跑**；未登记且未声明的用例输出 `[PENDING]` 并点名（**不得静默 SKIP**）。
   - **tmux 专有声明**：`# tmux-only: <编号...>`（注释区、机器可读）⇒ 运行期输出 `[TMUX-ONLY]` 并单列计数，**不进 PENDING、也不算 SKIP**。当前 = `12`（派生落点/宿主窗口属三期布局）与 `25`（tmux 宽度算式），三期重判。
   - **汇总行**：`后端索引（herdr）：共享 N / 本后端专有 M / tmux 专有 K / PENDING P` + `对账：N+M+K+P = <--list 计数>`。
   - **B4 终态 → 三期 P1**：`共享 20 / 专有 9 / tmux 专有 2 / PENDING 0`（31 例 = `--list`）。D 类 10 例按 PRD AC2.7 分流（19/20/21/23/24 shared · 09/15/22 own · 12/25 tmux-only），`case28` 一并登记（own，B1 记的账）；三期 P1 增 `case32`（own，真机整轮，到期 2027-06-30）。
@@ -28,10 +28,23 @@ npm run test:t4:full:dual                      # 发布前置**双环境** gate�
   - tmux（默认）路径**不加载登记集、不新增任何输出行**（AC1.2「逐字 diff 空」靠此保证）。
   **两条前置护栏**：① 实验根过深（`sun_path` 上限 108 含结尾 NUL）⇒ `be_init` **前置拒绝**并给出「当前长度 + 上限 + 换短 `T4_CACHE_DIR` 的改法」，不再退化成 herdr 的裸 `Error: local socket name length exceeds capacity of sun_path`（会被上层误读成「兜底未点火」）；② herdr 调用「命令位必须带 `--session`」的白名单**只此一条** = `herdr --version`（纯本地元数据、无会话参数、不读写用户文件），且**整行等值**（行内出现不算豁免）；其余命令位裸调用一律经唯一入口 `_be_herdr_exec`（用例内带双向负控：伪造裸调用必红 / 仅 `--version` 放行）。`cases/27` 现已**零豁免使用** —— 版本探针也走唯一入口（实测 herdr 0.9.1 接受 `--session <s> --version`）。
   后端自检用例 = `cases/27`，被测对象是 `tests/t4/lib-backend.sh`（**测试侧**抽象，生产 `nao-fleet.sh` 本批零改动）：两个实验场（herdr = 各自私有 `XDG_CONFIG_HOME` 根 / tmux = 各自隔离 socket）互不可见（`terminal_id` 交集空）+ 零渗透（pane 内 `env | grep -c '^TMUX'`==0 · `HERDR_SESSION` · `HERDR_SOCKET_PATH` 前缀在实验根内 · **只隔离 `XDG_CONFIG_HOME`，`XDG_STATE_HOME` 必须透传**）+ `stop` 容忍非 0 + `delete` 幂等（**判据 = effect，不信 rc**）+ 零残留（`sessions/` 空 / 无 server / 无进程）+ `default` 不可达。就绪一律 **50×100ms 轮询 + 5s 上限**（禁固定 sleep，超时 fail loud）。herdr 调用**只有** `_be_herdr_exec` 一个入口，`--session` 由它注入（「缺 `--session` ⇒ FAIL」护栏带**变异自证**：副本追加恒放行 ⇒ 子进程跑本用例必红并点名「护栏①」）。
+- **三期 P2 测试纪律（#96 · 默认翻 herdr）**：生产默认已 = herdr（`NAO_TERMINAL` 未设/空串 ⇒ herdr；回退 = `NAO_TERMINAL=tmux`，不自动回落）。因此：
+  - **测试不依赖默认值**：`run.sh` 按后端解析结果**显式导出** `NAO_TERMINAL`（取值优先级 `NAO_TEST_TERMINAL` > `NAO_TERMINAL` > 默认 herdr），`lib-backend.sh::be_fleet_handles` **两后端都显式给** `NAO_TERMINAL` ⇒ 每个用例里跑的生产路径都带确定后端（CI 固定后端）。
+  - **唯一允许 unset/空串的位置** = 「验默认值」段，必须包在 `# >>> default-value-probe BEGIN` / `# >>> default-value-probe END` 标记块内（当前 2 处：`cases/06` 默认值段、`cases/28` B1① 反向断言）。静态断言 `lib.sh::t4_scan_nao_terminal_default_probe` 扫**全部用例目录**：块外 `unset NAO_TERMINAL` / `env -u NAO_TERMINAL` / 空串赋值 = 0 命中（含两条负控 + 一条「块内被放过」正控）。
+  - **双 golden 分离 + 反向断言**：显式 `=tmux` ⇒ 旧 golden（`status` 全文 `144f3447…`、`ensure` blob `c2de6533…`、`check` 摘要 `31b5978e…`、tmux 落地段三处 md5）；未设 ⇒ **herdr golden**（由夹具生成，禁手抄：未设与显式 `=herdr` 两次调用必须同源，herdr 侧 `status` 有后端专有头行）；**两者必须不同**（防 flip 未生效仍全绿）+ 变异「把默认改回 tmux」⇒ 必红（`cases/28` B1①）。
+  - **exit 3 文案全扫（两轴）**：herdr 侧每条 `exit 3` 文案都必须含 `NAO_TERMINAL=tmux` 回退指路（tmux 前置那条含 `tmux new -s nao`）。
+    `cases/06` 同时断言 **独占行数 = 8**（tmux 1 + herdr 7）与 **token 级站点数 = 8**（命令位：行首 / `;` `|` `&` `(` `{` / `then|else|do` 之后，排除注释行）——
+    两轴并存的原因：只认独占行会漏 `cmd || exit 3` 形态且计数照样绿。负控三条：摘掉一条指路 ⇒ 恰 1 条必红 · 把站点改成 `cmd || exit 3` ⇒ 独占行 8→7 而 token 仍 8 · 该形态缺指路时 hint 扫描同样必红。
+- **夹具确定性三条（#96 P2 第二轮 QA）**：① `cases/18` 开头 `rm -rf "$T4_CACHE_DIR/c18"` —— A4 会建 `.codegraph`，沿用同一 user-provided cache 时第二次跑会让 A3「无索引」假红（会咬「两后端各跑一次」）；② `cases/12`（T517 冻结脚本）的 tmux 夹具用 `-f <夹具 tmux.conf>` **不读宿主/系统配置**并显式 `set -g pane-base-index 1` —— tmux 内建默认是 0，几何 golden 依赖 1 起索引（灰机常靠 `/etc/tmux.conf` 才有 1）；③ `cases/03` 的 3e 把 `HOME` 与 `PI_CODING_AGENT_DIR` **成对**指向同一私有根（shim 的 tier-3 是 `${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}` ⇒ 只改 HOME 会被 ambient override 盖掉而恒 DEGRADED），并配一条「HOME 有包、PI 目录指别处 ⇒ 必 DEGRADED」负控钉住优先级。
 - **孤儿 sweep 口径（#96 P2 缺陷修复）**：herdr server 用 `setsid` 脱离进程组 ⇒ 失败/被中断的跑次会遗留**常驻 server**（cache 按 T524 口径保留作证据，进程却没人收）。三层防护：① `run.sh` 起跑前（**仅 herdr**）扫「死 run 遗留」并 `session stop`+`delete`——判据 = `XDG_CONFIG_HOME` 是**实验根形态**（路径含 `nao-t4.*` 段 / 在当前 `T4_CACHE_DIR` 下）；**用户 `~/.config/herdr`（及 `~/.config`）结构上不在判据内**；**活 run 的 cache 跳过**（有进程持有该 cache 的 `T4_CACHE_DIR=`，防并发互杀；其残留由该 run 自己的 teardown + EXIT 兜底负责）；**不删目录**（只停进程 + 删该会话场）。② `be_arm_cleanup` 把「停本场 server」链进 EXIT trap（**保留原 `$?`** ⇒ T524 的「失败保留缓存」语义不变），失败打 `BE-CLEANUP-WARN:` 不静默。③ 兜不住（SIGKILL）的由下次起跑 sweep 收。effect 判据：`BE_SWEEP_EFFECT`（第 2 次必须 0）；跳过计数：`BE_SWEEP_SKIPPED_LIVE` / `BE_SWEEP_SKIPPED_FOREIGN`。
 - **默认严格**：`T4_ALLOW_MISSING` 默认 `0` —— 依赖的 T2 产物缺失即 FAIL；宽松模式**只有显式 `T4_ALLOW_MISSING=1`** 才启用（缺产物记 BLOCKED）。
 - **`T4_REQUIRE_FULL=1`**（与上者正交，只管 SKIP/DEGRADE/NOTE 三轴）：汇总层 **SKIP 计数 + DEGRADE 计数必须均为 `0`，且非白名单 NOTE 计数必须为 `0`** —— SKIP 含从用例输出解析的**行首** `[SKIP]` / `SKIP:` 行；DEGRADE 为能力降级标记；NOTE 按 tag 白名单判定（见下节）。发布用 `npm run test:t4:full:dual`（单环境退用 `npm run test:t4:full`）。
-- **双环境 gate**：`npm run test:t4:full:dual`（`tests/t4/run-dual.sh`）= 同参数两组串跑 —— 组1 保留 `$TMUX_PANE`（撞号态）/ 组2 `env -u TMUX_PANE`（未设态）；**任一非 0 ⇒ 整体非 0**，输出标明组别与失败组。约 2× 单轮耗时；`npm test` 默认路径**不含** dual（不变慢）。
+- **双后端 gate（#96 P2 改写）**：`npm run test:t4:full:dual`（`tests/t4/run-dual.sh`）= 同参数**两后端各一组**串跑 ——
+  组 1 = `NAO_TERMINAL=tmux`（回退通道 · 保留 `$TMUX_PANE` 撞号态）/ 组 2 = `NAO_TEST_TERMINAL=herdr`（默认通道 · `TMUX_PANE` 未设）；
+  每组开跑前打印**解析后的后端**（走 `lib-backend.sh::be_backend`，不是只回显设了哪个变量 —— 防「设了但被更高优先级盖掉」仍假绿）；
+  **任一非 0 ⇒ 整体非 0**，输出标明组别与失败组。约 2× 单轮耗时；`npm test` 默认路径**不含** dual（不变慢）。
+  改这句话的原因：默认翻 herdr 后，旧 dual（两组都靠「不设 `NAO_TEST_TERMINAL`」）两组**都落 herdr** ⇒ tmux 后端（含 12/25 tmux-only）
+  在文档化 gate 里永不执行，直接顶 BR1。**发布判据 = 两后端各跑一次、全部显式，不依赖默认值**。
 - **`test:t4:full` 能力要求**：`pi` CLI · tmux · bwrap · strace · npm registry 可达。缺任一即产生 DEGRADE/SKIP ⇒ **full rc≠0**（这正是 full 的意义：要求能力齐备）；默认 `npm test` 不因能力缺失变红。
 - **用例 13 的额外能力依赖**：⑥（tmux 内名册可用且为空 ⇒ 「未运行（无需回收）」rc=0）与 ⑦（`--force` 不改末段判定）需要 `tsx`（跑名册探针夹具）；缺失时这两组记 `[DEGRADE]`（默认豁免、`test:t4:full` 计分），其余断言照跑。①–⑤（非 tmux ⇒ exit 3 三条 + `无法确认在线`/宿主阶梯删除面两条静态 grep）只依赖 bash + 本仓脚本，无额外能力。
 - **用例 15 的能力与夹具纪律**：T2–T6/T8 需真 `tmux`（缺则整例 `SKIP`）；T1/T7/T9 需 `tsx`（假名册探针；缺则 T1–T9 记 `[DEGRADE]`），T10（`check` 守卫）纯 bash 照跑。夹具 = 真 tmux **隔离 socket**（≠ 生产默认候选；`TMUX_TMPDIR` 指向夹具目录，`env -u TMUX -u TMUX_PANE`）+ 假名册逐字段一行 pretty-print + 桩 `pi` 用**复制**的二进制（保 `comm=pi`）；收尾走机制 `cleanup -S <隔离 socket>`（不裸 `kill-server`）。

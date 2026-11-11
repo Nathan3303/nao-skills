@@ -26,17 +26,20 @@ nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，�
 除 pi 之外还需要：
 
 - **pi ≥ 1.4.0** —— 舰队依赖它的多会话能力，版本低了体检直接报红。
-- **tmux** —— 7 个角色会话在你当前窗口里分屏跑；`ensure` / `status` / `close` 都必须在 tmux 会话内执行。
+- **终端后端（二选一）** —— 7 个角色会话需要落在终端里：
+  - **herdr ≥ 0.9.1（默认后端）** —— 会话落在 herdr 的专用 session 里，每个角色一个 tab。还需装 pi 集成：`herdr integration install pi`。
+  - **tmux（回退后端）** —— 在**当前窗口**里分屏跑，用法与 0.23 之前完全一致；`export NAO_TERMINAL=tmux` 即可切回。
+  - 两者的完整前提链、空间判据与回退说明见 [docs/INSTALL.md](docs/INSTALL.md) 的「herdr 后端」一节。
 - **Node.js ≥ 18** —— 命令入口是 Node 脚本。
 - **git**（建议顺手装 **GitHub CLI `gh`**）—— 分支、PR、发版都走它；没有 `gh` 时这些步骤降级成手动/本地操作，流程不变。
 
 30 秒自检：
 
 ```bash
-pi --version && tmux -V && node -v && git --version
+pi --version && node -v && git --version && (herdr --version || tmux -V)
 ```
 
-缺了什么都能在第一步装：pi 见 [pi.dev](https://pi.dev)，tmux 用系统包管理器（`brew install tmux` / `apt install tmux`），Node 用 [nvm](https://github.com/nvm-sh/nvm) 或系统包管理器。
+缺了什么都能在第一步装：pi 见 [pi.dev](https://pi.dev)，**herdr** 见 [herdr.dev](https://herdr.dev)（装完还要 `herdr integration install pi`），**tmux**（回退用）走系统包管理器（`brew install tmux` / `apt install tmux`），Node 用 [nvm](https://github.com/nvm-sh/nvm) 或系统包管理器。
 
 ## 它解决什么问题
 
@@ -50,7 +53,7 @@ pi --version && tmux -V && node -v && git --version
 
 ## 三步装好
 
-1. **装好上面的前置**（pi / tmux / Node）。
+1. **装好上面的前置**（pi / Node / 终端后端：herdr 默认 或 tmux 回退）。
 
 2. **把机制装进你的项目**（项目级；版本 pin 在仓库里，团队 clone 即得同款）：
 
@@ -73,7 +76,7 @@ pi --version && tmux -V && node -v && git --version
 ```bash
 cd 你的项目
 .agents/scripts/nao-fleet.sh check                                    # 体检：exit 0 就能开工
-.agents/scripts/nao-fleet.sh ensure pm arch rd-fe rd-be qa rd-infra uiux    # 在当前 tmux 窗口里拉起 7 个会话
+.agents/scripts/nao-fleet.sh ensure pm arch rd-fe rd-be qa rd-infra uiux    # 拉起 7 个会话（后端见「前置环境」：herdr 默认 / tmux 回退）
 ```
 
 角色名可以写**别名**或**规范名**（两者等价）：`arch` = `arch-designer`、`infra` = `rd-infra`；上例混用也照常拉起。完整别名见 `.agents/roles.yaml` 或 `nao-fleet.sh --help`。
@@ -116,7 +119,12 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 
 **跑完的会话要留着吗？** 派生会话验收完就回收：`nao-fleet.sh close --task T1 rd-be`（等价写法 `nao-fleet.sh close rd-be-T1`，直接用派生会话名即可）；常驻角色留着复用。`nao-fleet.sh status` 会提示哪些是残留。目标在别的项目里也能回收——定位不到时会**非 0 退出并打印诊断**，不会假装已回收。
 
-**为什么一定要 tmux？** 它同时解决三件事：**布局可控**（三种布局自动排布，不会把桌面铺满一圈窗口）、**句柄完整**（`status` 查残留、`close` 跨项目回收都靠会话名册与 pane 标题定位）、**SSH 可用**（没有图形环境也能拉起整套舰队）。
+**为什么需要终端后端？** 舰队要把 7 个角色会话放进终端里，且要能可靠地「找回来」与「收掉」。
+
+- **默认（herdr）**：每个角色一个 tab，身份靠结构化事实（pane label + agent 状态）判定，不依赖终端标题；需要 `herdr integration install pi`。
+- **回退（tmux）**：`export NAO_TERMINAL=tmux` 即回到旧行为——分屏布局、靠会话名册与 pane 标题定位、SSH 下同样可用。
+
+两者都要求能 attach 到同一个终端会话；**不能自动回落**（静默换后端会让同一命令在不同机器上跑出不同结果）。
 
 **它会自己上网查吗？** 会，但有分工：产品经理查同类功能的**产品形态**（功能点、属性、视图、协作方式），架构师对照**业界成熟的架构模式**。两者都必须把来源和「适不适用于本项目」落成文件（`docs/research/`），抓来的网页内容不进聊天记录；技术选型仍只由架构师定。
 

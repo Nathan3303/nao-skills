@@ -29,7 +29,7 @@ t4_require_shim "$fx"
 # --- 3a 未物化（隔离空 HOME，排除 ~/.pi/agent/npm 兜底） ---------------------
 empty_home="$(mktemp -d "$T4_CACHE_DIR/home.XXXXXX")"
 rm -rf "$fx/.pi/npm/node_modules"
-t4_run_shim "$fx" -u NAO_SKILLS -u NAO_SHIM_ENTERED "HOME=$empty_home"
+t4_run_shim "$fx" -u NAO_SKILLS -u NAO_SHIM_ENTERED -u PI_CODING_AGENT_DIR "HOME=$empty_home"
 t4_info "3a rc=$T4_RC"
 assert_degraded "3a 未物化"
 t4_assert_not_contains "$T4_OUT$T4_ERR" "check: OK" "3a 不得静默成功"
@@ -38,16 +38,16 @@ t4_assert_not_contains "$T4_OUT$T4_ERR" "check: OK" "3a 不得静默成功"
 t4_materialize "$fx" >/dev/null 2>&1
 
 # --- 3b marker env 命中 -----------------------------------------------------
-t4_run_shim "$fx" -u NAO_SKILLS NAO_SHIM_ENTERED=1
+t4_run_shim "$fx" -u NAO_SKILLS -u PI_CODING_AGENT_DIR NAO_SHIM_ENTERED=1
 t4_info "3b rc=$T4_RC"
 assert_degraded "3b marker 防重入"
 
 # --- 3c 伪造 NAO_SKILLS（自指 / 非包根） ------------------------------------
-t4_run_shim "$fx" -u NAO_SHIM_ENTERED NAO_SKILLS="$fx"
+t4_run_shim "$fx" -u NAO_SHIM_ENTERED -u PI_CODING_AGENT_DIR NAO_SKILLS="$fx"
 t4_info "3c-1 rc=$T4_RC"
 assert_degraded "3c-1 NAO_SKILLS=项目根（自指）"
 
-t4_run_shim "$fx" -u NAO_SHIM_ENTERED NAO_SKILLS="$fx/.agents"
+t4_run_shim "$fx" -u NAO_SHIM_ENTERED -u PI_CODING_AGENT_DIR NAO_SKILLS="$fx/.agents"
 t4_info "3c-2 rc=$T4_RC"
 t4_assert_ne "0" "$T4_RC" "3c-2 NAO_SKILLS=.agents（旧语义）不得当作包根成功"
 [ "$T4_RC" -ne 124 ] && t4_ok "3c-2 未递归/未超时" || t4_bad "3c-2 递归或超时"
@@ -55,17 +55,22 @@ t4_assert_ne "0" "$T4_RC" "3c-2 NAO_SKILLS=.agents（旧语义）不得当作包
 # --- 3d NAO_SKILLS 指向合法包根（异位副本） ---------------------------------
 alt="$(mktemp -d "$T4_CACHE_DIR/altpkg.XXXXXX")"
 cp -a "$fx/.pi/npm/node_modules/$PKG_NAME/." "$alt/"
-t4_run_shim "$fx" -u NAO_SHIM_ENTERED NAO_SKILLS="$alt"
+t4_run_shim "$fx" -u NAO_SHIM_ENTERED -u PI_CODING_AGENT_DIR NAO_SKILLS="$alt"
 t4_info "3d rc=$T4_RC out=$(printf '%s' "$T4_OUT" | head -1)"
 t4_assert_eq "0" "$T4_RC" "3d NAO_SKILLS 显式覆盖：check exit=0"
 t4_assert_contains "$T4_OUT" "check: OK" "3d 显式覆盖 check 成功"
 
 # --- 3e ~/.pi/agent/npm 版本校验 -------------------------------------------
+# #96 P2-P3-6（与本项目自己的纪律对齐）：shim 的 tier-3 = `${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/npm/…`
+#   ⇒ **只改 HOME 不够**：ambient `PI_CODING_AGENT_DIR`（真 pi 目录）会盖过 HOME ⇒ 永远找不到夹具包 ⇒ 恒 DEGRADED。
+#   口径：本子用例按「四件私有 env」那一套把 **HOME 与 PI_CODING_AGENT_DIR 成对指向同一个私有根**
+#   （而不是 unset 后者），既验 tier-3 真能命中，也顺带把「shim 尊重 PI_CODING_AGENT_DIR」这一优先级钉住。
 rm -rf "$fx/.pi/npm/node_modules"           # 去掉 tier-2
 home_ok="$(mktemp -d "$T4_CACHE_DIR/homeok.XXXXXX")"
 mkdir -p "$home_ok/.pi/agent/npm/node_modules/@nathan33"
 cp -a "$alt" "$home_ok/.pi/agent/npm/node_modules/@nathan33/nao-skill"
-t4_run_shim "$fx" -u NAO_SKILLS -u NAO_SHIM_ENTERED "HOME=$home_ok"
+t4_run_shim "$fx" -u NAO_SKILLS -u NAO_SHIM_ENTERED \
+  "HOME=$home_ok" "PI_CODING_AGENT_DIR=$home_ok/.pi/agent"
 t4_info "3e-ok rc=$T4_RC"
 t4_assert_eq "0" "$T4_RC" "3e 全局兜底版本==pin：check exit=0（D6 第 3 优先级）"
 
@@ -77,8 +82,18 @@ const fs=require("fs"),p=process.argv[1];
 const j=JSON.parse(fs.readFileSync(p,"utf8"));j.version="0.0.1";
 fs.writeFileSync(p,JSON.stringify(j,null,2));
 ' "$home_bad/.pi/agent/npm/node_modules/@nathan33/nao-skill/package.json"
-t4_run_shim "$fx" -u NAO_SKILLS -u NAO_SHIM_ENTERED "HOME=$home_bad"
+t4_run_shim "$fx" -u NAO_SKILLS -u NAO_SHIM_ENTERED \
+  "HOME=$home_bad" "PI_CODING_AGENT_DIR=$home_bad/.pi/agent"
 t4_info "3e-bad rc=$T4_RC"
 assert_degraded "3e 全局兜底版本!=pin"
+
+# 3e-负控（#96 P2-P3-6）：HOME 指对、但 PI_CODING_AGENT_DIR 指到**另一个**私有根 ⇒ 必须 DEGRADED。
+#   作用：证明 tier-3 真的以 `PI_CODING_AGENT_DIR` 为准（上面两条绿不是「碰巧 HOME 生效」），
+#   也把「四件私有 env 必须成对设置」这条纪律钉成判据。
+home_decoy="$(mktemp -d "$T4_CACHE_DIR/homedecoy.XXXXXX")"
+t4_run_shim "$fx" -u NAO_SKILLS -u NAO_SHIM_ENTERED \
+  "HOME=$home_ok" "PI_CODING_AGENT_DIR=$home_decoy/.pi/agent"
+t4_info "3e-decoy rc=$T4_RC"
+assert_degraded "3e 负控：HOME 有包但 PI_CODING_AGENT_DIR 指向别处 ⇒ DEGRADED（override 优先，判据非空转）"
 
 t4_exit

@@ -126,7 +126,8 @@ live_probe() { # $1=脚本 $2=宽度 → "panes=<n> rc=<rc> warn=<0|1>"
   pid="$(TX display -p '#{pid}' 2>/dev/null)"
   sid="$(TX display -p '#{session_id}' 2>/dev/null)"
   caller="$(TX list-panes -t fx -F '#{pane_id}' 2>/dev/null | head -1)"
-  out="$( cd "$LAB" && env -u NAO_TMUX_LAYOUT PATH="$LAB/bin:$PATH" \
+  # #96 三期 P2：本用例是 tmux 布局专有 ⇒ 一律显式 =tmux（不依赖默认值；默认已翻 herdr）
+  out="$( cd "$LAB" && env -u NAO_TMUX_LAYOUT PATH="$LAB/bin:$PATH" NAO_TERMINAL=tmux \
       TMUX="$SOCK,$pid,$sid" TMUX_PANE="$caller" NAO_SKILLS="$LAB" \
       NAO_TASKS_STATE="$LAB/.none.md" NAO_UPDATE_ON_ENSURE=0 PI_CODING_AGENT_DIR="$LAB/pi-empty" \
       timeout 120 bash "$fleet" ensure pm arch-designer uiux-designer rd-fe rd-be qa rd-infra 2>&1 )"

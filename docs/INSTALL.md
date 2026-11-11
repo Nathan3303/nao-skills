@@ -10,21 +10,28 @@
 > **模型可选，但有推荐**：舰队推荐配合 **`deepseek-v4.1-flash`**（7 个常驻会话 + 长链路交接，长上下文稳定性与单轮成本更省心）。这不是硬依赖——换成别的模型也能跑，差异在纪律遵守与回执质量。
 
 - **pi（≥ 1.4.0）**：唯一的运行宿主。本机制**只支持 pi**，不为其他编程 Agent（Claude Code / Codex / Cursor 等）提供适配或支持承诺。
-- **tmux（任意版本）**：舰队的 7 个会话都作为 tmux pane 在你的窗口里分屏拉起。
+- **终端后端（二选一）**：
+  - **herdr（≥ 0.9.1，0.23 起默认）**：7 个会话落在 herdr 的专用 session 里，每个角色一个 tab。装法见 [herdr.dev](https://herdr.dev)；装完还要 **`herdr integration install pi`**（舰队靠它判「会话是否就绪」）。
+  - **tmux（任意版本，回退）**：7 个会话作为 tmux pane 在当前窗口里分屏拉起；`export NAO_TERMINAL=tmux` 切回。
 - **Node.js（≥ 18）**：`nao-skill` CLI 与 `nao-fleet.sh` 的转发入口都是 Node 脚本。
 - **git**：任务分支、提交、PR 全靠它；装了 **GitHub CLI（`gh`）** 则额外支持自动开 Issue / PR / Release，没有 `gh` 也能跑，只是这些步骤降级为本地操作。
 
 自检：
 
 ```bash
-pi --version      # 需 ≥ 1.4.0
-tmux -V           # 有输出即可
-node -v           # 需 ≥ 18
+pi --version                          # 需 ≥ 1.4.0
+herdr --version || tmux -V            # 二选一：herdr ≥ 0.9.1（默认）或 tmux
+node -v                               # 需 ≥ 18
 git --version
-gh --version      # 可选
+gh --version                          # 可选
 ```
 
-不满足时的表现：不在 tmux 里执行 `ensure` / `status` / `close` ⇒ `exit 3` + 一行提示 `tmux new -s nao`（不建任何窗口、不留副作用）；pi 版本低于 1.4.0 ⇒ `check` 该项打红并 `rc=1`。
+不满足时的表现（都是 fail loud，不静默回落）：
+
+- 默认 herdr 但**没装 herdr** ⇒ `check` 打红 `rc=1`（给「装 herdr」与「`export NAO_TERMINAL=tmux` 回退」两条命令）；`ensure` / `status` / `close` ⇒ `exit 3`。
+- 默认 herdr 但**不在 herdr pane 内**（例如你在 tmux 里跑）⇒ `exit 3` + 一行提示（去 herdr 会话的 pane 内重试，或 `export NAO_TERMINAL=tmux` 回退）。
+- 选了 tmux 后端但不在 tmux 里 ⇒ `exit 3` + 一行提示 `tmux new -s nao`（不建任何窗口、不留副作用）。
+- pi 版本低于 1.4.0 ⇒ `check` 该项打红并 `rc=1`。
 
 ## 安装（项目级）
 
@@ -147,9 +154,9 @@ cd ~/proj/web  && .agents/scripts/nao-fleet.sh ensure rd-be     # → rd-be@web
 - `close rd-be`（裸别名/裸派生名）= 用**调用者所在仓**的 scope；`close rd-be@todo`（全名）= 用它自己带的 scope，**忽略** scope 文件。
 - 同 core 的带 scope 会话不止一个、而你又只给了裸名 ⇒ 拒绝并列出候选（用全名指定，不猜）。
 
-## herdr 后端（可选；当前默认仍是 tmux）
+## herdr 后端（0.23 起为默认后端）
 
-舰队支持两种终端后端：`tmux`（默认）与 `herdr`。用 `NAO_TERMINAL` 切换：
+舰队支持两种终端后端：**`herdr`（0.23 起默认）** 与 `tmux`（回退）。用 `NAO_TERMINAL` 切换：
 
 ```bash
 NAO_TERMINAL=herdr .agents/scripts/nao-fleet.sh status
