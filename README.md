@@ -39,7 +39,7 @@ nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，�
 pi --version && node -v && git --version && (herdr --version || tmux -V)
 ```
 
-缺了什么都能在第一步装：pi 见 [pi.dev](https://pi.dev)，tmux 用系统包管理器（`brew install tmux` / `apt install tmux`），Node 用 [nvm](https://github.com/nvm-sh/nvm) 或系统包管理器。
+缺了什么都能在第一步装：pi 见 [pi.dev](https://pi.dev)，**herdr** 见 [herdr.dev](https://herdr.dev)（装完还要 `herdr integration install pi`），**tmux**（回退用）走系统包管理器（`brew install tmux` / `apt install tmux`），Node 用 [nvm](https://github.com/nvm-sh/nvm) 或系统包管理器。
 
 ## 它解决什么问题
 
