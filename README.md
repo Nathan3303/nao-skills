@@ -29,7 +29,7 @@ nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，�
 - **终端后端（二选一）** —— 7 个角色会话需要落在终端里：
   - **herdr ≥ 0.9.1（默认后端）** —— 会话落在 herdr 的专用 session 里，每个角色一个 tab。还需装 pi 集成：`herdr integration install pi`。
   - **tmux（回退后端）** —— 在**当前窗口**里分屏跑，用法与 0.23 之前完全一致；`export NAO_TERMINAL=tmux` 即可切回。
-  - 两者的完整前提链、空间判据与回退说明见 [docs/INSTALL.md](docs/INSTALL.md#herdr-后端可选当前默认仍是-tmux)。
+  - 两者的完整前提链、空间判据与回退说明见 [docs/INSTALL.md](docs/INSTALL.md) 的「herdr 后端」一节。
 - **Node.js ≥ 18** —— 命令入口是 Node 脚本。
 - **git**（建议顺手装 **GitHub CLI `gh`**）—— 分支、PR、发版都走它；没有 `gh` 时这些步骤降级成手动/本地操作，流程不变。
 
