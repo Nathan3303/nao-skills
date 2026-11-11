@@ -326,3 +326,54 @@ herdr 侧**每条**（实测 7 条；arch 枚举的 6 条 + `cmd_status` 的「�
 | 用例数 | `--list` = **31**（不变） |
 | BR1 五处 md5 | `status 144f3447…` · `ensure c2de6533…` · 句柄层 `9549f513…` · cleanup 体 `d8937134…` · socket 候选 `e4950f38…` —— 与第一轮逐字相同 |
 | 台账 / herdr 区禁字 / 敏感值 | 0 / 0 / 0 |
+
+---
+
+## 十二、二轮点检后的两条 nit（QA「6 项全关 · GO」之后）
+
+### 12.1 nit 3（必改）dual 的「解析后端」→ **硬断言**
+
+缺陷：上一轮只**打印**「本组解析后端 = tmux/herdr」，靠人看日志。我们这一路反复吃「设置 ≠ 生效」
+（`NAO_TERMINAL=` 空串 / `HERDR_ENV` 丢失 / `TMUX_PANE` 渗透）⇒ 打印只是提示，**断言才是判据**。
+
+改（`tests/t4/run-dual.sh`）：`assert_group_backend <期望> <env...>` —— 组 1 断言 `tmux`、组 2 断言 `herdr`，
+不符即**点名「期望 / 实际」+ `exit 1`（fail fast，本组不跑）**。
+
+实测（正常路径，`npm run test:t4:full:dual` rc=**0**）：
+
+```
+########## 组 1/2：tmux 后端（…）##########
+  本组后端断言 = tmux ✓（期望 tmux）
+… 1635 PASS（含 12/25 两个 tmux-only）…
+########## 组 2/2：herdr 后端（…）##########
+  本组后端断言 = herdr ✓（期望 herdr）
+… 1747 PASS（12/25 = TMUX-ONLY · 后端索引 PENDING 0）…
+  结论: PASS（组1 断言 tmux ✓ / 组2 断言 herdr ✓ · 两组 rc=0；判据另含每组 SKIP=0 · DEGRADE=0 · 非白名单 NOTE=0）
+```
+
+**负控**（把组 1 的 env 改成 `NAO_TEST_TERMINAL=herdr` 盖掉 `NAO_TERMINAL=tmux`；用副本跑，不动真文件）：
+
+```
+########## 组 1/2：tmux 后端（…）##########
+########## 双后端 gate 结论（test:t4:full:dual）##########
+  ✗ 后端断言失败：期望 tmux，实际 herdr
+    含义：「设置 ≠ 生效」—— 更高优先级的 env 盖掉了本组设置（NAO_TEST_TERMINAL > NAO_TERMINAL > 默认 herdr）。
+  结论: FAIL（组后端断言未过 · 该组未开跑，fail fast）
+rc=1
+```
+
+### 12.2 nit 1（措辞）`tests/README.md:20`
+
+`发布前置**双环境** gate（两组串跑，任一红即红）` → `发布前置**双后端** gate（tmux / herdr 各一组串跑，任一红即红）`
+（正文早已是「双后端」口径，代码块注释与之一致化）。
+
+### 12.3 本条门禁（终态，本机实测）
+
+| 项 | 结果 |
+| :-- | :-- |
+| `check` | **rc=0 ×2**，两次 md5 相同 = `1bcb376727a5a6992aefe2fd48b897ee`（默认 herdr · 3 行）；显式 `=tmux` md5 仍 = `31b5978e95e7f5b4dc7a9fd861548065`（2 行） |
+| `npm test`（默认 herdr） | **rc=0** · 断言 **1747** · 31 例 PASS · SKIP=0 DEGRADE=0 NOTE=9(全白名单) · 共享20/专有9/tmux专有2/**PENDING 0** |
+| `NAO_TERMINAL=tmux npm test` | **rc=0** · 断言 **1635** · SKIP=0 DEGRADE=0 NOTE=8 |
+| `test:t4:full:dual` | **rc=0** · 组1 断言 tmux ✓ / 组2 断言 herdr ✓（各 1635 / 1747 PASS） |
+| 例数 | `--list` = **31** |
+| BR1 五处 md5 | `status 144f3447c9ff406d6aed828d9c9720e5` · `ensure c2de6533a1826dbf470dcc401cb29063` · 句柄层 `9549f513b7a66fbced68bc1a1fa1dc10` · cleanup 体 `d8937134bb3ed4ceca29fb581d4acf2c` · socket 候选 `e4950f3897670a97d7baaea8f54727c3` —— 与二轮逐字相同 |

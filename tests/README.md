@@ -17,7 +17,7 @@ NAO_TEST_TERMINAL=herdr bash tests/t4/run.sh   # 后端自检：只跑登记集�
 NAO_TEST_TERMINAL=herdr bash tests/t4/run.sh --case 27   # 后端抽象层自检（隔离 / 零渗透 / 拆场幂等 / 零残留）
 npm test                                       # 唯一机械门禁 = test:agents + test:t4
 npm run test:t4:full                           # 发布前置双轴（= 上面两个环境变量 · 单环境）
-npm run test:t4:full:dual                      # 发布前置**双环境** gate（两组串跑，任一红即红）
+npm run test:t4:full:dual                      # 发布前置**双后端** gate（tmux / herdr 各一组串跑，任一红即红）
 ```
 
 - **后端登记集与后端自检（#96 · 一期建机制 / 二期 B4 终态 / 三期 P2 默认翻 herdr）**：开关 `NAO_TEST_TERMINAL=tmux|herdr|auto`（**未设 = herdr**，与生产默认一致；`auto` = herdr；回退全量跑用 `NAO_TERMINAL=tmux npm test`）。**只有 herdr** 走登记集：唯一准入清单 = `tests/t4/backends/herdr.txt`（每行 `<编号> <shared|own> <到期> <理由>`，登记集非法 ⇒ rc=1），**登记集内的用例才跑**；未登记且未声明的用例输出 `[PENDING]` 并点名（**不得静默 SKIP**）。
