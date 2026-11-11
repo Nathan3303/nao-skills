@@ -9,6 +9,7 @@
 #   T4_ALLOW_MISSING=1 bash tests/t4/run.sh  # 宽松：依赖缺失=BLOCKED（仅显式 1）
 #   T4_REQUIRE_FULL=1 bash tests/t4/run.sh   # 发布前置：SKIP+DEGRADE 计数>0 即 FAIL，非白名单 NOTE 亦 FAIL（与上者正交）
 #   NAO_TEST_TERMINAL=herdr bash tests/t4/run.sh   # 后端自检：只跑 tests/t4/backends/herdr.txt 登记集，未登记点名 PENDING
+#                                                  #   另有 `# tmux-only:` 声明（12/25）⇒ 输出 [TMUX-ONLY] 并单列计数（不进 PENDING）
 #   NAO_TEST_TERMINAL=tmux bash tests/t4/run.sh    # 默认后端（未设同义）：全量跑，行为与 #96 改动前逐字一致
 #
 # 后端开关（PRD #96 一期 AC1.1 / AC1.2）：NAO_TEST_TERMINAL=tmux|herdr|auto（未设 = tmux，auto 一期 = tmux）。
@@ -29,7 +30,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 
-CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26" "27" "28")
+CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "30" "31")
 CASE_TITLES=(
   "主路径足迹 + check exit=0（AC1）"
   "设计一致性：注册 skill 数==2 且无 collision（AC1/AC6）"
@@ -58,6 +59,9 @@ CASE_TITLES=(
   "真 pi 冒烟受限重试护栏（#86 A）：超时才重试 / 非超时失败不重试（按调用次数证）/ 无凭据不重试"
   "后端抽象层自检（#96 一期步 1）：两场隔离 / 零渗透 / 拆场幂等 / 零残留 / default 不可达 + 护栏变异自证"
   "舰队命名契约（BR8 · #96 步 2a）：C1 codec 恒等 + M1–M4 变异负控 / C2 golden diff 空 / C3 单写点 lint"
+  "herdr 就绪门反假阳性（#96 B4）：已 idle 但 state_change_seq 不动 ⇒ 超时 fail loud（rc 仍 0）"
+  "herdr 幽灵 pane（#96 B4）：label 在、agent 无 ⇒ 不判在线 / ensure 不判已在运行（复用重跑）"
+  "herdr 集成缺失 fail loud（#96 B4）：agent_session 空 / 钩子权威缺 ⇒ 点名不可投递，不退化 idle"
 )
 
 mode="run"; only=""; arg_err=""
@@ -100,7 +104,10 @@ case "$BACKEND" in
 esac
 
 # 登记集（仅 herdr 加载；tmux 路径零新增行为/零新增输出）
+#   `# tmux-only: <id...>` 注释声明 = 该用例**本后端不适用**（结构上是另一后端的断言面），
+#   三期重判；运行期输出 `[TMUX-ONLY]` 并单独计数 —— 不进登记集、也不计入 PENDING。
 declare -A REG_KIND=()
+declare -A TMUX_ONLY=()
 if [ "$BACKEND" = "herdr" ]; then
   REG_FILE="$HERE/backends/herdr.txt"
   if [ ! -f "$REG_FILE" ]; then
@@ -108,7 +115,19 @@ if [ "$BACKEND" = "herdr" ]; then
   fi
   while IFS= read -r line || [ -n "$line" ]; do
     line="${line#"${line%%[![:space:]]*}"}"          # 去前导空白
-    case "$line" in ''|'#'*) continue ;; esac
+    case "$line" in
+      '# tmux-only:'*)
+        for x in ${line#*'# tmux-only:'}; do
+          matched=0; for y in "${CASE_IDS[@]}"; do [ "$x" = "$y" ] && matched=1; done
+          if [ "$matched" != 1 ]; then
+            printf '登记集非法: tmux-only 声明含未知编号 %s（%s）\n' "$x" "$REG_FILE" >&2; exit 1
+          fi
+          [ -n "${TMUX_ONLY[$x]:-}" ] && { printf '登记集重复: tmux-only 声明 %s（%s）\n' "$x" "$REG_FILE" >&2; exit 1; }
+          TMUX_ONLY[$x]=1
+        done
+        continue ;;
+      ''|'#'*) continue ;;
+    esac
     id="${line%%[[:space:]]*}"
     rest="${line#"$id"}"; rest="${rest#"${rest%%[![:space:]]*}"}"
     kind="${rest%%[[:space:]]*}"
@@ -126,6 +145,8 @@ if [ "$BACKEND" = "herdr" ]; then
     if [ -z "${rest#"$kind"}" ]; then
       printf '登记集非法: 用例 %s 缺「到期 + 理由」两列（%s）\n' "$id" "$REG_FILE" >&2; exit 1
     fi
+    [ -n "${TMUX_ONLY[$id]:-}" ] && {
+      printf '登记集非法: 用例 %s 既登记又声明 tmux-only（%s）\n' "$id" "$REG_FILE" >&2; exit 1; }
     REG_KIND[$id]="$kind"
   done < "$REG_FILE"
 fi
@@ -196,6 +217,12 @@ declare -A results
 for i in "${!CASE_IDS[@]}"; do
   id="${CASE_IDS[$i]}"
   if [ "$mode" = "case" ] && [ "$only" != "$id" ]; then continue; fi
+  if [ "$BACKEND" = "herdr" ] && [ -n "${TMUX_ONLY[$id]:-}" ]; then
+    # 本后端不适用（三期重判）：点名 + 单独计数，**不算 PENDING**（也不是 SKIP）
+    results[$id]="TMUX-ONLY"
+    printf '  [TMUX-ONLY] 用例 %s: %s —— 声明为 tmux 专有（tests/t4/backends/herdr.txt 注释区；三期重判）\n' "$id" "${CASE_TITLES[$i]}"
+    continue
+  fi
   if [ "$BACKEND" = "herdr" ] && [ -z "${REG_KIND[$id]:-}" ]; then
     # 未登记 ⇒ **点名**（不得静默 SKIP）：不跑、不计 SKIP，汇总结算为 PENDING
     results[$id]="PENDING"
@@ -220,7 +247,7 @@ done
 
 printf '\n==================== T4 汇总 ====================\n'
 fail=0; blocked=0; skip_cases=0; degrade_lines=0; note_lines=0
-run_shared=0; run_own=0; run_pending=0
+run_shared=0; run_own=0; run_pending=0; run_tmuxonly=0
 # NOTE 白名单聚合（T531 · BR1/BR2）：逐条解析行首 `[NOTE]` 后的首个 token，合法性判定只在此处。
 note_wl=(); note_bad=()
 for i in "${!CASE_IDS[@]}"; do
@@ -248,7 +275,8 @@ for i in "${!CASE_IDS[@]}"; do
   printf '  %s  %-12s %s\n' "$id" "$st" "${CASE_TITLES[$i]}"
   if [ "$BACKEND" = "herdr" ]; then
     case "$st" in
-      PENDING) run_pending=$((run_pending + 1)) ;;
+      PENDING)   run_pending=$((run_pending + 1)) ;;
+      TMUX-ONLY) run_tmuxonly=$((run_tmuxonly + 1)) ;;
       *) case "${REG_KIND[$id]:-}" in
            shared) run_shared=$((run_shared + 1)) ;;
            own)    run_own=$((run_own + 1)) ;;
@@ -258,6 +286,8 @@ for i in "${!CASE_IDS[@]}"; do
   case "$st" in
     PASS|SKIP) ;;       # 白名单：仅 PASS/SKIP 视为通过
     PENDING)            # 仅 herdr 登记集模式可出现；不算 SKIP、不算 FAIL
+      [ "$BACKEND" = "herdr" ] || fail=1 ;;
+    TMUX-ONLY)          # 声明为 tmux 专有（本后端不适用）；不算 SKIP/FAIL/PENDING
       [ "$BACKEND" = "herdr" ] || fail=1 ;;
     BLOCKED) blocked=1 ;;
     *) fail=1 ;;        # FAIL* / MISSING / NOT_RUN / 未知值 一律 rc≠0
@@ -271,8 +301,12 @@ printf '  ---\n'
 printf '  SKIP=%d · DEGRADE=%d · NOTE=%d\n' "$skip_cases" "$degrade_lines" "$note_lines"
 printf '  （SKIP 含用例内 [SKIP]/SKIP: 行；DEGRADE=能力降级，默认豁免、full 计分；NOTE 按白名单分轴）\n'
 if [ "$BACKEND" = "herdr" ]; then
-  printf '  后端索引（herdr）：共享 %d / 本后端专有 %d / PENDING %d（登记文件 tests/t4/backends/herdr.txt）\n' \
-    "$run_shared" "$run_own" "$run_pending"
+  printf '  后端索引（herdr）：共享 %d / 本后端专有 %d / tmux 专有 %d / PENDING %d（登记文件 tests/t4/backends/herdr.txt）\n' \
+    "$run_shared" "$run_own" "$run_tmuxonly" "$run_pending"
+  if [ "$mode" = "run" ]; then
+    printf '  对账：共享+专有+tmux专有+PENDING = %d（--list 计数 %d）\n' \
+      "$((run_shared + run_own + run_tmuxonly + run_pending))" "${#CASE_IDS[@]}"
+  fi
 fi
 if [ "${#note_wl[@]}" -gt 0 ]; then
   printf '  NOTE 白名单命中（%d 条）：%s\n' "${#note_wl[@]}" "$(join_by ' · ' "${note_wl[@]}")"

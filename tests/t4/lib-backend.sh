@@ -521,11 +521,11 @@ be_new_pane() { # [cwd]
         be_stage_fail "tmux split-window 失败（session=$BE_SESSION）"; return 1; }
       ;;
     herdr)
-      local ws first
-      ws="$(be_herdr "$BE_SESSION" workspace list 2>/dev/null)" || return 1
-      if printf '%s' "$ws" | grep -q '"workspace_id"'; then
-        first="$(be_panes)"; first="${first%%$'\n'*}"; first="${first%%$'\t'*}"   # 不走管道（避 SIGPIPE/T534 类假红）
-        [ -n "$first" ] || { be_stage_fail "herdr 已有 workspace 但 pane 视图为空: $BE_SESSION"; return 1; }
+      local first
+      # 以 **pane 视图**为准（不是 workspace 表）：workspace 可能还在但 pane 已关空 ⇒ 应新建 workspace，
+      #   否则 split 无锚点（实测：关掉最后一个 pane 后再建 pane 时 pane list 为空）。
+      first="$(be_panes)"; first="${first%%$'\n'*}"; first="${first%%$'\t'*}"   # 不走管道（避 SIGPIPE/T534 类假红）
+      if [ -n "$first" ]; then
         js="$(be_herdr "$BE_SESSION" pane split "$first" \
                 --direction down --cwd "$cwd" --no-focus 2>/dev/null)" || {
           be_stage_fail "herdr pane split 失败（session=$BE_SESSION）"; return 1; }
@@ -561,4 +561,205 @@ be_wait_until() {
     i=$((i + 1))
   done
   return 1
+}
+
+# ---------------------------------------------------------------- 用例侧夹具 API（B4 · D 类迁移）
+# 目的：D 类用例（19/20/21/23/24）的**夹具**只经本组函数 ⇒ tmux/herdr 差异单点收在此处；
+#   用例正文只断言「我们自己的输出 / argv / 文件内容」（PRD AC2.7 的 shared 定义）。
+# 前置：已 `be_init`；herdr 侧必须在 `be_start_server` **之前** export 好要被 pane 继承的环境
+#   （server 把自己起跑时的环境交给 pane —— 如 PI_CODING_AGENT_DIR，避免写用户 ~/.pi）。
+# 纪律：本组内 tmux 调用一律经 `_be_tmux`（恒带 -S），herdr 一律经 `be_herdr`（恒带 --session）。
+
+# 起 server 并保证「至少一个 pane」（后端无关的调用者场景）：
+#   tmux = server 自带一个 shell pane；herdr = 无 workspace 就没有 pane ⇒ 首个 pane 由 workspace 建。
+be_ensure_scene() {
+  be_start_server || return 1
+  if [ -z "$(be_panes 2>/dev/null)" ]; then
+    be_new_pane "$BE_LAB" >/dev/null || return 1
+  fi
+  return 0
+}
+
+be_caller_pane() { # 本场首个 pane（夹具里的「调用者」）
+  local first
+  first="$(be_panes 2>/dev/null)"; first="${first%%$'\n'*}"; first="${first%%$'\t'*}"
+  printf '%s' "$first"
+}
+
+be_pane_count() { # 本场 pane 数（只数本会话/场，不数整 server）
+  local n; n="$(be_panes 2>/dev/null | grep -c . || true)"; printf '%s' "${n:-0}"
+}
+
+be_pane_alive() { # <pane_id> → 0 存活 / 1 不在
+  local p="${1:-}"
+  [ -n "$p" ] || return 1
+  be_panes 2>/dev/null | awk -F'\t' -v p="$p" '$1 == p { f = 1 } END { exit(f ? 0 : 1) }'
+}
+
+be_set_name() { # <pane_id> <会话名> [仓标签] —— 置身份：tmux = 标题契约 · herdr = pane.label
+  local p="${1:-}" n="${2:-}" repo="${3:-}"
+  [ -n "$p" ] && [ -n "$n" ] || { be_guard_fail "be_set_name 缺 pane/name"; return 1; }
+  [ -n "$repo" ] || repo="$(basename "${BE_LAB:-.}")"
+  case "$BE_BACKEND" in
+    tmux)  _be_tmux select-pane -t "$p" -T "π - $n - $repo" >/dev/null 2>&1 ;;
+    herdr) be_herdr "$BE_SESSION" pane rename "$p" "$n" >/dev/null 2>&1 ;;
+    *) return 1 ;;
+  esac
+}
+
+be_pane_cwd() { # <pane_id> → 该 pane 的工作目录
+  local p="${1:-}" js
+  [ -n "$p" ] || return 1
+  case "$BE_BACKEND" in
+    tmux)  _be_tmux display-message -p -t "$p" '#{pane_current_path}' 2>/dev/null ;;
+    herdr)
+      js="$(be_herdr "$BE_SESSION" pane list 2>/dev/null)" || return 1
+      printf '%s' "$js" | _be_json_lines \
+        "(r.panes||[]).filter(p=>p.pane_id===\"$p\").map(p=>p.cwd||p.foreground_cwd||\"\")"
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+be_pane_cmdline() { # <pane_id> → 启动命令行（tmux: pane_start_command · herdr: 前台进程 cmdline）
+  local p="${1:-}" js
+  [ -n "$p" ] || return 1
+  case "$BE_BACKEND" in
+    tmux)  _be_tmux display-message -p -t "$p" '#{pane_start_command}' 2>/dev/null ;;
+    herdr)
+      js="$(be_herdr "$BE_SESSION" pane process-info --pane "$p" 2>/dev/null)" || return 1
+      printf '%s' "$js" | _be_json_lines \
+        '((r.process_info||{}).foreground_processes||[]).map(x=>x.cmdline||"").filter(Boolean)'
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+be_pane_label() { # <pane_id> → 身份面（tmux = pane_title 契约串 · herdr = pane.label）
+  local p="${1:-}" js
+  [ -n "$p" ] || return 1
+  case "$BE_BACKEND" in
+    tmux)  _be_tmux display-message -p -t "$p" '#{pane_title}' 2>/dev/null ;;
+    herdr)
+      js="$(be_herdr "$BE_SESSION" pane list 2>/dev/null)" || return 1
+      printf '%s' "$js" | _be_json_lines "(r.panes||[]).filter(p=>p.pane_id===\"$p\").map(p=>p.label||\"\")"
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+be_kill_pane() { # <pane_id> —— 关 pane（收尾/隔离用；判据看 effect 不看 rc）
+  local p="${1:-}"
+  [ -n "$p" ] || return 1
+  case "$BE_BACKEND" in
+    tmux)  _be_tmux kill-pane -t "$p" >/dev/null 2>&1 || true ;;
+    herdr) be_herdr "$BE_SESSION" pane close "$p" >/dev/null 2>&1 || true ;;
+  esac
+  return 0
+}
+
+be_scene_signature() { # 现场签名（排序后逐行）：pane + 会话/workspace —— 「零副作用」断言用
+  case "$BE_BACKEND" in
+    tmux)
+      { _be_tmux list-panes -a -F 'pane #{pane_id}' 2>/dev/null || true
+        _be_tmux list-sessions -F 'sess #{session_name}' 2>/dev/null || true
+      } | sort ;;
+    herdr)
+      { be_panes 2>/dev/null | awk -F'\t' 'NF { print "pane " $1 }'
+        be_herdr "$BE_SESSION" workspace list 2>/dev/null \
+          | _be_json_lines '(r.workspaces||[]).map(w=>"ws "+w.workspace_id)' || true
+      } | sort ;;
+    *) return 1 ;;
+  esac
+}
+
+be_fleet_handles() { # 打印运行生产脚本所需的后端句柄（每行 VAR=VAL），供 `env` 直接展开
+  case "$BE_BACKEND" in
+    tmux)
+      local td; td="$(dirname "$(dirname "$BE_SOCK")")"
+      printf 'TMUX=%s,0,0\nTMUX_PANE=%s\nTMUX_TMPDIR=%s\n' "$BE_SOCK" "$(be_caller_pane)" "$td" ;;
+    herdr)
+      printf 'NAO_TERMINAL=herdr\nHERDR_ENV=1\nHERDR_SESSION=%s\nHERDR_SOCKET_PATH=%s/herdr/sessions/%s/herdr.sock\nXDG_CONFIG_HOME=%s\n' \
+        "$BE_SESSION" "$BE_CFGROOT" "$BE_SESSION" "$BE_CFGROOT" ;;
+    *) return 1 ;;
+  esac
+}
+
+# 跑生产脚本（本用例的后端句柄由 be_fleet_handles 注入；调用方只补业务 env）。
+# 结果：BE_RC / BE_OUT / BE_ERR / BE_OUT_ANSI / BE_ERR_ANSI（ANSI 已去色）。
+be_run_fleet() { # <cwd 目录> <args...>
+  local dir="${1:-}"; shift
+  [ -n "$dir" ] || { be_guard_fail "be_run_fleet 缺工作目录"; return 1; }
+  command -v t4_run_in_dir >/dev/null 2>&1 || { be_guard_fail "be_run_fleet 需要 lib.sh（t4_run_in_dir）"; return 1; }
+  local script="${BE_FLEET_SCRIPT:-${BE_FLEET_ROOT:-$BE_LAB}/.agents/scripts/nao-fleet.sh}"
+  local -a envs=(env -u TMUX -u TMUX_PANE -u TMUX_TMPDIR
+                 -u HERDR_ENV -u HERDR_SESSION -u HERDR_SOCKET_PATH -u HERDR_SOCKET_FILE)
+  local kv
+  # BE_FLEET_NO_HANDLES=1：不注入后端句柄（负控用：验「不在终端内」时入口闸门必须 exit 3）
+  if [ "${BE_FLEET_NO_HANDLES:-0}" != "1" ]; then
+    while IFS= read -r kv; do [ -n "$kv" ] && envs+=("$kv"); done < <(be_fleet_handles)
+  fi
+  t4_run_in_dir "$dir" "${envs[@]}" timeout "${BE_FLEET_TIMEOUT:-120}" \
+    bash "$script" "$@"
+  BE_RC=$T4_RC; BE_OUT=$T4_OUT; BE_ERR=$T4_ERR
+  BE_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  BE_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  return 0
+}
+
+# 造一个「可被舰队识别」的夹具会话（D 类用例的唯一身份入口）：
+#   tmux  = 由 pane 内进程自己输出 **OSC 0** 后再 `exec sleep`（#90 定性的 flake 根因是
+#           `select-pane -T` 会被 PS1 随后重写；进程自己设且不再有 shell 则标题恒定）。
+#           需要「只是改标题」的原语时用 `be_set_name`（= select-pane -T）。
+#   herdr = 先 `pane rename` 写 label，再在 pane 内起 `pi --name <名>`（在线证据链要求
+#           pane.label ∧ 前台 pi ∧ argv --name 三者自洽；替身按命令推导前台进程与 agent 条目）。
+be_fixture_session() { # <pane_id> <会话名> [仓标签]
+  local p="${1:-}" n="${2:-}" repo="${3:-}"
+  [ -n "$p" ] && [ -n "$n" ] || { be_guard_fail "be_fixture_session 缺 pane/name"; return 1; }
+  [ -n "$repo" ] || repo="$(basename "${BE_LAB:-.}")"
+  local want i
+  case "$BE_BACKEND" in
+    tmux)  want="π - $n - $repo"
+           be_run "$p" "printf '\\033]0;$want\\007'; exec sleep \"\${BE_FIXTURE_IDLE_SECS:-900}\"" || return 1 ;;
+    herdr) want="$n"
+           be_set_name "$p" "$n" "$repo" || return 1
+           be_run "$p" "exec pi --name $n" || return 1 ;;
+    *) return 1 ;;
+  esac
+  # 有界确认（禁固定 sleep）：send-keys / pane run 都是 fire-and-forget ⇒ 必须等身份面**真的**就位，
+  #   否则紧随其后的 status 会读到「还没命名」的 pane（实测：AC3 冲突夹具若不等标题就位会假红）。
+  for i in $(seq 1 "${BE_POLL_MAX:-50}"); do
+    [ "$(be_pane_label "$p" 2>/dev/null)" = "$want" ] && return 0
+    sleep "${BE_POLL_INT:-0.1}"
+  done
+  be_stage_fail "be_fixture_session 身份未就绪（pane=$p 期望=[$want] 实际=[$(be_pane_label "$p" 2>/dev/null)]）"
+  return 1
+}
+
+be_pane_argv() { # <pane_id> → 每行一个 argv 元素（不含 argv[0]；与桩 pi 落盘同口径）
+  local p="${1:-}" js
+  [ -n "$p" ] || return 1
+  case "$BE_BACKEND" in
+    herdr)
+      js="$(be_herdr "$BE_SESSION" pane process-info --pane "$p" 2>/dev/null)" || return 1
+      printf '%s' "$js" | _be_json_lines \
+        '((((r.process_info||{}).foreground_processes||[])[0]||{}).argv||[]).slice(1)'
+      ;;
+    tmux) return 0 ;;   # tmux 侧无法取 argv（既有用例改用桩进程日志）
+    *) return 1 ;;
+  esac
+}
+
+# 按 `--name <名>` 找到 pane（D 类用例：spawn 之后按名字定位新 pane）
+be_pane_by_name() { # <name> → pane_id（无则空）
+  local want="${1:-}" p c
+  [ -n "$want" ] || return 1
+  while IFS=$'\t' read -r p _; do
+    [ -n "$p" ] || continue
+    c="$(be_pane_cmdline "$p" 2>/dev/null)"
+    case "$c" in
+      *"--name $want "*|*"--name $want") printf '%s' "$p"; return 0 ;;
+    esac
+  done < <(be_panes 2>/dev/null)
+  return 0
 }

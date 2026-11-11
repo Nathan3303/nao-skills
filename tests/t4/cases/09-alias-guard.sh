@@ -15,9 +15,17 @@
 # 夹具全部落在 $T4_CACHE_DIR；不写仓库工作区（roles.yaml 只改夹具副本）。
 # 名册走夹具内嵌假探针（NAO_QA_FAKE_ROSTER），不读真实 pi-intercom 名册。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
+source "$T4_ROOT/tests/t4/lib-backend.sh"
 
 t4_require_cmd node
 
+BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
+PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
+LAB="$T4_CACHE_DIR/lab09-$$"; mkdir -p "$LAB"
+BE_CACHE_ROOT="$T4_CACHE_DIR"
+be_init "$LAB" "lab" || { t4_bad "be_init 失败（后端=$BE_NAME）"; t4_exit; }
+be_ensure_scene || { t4_bad "be_ensure_scene 失败（后端=$BE_NAME）"; t4_exit; }
+# 后端场（socket / herdr 私有根）由 be_* 单点管理；本用例下面的 tmux 夹具只用于 tmux 后端的 AC3 组。
 FIX_SESS="t4c09-$$"
 # T529：真回收组用**隔离 socket**（不碰生产默认 server；T516 纪律），并以其作 $TMUX 过入口闸门。
 C09_SOCK="$T4_CACHE_DIR/c09-sock/tmux-$(id -u)/default"
@@ -27,6 +35,7 @@ t09() { tmux -S "$C09_SOCK" "$@"; }
 c09b() { tmux -S "$C09_SOCK_B" "$@"; }
 cleanup_c09() {
   command -v tmux >/dev/null 2>&1 && { t09 kill-server >/dev/null 2>&1 || true; c09b kill-server >/dev/null 2>&1 || true; }
+  be_teardown >/dev/null 2>&1 || true
   t4_cache_cleanup   # BR10：本 trap 会覆盖 lib.sh 的 EXIT trap，串一次清理（仅影响单跑 09；经 run.sh 时 OWNED=0，无害）
 }
 trap cleanup_c09 EXIT
@@ -73,12 +82,12 @@ JS
 C09_TMUX_FAKE="/tmp/nao-t4-c09-$$,1,0"
 C09_TMUX="${TMUX:-$C09_TMUX_FAKE}"
 
-fx_fleet() { # $1=夹具根；其余 = fleet 参数（可前置 KEY=VAL 环境变量）
+# 夹具 fleet 调用：后端句柄由 be_run_fleet 注入（tmux = 隔离 socket · herdr = 私有根 + 替身）
+fx_fleet() { # $1=夹具根；其余 = fleet 参数（名册用 NAO_QA_FAKE_ROSTER 环境变量给）
   local d="$1"; shift
-  # T530 夹具纪律：-u TMUX_PANE —— 不让共享 worktree 里调用者（PM/QA）的 pane 句柄混进断言；
-  #   需要验「撞号」的子用例再显式把自己的 TMUX_PANE 设进去。
-  t4_run_in_dir "$d" env -u TMUX_PANE TMUX="$C09_TMUX" NAO_SKILLS="$d" NAO_TASKS_STATE="$d/.none.md" \
-    bash "$d/.agents/scripts/nao-fleet.sh" "$@"
+  export NAO_SKILLS="$d" NAO_TASKS_STATE="$d/.none.md"
+  BE_FLEET_SCRIPT="$d/.agents/scripts/nao-fleet.sh" be_run_fleet "$d" "$@"
+  T4_RC="$BE_RC"; T4_OUT="$BE_OUT"; T4_ERR="$BE_ERR"
 }
 
 # ---------------------------------------------------------------- AC2 守卫
@@ -147,26 +156,63 @@ ROSS="[{\"name\":\"qa-T508\",\"id\":\"qa-T508\",\"status\":\"idle\",\"cwd\":\"$O
 
 # 名册报在线（cwd=另一仓）但无存活 pane ⇒ 必须非静默（非 0 且不报「未运行（无需回收）」）
 T4_OUT=""; T4_ERR=""; T4_RC=0
-t4_run_in_dir "$FX_N" env TMUX="$C09_TMUX" NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$ROSS" \
-  bash "$FX_N/.agents/scripts/nao-fleet.sh" close --task T508 qa
+NAO_QA_FAKE_ROSTER="$ROSS" fx_fleet "$FX_N" close --task T508 qa
 t4_assert_ne "0" "$T4_RC" "AC3: 跨仓 qa-T508 未定位到句柄 ⇒ 非 0"
 t4_assert_not_contains "$T4_OUT" "未运行（无需回收）" "AC3: 不得报「未运行（无需回收）」而 pane 未回收"
 
 # 派生会话名（无 --task）不得静默 no-op
 T4_OUT=""; T4_ERR=""; T4_RC=0
-t4_run_in_dir "$FX_N" env TMUX="$C09_TMUX" NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$ROSS" \
-  bash "$FX_N/.agents/scripts/nao-fleet.sh" close qa-T508
+NAO_QA_FAKE_ROSTER="$ROSS" fx_fleet "$FX_N" close qa-T508
 t4_assert_ne "0" "$T4_RC" "AC3: close qa-T508（无 --task）不得 rc=0 静默 no-op"
 t4_assert_not_contains "$T4_OUT" "未运行（无需回收）" "AC3: close qa-T508 不得静默报「未运行」"
 
 # 回归：确实不在线仍应 rc=0 + 「未运行（无需回收）」（不过度矫正为恒失败）
 T4_OUT=""; T4_ERR=""; T4_RC=0
-t4_run_in_dir "$FX_N" env TMUX="$C09_TMUX" NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER='[]' \
-  bash "$FX_N/.agents/scripts/nao-fleet.sh" close --task T508 qa
+NAO_QA_FAKE_ROSTER='[]' fx_fleet "$FX_N" close --task T508 qa
 t4_assert_eq "0" "$T4_RC" "AC3 回归: 名册无记录且无句柄 ⇒ 未运行 rc=0"
 t4_assert_contains "$T4_OUT" "未运行（无需回收）" "AC3 回归: 输出「未运行（无需回收）」"
 
-# ---------------------------------------------------------------- AC3 真回收 + 撞号负控（T530）
+# ---------------------------------------------------------------- AC3 真回收（后端分派）
+# tmux：撞号负控/自 pane 双驱动建立在一_pane id server 局部命名空间_上 —— 该缺陷类在 herdr 侧
+#   **结构上不存在**（key 恒为 (session, pane_id)，无裸 id 比较）⇒ 该组 tmux 专有；
+#   herdr 侧按同一语义给出等价组（见下），不是静默跳过。
+if [ "$BE_NAME" = "herdr" ]; then
+  t4_note backend-gate "AC3 撞号负控/自 pane 大量 tmux 专有夹具（pane id server 局部命名空间）；herdr 侧用 (session,pane) 语义的等价组覆盖"
+  H_PANE="$(be_new_pane "$OTHER")"
+  t4_assert_ne "" "$H_PANE" "AC3h 夹具：跨仓目标 pane 建立（$OTHER）"
+  be_fixture_session "$H_PANE" "qa-T509R" "$(basename "$OTHER")" || t4_bad "AC3h 夹具：身份写入失败"
+  NAO_QA_FAKE_ROSTER="[{\"name\":\"qa-T509R\",\"id\":\"qa-T509R\",\"status\":\"idle\",\"cwd\":\"$OTHER\"}]" \
+    fx_fleet "$FX_N" close --task T509R qa
+  t4_assert_eq "0" "$T4_RC" "AC3h①: 真回收 rc=0（跨仓 label）"
+  t4_assert_not_contains "$T4_OUT" "未运行（无需回收）" "AC3h①: 不得静默报「未运行」"
+  if be_pane_alive "$H_PANE"; then
+    t4_bad "AC3h①: 目标 pane $H_PANE 仍存活"
+  else
+    t4_ok "AC3h①: 目标 pane $H_PANE 已回收（判 effect 不看 rc）"
+  fi
+  # 自 pane 不变量：祖先链**不可读**（伪造 ps）+ HERDR_PANE_ID == 目标 pane ⇒ 不可判定档必须保守拒。
+  #   可读时（默认）herdr 用 shell_pid 祖先链判；不可读才退回 (session,pane) 全等比较 —— 两档都要守。
+  H_PANE2="$(be_new_pane "$OTHER")"
+  be_fixture_session "$H_PANE2" "qa-T509T" "$(basename "$OTHER")" || t4_bad "AC3h 夹具：自 pane 身份写入失败"
+  C09_FPSBIN="$T4_CACHE_DIR/c09-fpsbin"; mkdir -p "$C09_FPSBIN"
+  { printf '#!/usr/bin/env bash\n# 伪造 ps：ppid 查询恒失败（模拟祖先链不可读）\ncase "$*" in *ppid*) exit 1 ;; esac\nexec %q "$@"\n' "$(command -v ps)"; } > "$C09_FPSBIN/ps"
+  chmod +x "$C09_FPSBIN/ps"
+  PATH_SAVE="$PATH"; PATH="$C09_FPSBIN:$PATH"
+  NAO_QA_FAKE_ROSTER="[{\"name\":\"qa-T509T\",\"id\":\"qa-T509T\",\"status\":\"idle\",\"cwd\":\"$OTHER\"}]" \
+    HERDR_PANE_ID="$H_PANE2" fx_fleet "$FX_N" close --task T509T qa
+  PATH="$PATH_SAVE"
+  t4_assert_ne "0" "$T4_RC" "AC3h③: 目标 pane == HERDR_PANE_ID（调用者自身）⇒ 必须拒（rc≠0）"
+  t4_assert_contains "$T4_OUT$T4_ERR" "拒绝回收" "AC3h③: 输出「拒绝回收」"
+  if be_pane_alive "$H_PANE2"; then
+    t4_ok "AC3h③: 调用者自身 pane $H_PANE2 存活（未被自杀）"
+  else
+    t4_bad "AC3h③: 调用者自身 pane $H_PANE2 被回收（F1 不变量破坏）"
+  fi
+  be_kill_pane "$H_PANE2"
+  t4_exit
+fi
+
+# ---------------------------------------------------------------- AC3 真回收 + 撞号负控（T530 · tmux）
 # pane id 是 server 局部命名空间（不同 server 首块 pane 都叫 %0）⇒ 任何裸 id 比较都会跨 server 撞号。
 # 三态（缺一不可，能力缺失一律 SKIP 计分，不许 NOTE 掩盖）：
 #   ① 正常回收：目标 pane 消失

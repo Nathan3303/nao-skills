@@ -343,6 +343,15 @@ term_cleanup() {  # <tmux-socket> <herdr-session>
   esac
 }
 
+# ---- 9/9 当前终端会话名（诊断行用；B4 起取代 cmd_check 的裸 `tmux display-message`）----
+#   tmux = 当前 client 的 session 名（无 client/失败 ⇒ 空，调用方给 `?`）；herdr = HERDR_SESSION。
+term_session_name() {
+  case "$(term_backend)" in
+    tmux) _term_tmux_current_session ;;
+    herdr) printf '%s\n' "${HERDR_SESSION:-}" ;;
+  esac
+}
+
 # ---- BR7 忙闲 → 可投递（纯谓词；事实判定与策略映射分离，B3 close 复用）----
 #   idle/done 可投递；working/blocked 不可；unknown 保守不可。
 #   `done` 对 pi **不可达**（实测扩展只上报 idle/working/blocked，PaneAgentState 枚举无 done）
@@ -1111,6 +1120,7 @@ _term_herdr_wait_ready() {  # <pane_id> <name> → 0 就绪 / 1 超时（逐条�
   { [[ "$_TR_SEQ" =~ ^[0-9]+$ ]] && (( _TR_SEQ >= 1 )); } || warn "  · state_change_seq ≥ 1：实际 ${_TR_SEQ:-0}（未观测到状态迁移）"
   [[ "$_TR_SKIP" == "1" ]] || warn "  · screen_detection_skipped == true：实际 false（状态来自屏幕启发式，不可作就绪判据）"
   warn "  · 诊断指路：herdr --session ${HERDR_SESSION:-<session>} agent explain $pid"
+  warn "  · 若 pi 首次启动停在 What's New / 信任提示（如 lastChangelogVersion 落后于 pi 版本），先手工关闭再重试"
   return 1
 }
 
@@ -2193,6 +2203,8 @@ running_verdict() {  # <name> [repo] → same | conflict:<候选…> | absent
 #    使「名册回退」永远走不到 —— 必疾。
 # P6（BR8）：标题字符集必须含 `@` —— 否则带 scope 的会话在 status 里**整条消失**（已实测）。
 # >>> term-impl-tmux BEGIN (会话名 / 未归属)
+_term_tmux_current_session() { tmux display-message -p '#S' 2>/dev/null || true; }
+
 _term_tmux_names() {
   { if command -v tmux >/dev/null 2>&1; then
       { tmux list-panes -a -F '#{pane_title}' 2>/dev/null || true; } \
@@ -2404,6 +2416,9 @@ build_main_row2_layout() {
     "$right_body"
 }
 
+# >>> term-impl-tmux BEGIN (布局 / 窄列回退)
+# B4（#96 二期）：布局面整段进 tmux 标记区 —— 它是**后端专有**证据层（三期 workspace/tab 拓扑替换），
+#   不是业务区。进门面标记区后台账条目（apply_main_col / apply_tmux_layout）清零，只减不增。
 # main-col：委托 tmux 内建 main-vertical（主 pane 左全高 + 右列纵向堆叠）
 #   坑：tmux 默认 main-pane-width=80（格）⇒ 必须显式设百分比
 apply_main_col() {
@@ -2486,6 +2501,8 @@ apply_tmux_layout() {
     tmux select-layout -t "$HOST_WINDOW" tiled >/dev/null 2>&1 || true
   fi
 }
+
+# <<< term-impl-tmux END (布局 / 窄列回退)
 
 # ---------------------------------------------------------------------------
 # >>> term-impl-tmux BEGIN (spawn)
@@ -2840,7 +2857,7 @@ cmd_check() {
     #   rc 口径（P3-4 订正）：显式指定 herdr 却**缺 herdr 可执行文件** ⇒ rc=1（明确错配，不能装没看见）；
     #   缺 `HERDR_SESSION`（未在 herdr pane 内，CI 常见）⇒ 只提示不置红（静态体检照跑）；
     #   `protocol≠22` ⇒ rc=1（唯一可置红的机械项）。
-    echo '  · 生效后端 NAO_TERMINAL=herdr（#96 二期 B3：status/ensure/close/cleanup 走门面；session-start 起 server；台账 3 条）'
+    echo '  · 生效后端 NAO_TERMINAL=herdr（#96 二期 B4：status/ensure/close/cleanup 走门面；session-start 起 server；台账 0 条）'
     if command -v herdr >/dev/null 2>&1; then
       printf '  ✓ herdr 可用\n'
       if [[ -n "${HERDR_SESSION:-}" && "${HERDR_SESSION}" != "default" ]]; then
@@ -2875,7 +2892,10 @@ cmd_check() {
     printf '  ✗ tmux 缺失（ensure/status/close 将 exit 3）\n'; rc=1
   fi
   if [[ -n "${TMUX:-}" ]]; then
-    echo "  ✓ 当前在 tmux 会话内（$(tmux display-message -p '#S' 2>/dev/null || echo '?')）"
+    # B4：会话名经门面取（tmux 证据层 `_term_tmux_current_session`；业务区不再裸调后端）
+    local tmux_session_now
+    tmux_session_now="$(term_session_name 2>/dev/null)"
+    echo "  ✓ 当前在 tmux 会话内（${tmux_session_now:-?}）"
   else
     printf '  · 当前不在 tmux 会话内：ensure/status/close 将 exit 3（先 `tmux new -s nao`）；纯静态体检可照跑\n'
   fi
@@ -3296,7 +3316,7 @@ cmd_status() {
         mismatch)
           term_abn+=("  ! $nm 身份不一致：label 与 argv --name 不符 → 非在线（禁猜）") ;;
         integration-missing)
-          term_abn+=("  ! $nm 集成缺失：agent_session 空或生命周期钩子权威缺（状态 ${hstate[$nm]}）→ **不可投递**；请核对 pi-intercom/herdr 集成") ;;
+          term_abn+=("  ! $nm 集成缺失：agent_session 空或生命周期钩子权威缺（状态 ${hstate[$nm]}）→ **不可投递**；请核对 pi-intercom/herdr 集成；若 pi 首次启动停在 What's New / 信任提示，先手工关闭再重试") ;;
         ambiguous)
           term_abn+=("  ! $nm 同名 label 多 pane：命中多个 ⇒ 不猜（既不判在线，也不静默挑一个）；先人工核对/清理重复 label（回收面归 B3）") ;;
       esac
@@ -4001,7 +4021,7 @@ case "$CMD" in
       grep -m1 -E '^  . codegraph ' "$REPFILE" || true
       # B1（BR1 六条机械保证之「check 打印生效后端」）：**仅 herdr 模式加行**；tmux 路径零新增输出
       if [[ "$NAO_TERMINAL" == "herdr" ]]; then
-        echo '  · 生效后端 NAO_TERMINAL=herdr（#96 二期 B3：status/ensure/close/cleanup 走门面；session-start 起 server；台账 3 条）'
+        echo '  · 生效后端 NAO_TERMINAL=herdr（#96 二期 B4：status/ensure/close/cleanup 走门面；session-start 起 server；台账 0 条）'
       fi
     else
       cat "$REPFILE"

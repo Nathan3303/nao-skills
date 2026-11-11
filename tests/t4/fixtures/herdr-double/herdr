@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# herdr 测试替身入口（#96 二期 B4）：与真 CLI 同名，放在 PATH 前缀即可替身化。
+#   · 判定逻辑在 `herdr-double.cjs`（**必须 .cjs**：本仓 package.json 是 type=module，
+#     无扩展名/`.js` 会被当成 ESM ⇒ `require is not defined`）。
+#   · 全部状态按 `--session` 落在 `$XDG_CONFIG_HOME/herdr/sessions/<名>/`，与真 herdr 同构。
+exec node "$(dirname "$0")/herdr-double.cjs" "$@"

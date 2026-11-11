@@ -610,8 +610,10 @@ t4_assert_eq "" "$(t4_scan_term_bare_calls "$FLEET_B1" "$LEDGER_B1")" \
   "B1② 真脚本：门面外 0 处裸后端调用（标记区 + 台账之外一律红）"
 t4_assert_eq "" "$(t4_verify_term_ledger "$FLEET_B1" "$LEDGER_B1")" \
   "B1② 台账可验：函数存在 · 仍含裸调用 · 去重 · 不超 baseline · 不收录渲染层/标记区内函数"
-t4_assert_contains "$(head -30 "$LEDGER_B1")" "baseline: 3" \
-  "B1②/B3 台账头写明 baseline（B2 减 2 / B3 减 3：pane_hosts_caller · pane_busy · cmd_close；只减不增）"
+t4_assert_contains "$(head -40 "$LEDGER_B1")" "baseline: 0" \
+  "B1②/B4 台账头写明 baseline（B2 减 2 / B3 减 3 / B4 减 3 ⇒ 0；只减不增）"
+t4_assert_eq "0" "$(grep -vcE '^[[:space:]]*(#|$)' "$LEDGER_B1")" \
+  "B4 台账条目数 = 0（布局段进 tmux 标记区 + cmd_check 的裸调用进 term_session_name 门面）"
 
 # ---- ② 负控 A：往 cmd_status 里塞裸 tmux 调用 ⇒ 必红并点名（渲染层强制门面化）----
 NEG_B1A="$T4_CACHE_DIR/b1-neg-a.sh"
@@ -655,7 +657,7 @@ t4_assert_contains "$(t4_verify_term_ledger "$FLEET_B1" "$NEG_LED")" "函数不�
 cp "$LEDGER_B1" "$NEG_LED"
 printf 'pi_pids_for\tB2\t已在 tmux 标记区内\n' >> "$NEG_LED"
 out="$(t4_verify_term_ledger "$FLEET_B1" "$NEG_LED")"
-t4_assert_contains "$out" "台账行数 4 超过 baseline 3" "B1②/B3 负控C3: 条目数超 baseline ⇒ 必红（B3: 3 条上限；自造第 4 条即红）"
+t4_assert_contains "$out" "台账行数 1 超过 baseline 0" "B1②/B4 负控C3: 条目数超 baseline ⇒ 必红（B4: 0 条上限；自造第 1 条即红）"
 t4_assert_contains "$out" "台账多余（该函数已在标记区内" "B1② 负控C4: 标记区内函数混进台账 ⇒ 必红"
 
 # ---- ④ check 生效后端行 + herdr 模式 fail loud（零后端调用）----
