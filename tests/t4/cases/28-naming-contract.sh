@@ -664,9 +664,10 @@ t4_assert_eq "1" "$(grep -c '^herdr .*agent list' "$LAB/herdr-calls.log" || true
 t4_assert_eq "0" "$(ls -A "$LAB/tmp" 2>/dev/null | wc -l | tr -d ' ')" "B1⑤ 空 label 夹具：快照临时文件零残留"
 
 # ============================================================================
-# B2（#96 二期）：放置 / 就绪门 / 幽灵 pane / 同名歧义 —— 全部用**有状态** herdr 桩（不启真 server）
-#   桩状态：$ST/{panes,agents,ws,order.log,calls.log}；`pane run` 按 HERDR_STUB_ONRUN 追加 agent 条目，
+# B2（#96 二期 + 三期 P1 布局 A）：放置 / 就绪门 / 幽灵 pane / 同名歧义 / 迁移
+#   桩状态：$ST/{panes,agents,ws,tabs,order.log,calls.log}；`pane run` 按 HERDR_STUB_ONRUN 追加 agent 条目，
 #   并记 order.log（用于断言「先 label(rename) 后 run」）。
+#   三期 P1：panes 第 5 列 = tab_id（缺 = `<ws>:t1`）；tabs = `tab_id|ws|label`（缺则按 pane 自动补登记）。
 # ============================================================================
 B2ST="$LAB/b2-stub"; B2ST_BIN="$B2ST/bin"; B2ST_ST="$B2ST/st"
 mkdir -p "$B2ST_BIN" "$B2ST_ST"
@@ -676,14 +677,57 @@ ST="${HERDR_STUB_STATE:?}"
 printf 'herdr %s\n' "$*" >> "$ST/calls.log"
 if [ "${1:-}" = "--session" ]; then shift 2; fi
 cmd="${1:-}"; shift || true
-json_panes() {
-  local first=1 pid label fg ws out=""
-  while IFS='|' read -r pid label fg ws; do
+# panes: pane|label|fg|ws|tab（tab 空 ⇒ <ws>:t1）
+pane_tab() { # <pane_id>
+  awk -F'|' -v p="$1" '$1==p{ if ($5) print $5; else print $4":t1"; exit }' "$ST/panes" 2>/dev/null
+}
+pane_ws() { awk -F'|' -v p="$1" '$1==p{print $4; exit}' "$ST/panes" 2>/dev/null; }
+# pane/tab id 分配 = max 现有索引 + 1（**同一套分配器**：tab create / pane split / move 不得撞号）
+next_pane_id() { # <ws>
+  awk -F'|' -v w="$1" '$4==w && $1 ~ /:p[0-9]+$/ { n=$1; sub(/^.*:p/,"",n); if (n+0>m) m=n+0 } END{ printf "%s:p%d\n", w, m+1 }' "$ST/panes" 2>/dev/null
+}
+next_tab_id() { # <ws>
+  awk -F'|' -v w="$1" '$2==w && $1 ~ /:t[0-9]+$/ { n=$1; sub(/^.*:t/,"",n); if (n+0>m) m=n+0 } END{ printf "%s:t%d\n", w, m+1 }' "$ST/tabs" 2>/dev/null
+}
+tab_seeded() { # 未登记 tab 按现有 pane 自动补登记（label=1），保证旧夹具（4 列 panes）仍可读
+  local pid tab ws
+  while IFS= read -r pid; do
     [ -n "$pid" ] || continue
+    tab="$(pane_tab "$pid")"; ws="$(pane_ws "$pid")"
+    [ -n "$tab" ] && [ -n "$ws" ] || continue
+    grep -q "^$tab|" "$ST/tabs" 2>/dev/null || printf '%s|%s|1\n' "$tab" "$ws" >> "$ST/tabs"
+  done < <(awk -F'|' 'NF{print $1}' "$ST/panes" 2>/dev/null)
+}
+tab_pane_count() { # <tab_id>
+  local n=0 pid
+  while IFS= read -r pid; do
+    [ -n "$pid" ] || continue
+    [ "$(pane_tab "$pid")" = "$1" ] && n=$((n + 1))
+  done < <(awk -F'|' 'NF{print $1}' "$ST/panes" 2>/dev/null)
+  printf '%s' "$n"
+}
+json_tabs() { # [ws]
+  local first=1 tab ws label out="" cnt
+  tab_seeded
+  while IFS='|' read -r tab ws label; do
+    [ -n "$tab" ] || continue
+    if [ -n "${WSFILTER:-}" ] && [ "$ws" != "$WSFILTER" ]; then continue; fi
+    cnt="$(tab_pane_count "$tab")"
+    [ "$first" = 1 ] || out+=","
+    first=0
+    out+="{\"tab_id\":\"$tab\",\"workspace_id\":\"$ws\",\"label\":\"$label\",\"pane_count\":$cnt}"
+  done < "$ST/tabs" 2>/dev/null
+  printf '{"result":{"tabs":[%s],"type":"tab_list"}}\n' "$out"
+}
+json_panes() {
+  local first=1 pid label fg ws tab out=""
+  while IFS='|' read -r pid label fg ws tab; do
+    [ -n "$pid" ] || continue
+    [ -n "$tab" ] || tab="$ws:t1"
     if [ -n "${WSFILTER:-}" ] && [ "$ws" != "$WSFILTER" ]; then continue; fi
     [ "$first" = 1 ] || out+=","
     first=0
-    out+="{\"pane_id\":\"$pid\",\"label\":\"$label\",\"cwd\":\"${HERDR_STUB_CWD:-$ST/repo}\",\"foreground_cwd\":\"${HERDR_STUB_CWD:-$ST/repo}\",\"agent_status\":\"unknown\",\"terminal_id\":\"term_$pid\",\"workspace_id\":\"$ws\"}"
+    out+="{\"pane_id\":\"$pid\",\"label\":\"$label\",\"cwd\":\"${HERDR_STUB_CWD:-$ST/repo}\",\"foreground_cwd\":\"${HERDR_STUB_CWD:-$ST/repo}\",\"agent_status\":\"unknown\",\"terminal_id\":\"term_$pid\",\"workspace_id\":\"$ws\",\"tab_id\":\"$tab\"}"
   done < "$ST/panes" 2>/dev/null
   printf '{"result":{"panes":[%s],"type":"pane_list"}}\n' "$out"
 }
@@ -745,14 +789,48 @@ case "$cmd" in
           printf '%s|%s\n' "$pid" "${HERDR_STUB_ONRUN:-idle|1|1|sess-x}" >> "$ST/agents"
         fi ;;
       split)
-        n=$(( $(wc -l < "$ST/panes") + 1 )); ws="$(awk -F'|' 'NR==1{print $4}' "$ST/panes")"
-        new="$ws:p$n"
-        printf '%s||bash|%s\n' "$new" "$ws" >> "$ST/panes"
+        ws="$(awk -F'|' 'NR==1{print $4}' "$ST/panes")"
+        base="${1:-}"; btab="$(pane_tab "$base")"
+        new="$(next_pane_id "$ws")"
+        printf '%s||bash|%s|%s\n' "$new" "$ws" "${btab:-$ws:t1}" >> "$ST/panes"
         printf '{"result":{"pane":{"pane_id":"%s"}}}\n' "$new" ;;
+      layout)
+        pid=""; while [ "$#" -gt 0 ]; do [ "$1" = "--pane" ] && pid="${2:-}"; shift; done
+        tab="$(pane_tab "$pid")"; [ -n "$tab" ] || { printf '{"error":{"code":"pane_not_found"}}\n' >&2; exit 1; }
+        cols="${HERDR_STUB_COLS:-120}"; rows="${HERDR_STUB_ROWS:-40}"
+        printf '{"result":{"layout":{"area":{"height":%s,"width":%s,"x":0,"y":0},"panes":[{"focused":true,"pane_id":"%s","rect":{"height":%s,"width":%s,"x":0,"y":0}}],"tab_id":"%s"}}}\n' \
+          "$rows" "$cols" "$pid" "$rows" "$cols" "$tab" ;;
+      move)
+        pid="${1:-}"; [ -n "$pid" ] || exit 1
+        prev="$(pane_tab "$pid")"; ws="$(pane_ws "$pid")"
+        created=""
+        if printf '%s\n' "$*" | grep -q -- '--new-tab'; then
+          tab="$(next_tab_id "$ws")"; printf '%s|%s|%s\n' "$tab" "$ws" "${tab##*:t}" >> "$ST/tabs"; created="$tab"
+        else
+          tab="$(printf '%s\n' "$*" | sed -nE 's/.*--tab ([^ ]+).*/\1/p' | head -1)"
+          [ -n "$tab" ] || exit 1
+        fi
+        awk -F'|' -v p="$pid" -v t="$tab" 'BEGIN{OFS="|"} $1==p{$5=t} {print}' "$ST/panes" > "$ST/panes.new" 2>/dev/null || true
+        [ -f "$ST/panes.new" ] && mv "$ST/panes.new" "$ST/panes"
+        # 被搬空的 tab 自动关（布局 A 契约）
+        if [ -n "$prev" ] && [ "$(tab_pane_count "$prev")" = "0" ]; then
+          grep -v "^$prev|" "$ST/tabs" > "$ST/tabs.new" 2>/dev/null || true
+          [ -f "$ST/tabs.new" ] && mv "$ST/tabs.new" "$ST/tabs"
+        fi
+        if [ -n "$created" ]; then
+          printf '{"result":{"move_result":{"changed":true,"created_tab":{"tab_id":"%s","workspace_id":"%s"},"pane":{"pane_id":"%s"}}}}\n' "$created" "$ws" "$pid"
+        else
+          printf '{"result":{"move_result":{"changed":true,"pane":{"pane_id":"%s"}}}}\n' "$pid"
+        fi ;;
       close)
-        pid="${1:-}"
+        pid="${1:-}"; ctab="$(pane_tab "$pid")"
         grep -v "^$pid|" "$ST/panes" > "$ST/panes.new" 2>/dev/null || true
-        [ -f "$ST/panes.new" ] && mv "$ST/panes.new" "$ST/panes" ;;
+        [ -f "$ST/panes.new" ] && mv "$ST/panes.new" "$ST/panes"
+        # 真 herdr：关掉 tab 的最后一个 pane ⇒ 该 tab 随之消失（布局 A 重开路径依赖这条）
+        if [ -n "$ctab" ] && [ "$(tab_pane_count "$ctab")" = "0" ]; then
+          grep -v "^$ctab|" "$ST/tabs" > "$ST/tabs.new" 2>/dev/null || true
+          [ -f "$ST/tabs.new" ] && mv "$ST/tabs.new" "$ST/tabs"
+        fi ;;
       *) exit 1 ;;
     esac ;;
   agent)
@@ -778,14 +856,43 @@ case "$cmd" in
         while [ "$#" -gt 0 ]; do [ "$1" = "--label" ] && label="${2:-}"; shift; done
         ws="w$(( $(wc -l < "$ST/ws" 2>/dev/null || echo 0) + 1 ))"
         printf '%s|%s\n' "$ws" "$label" >> "$ST/ws"
-        printf '%s||bash|%s\n' "$ws:p1" "$ws" >> "$ST/panes"
-        printf '{"result":{"root_pane":{"pane_id":"%s:p1","workspace_id":"%s"},"workspace":{"workspace_id":"%s","label":"%s"}}}\n' "$ws" "$ws" "$ws" "$label" ;;
+        printf '%s|%s|1\n' "$ws:t1" "$ws" >> "$ST/tabs"
+        printf '%s||bash|%s|%s:t1\n' "$ws:p1" "$ws" "$ws" >> "$ST/panes"
+        printf '{"result":{"root_pane":{"pane_id":"%s:p1","workspace_id":"%s","tab_id":"%s:t1"},"workspace":{"workspace_id":"%s","label":"%s"}}}\n' "$ws" "$ws" "$ws" "$ws" "$label" ;;
       close)
         ws="${1:-}"
         grep -v "^$ws|" "$ST/ws" > "$ST/ws.new" 2>/dev/null || true
         [ -f "$ST/ws.new" ] && mv "$ST/ws.new" "$ST/ws"
-        grep -v "|$ws$" "$ST/panes" > "$ST/panes.new" 2>/dev/null || true
-        [ -f "$ST/panes.new" ] && mv "$ST/panes.new" "$ST/panes" ;;
+        grep -v "|$ws|" "$ST/panes" > "$ST/panes.new" 2>/dev/null || true
+        [ -f "$ST/panes.new" ] && mv "$ST/panes.new" "$ST/panes"
+        grep -v "^$ws:" "$ST/tabs" > "$ST/tabs.new" 2>/dev/null || true
+        [ -f "$ST/tabs.new" ] && mv "$ST/tabs.new" "$ST/tabs" ;;
+      *) exit 1 ;;
+    esac ;;
+  tab)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      list)
+        WSFILTER=""
+        if [ "${1:-}" = "--workspace" ]; then WSFILTER="${2:-}"; fi
+        json_tabs ;;
+      create)
+        ws=""; label=""
+        while [ "$#" -gt 0 ]; do
+          case "$1" in --workspace) ws="${2:-}"; shift 2 ;; --label) label="${2:-}"; shift 2 ;; *) shift ;; esac
+        done
+        [ -n "$ws" ] || exit 1
+        tab="$(next_tab_id "$ws")"
+        printf '%s|%s|%s\n' "$tab" "$ws" "$label" >> "$ST/tabs"
+        newp="$(next_pane_id "$ws")"
+        printf '%s||bash|%s|%s\n' "$newp" "$ws" "$tab" >> "$ST/panes"
+        printf '{"result":{"root_pane":{"pane_id":"%s","workspace_id":"%s","tab_id":"%s"},"tab":{"tab_id":"%s","label":"%s"}}}\n' \
+          "$newp" "$ws" "$tab" "$tab" "$label" ;;
+      rename)
+        tab="${1:-}"; label="${2:-}"
+        awk -F'|' -v t="$tab" -v l="$label" 'BEGIN{OFS="|"} $1==t{$3=l} {print}' "$ST/tabs" > "$ST/tabs.new" 2>/dev/null || true
+        [ -f "$ST/tabs.new" ] && mv "$ST/tabs.new" "$ST/tabs"
+        printf '{"result":{"tab":{"tab_id":"%s","label":"%s"}}}\n' "$tab" "$label" ;;
       *) exit 1 ;;
     esac ;;
   *) exit 1 ;;
@@ -800,7 +907,7 @@ B2_ENV=(env HERDR_ENV=1 HERDR_SESSION=nao-b2-stub XDG_CONFIG_HOME="$LAB/cfg" \
   NAO_SKILLS="$LAB" TMPDIR="$LAB/tmp" PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" \
   PATH="$B2ST_BIN:$PATH")
 b2_reset() { # 清桩状态（每场景一份）
-  rm -rf "$B2ST_ST"; mkdir -p "$B2ST_ST"; : > "$B2ST_ST/panes"; : > "$B2ST_ST/agents"; : > "$B2ST_ST/ws"
+  rm -rf "$B2ST_ST"; mkdir -p "$B2ST_ST"; : > "$B2ST_ST/panes"; : > "$B2ST_ST/agents"; : > "$B2ST_ST/ws"; : > "$B2ST_ST/tabs"
   : > "$B2ST_ST/order.log"; : > "$B2ST_ST/calls.log"
 }
 b2_run() { # <onrun> <args...> → 清桩后跑 fleet（输出落 T4_OUT/T4_ERR）
@@ -954,6 +1061,107 @@ for b2bad in internal empty; do
   t4_assert_eq "0" "$(grep -c 'pane run ' "$B2ST_ST/calls.log" || true)" \
     "P3-6 $b2bad：零 pane run（不注入）"
 done
+
+# ---- 布局 A（三期 P1 · AC3.1）+ 迁移无损（同一 tab 内旧布局 ⇒ pane move --new-tab）----
+#   梯度：① 新 workspace 内第二个角色 = **tab create**（不再 split 进同一 tab）→ 每 tab 恰 1 pane；
+#        ② 旧布局（共享 tab 内多 pane，label = 目标名）⇒ ghost 复用 + 迁到独立 tab：pane_id 不变，
+#           搬空的 tab 自动关；
+#        ③ 对照：全程零 pane split（布局不靠分屏算式）。
+b2_reset
+printf 'w1|nao-b2-stub\n' > "$B2ST_ST/ws"
+printf 'w1:p1||bash|w1\n' > "$B2ST_ST/panes"
+: > "$B2ST_ST/agents"
+t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-x' \
+  NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure rd-fe
+B2A_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "0" "$T4_RC" "J2① 新放置 ensure rc=0"
+t4_assert_contains "$B2A_OUT" "已拉起 rd-fe" "J2① 成功行在位"
+t4_assert_eq "1" "$(grep -c '^herdr .*tab create' "$B2ST_ST/calls.log" || true)" \
+  "J2① 角色 pane 用 tab create 落独立 tab（不再 split 进共享 tab）"
+t4_assert_eq "0" "$(grep -c '^herdr .*pane split' "$B2ST_ST/calls.log" || true)" \
+  "J2① 零 pane split（布局不靠分屏算式）"
+t4_assert_contains "$(cat "$B2ST_ST/tabs")" "|rd-fe" "J2① tab label = 角色名（结构判据）"
+t4_assert_eq "1" "$(awk -F'|' '$3=="rd-fe"{print $1}' "$B2ST_ST/tabs" | while read -r t; do awk -F'|' -v t="$t" '$5==t' "$B2ST_ST/panes" | wc -l; done)" \
+  "J2① 该角色 tab 恰 1 个 pane（pane_count == 1）"
+# ② 旧布局迁移：两个 ghost pane 共处 w1:t1 ⇒ 各自 ensure 后搬到独立 tab，搬空的 t1 自动关
+b2_reset
+printf 'w1|nao-b2-stub\n' > "$B2ST_ST/ws"
+printf 'w1:p1|rd-fe|bash|w1\nw1:p2|rd-be|bash|w1\n' > "$B2ST_ST/panes"
+printf 'w1:t1|w1|1\n' > "$B2ST_ST/tabs"
+: > "$B2ST_ST/agents"
+for b2role in rd-fe rd-be; do
+  t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-x' \
+    NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure "$b2role"
+  t4_assert_eq "0" "$T4_RC" "J2② 迁移 $b2role：ensure rc=0"
+done
+t4_assert_eq "1" "$(grep -c '^herdr .*pane move' "$B2ST_ST/calls.log" || true)" \
+  "J2② 共享 tab 里的 pane 用 pane move 迁移（不重建 pane）恰 1 次"
+t4_assert_eq "1" "$(grep -cE '^herdr .*pane move .* --new-tab' "$B2ST_ST/calls.log" || true)" \
+  "J2② 迁移走 --new-tab（把 pane 搬进独立 tab）"
+t4_assert_eq "1" "$(grep -cE '^herdr .*tab rename w1:t1 rd-be$' "$B2ST_ST/calls.log" || true)" \
+  "J2② 独占但 label 旧的 tab 只改名（零 pane 搬动：更小 effect）"
+t4_assert_contains "$(cat "$B2ST_ST/panes")" "w1:p1|rd-fe" "J2② 迁移后 pane_id 不变（rd-fe 仍 w1:p1）"
+t4_assert_contains "$(cat "$B2ST_ST/panes")" "w1:p2|rd-be" "J2② 改名后 pane_id 不变（rd-be 仍 w1:p2）"
+t4_assert_eq "0" "$(printf '%s\n' "$(cat "$B2ST_ST/tabs")" | grep -c '|1$' || true)" \
+  "J2② 无 label=1 的旧 tab 残留（迁移/改名已收敛）"
+t4_assert_eq "2" "$(printf '%s\n' "$(cat "$B2ST_ST/tabs")" | grep -cE '\|rd-fe$|\|rd-be$')" \
+  "J2② 剩下恰 2 个角色 tab（label = 角色名）"
+t4_assert_eq "1" "$(awk -F'|' -v t=w1:t2 '$5==t' "$B2ST_ST/panes" | wc -l | tr -d ' ')" \
+  "J2② 迁移后的 tab 恰 1 个 pane（pane_count == 1）"
+
+# ---- P2-1（第二轮 QA）：文案与新语义一致（P1 把「角色 tab 被占 + --force」收紧成 fail loud）----
+#   旧文案说「--force ⇒ 新建 pane（随后同名 label 会有 2 个）」，但实际紧接着就 fail loud、根本不新建
+#   ⇒ 用户若照 close 提示「ensure --force 重开」会得到失败 1。本块把两条路径都钉住。
+#   ① 角色 tab 被他人 pane 占用（tab label=n、pane label=intruder）+ `--force` ⇒ fail loud + 指路 close
+b2_reset
+printf 'w1|nao-b2-stub\n' > "$B2ST_ST/ws"
+printf 'w1:t1|w1|rd-fe\n' > "$B2ST_ST/tabs"
+printf 'w1:p1|intruder|bash|w1|w1:t1\n' > "$B2ST_ST/panes"
+: > "$B2ST_ST/agents"
+t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=herdr timeout 60 \
+  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --force rd-fe
+B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "0" "$T4_RC" "P2-1① 角色 tab 被占 + --force：ensure rc=0（失败只进计数）"
+t4_assert_contains "$B2_ERR" "角色 tab 已在场但无 pane 命中该角色" "P2-1① 新文案点名「角色 tab 已在场但无 pane 命中」"
+t4_assert_contains "$B2_ERR" "先回收该角色（nao-fleet.sh close rd-fe）再重跑 ensure" \
+  "P2-1① 指路 = 先 close 该角色再 ensure（不再说「新建 pane」）"
+t4_assert_not_contains "$B2_ERR" "同名 label 会有 2 个" "P2-1① 旧文案「同名 label 会有 2 个」已退场（实际不新建）"
+t4_assert_contains "$B2_OUT" "（成功 0 / 跳过 0 / 失败 1）" "P2-1① 摘要计失败 1（不冒充成功）"
+t4_assert_eq "1" "$(printf '%s\n' "$(cat "$B2ST_ST/panes")" | grep -c . || true)" \
+  "P2-1① 同名 label 仍 1（未新建 pane，pane 数不变）"
+t4_assert_eq "1" "$(grep -c '|rd-fe$' "$B2ST_ST/tabs" || true)" "P2-1① 仍只有 1 个 rd-fe tab（未新建第二个同名 tab）"
+t4_assert_eq "0" "$(grep -c 'pane run ' "$B2ST_ST/calls.log" || true)" "P2-1① 零 pane run（不接管他人 pane）"
+t4_assert_eq "0" "$(grep -c 'pane split ' "$B2ST_ST/calls.log" || true)" "P2-1① 零 pane split"
+
+#   ② 在线 pi 占位 + `--force` ⇒ fail loud；提示=先 close 再 ensure；close 后 `ensure --force` ⇒ 成功新建
+b2_reset
+printf 'w1|nao-b2-stub\n' > "$B2ST_ST/ws"
+printf 'w1:t1|w1|rd-fe\n' > "$B2ST_ST/tabs"
+printf 'w1:p1|rd-fe|pi|w1|w1:t1\n' > "$B2ST_ST/panes"
+printf 'w1:p1|idle|3|1|sess-a\n' > "$B2ST_ST/agents"
+t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=herdr timeout 60 \
+  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --force rd-fe
+B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_contains "$B2_ERR" "--force 也不向在场程序注入按键" "P2-1② --force 撞上在线 pi：仍不注入按键"
+t4_assert_contains "$B2_ERR" "角色 tab 已被占用 ⇒ fail loud" "P2-1② 明说随后会 fail loud（不再是「新建 pane」）"
+t4_assert_eq "1" "$(printf '%s\n' "$(cat "$B2ST_ST/panes")" | grep -c . || true)" \
+  "P2-1② 在线 pane 仍在场且未新增（同名 label 仍 1）"
+# close 提示（P2-1 的第二处文案）
+t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=herdr timeout 60 \
+  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" close rd-fe
+B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "0" "$T4_RC" "P2-1② close rd-fe rc=0"
+t4_assert_contains "$B2_ERR" "[fleet] 常驻会话 rd-fe：" "P2-1② close 提示固定前缀在位"
+t4_assert_contains "$B2_ERR" "先 close 该角色再 ensure 重开" "P2-1② close 提示改成「先 close 再 ensure」"
+t4_assert_not_contains "$B2_ERR" "应 ensure --force 重开" "P2-1② 旧提示「应 ensure --force 重开」已退场"
+# close 后（pane 与空 tab 均已消失）⇒ --force 成功新建（证明上一条提示可执行）
+t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-b' \
+  NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --force rd-fe
+B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "0" "$T4_RC" "P2-1② close 后 ensure --force rc=0"
+t4_assert_contains "$B2_OUT" "已拉起 rd-fe" "P2-1② close 后 ensure --force 成功新建（提示可执行，不再「照做即失败」）"
+t4_assert_contains "$B2_OUT" "（成功 1 / 跳过 0 / 失败 0）" "P2-1② 摘要 1/0/0"
 
 # ---- ④ BR7 忙闲映射 + 阶梯单测（抽取门面区到子进程；只灌纯依赖，不启 tmux）----
 FACADE_SRC="$T4_CACHE_DIR/b1-facade.sh"

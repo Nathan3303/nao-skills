@@ -147,6 +147,27 @@ cd ~/proj/web  && .agents/scripts/nao-fleet.sh ensure rd-be     # → rd-be@web
 - `close rd-be`（裸别名/裸派生名）= 用**调用者所在仓**的 scope；`close rd-be@todo`（全名）= 用它自己带的 scope，**忽略** scope 文件。
 - 同 core 的带 scope 会话不止一个、而你又只给了裸名 ⇒ 拒绝并列出候选（用全名指定，不猜）。
 
+## herdr 后端（可选；当前默认仍是 tmux）
+
+舰队支持两种终端后端：`tmux`（默认）与 `herdr`。用 `NAO_TERMINAL` 切换：
+
+```bash
+NAO_TERMINAL=herdr .agents/scripts/nao-fleet.sh status
+```
+
+**前提链（缺一环就起不来，按顺序做）**：
+
+1. 装 **herdr ≥ 0.9.1**（`herdr --version` 可查；协议须为 22）。
+2. 装 pi 集成：`herdr integration install pi` —— 舰队靠它拿 `agent_session` 与生命周期钩子权威判「会话是否就绪」；不装则就绪门永远超时并逐条报缺。
+3. 起专用会话：`nao-fleet.sh session-start --session <名>`（清宿主终端句柄 + 起 server + 轮询就绪）。
+4. **在该会话的 pane 内**跑 `ensure`：herdr 后端只在其 pane 内运行（外部调用会 `exit 3`，这是有意的隔离）。
+
+**空间判据**：herdr 不报「空间不足」，所以舰队放置后会量测每个 pane 的 `rect`；小于 `60×10` 会 **warn + 给可执行指路**（调 herdr 的 `[server] headless_cols/headless_rows`、attach 后重排、或切回 tmux），**不中断拉起**；但出现 **0 行/0 列 pane**（实际读不了）会**计入失败**而不是报成功。
+
+**回退**：`export NAO_TERMINAL=tmux` 一条命令即可回到 tmux 后端（**不删任何文件**）。回退开关会保留**至少 2 个 MINOR 且 ≥90 天**；真要移除时会先发一个 MINOR 的弃用说明，不静默删。
+
+**CI / 自动化固定后端**：在流水线里显式 `export NAO_TERMINAL=tmux`（或 `herdr`），不要依赖默认值 —— 默认值会随版本演进。
+
 ## tmux 布局
 
 舰队在你当前窗口内分屏，三种布局：

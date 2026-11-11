@@ -292,8 +292,12 @@ P_QA="$(new_panes "$BEFORE" | head -1)"
 set_title "$P_QA" "qa"
 run_fleet close qa
 t4_assert_eq "0" "$T4_RC" "AC4③A close qa rc=0"
-t4_assert_contains "$T4_ERR_ANSI" "[fleet] 常驻会话 qa：任务闭环后应 ensure --force 重开" \
+t4_assert_contains "$T4_ERR_ANSI" "[fleet] 常驻会话 qa：" \
   "AC4③A 常驻会话仍弹固定前缀警告（未被整体静音）"
+t4_assert_contains "$T4_ERR_ANSI" "先 close 该角色再 ensure 重开" \
+  "AC4③A 警告与新语义一致（先 close 再 ensure；pane 仍在场时 --force 会 fail loud）"
+t4_assert_not_contains "$T4_ERR_ANSI" "应 ensure --force 重开" \
+  "AC4③A 旧文案（「应 ensure --force 重开」）已退场（P1 收紧后该命令在 pane 在场时必失败）"
 
 # ============================================================ AC4③C 正交：B 之后 A 的警告仍在
 reset_lab
@@ -309,8 +313,10 @@ run_fleet ensure qa
 P_QA="$(new_panes "$BEFORE" | head -1)"
 set_title "$P_QA" "qa"
 run_fleet close qa
-t4_assert_contains "$T4_ERR_ANSI" "[fleet] 常驻会话 qa：任务闭环后应 ensure --force 重开" \
+t4_assert_contains "$T4_ERR_ANSI" "[fleet] 常驻会话 qa：" \
   "AC4③C B 之后 A 的常驻警告仍出现（禁整体静音蒙过 B）"
+t4_assert_contains "$T4_ERR_ANSI" "先 close 该角色再 ensure 重开" \
+  "AC4③C 警告与新语义一致（同 AC4③A 的稳定片段）"
 
 # ============================================================ AC4③D 闸门分叉不外溢
 reset_lab

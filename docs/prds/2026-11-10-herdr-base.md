@@ -49,7 +49,7 @@
 
 ## 五、业务规则
 
-- **BR1 零回归优先**：tmux 后端在每期验收时逐字等价；三期验收通过前不得削弱它。
+- **BR1 零回归优先**：tmux 后端在每期验收时逐字等价；三期验收通过前不得削弱它。**三期改写（2026-11-11 PM 裁定）**：B1 立的「未设 == `=tmux` 两种拼写同 md5」在默认翻转后**按设计失效** ⇒ 改为「显式 `=tmux` ⇒ 对**旧** golden；未设 ⇒ 对**新 herdr golden**；**并新增反向断言「两者必须不同」**」（防 flip 未生效仍全绿）。涉及断言：`cases/06`（默认字面量 / 未设零字样 / 空串）与 `cases/28`（双拼写相等）必须同步改写。
 - **BR2 禁读终端标题**：herdr 后端不得用终端标题做身份或就绪判定。
 - **BR3 身份只取结构化字段（2026-11-10 按 herdr 0.9.1 实测订正）**：会话名取 `pane.label`（spawn 前写入，交叉校验 `process-info.argv --name`）；仓归属取 `pane.cwd` / `foreground_cwd` + 现有 `repo_contains_path`（谓词不变）；跨系统同人取 `agent_session.value`；存活取 `process-info.foreground_processes[].name=="pi"` ∧ `agent list` 有条目。**`workspace.identity_cwd` 在 0.9.1 API 中不存在**（仅出现在持久化 snapshot 结构），原表述作废；`pane_id` / `terminal_id` 均为 **server 局部** ⇒ 所有 key 必须是 `(session, pane_id)`。
 - **BR4 实验场必须 stop+delete**：只 `stop` 会回放上一轮 pane 布局（spike 实测）。
@@ -89,10 +89,11 @@
 - AC2.7 Given D 类 10 例，When 二期完成，Then **5 例迁 shared（19/20/21/23/24）** + **3 例迁 own（09/15/22，到期 2027-06-30 且逐条写理由）** + **12/25 不迁（tmux 专有：12 = 派生落点/宿主窗口属三期布局，25 = tmux 宽度算式）**，并在 `herdr.txt` 注释区写明「tmux 专有，三期重判」；命名契约**逐字保持**（一期 BR8 单一函数，不得改名）。**2026-11-10 订正：原「10 例全迁」不可达，PM 未核实即写入，作废。**
 
 **三期：布局与多仓形态，herdr 转默认**
-- AC3.1 Given 七角色，When `ensure`，Then 落在约定 workspace 的 tab 内，布局不依赖列宽算式。
-- AC3.2 Given 空间不足，When `ensure`，Then 明确 warn 并给可执行指路（不静默、不半启动）。
-- AC3.3 Given 未设 `NAO_TERMINAL`，When 跑全部门禁，Then herdr 为默认且全绿；`NAO_TERMINAL=tmux` 仍全绿。
+- AC3.1 Given 七角色（herdr 后端），When `ensure`，Then 布局 = **1 workspace/仓（label=scope）+ 1 tab/角色（tab label=角色），每 tab 恰 1 pane**；判据（结构，非几何）：每角色 tab `pane_count == 1` ∧ `pane_id` 唯一（`tab list`/`pane list` 的 `tab_id` 字段）；**迁移无损**：`pane move <pane> --tab <tid> --split right` 后 `pane_id` 不变、被搬空的 tab 自动关闭、`status` 仍在线。
+- AC3.2 Given 空间不足，When `ensure`，Then 按 J1–J5 判：**J1** 放置后 `pane layout` 量测每 pane `rect.width ≥ TERM_MIN_COLS` ∧ `height ≥ TERM_MIN_ROWS`（默认 60×10，常量可覆盖）⇒ 不足只 **warn 不 die**（rc 保持 0，沿用 D3）；**J2** 结构判据见 AC3.1；**J3** 静态证明：herdr 实现区 `grep -c 'TMUX_MIN_PANE_WIDTH|main_row2_min_col|137|184'` == 0；**J4** 小空间可注入（私有根 + `[server] headless_cols/headless_rows`，实测 60×20 生效）⇒ warn + 指路 + **无 0 尺寸 pane**；**J5** 失败文案三件套：哪个 pane 多少列/行 < 阈值 → 三个可执行动作（调 `[server] headless_*` / attach 后重排 / 切布局）→ 文档指针；且**不半启动**。**「0 行 pane」这类不可用态计 `SPAWN_FAIL`**（否则摘要说「成功 7」而实际读不了）。
+- AC3.3 Given 未设 `NAO_TERMINAL`，When 跑全部门禁，Then **herdr 为默认**且全绿；`NAO_TERMINAL=tmux` 仍全绿。**不自动回落**（PM 裁定 D2）：herdr 未装 / protocol≠22 / 非 herdr pane 内 ⇒ **fail loud（exit 3）**；**6 条 exit 3 文案必须全部含 `NAO_TERMINAL=tmux` 指路**（现状只有 2/6 条有 ⇒ 三期必改，静态断言全扫）；`check` 在「默认 herdr 且缺可执行」⇒ **置红**并打同一组命令（装 herdr / `export NAO_TERMINAL=tmux`）。
 - AC3.4 Given 一个下游仓，When 按 README 升级，Then 无需改其 `AGENTS.md` 即可起舰队（前提 herdr 已装）。
+- AC3.5 Given 真 herdr（私有 `XDG_CONFIG_HOME` + `HOME` + `PI_CODING_AGENT_DIR` + `TMPDIR` 四件全私有），When 跑新增 own 用例 `32-real-herdr-roundtrip.sh`，Then `session-start` → **2 角色**（pm + rd-fe，控时长）→ 就绪七条件 → `status` 双在线 → `close` 一个 → `cleanup` → 断言 `sessions/` 空 + 零残留 + 用户 `default` 不可见；缺 herdr ⇒ 按 AC1.5 SKIP 给原因（不 FAIL）；造价 wall clock 3–6s；**不写用户 `~/.pi`**（`herdr integration install pi` 尊重 `PI_CODING_AGENT_DIR`，实测）。
 
 ## 八、上线闭环
 
@@ -115,6 +116,15 @@
 - **MoSCoW**：一期 Must（安全网）· 二期 Must（收益主体）· 三期 Should（布局与默认切换）。
 - **RICE**：Reach 28（4 仓 × 7 会话）· Impact 2 · Confidence 0.7（隔离/身份/就绪已实测，布局未验）· Effort 5（三期）⇒ **RICE ≈ 7.8**。
 - **Kano**：不 flake = 基本型；attach 看进度 = 期望型；worktree 绑定 workspace = 兴奋型。
+
+## 附三：三期设计评审与 PM 裁定（2026-11-11）
+
+- **结论**：有条件可行。**布局 = A**（1 workspace/仓 + 1 tab/角色，每 tab 1 pane）：零几何算式、迁移无损（`pane move` 后 `pane_id` 不变）、`status` 零改动。不采 B（单 tab 平铺 = 把列宽算式换个形态搬回，且 60×10 对 pi TUI 偏小、attach 尺寸变化会重排）与 C（分组映射表 = 双源，违单一事实）。
+- **默认切换 = fail loud，不自动回落**：回落会让默认变**双稳态**（同命令不同机器不同后端）⇒ 破 NFR 可复现，并引入「误判回落 ⇒ 跨后端串台」缺陷类。降痛三件：可复制的两条命令 · release notes 置顶 · `check` 分级置红。
+- **回退承诺**：`NAO_TERMINAL=tmux` 保留 **≥2 MINOR 且 ≥90 天**；退役另立项并先发弃用说明；**文档不写死移除日期**。
+- **herdr 不报空间不足**（实测 split 从不失败、pane 可被压到 0 行且无 warn、`pane resize` 静默无效）⇒ 空间判据必须**自测**（J1–J5），**rc 不可作判据**。
+- **真机整轮可固化**（订正 B4 的推断）：`herdr integration install pi` **尊重 `PI_CODING_AGENT_DIR`**，实测装到私有目录、不写 `~/.pi`；全新私有 agent dir 无 `lastChangelogVersion` ⇒ **天然不触发 What's New 遮罩**。
+- **未验**：attach 客户端尺寸变化后的重排（仅文档口径）· pi TUI 真实最小可用行列 · `pane move` 迁移后 pi 会话长稳（只到 `pane_id`/即时 status 级）。
 
 ## 附二：二期设计评审与 PM 裁定（2026-11-10）
 
