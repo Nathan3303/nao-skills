@@ -1031,7 +1031,7 @@ _term_herdr_space_check() {  # <pane_id> <name> → 0 可继续 / 1 不可用（
 #   被搬空的 tab 由 herdr 自动关闭）+ `tab rename` 把新 tab 标成角色名；
 #   tab 已独占但 label 旧（如根 tab 的 "1"）⇒ 只改 tab 名（effect 零风险）。
 _term_herdr_layout_converge() {  # <pane_id> <name> → 0 布局 A 达成 / 1 未达成（fail loud）
-  local pid="${1-}" name="${2-}" pt tid wsid row label cnt js newtid
+  local pid="${1-}" name="${2-}" pt tid wsid row label cnt js newtid prev_tid="" closed_note=""
   pt="$(_term_herdr_pane_tab "$pid")"
   if [[ -z "$pt" ]]; then
     warn "布局判据不可用：pane=$pid 不在 pane list（无法确认独立 tab）⇒ 计 SPAWN_FAIL"
@@ -1054,13 +1054,19 @@ _term_herdr_layout_converge() {  # <pane_id> <name> → 0 布局 A 达成 / 1 �
   fi
   js="$(_term_herdr_exec pane move "$pid" --new-tab 2>/dev/null)" \
     || { warn "pane move --new-tab 失败（pane=$pid name=$name）⇒ 布局 A 未达成（计 SPAWN_FAIL）"; return 1; }
+  prev_tid="$tid"
   newtid="$(printf '%s' "$js" | sed -nE 's/.*"created_tab":\{[^}]*"tab_id":"([^"]+)".*/\1/p' | head -1)"
   if [[ -z "$newtid" ]]; then pt="$(_term_herdr_pane_tab "$pid")"; newtid="${pt%%$'\t'*}"; fi
   [[ -n "$newtid" ]] || { warn "pane move 后未取到新 tab_id（pane=$pid name=$name）⇒ 布局 A 未达成"; return 1; }
   if ! _term_herdr_exec tab rename "$newtid" "$name" >/dev/null 2>&1; then
     warn "tab rename 失败（tab=$newtid → label=$name）⇒ 布局 A 未达成（计 SPAWN_FAIL）"; return 1
   fi
-  log "[herdr] 布局 A 迁移：$name（pane=$pid）已搬到独立 tab $newtid（pane_id 不变；被搬空的 tab 由 herdr 自动关闭）"
+  if [[ -n "$(_term_herdr_tab_row "$wsid" "$prev_tid")" ]]; then
+    closed_note="源 tab $prev_tid 仍有其他 pane（未关闭）"
+  else
+    closed_note="被搬空的 tab $prev_tid 已由 herdr 自动关闭"
+  fi
+  log "[herdr] 布局 A 迁移：$name（pane=$pid）已搬到独立 tab $newtid（pane_id 不变；$closed_note）"
   return 0
 }
 
@@ -1111,25 +1117,28 @@ _term_herdr_spawn() {  # <name> <inner> <repo> [force] → SPAWN_RC_OK|FAIL
         if (( ${#fgnames[@]} == 0 )); then
           # pane 可达但前台不可判（空进程表）⇒ **不 close**、不注入，fail loud
           warn "前台不可判（$name ⇒ $pane：process-info 无前台进程）⇒ 不关闭、不注入、不判「已在运行」"
-          warn "  该怎么办：核对 pane 后人工处理（回收归 B3），或加 --force 新建（会产生同名 label）"
+          warn "  该怎么办：先回收该角色（nao-fleet.sh close ${name%%@*}）再 ensure；--force 不绕过本条（仍不会新建重复 label）"
           return "$SPAWN_RC_FAIL"
         elif _term_fg_list_is_shell "${fgnames[@]}"; then
           # 前台是交互式 shell ⇒ 可以安全把启动命令送进去；label 在、agent 无 = **不判「已在运行」**（不静默跳过）
           warn "label 已在场但不在线（幽灵 pane / stale：$name ⇒ $pane，verdict=$verdict 前台=${fgnames[*]}）⇒ 不判「已在运行」，复用该 pane 重跑 agent"
         elif $force; then
-          # --force：显式要一个新会话；**不向在场程序注入按键**（会污染 vim/REPL/cat 的输入）
-          warn "前台非 shell（$name ⇒ $pane 前台=${fgnames[*]}）：--force ⇒ 新建 pane，不向在场程序注入按键（随后同名 label 会有 2 个，status 将标歧义）"
+          # --force：显式要一个新会话；**不向在场程序注入按键**（会污染 vim/REPL/cat 的输入）。
+          #   随后按布局 A 放置：角色 tab 已被占用 ⇒ fail loud（不新建重复 tab/label）；
+          #   旧 pane 在共享 tab 里才可能新建独立 tab（旧 label 仍在 ⇒ status 会标同名歧义）。
+          warn "前台非 shell（$name ⇒ $pane 前台=${fgnames[*]}）：--force 也不向在场程序注入按键"
+          warn "  → 随后按布局 A 放置：角色 tab 已被占用 ⇒ fail loud（不新建重复 label；改法：先 close 该角色再 ensure）；旧 pane 在共享 tab 里才会新建独立 tab（旧 label 仍在 ⇒ status 标同名歧义）"
           pane=""
         else
           warn "前台非 shell（$name ⇒ $pane 前台=${fgnames[*]}）⇒ **不注入按键**、不判「已在运行」（向正在运行的程序写命令会污染其输入：vim/REPL/cat）"
-          warn "  该怎么办：人工核对后关闭该 pane（回收面归 B3），或加 --force 新建（会产生同名 label，需人工收口）"
+          warn "  该怎么办：人工核对后关闭该 pane（回收面归 B3），或加 --force 后按布局 A 放置（角色 tab 被占用 ⇒ fail loud，不新建重复 tab/label）"
           return "$SPAWN_RC_FAIL"
         fi
         ;;
       *)
         # internal_error / 超时 / 解析失败 / 空输出：pane 可能仍可达 ⇒ **绝不 close**，fail loud 点名错误类别
         warn "process-info 错误（$name ⇒ $pane：${pmsg:-未知错误}）⇒ **不关闭**（pane 可能仍可达/正跑用户程序）、不判「已在运行」、不注入"
-        warn "  该怎么办：稍后重试；确认该 pane 无用后人工关闭（回收面归 B3），或加 --force 新建（会产生同名 label）"
+        warn "  该怎么办：稍后重试；确认该 pane 无用后先 close 该角色（回收面归 B3）再 ensure；--force 不绕过本条（仍不会新建重复 label）"
         return "$SPAWN_RC_FAIL"
         ;;
     esac
@@ -1178,7 +1187,7 @@ _term_herdr_spawn() {  # <name> <inner> <repo> [force] → SPAWN_RC_OK|FAIL
       tid="$(_term_herdr_tab_id_for "$wsid" "$name")"
       if [[ -n "$tid" ]]; then
         warn "角色 tab 已在场但无 pane 命中该角色（workspace=$wsid tab=$tid label=$name）⇒ 不猜：既不新建第二个同名 tab，也不接管他人 pane"
-        warn "  该怎么办：attach 后核对/回收该 tab 内的 pane（回收面归 B3）后重跑 ensure；或 cleanup + session-start 重建会话"
+        warn "  该怎么办：先回收该角色（nao-fleet.sh close ${name%%@*}）再重跑 ensure；--force 不绕过本条（避免同名 label 重复）"
         return "$SPAWN_RC_FAIL"
       fi
       js="$(_term_herdr_exec tab create --workspace "$wsid" --cwd "$repo" --label "$name" --no-focus 2>/dev/null)" \
@@ -3846,7 +3855,7 @@ cmd_close() {
       esac
     fi
   elif [[ -z "$task" ]]; then
-    warn "常驻会话 $name：任务闭环后应 ensure --force 重开，而非回收（仅在本批不再需要该角色时回收）"
+    warn "常驻会话 $name：任务闭环后应先 close 该角色再 ensure 重开（pane 仍在场时 ensure --force 会 fail loud）；仅在本批不再需要该角色时才回收"
   else
     # 闸门①：tasks-state 未推进 → 拒绝（验收未过需原会话返工，回收会丢上下文）
     cls="$(task_state_class "$task")"

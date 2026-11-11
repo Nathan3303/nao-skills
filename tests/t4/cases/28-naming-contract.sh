@@ -823,9 +823,14 @@ case "$cmd" in
           printf '{"result":{"move_result":{"changed":true,"pane":{"pane_id":"%s"}}}}\n' "$pid"
         fi ;;
       close)
-        pid="${1:-}"
+        pid="${1:-}"; ctab="$(pane_tab "$pid")"
         grep -v "^$pid|" "$ST/panes" > "$ST/panes.new" 2>/dev/null || true
-        [ -f "$ST/panes.new" ] && mv "$ST/panes.new" "$ST/panes" ;;
+        [ -f "$ST/panes.new" ] && mv "$ST/panes.new" "$ST/panes"
+        # 真 herdr：关掉 tab 的最后一个 pane ⇒ 该 tab 随之消失（布局 A 重开路径依赖这条）
+        if [ -n "$ctab" ] && [ "$(tab_pane_count "$ctab")" = "0" ]; then
+          grep -v "^$ctab|" "$ST/tabs" > "$ST/tabs.new" 2>/dev/null || true
+          [ -f "$ST/tabs.new" ] && mv "$ST/tabs.new" "$ST/tabs"
+        fi ;;
       *) exit 1 ;;
     esac ;;
   agent)
@@ -1103,6 +1108,60 @@ t4_assert_eq "2" "$(printf '%s\n' "$(cat "$B2ST_ST/tabs")" | grep -cE '\|rd-fe$|
   "J2② 剩下恰 2 个角色 tab（label = 角色名）"
 t4_assert_eq "1" "$(awk -F'|' -v t=w1:t2 '$5==t' "$B2ST_ST/panes" | wc -l | tr -d ' ')" \
   "J2② 迁移后的 tab 恰 1 个 pane（pane_count == 1）"
+
+# ---- P2-1（第二轮 QA）：文案与新语义一致（P1 把「角色 tab 被占 + --force」收紧成 fail loud）----
+#   旧文案说「--force ⇒ 新建 pane（随后同名 label 会有 2 个）」，但实际紧接着就 fail loud、根本不新建
+#   ⇒ 用户若照 close 提示「ensure --force 重开」会得到失败 1。本块把两条路径都钉住。
+#   ① 角色 tab 被他人 pane 占用（tab label=n、pane label=intruder）+ `--force` ⇒ fail loud + 指路 close
+b2_reset
+printf 'w1|nao-b2-stub\n' > "$B2ST_ST/ws"
+printf 'w1:t1|w1|rd-fe\n' > "$B2ST_ST/tabs"
+printf 'w1:p1|intruder|bash|w1|w1:t1\n' > "$B2ST_ST/panes"
+: > "$B2ST_ST/agents"
+t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=herdr timeout 60 \
+  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --force rd-fe
+B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "0" "$T4_RC" "P2-1① 角色 tab 被占 + --force：ensure rc=0（失败只进计数）"
+t4_assert_contains "$B2_ERR" "角色 tab 已在场但无 pane 命中该角色" "P2-1① 新文案点名「角色 tab 已在场但无 pane 命中」"
+t4_assert_contains "$B2_ERR" "先回收该角色（nao-fleet.sh close rd-fe）再重跑 ensure" \
+  "P2-1① 指路 = 先 close 该角色再 ensure（不再说「新建 pane」）"
+t4_assert_not_contains "$B2_ERR" "同名 label 会有 2 个" "P2-1① 旧文案「同名 label 会有 2 个」已退场（实际不新建）"
+t4_assert_contains "$B2_OUT" "（成功 0 / 跳过 0 / 失败 1）" "P2-1① 摘要计失败 1（不冒充成功）"
+t4_assert_eq "1" "$(printf '%s\n' "$(cat "$B2ST_ST/panes")" | grep -c . || true)" \
+  "P2-1① 同名 label 仍 1（未新建 pane，pane 数不变）"
+t4_assert_eq "1" "$(grep -c '|rd-fe$' "$B2ST_ST/tabs" || true)" "P2-1① 仍只有 1 个 rd-fe tab（未新建第二个同名 tab）"
+t4_assert_eq "0" "$(grep -c 'pane run ' "$B2ST_ST/calls.log" || true)" "P2-1① 零 pane run（不接管他人 pane）"
+t4_assert_eq "0" "$(grep -c 'pane split ' "$B2ST_ST/calls.log" || true)" "P2-1① 零 pane split"
+
+#   ② 在线 pi 占位 + `--force` ⇒ fail loud；提示=先 close 再 ensure；close 后 `ensure --force` ⇒ 成功新建
+b2_reset
+printf 'w1|nao-b2-stub\n' > "$B2ST_ST/ws"
+printf 'w1:t1|w1|rd-fe\n' > "$B2ST_ST/tabs"
+printf 'w1:p1|rd-fe|pi|w1|w1:t1\n' > "$B2ST_ST/panes"
+printf 'w1:p1|idle|3|1|sess-a\n' > "$B2ST_ST/agents"
+t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=herdr timeout 60 \
+  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --force rd-fe
+B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_contains "$B2_ERR" "--force 也不向在场程序注入按键" "P2-1② --force 撞上在线 pi：仍不注入按键"
+t4_assert_contains "$B2_ERR" "角色 tab 已被占用 ⇒ fail loud" "P2-1② 明说随后会 fail loud（不再是「新建 pane」）"
+t4_assert_eq "1" "$(printf '%s\n' "$(cat "$B2ST_ST/panes")" | grep -c . || true)" \
+  "P2-1② 在线 pane 仍在场且未新增（同名 label 仍 1）"
+# close 提示（P2-1 的第二处文案）
+t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=herdr timeout 60 \
+  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" close rd-fe
+B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "0" "$T4_RC" "P2-1② close rd-fe rc=0"
+t4_assert_contains "$B2_ERR" "[fleet] 常驻会话 rd-fe：" "P2-1② close 提示固定前缀在位"
+t4_assert_contains "$B2_ERR" "先 close 该角色再 ensure 重开" "P2-1② close 提示改成「先 close 再 ensure」"
+t4_assert_not_contains "$B2_ERR" "应 ensure --force 重开" "P2-1② 旧提示「应 ensure --force 重开」已退场"
+# close 后（pane 与空 tab 均已消失）⇒ --force 成功新建（证明上一条提示可执行）
+t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-b' \
+  NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --force rd-fe
+B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "0" "$T4_RC" "P2-1② close 后 ensure --force rc=0"
+t4_assert_contains "$B2_OUT" "已拉起 rd-fe" "P2-1② close 后 ensure --force 成功新建（提示可执行，不再「照做即失败」）"
+t4_assert_contains "$B2_OUT" "（成功 1 / 跳过 0 / 失败 0）" "P2-1② 摘要 1/0/0"
 
 # ---- ④ BR7 忙闲映射 + 阶梯单测（抽取门面区到子进程；只灌纯依赖，不启 tmux）----
 FACADE_SRC="$T4_CACHE_DIR/b1-facade.sh"

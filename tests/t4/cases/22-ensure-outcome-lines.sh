@@ -241,6 +241,7 @@ fs.writeFileSync(p,JSON.stringify(st));' "$SPACE_STATE" "$1" "$2"
     t4_assert_contains "$T4_ERR_ANSI" "$act" "J5 指路动作在位：$act"
   done
   t4_assert_contains "$T4_ERR_ANSI" "docs/INSTALL.md" "J5 文档指针在位（docs/INSTALL.md）"
+  t4_assert_contains "$T4_ERR_ANSI" "herdr 后端" "J5 指针点名章节（「herdr 后端」⇒ 与 INSTALL 节标题同源）"
   t4_assert_contains "$T4_ERR_ANSI" "AC3.2" "J5 文档指针点到 AC3.2（J1–J5 口径）"
   t4_assert_eq "0" "$(grep -cE '列=0|行=0' <<< "$T4_ERR_ANSI" || true)" \
     "J4 小空间：无 0 尺寸 pane（40×8 下每个 pane 仍可读）"
@@ -271,5 +272,23 @@ fs.writeFileSync(p,JSON.stringify(st));' "$SPACE_STATE" "$1" "$2"
 else
   t4_note backend-gate "J1/J3/J5 空间判据是 herdr 专有面（tmux 侧 split-window 自带失败信号，见用例 25 的宽度算式）"
 fi
+
+# ============================================================ P2-2（第二轮 QA）：J5 文档指针静态核
+#   缺陷类：warn 指向「docs/INSTALL.md 的某节」，但那一节根本不存在 ⇒ 用户照指路找不到东西（形式绿）。
+#   判据：① 脚本里确实写了该指针；② 文档里**真能 grep 到**稳定片段（不写死整行标题，避免改措辞即假红）；
+#        ③ 变异负控：把章节名改掉 ⇒ 同一判据必红（证明不是空转）。
+INSTALL_DOC="$T4_ROOT/docs/INSTALL.md"
+FLEET_SRC="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+t4_assert_contains "$(grep -F 'docs/INSTALL.md' "$FLEET_SRC" || true)" "docs/INSTALL.md" \
+  "P2-2 J5 warn 的文档指针写在脚本里（docs/INSTALL.md）"
+t4_assert_file "$INSTALL_DOC" "P2-2 文档指针落点存在（docs/INSTALL.md）"
+t4_assert_contains "$(cat "$INSTALL_DOC" 2>/dev/null)" "## herdr 后端" \
+  "P2-2 INSTALL 含稳定片段「## herdr 后端」（J5 指针可解析，不写死整行标题）"
+t4_assert_contains "$(grep -F 'herdr 后端' "$FLEET_SRC" || true)" "herdr 后端" \
+  "P2-2 warn 文案与文档同名（「herdr 后端」两端一致）"
+MUT_INSTALL="$T4_CACHE_DIR/install-nohd-$$.md"
+sed 's/^## herdr 后端.*$/## herdr-backend-renamed/' "$INSTALL_DOC" > "$MUT_INSTALL" 2>/dev/null || true
+t4_assert_not_contains "$(cat "$MUT_INSTALL" 2>/dev/null)" "## herdr 后端" \
+  "P2-2 变异负控：章节改名后同一判据必红（判据不空转）"
 
 t4_exit
