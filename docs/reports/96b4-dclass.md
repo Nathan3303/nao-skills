@@ -36,7 +36,7 @@
   `select-pane -T` 会被 pane 内 shell 的 PS1 随后重写（负载相关假红）。`be_set_name` 仍保留 `select-pane -T`
   作为「只改标题」的原语（PM 指定形态），稳定夹具走前者。
 - **后端门控一律显式**（新增 NOTE tag `backend-gate`，已登记白名单 + `tests/README.md`）：
-  每处都写「为什么本后端不可达」，避免静默跳过；B4 全量 herdr 跑共 9 条（09×1 / 15×3 / 19×1 / 20×1 / 23×1 + 06×2）。
+  每处都写「为什么本后端不可达」，避免静默跳过；herdr 模式 NOTE 共 9 条（`backend-gate` 7：09×1 / 15×3 / 19×1 / 20×1 / 23×1；另有 `static-contract` 2：06）。
   与 `t4_skip` 的区别：其余断言照跑、用例仍 PASS 计分。
 - **`run.sh` 新增 tmux-only 机器可读声明**：`# tmux-only: 12 25` → `[TMUX-ONLY]` 点名 + 单列计数（不算 PENDING/SKIP），
   汇总行改为 `共享 N / 本后端专有 M / tmux 专有 K / PENDING P`，并追加「对账：N+M+K+P = `--list` 计数」。
@@ -46,7 +46,7 @@
 | 用例 | tmux | herdr | 变化 | 说明 |
 | :-- | --: | --: | --: | :-- |
 | 09 | 47 | 35 | −12 | AC3 撞号/跨 server 见证/自 pane 双驱动（tmux 专有）→ herdr 等价组（(session,pane) 语义：跨仓真回收 + `HERDR_PANE_ID` 不可判定档拒）＋`backend-gate` 点名 |
-| 12 | 0（未跑） | 0（`TMUX-ONLY`） | 0 | tmux 专有声明（三期布局）；不再计 PENDING |
+| 12 | 0（**不计 `[PASS]` 行**） | 0（`TMUX-ONLY`） | 0 | tmux 专有声明（三期布局）；tmux 侧**真跑 36 条子断言**（断言实体是 QA 冻结的外部脚本，自有输出但不产 `[PASS]` 行）⇒ 不是「未跑」；不再计 PENDING |
 | 15 | 47 | 41 | −6 | T8 孤儿 pi pane（tmux 未归属启发式）→ `backend-gate`；T1/T9 的 roster 口径 → label 夹具等价组（+4 条 herdr 专属断言） |
 | 19 | 67 | 60 | −7 | ③ 不可判定归属（tmux detached 夹具）+ AC5① 基线逐字对照 → `backend-gate`；其余（①②④⑧ + M 双向变异 + AC5② 键口径变异）两后端同跑 |
 | 20 | 106 | 106 | 0 | 仅 AC1①「与调用者同窗口」换等价判据（herdr：同场 pane + cwd 正确）＋1 条 NOTE |
@@ -54,7 +54,7 @@
 | 22 | 34 | 34 | 0 | 三态/摘要两后端同形（1/1/1 守恒）；差异只在注入点（split-window vs pane run）与「失败保留 pane」增量判据 |
 | 23 | 52 | 48 | −4 | argv 级断言（桩 pi 落盘）→ `backend-gate`；herdr 以「交给后端的原始命令串」**字节级**对照等价覆盖（含 `%q(消息)` 全文）+ 3 条结构性计数 |
 | 24 | 78 | 78 | 0 | 同 23 的捕获口径，无 argv 级断言 ⇒ 零门控 |
-| 25 | 29（未跑） | 0（`TMUX-ONLY`） | 0 | tmux 宽度算式 + 活体 pane 数；三期重判 |
+| 25 | 29 | 0（`TMUX-ONLY`） | 0 | tmux 宽度算式 + 活体 pane 数（tmux 侧 29 条 `[PASS]` 真跑）；三期重判 |
 | 27 | 44 | 64 | +20 | herdr 侧多跑后端专属断言（既有设计，非本批改动） |
 | 28 | 367 | 367 | 0 | 命名契约 + B3 段；herdr 模式复用同一 golden 载体 |
 | 29/30/31 | 0（门控） | 18/19/16 | 新增 | 三条新 herdr 专有例；tmux 后端按 `backend-gate` 点名退出（0 断言，非 SKIP） |
@@ -103,14 +103,21 @@
 - `npm test` rc=0：`SKIP=0 · DEGRADE=0 · NOTE=6`（运行时 `[PASS]` 行 **1550**）。
   注：同批早前一轮曾出现 `SKIP=1`（用例 07「npm registry 不可达」），复跑即 8 条断言通过 ⇒ 环境/网络波动，非本批引入。
 - `NAO_TEST_TERMINAL=herdr bash tests/t4/run.sh` rc=0：`共享 20 / 本后端专有 8 / tmux 专有 2 / PENDING 0`，
-  对账 `20+8+2+0 = 30`（`--list` 计数 30），`SKIP=0 · DEGRADE=0 · NOTE=9`（9 条全是 `backend-gate` + 06 的
-  2 条 `static-contract`）；运行时 `[PASS]` 行 **1565**。
+  对账 `20+8+2+0 = 30`（`--list` 计数 30），`SKIP=0 · DEGRADE=0 · NOTE=9`（＝ `backend-gate` **7** 条 + 06 的
+  **2** 条 `static-contract`）；运行时 `[PASS]` 行 **1565**。
 - 例数唯一出处：`bash tests/t4/run.sh --list | tail -n +2 | wc -l` = **30**（01–10 + 12–31，无 11）。
 
 ## 九、边界与未验（不隐瞒）
 
 - 替身**不验证**真 herdr 的 CLI 行为（时序/退出码/字段漂移）；真后端的行为面由 B1/B2/B3 的实现与 `cases/27`
   的自检 + 生产侧 `_term_herdr_*` 覆盖。三期转默认时应补一次**真 herdr** 的整轮对照（已记入 27/28 的到期复核理由）。
-- `backend-gate` 共 9 处，逐处理由写在用例内；三期（布局/多仓形态）落地后 20/19 的两处门控应重新评估。
+- `backend-gate` 有两层数字，别混：**代码站点 11 处** = herdr 侧触发 **7**（09×1 / 15×3 / 19 AC5① / 20×1 / 23×1：
+  同一断言在另一后端结构上不可达）＋ tmux 侧触发 **4**（19③ 与 29/30/31 在 tmux 后端按门控早退，0 断言，非 SKIP）；
+  **herdr 模式 NOTE 9 条** = 上述 7 条 `backend-gate` ＋ 06 的 2 条 `static-contract`（tmux 侧那 4 个触发点在 herdr
+  模式**跑满**、不产 NOTE，故 11 ≠ 9）。逐处理由写在用例内；三期（布局/多仓形态）落地后 20/19 的两处门控应重新评估。
+- **就绪门超时的常见真因不是「集成缺失」**：本机 pi **1.5.2** 而 `~/.pi/agent/settings.json` 的
+  `lastChangelogVersion=1.5.1` ⇒ 新起 pi 停在 **What's New 遮罩**、会话钩子不触发 ⇒ 就绪门超时。fail loud 的方向对，
+  但旧文案只指「集成缺失」会把人引偏：已在就绪门超时诊断与 `status` 集成缺失文案各补一句
+  「若 pi 首次启动停在 What's New / 信任提示，先手工关闭再重试」。
 - 22 的 herdr 失败分支**保留 pane**（先建后注入，不自动 kill）⇒ pane 增量判据按后端分叉（已断言，不是漏洞）。
 - 真机未验：herdr 0.9.x 后续版本的字段变更；`blocked` 态真机触发（PRD 附二「未验」项不变）。

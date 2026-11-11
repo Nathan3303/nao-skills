@@ -47,7 +47,7 @@
 15  own     2027-06-30  subagent-* 在 status/close 的显式排除 + 父 pane 存活；T2/T3/T4/T8 夹具建在「父+子代理共用同一 tmuxPane」「仅被子代理 tmuxPane 认领的孤儿 pi pane」上（tmux 未归属启发式）。herdr 身份 = pane.label，该态不可达（backend-gate 点名）⇒ 改用 label 夹具覆盖同组判据（计数/排除/前缀边界/close 拒绝文案）。到期复核：三期多仓并发下 label 归属
 22  own     2027-06-30  ensure 三态输出互斥 + 摘要三类计数；失败注入靠后端桩（tmux `split-window` / herdr 替身 `pane run`），且 herdr 失败**保留 pane**（先建后注入，不自动 kill）⇒ pane 增量判据不同；三态本身两后端同形（1/1/1 计数守恒）。到期复核：herdr 是否引入统一 rc 语义（观察项）
 28  own     2027-06-30  舰队命名契约（BR8）：C1 codec / C2 golden diff 空 / C3 单写点 lint；golden 对照以 tmux 为对照载体（基线 fixture = tmux 时代整脚本 + `bash -lc` 落地段 md5）。herdr 零回归由同用例「双拼写 md5 + B3 段」承担（不立 second source）；B1 记的账，B4 归口。到期复核：三期转默认后是否需独立 golden
-29  own     2027-06-30  herdr 就绪门反假阳性：已 idle 但 `state_change_seq` 不前进 ⇒ 必须超时 fail loud（禁 `agent wait` 作就绪门）；依赖 herdr 的 agent 会话证据（agent_session / seq / 钩子权威），tmux 侧无此语义。到期复核：herdr 是否提供「有界 wait + 已迁移」原生原语
+29  own     2027-06-30  herdr 就绪门反假阳性：已 idle 但 `state_change_seq` 不前进 ⇒ 必须超时 fail loud（禁 `agent wait` 作就绪门）；依赖 herdr 的 agent 会话证据（agent_session / seq / 钩子权威），tmux 侧无此语义。到期复核：herdr 是否提供「有界 wait + 已迁移」原生原语；P3-6 接受（2026-11-11）：① 「session+skip 齐备但 seq=0」组合真机 0.9.1 未观测到（门禁仍有效、变异必红）② 用例 15 的 T8 门控无替代断言（组判据由 T1-herdr「终端证据异常」承担）⇒ 到期时一并重判
 30  own     2027-06-30  herdr 幽灵 pane：label 在、agent 条目缺 ⇒ status 不判在线、ensure 不判「已在运行」（可寻址则复用重跑）；label ∧ agent 二元证据是 herdr 专有面。到期复核：herdr 是否提供显式「pane 存活 vs agent 会话」双字段
 31  own     2027-06-30  herdr 集成缺失：`agent_session` 空 / 钩子权威缺 ⇒ 点名不可投递 + ensure fail loud（不退化成 idle/unknown）；BR7 权威源只存在于 herdr。到期复核：herdr 是否把集成状态并入 protocol 契约
 27  own     2027-01-31  后端自检：只验测试侧抽象层 `lib-backend.sh`；herdr 专有断言由 `BE_BACKEND` 门控。到期复核：三期 herdr 转默认后，本用例的 tmux 分支同步升级，届时重判是否升为 shared

@@ -96,8 +96,8 @@ npm run test:t4:full:dual                      # 发布前置**双环境** gate�
 
 NOTE = 用例产出的**事实性说明**（合法的能力/前提说明，不是通过证据）。为避免「能力缺失时用 NOTE 跳过断言而不阻断」，NOTE 改为**白名单制**并分轴判定：
 
-- **签名**：`t4_note <tag> <msg>`；`tag` 必须是下列四个之一（枚举**单点定义**于 `tests/t4/lib.sh` 的 `T4_NOTE_TAGS`）。
-- **合法 tag（4 个）**：
+- **签名**：`t4_note <tag> <msg>`；`tag` 必须是下列五个之一（枚举**单点定义**于 `tests/t4/lib.sh` 的 `T4_NOTE_TAGS`）。
+- **合法 tag（5 个）**：`static-contract` · `pin-fallback` · `migrate-fallback` · `baseline-selfequiv` · `backend-gate`（逐个说明见下）：
   - `static-contract` —— 用**静态断言**替代动态证据（如真 `pi` 加载需凭据，改判 manifest/文档契约）。
   - `pin-fallback` —— pin 版本尚未发布，改用已发布 `latest` 只做**布局**对照（内容差异不计）。
   - `migrate-fallback` —— CLI 未提供 `migrate`，改用 `init` 的自动迁移路径。
@@ -128,7 +128,7 @@ NOTE = 用例产出的**事实性说明**（合法的能力/前提说明，不�
   （BR2 禁读标题 + BR6 禁把宿主句柄当证据的机械兜）。
 - `lib.sh::t4_verify_term_ledger <script> <台账>`：台账每行可验 —— 函数存在 · 函数体**仍**含裸后端调用（stale ⇒ 红）·
   去重 · 条目数 ≤ 文件头 `baseline`（**只减不增**）· 不收录渲染层/门面函数、不收录已在标记区内的函数。
-- 台账：`tests/t4/fixtures/term-legacy-allowlist.txt`（B1 立账 8 条，归口 B2/B3/B4）。B2 迁 2 条（8→6）、B3 迁 3 条（6→3：`pane_hosts_caller` / `pane_busy` / `cmd_close`），剩 B4 三条；每迁一个函数就删一条，**只减不增**（自造第 4 条 ⇒ 用例 06 红）。
+- 台账：`tests/t4/fixtures/term-legacy-allowlist.txt`（B1 立账 8 条，归口 B2/B3/B4）。B2 迁 2 条（8→6）、B3 迁 3 条（6→3：`pane_hosts_caller` / `pane_busy` / `cmd_close`）、**B4 迁最后 3 条（3→0：`apply_main_col` / `apply_tmux_layout` 进 `term-impl-tmux (布局 / 窄列回退)` 标记区，`cmd_check` 换门面 `term_session_name`）⇒ 当前 `baseline: 0` 且条目数 0（清零）**；每迁一个函数就删一条，**只减不增**（自造第 1 条 ⇒ 用例 06 红）。
 - **判据边界**：与 `t4_scan_host_pane_refs` 同一命令行位前缀集，`if ! tmux …` / `env tmux …` / `command tmux …` / 变量间接不纳管；
   status 路径的「herdr 模式零 tmux 调用」由用例 28 的 PATH 桩**动态**断言（比静态更硬）。
 

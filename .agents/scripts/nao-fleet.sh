@@ -1120,6 +1120,7 @@ _term_herdr_wait_ready() {  # <pane_id> <name> → 0 就绪 / 1 超时（逐条�
   { [[ "$_TR_SEQ" =~ ^[0-9]+$ ]] && (( _TR_SEQ >= 1 )); } || warn "  · state_change_seq ≥ 1：实际 ${_TR_SEQ:-0}（未观测到状态迁移）"
   [[ "$_TR_SKIP" == "1" ]] || warn "  · screen_detection_skipped == true：实际 false（状态来自屏幕启发式，不可作就绪判据）"
   warn "  · 诊断指路：herdr --session ${HERDR_SESSION:-<session>} agent explain $pid"
+  warn "  · 若 pi 首次启动停在 What's New / 信任提示（如 lastChangelogVersion 落后于 pi 版本），先手工关闭再重试"
   return 1
 }
 
@@ -3315,7 +3316,7 @@ cmd_status() {
         mismatch)
           term_abn+=("  ! $nm 身份不一致：label 与 argv --name 不符 → 非在线（禁猜）") ;;
         integration-missing)
-          term_abn+=("  ! $nm 集成缺失：agent_session 空或生命周期钩子权威缺（状态 ${hstate[$nm]}）→ **不可投递**；请核对 pi-intercom/herdr 集成") ;;
+          term_abn+=("  ! $nm 集成缺失：agent_session 空或生命周期钩子权威缺（状态 ${hstate[$nm]}）→ **不可投递**；请核对 pi-intercom/herdr 集成；若 pi 首次启动停在 What's New / 信任提示，先手工关闭再重试") ;;
         ambiguous)
           term_abn+=("  ! $nm 同名 label 多 pane：命中多个 ⇒ 不猜（既不判在线，也不静默挑一个）；先人工核对/清理重复 label（回收面归 B3）") ;;
       esac
