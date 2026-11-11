@@ -594,11 +594,13 @@ LEDGER_B1="$T4_ROOT/tests/t4/fixtures/term-legacy-allowlist.txt"
 t4_assert_file "$FLEET_B1" "B1: 被测脚本存在"
 t4_assert_file "$LEDGER_B1" "B1: 门面台账存在（tests/t4/fixtures/term-legacy-allowlist.txt）"
 
-# ---- ① 默认值唯一 ----
+# ---- ① 默认值唯一（#96 三期 P2：默认已翻 herdr；B1 立的 lint 就是为这一步准备的）----
 t4_assert_eq "1" "$(grep -cE '^NAO_TERMINAL=' "$FLEET_B1" || true)" \
   "B1① NAO_TERMINAL 赋值点恰 1 处（默认值唯一；三期只改这一行）"
-t4_assert_eq 'NAO_TERMINAL="${NAO_TERMINAL:-tmux}"' "$(grep -E '^NAO_TERMINAL=' "$FLEET_B1" || true)" \
-  "B1① 唯一赋值点就是默认 tmux（未设/显式 =tmux 两种拼写走同一处）"
+t4_assert_eq 'NAO_TERMINAL="${NAO_TERMINAL:-herdr}"' "$(grep -E '^NAO_TERMINAL=' "$FLEET_B1" || true)" \
+  "P2① 唯一赋值点 = 默认 **herdr**（未设/空串两种拼写走同一处）"
+t4_assert_eq "0" "$(grep -cE '^NAO_TERMINAL="\$\{NAO_TERMINAL:-tmux\}"' "$FLEET_B1" || true)" \
+  "P2① 反向断言：默认不再是 tmux（flip 真生效，不是两处赋值共存）"
 
 # ---- ② 门面四函数 + 纯谓词：各恰 1 处定义（业务区只调它们）----
 for fn in term_require term_snapshot term_liveness term_argv term_deliverable term_spawn term_session_start term_reclaim term_cleanup; do
@@ -702,10 +704,40 @@ t4_assert_contains "$out" "生效后端 NAO_TERMINAL=herdr" "B1④ herdr 模式 
 t4_assert_eq "0" "$(grep -c '^tmux ' "$B1_LOG" || true)" "B1④ herdr 模式 check 零 tmux 调用（桩 0 命中）"
 
 : > "$B1_LOG"
-out="$(cd "$T4_ROOT" && env -u NAO_TERMINAL PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" bash .agents/scripts/nao-fleet.sh check 2>&1)"; rc=$?
-t4_assert_eq "0" "$rc" "B1④ tmux 模式（未设 NAO_TERMINAL）check rc=0（零回归）"
+# 三期 P2：默认已翻 herdr ⇒ 「tmux 模式」必须**显式 =tmux**（不再靠「未设」搭车 —— 测试不依赖默认值）
+out="$(cd "$T4_ROOT" && env NAO_TERMINAL=tmux PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" bash .agents/scripts/nao-fleet.sh check 2>&1)"; rc=$?
+t4_assert_eq "0" "$rc" "B1④ 显式 NAO_TERMINAL=tmux check rc=0（零回归）"
 t4_assert_eq "0" "$(printf '%s\n' "$out" | grep -c 'NAO_TERMINAL' || true)" \
-  "B1④ tmux 模式 check 输出**零** NAO_TERMINAL 字样（仅 herdr 模式加行）"
+  "B1④ 显式 =tmux check 输出**零** NAO_TERMINAL 字样（仅 herdr 模式加行；二期口径不破）"
+OUT_B1_TMUX_CHECK="$out"
+
+# P2④（PM 验收 5/6）：默认翻 herdr **不得**改动 tmux 输出 —— 显式 =tmux 的 check 摘要逐字等于旧 golden。
+#   钉两段：① 首行逐字（roles/files/layout 口径不变）② 在「codegraph 齐备」态下全输出 md5 == 旧 golden
+#   （codegraph 态行随环境变 —— 无索引的机器/CI 会打印别的态，故该条在非齐备态下只 info 不假红）。
+CHECK_GOLD_LINE='check: OK · roles=7 · files=54 · layout=main-row2'
+t4_assert_eq "$CHECK_GOLD_LINE" "$(printf '%s\n' "$OUT_B1_TMUX_CHECK" | head -1)" \
+  "P2④ 显式 =tmux check 首行逐字不变（旧样）"
+t4_assert_eq "2" "$(printf '%s\n' "$OUT_B1_TMUX_CHECK" | grep -c . || true)" \
+  "P2④ 显式 =tmux check 仍 2 行（未新增「生效后端」行 —— 二期口径不破）"
+if printf '%s\n' "$OUT_B1_TMUX_CHECK" | sed -n '2p' | grep -q '^  ✓ codegraph 齐备'; then
+  t4_assert_eq "31b5978e95e7f5b4dc7a9fd861548065" \
+    "$(printf '%s\n' "$OUT_B1_TMUX_CHECK" | md5sum | awk '{print $1}')" \
+    "P2④ 显式 =tmux check 全输出 == 旧 golden md5（codegraph 齐备态下逐字）"
+else
+  t4_info "P2④ 全输出 md5 未断言（本机 codegraph 态非「齐备」；首行逐字 + 行数已断言，不假红）"
+fi
+
+# >>> default-value-probe BEGIN（#96 P2：验「默认值」的探针段 —— 全仓唯一允许 unset 的位置）
+: > "$B1_LOG"
+out="$(cd "$T4_ROOT" && env -u NAO_TERMINAL PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" bash .agents/scripts/nao-fleet.sh check 2>&1)"; rc=$?
+t4_assert_eq "0" "$rc" "P2① 未设 NAO_TERMINAL（默认）check rc=0"
+t4_assert_contains "$out" "生效后端 NAO_TERMINAL=herdr" \
+  "P2① 未设 ⇒ herdr（默认已翻；B1 的「仅 herdr 模式加行」靠本行反向验）"
+t4_assert_eq "3" "$(printf '%s\n' "$out" | grep -c . || true)" \
+  "P2① 未设(herdr) check = 3 行（摘要 + codegraph 态 + 生效后端行）"
+t4_assert_ne "$OUT_B1_TMUX_CHECK" "$out" \
+  "P2① 反向断言：未设(herdr) 与 显式 =tmux 的 check 输出必 **不同**（防 flip 未生效仍全绿）"
+# >>> default-value-probe END
 
 # B2（#96 二期）：ensure 已接 —— 不再是 exit 4；但桩夹具（pane/workspace 都为空）下必须 **fail loud**
 #   （逐目标 warn + 失败计数），且 **零 tmux 调用**；rc 仍 0（PM 裁定 D3：跨后端 rc 语义一致）。
@@ -750,11 +782,11 @@ done
 
 # ---- B2（#96 二期）：session-start —— tmux 幂等无操作 / herdr 守卫（--session 必填 · ≠default）----
 : > "$B1_LOG"
-out="$(cd "$T4_ROOT" && env -u NAO_TERMINAL PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" \
+out="$(cd "$T4_ROOT" && env NAO_TERMINAL=tmux PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" \
   bash .agents/scripts/nao-fleet.sh session-start --session nao-x 2>&1)"; rc=$?
-t4_assert_eq "0" "$rc" "B2④ tmux 模式 session-start ⇒ rc=0（server 随会话自动起，幂等无操作）"
-t4_assert_contains "$out" "tmux 后端无需 session-start" "B2④ tmux 模式 session-start 打印指路行"
-t4_assert_eq "0" "$(grep -cE '^(herdr|tmux) ' "$B1_LOG" || true)" "B2④ tmux 模式 session-start 零后端调用"
+t4_assert_eq "0" "$rc" "B2④ 显式 =tmux session-start ⇒ rc=0（server 随会话自动起，幂等无操作）"
+t4_assert_contains "$out" "tmux 后端无需 session-start" "B2④ 显式 =tmux session-start 打印指路行"
+t4_assert_eq "0" "$(grep -cE '^(herdr|tmux) ' "$B1_LOG" || true)" "B2④ 显式 =tmux session-start 零后端调用"
 err="$(cd "$T4_ROOT" && "${B1_ENV[@]}" bash .agents/scripts/nao-fleet.sh session-start --session default 2>&1 >/dev/null)"; rc=$?
 t4_assert_eq "2" "$rc" "B2④ herdr 模式 session-start --session default ⇒ rc=2（BR9：绝不碰用户会话）"
 t4_assert_contains "$err" "≠default" "B2④ session-start 拒绝 default 并点名原因"
@@ -777,14 +809,101 @@ t4_assert_eq "0" "$(grep -cE '^(herdr|tmux) ' "$B1_LOG" || true)" "B3④ -S 误�
 err="$(cd "$T4_ROOT" && env NAO_TERMINAL=bogus bash .agents/scripts/nao-fleet.sh status 2>&1 >/dev/null)"; rc=$?
 t4_assert_eq "2" "$rc" "B1④ NAO_TERMINAL=bogus ⇒ rc=2（fail loud，不静默回落）"
 t4_assert_contains "$err" "NAO_TERMINAL=bogus 非法" "B1④ 非法后端回显取值与期望值域"
-# P3-2（PM 拍板）：`NAO_TERMINAL=`（空串）= 未设（`:-` 是 shell 标准语义）⇒ tmux 默认，不是错配；
-#   大小写敏感：`=TMUX` 仍 rc=2。两条一起钉住「空串放过、拼错不放」。
+# P3-2（PM 拍板）：`NAO_TERMINAL=`（空串）= 未设（`:-` 是 shell 标准语义）⇒ **herdr** 默认（三期 P2 改写：
+#   空串仍不是错配，但默认已不是 tmux）；大小写敏感：`=TMUX` 仍 rc=2。两条一起钉住「空串放过、拼错不放」。
+# >>> default-value-probe BEGIN（#96 P2：空串探针 —— 全仓唯一允许空串的位置）
 out="$(cd "$T4_ROOT" && env NAO_TERMINAL= PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" bash .agents/scripts/nao-fleet.sh check 2>&1)"; rc=$?
-t4_assert_eq "0" "$rc" "B1④ NAO_TERMINAL=（空串）= 未设 ⇒ 按 tmux 默认跑（rc=0）"
-t4_assert_eq "0" "$(printf '%s\n' "$out" | grep -c 'NAO_TERMINAL' || true)" \
-  "B1④ 空串取值不得被当成 herdr/非法（输出零 NAO_TERMINAL 字样 = 走 tmux 默认路径）"
+t4_assert_eq "0" "$rc" "P2① NAO_TERMINAL=（空串）= 未设 ⇒ 按 **herdr** 默认跑（rc=0）"
+t4_assert_contains "$out" "生效后端 NAO_TERMINAL=herdr" \
+  "P2① 空串 ⇒ herdr（:- 语义；不是 tmux、也不是非法）"
+# >>> default-value-probe END
 err="$(cd "$T4_ROOT" && env NAO_TERMINAL=TMUX bash .agents/scripts/nao-fleet.sh status 2>&1 >/dev/null)"; rc=$?
 t4_assert_eq "2" "$rc" "B1④ NAO_TERMINAL=TMUX（大小写不符）⇒ rc=2（空串放过、拼错不放）"
+
+# ============================================================================
+# #96 三期 P2：① herdr 侧每条 exit 3 文案都带回退指路（AC3.3）
+#               ② **测试不依赖默认值**（静态面：块外 0 处 unset/空串）
+#   口径：默认已 = herdr ⇒ 任何用例靠「未设」搭车 = 不可复现。基线由 run.sh 显式导出；
+#   唯一例外 = 验默认值的探针段（`# >>> default-value-probe BEGIN/END`）。
+# ============================================================================
+# ---- ① exit 3 文案全扫（一条断言扫全部，不抽查）----
+EXIT3_TOTAL="$(grep -cE '^[[:space:]]*exit 3[[:space:]]*$' "$FLEET_B1" || true)"
+t4_assert_eq "8" "$EXIT3_TOTAL" "P2② 脚本内真 exit 3 站点 = 8（tmux 前置 1 + herdr 侧 7）—— 扫全面成立的前提"
+EXIT3_SCAN="$(awk '
+  { line[NR] = $0 }
+  END {
+    for (i = 1; i <= NR; i++) {
+      if (line[i] !~ /^[[:space:]]*exit 3[[:space:]]*$/) continue
+      ctx = ""
+      for (j = i - 3; j < i; j++) if (j >= 1) ctx = ctx "\n" line[j]
+      if (ctx ~ /NAO_TERMINAL=tmux/ || ctx ~ /tmux new -s nao/) continue
+      printf "%d: 报文缺回退指路: %s\n", i, line[i]
+    }
+  }' "$FLEET_B1")"
+t4_assert_eq "" "$EXIT3_SCAN" \
+  "P2② herdr 侧每条 exit 3 文案都含 NAO_TERMINAL=tmux 指路（tmux 前置那条含 tmux new -s nao）"
+EXIT3_HINTED="$(awk '
+  { line[NR] = $0 }
+  END {
+    for (i = 1; i <= NR; i++) {
+      if (line[i] !~ /^[[:space:]]*exit 3[[:space:]]*$/) continue
+      ctx = ""
+      for (j = i - 3; j < i; j++) if (j >= 1) ctx = ctx "\n" line[j]
+      if (ctx ~ /NAO_TERMINAL=tmux/) n++
+    }
+    print n + 0
+  }' "$FLEET_B1")"
+t4_assert_eq "7" "$EXIT3_HINTED" "P2② 含回退指路的 exit 3 = 7 条（herdr 侧全数；tmux 前置那条不计）"
+# 负控：拿掉其中一条的指路 ⇒ 扫描必点名（判据非空转）
+NEG_EXIT3="$T4_CACHE_DIR/p2-neg-exit3-$$.sh"
+sed 's/—— 在该 herdr 会话的 pane 内重试，或 NAO_TERMINAL=tmux 回退//' "$FLEET_B1" > "$NEG_EXIT3"
+NEG_OUT="$(awk '
+  { line[NR] = $0 }
+  END {
+    for (i = 1; i <= NR; i++) {
+      if (line[i] !~ /^[[:space:]]*exit 3[[:space:]]*$/) continue
+      ctx = ""
+      for (j = i - 3; j < i; j++) if (j >= 1) ctx = ctx "\n" line[j]
+      if (ctx ~ /NAO_TERMINAL=tmux/ || ctx ~ /tmux new -s nao/) continue
+      printf "%d\n", i
+    }
+  }' "$NEG_EXIT3")"
+t4_assert_eq "1" "$(printf '%s\n' "$NEG_OUT" | grep -c . || true)" \
+  "P2② 负控：摘掉一条 herdr 文案的回退指路 ⇒ 全扫恰 1 条必红（断言不是空转）"
+rm -f "$NEG_EXIT3"
+
+# ---- ② 测试不依赖默认值（静态面）----
+CASES_DIR="$T4_ROOT/tests/t4/cases"
+t4_assert_eq "1" "$(grep -cE '^export NAO_TERMINAL="\$BACKEND"$' "$T4_ROOT/tests/t4/run.sh" || true)" \
+  "P2③ 测试基座：run.sh 按 BE_BACKEND 显式导出 NAO_TERMINAL（CI 固定后端）"
+t4_assert_eq "2" "$(grep -cE "printf 'NAO_TERMINAL=(tmux|herdr)" "$T4_ROOT/tests/t4/lib-backend.sh" || true)" \
+  "P2③ 测试基座：be_fleet_handles 两后端都显式给 NAO_TERMINAL（不靠默认值）"
+t4_assert_eq "" "$(t4_scan_nao_terminal_default_probe "$CASES_DIR")" \
+  "P2③ 全部用例：默认值探针块外 0 处 unset / env -u / 空串 NAO_TERMINAL ⇒ 无任何用例在 unset 下跑生产路径"
+t4_assert_eq "31" "$(ls -1 "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" "P2③ 扫描面 = 全部 31 个用例文件（不是子集）"
+t4_assert_eq "2" "$(grep -l 'default-value-probe BEGIN' "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" \
+  "P2③ 默认值探针块白名单 = 2 个文件（cases/06 默认值段 · cases/28 B1① 反向断言）"
+# 负控：块外注入 unset ⇒ 必被扫到（并点名行号与形态）
+#   注：本段用 printf **构造**违规样本（不是执行默认值探针）；构造串里必然出现被扫关键字，
+#   故一并包在标记块内（否则用例 06 会「自我举报」—— 判据只白名单标记块内文本）。
+# >>> default-value-probe BEGIN（构造负控样本）
+PROBE_NEG_DIR="$T4_CACHE_DIR/p2-probe-neg-$$"
+mkdir -p "$PROBE_NEG_DIR"
+cp "$CASES_DIR/13-close-guards.sh" "$PROBE_NEG_DIR/x.sh"
+printf '\nunset NAO_TERMINAL\n' >> "$PROBE_NEG_DIR/x.sh"
+PROBE_NEG_OUT="$(t4_scan_nao_terminal_default_probe "$PROBE_NEG_DIR")"
+t4_assert_contains "$PROBE_NEG_OUT" "[unset]" "P2③ 负控：探针块外 unset ⇒ 扫描必红并点名（判据非空转）"
+printf '\nenv -u NAO_TERMINAL true\n' >> "$PROBE_NEG_DIR/x.sh"
+t4_assert_contains "$(t4_scan_nao_terminal_default_probe "$PROBE_NEG_DIR")" "[env -u]" \
+  "P2③ 负控：探针块外 env -u ⇒ 扫描必红"
+# 正控：同一份内容放进标记块 ⇒ 0 命中（白名单不是空话）
+cp "$CASES_DIR/13-close-guards.sh" "$PROBE_NEG_DIR/y.sh"
+printf '\n# >>> default-value-probe BEGIN\nunset NAO_TERMINAL\nenv NAO_TERMINAL= true\n# >>> default-value-probe END\n' >> "$PROBE_NEG_DIR/y.sh"
+t4_assert_eq "" "$(t4_scan_nao_terminal_default_probe "$PROBE_NEG_DIR/y.sh")" \
+  "P2③ 正控：标记块内的 unset/空串被放过（白名单生效；否则真用例无法验默认值）"
+rm -rf "$PROBE_NEG_DIR"
+# >>> default-value-probe END
+
 rm -rf "$B1BIN" "$B1_LOG" "$NEG_B1A" "$NEG_B1B" "$NEG_B1C" "$NEG_B1D" "$NEG_LED"
 
 t4_exit

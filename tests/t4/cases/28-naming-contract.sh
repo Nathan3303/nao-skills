@@ -439,7 +439,8 @@ trap 'for s in "$SOCK_A" "$SOCK_B"; do
 
 run_in() { # <socket> <tmuxdir> <caller> <script> <args...>
   local sock="$1" tdir="$2" pane="$3" script="$4"; shift 4
-  t4_run_in_dir "$LAB" env -u TMUX -u TMUX_PANE TMUX="$sock,0,0" TMUX_PANE="$pane" \
+  # #96 三期 P2：tmux 夹具场一律显式 =tmux（测试不依赖默认值；默认已翻 herdr）
+  t4_run_in_dir "$LAB" env -u TMUX -u TMUX_PANE NAO_TERMINAL=tmux TMUX="$sock,0,0" TMUX_PANE="$pane" \
     TMUX_TMPDIR="$tdir" NAO_SKILLS="$LAB" PI_CODING_AGENT_DIR="$LAB/pi-empty" \
     NAO_TASKS_STATE="$TASKS_FIX" PATH="$LAB/bin:$PATH" \
     timeout 180 "$BASH_BIN" "$script" "$@"
@@ -569,23 +570,25 @@ exit 1
 SH
 chmod +x "$LAB/bin/herdr" "$LAB/bin/tmux" "$LAB/bin/node"
 
-# ---- ① 双拼写 md5（未设 vs 显式 =tmux；两次 invocation 必须逐字同源）----
+# ---- ① 显式 =tmux ⇒ **旧** golden（#96 三期 P2 改写：未设不再 == =tmux）----
+#   BR1 三期改写（PM 2026-11-11）：默认翻 herdr 后，「双拼写相等」按设计失效 ⇒ 改为
+#     显式 `=tmux` ⇒ 旧 golden（144f3447…，自 2692b42 基线以来未变）
+#     未设 ⇒ 新 herdr golden（由夹具生成，见下方「默认值反向断言」节）
+#     **反向断言：两者必须不同**（防 flip 未生效仍全绿）+ 变异「把默认改回 tmux」⇒ 必红
+# golden 生成命令（旧 golden，可复算）：
+#   run_in "$SOCK_B" … env NAO_TERMINAL=tmux bash .agents/scripts/nao-fleet.sh status | md5sum
+#   ⇒ 144f3447c9ff406d6aed828d9c9720e5（15 行；夹具 = 本用例的 6 个标题 pane + 基线 fixture）
+GOLD_TMUX_MD5="144f3447c9ff406d6aed828d9c9720e5"
+GOLD_ENSURE_TMUX="c2de6533a1826dbf470dcc401cb29063"
 : > "$LAB/herdr-calls.log"
-unset NAO_TERMINAL
-run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" status
-RC_DEF=$T4_RC; OUT_DEF="$T4_OUT_ANSI"
-export NAO_TERMINAL=tmux
+export NAO_TERMINAL=tmux          # 本用例 tmux 夹具段一律显式 tmux（测试不依赖默认值）
 run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" status
 RC_TMUX=$T4_RC; OUT_TMUX="$T4_OUT_ANSI"
-unset NAO_TERMINAL
-MD5_DEF="$(printf '%s' "$OUT_DEF" | md5sum | awk '{print $1}')"
 MD5_TMUX="$(printf '%s' "$OUT_TMUX" | md5sum | awk '{print $1}')"
-t4_assert_eq "0" "$RC_DEF" "B1① 未设 NAO_TERMINAL ⇒ status rc=0"
 t4_assert_eq "0" "$RC_TMUX" "B1① 显式 NAO_TERMINAL=tmux ⇒ status rc=0"
-t4_assert_eq "$MD5_DEF" "$MD5_TMUX" "B1① 双拼写 status 全文 md5 相等（默认值唯一 ⇒ 不可分叉）"
-t4_assert_eq "$MD5_A" "$MD5_DEF" "B1① 未设拼写 == C2 golden（基线 fixture 场）"
-t4_assert_eq "$MD5_A" "$MD5_TMUX" "B1① =tmux 拼写 == C2 golden（基线 fixture 场）"
-t4_info "B1① 双拼写 md5：未设=$MD5_DEF · =tmux=$MD5_TMUX · C2 golden=$MD5_A"
+t4_assert_eq "$GOLD_TMUX_MD5" "$MD5_TMUX" "B1① =tmux 拼写 == **旧** golden（status 全文 md5，BR1 零回归）"
+t4_assert_eq "$MD5_A" "$MD5_TMUX" "B1① =tmux 拼写 == C2 golden（基线 fixture 场，动态复核）"
+t4_info "B1① =tmux md5：$MD5_TMUX（旧 golden $GOLD_TMUX_MD5）· 行数 $(printf '%s\n' "$OUT_TMUX" | wc -l | tr -d ' ')"
 t4_assert_eq "0" "$(grep -c '^herdr ' "$LAB/herdr-calls.log" || true)" \
   "B1② tmux 模式 status：herdr 桩 0 命中（tmux 后端不碰 herdr）"
 
@@ -613,11 +616,9 @@ HENV=(env HERDR_ENV=1 HERDR_SESSION=nao-b1-status XDG_CONFIG_HOME="$LAB/cfg" \
   HERDR_SOCKET_PATH="$LAB/cfg/herdr/sessions/nao-b1-status/herdr.sock")
 mkdir -p "$LAB/tmp"   # 私有 TMPDIR：快照临时文件必须落这里且跑完为空（P3-5 残留断言）
 : > "$LAB/tmux-calls.log"; : > "$LAB/node-calls.log"; : > "$LAB/herdr-calls.log"
-export NAO_TERMINAL=herdr
 t4_run_in_dir "$LAB" "${HENV[@]}" NAO_TERMINAL=herdr NAO_SKILLS="$LAB" TMPDIR="$LAB/tmp" \
   PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" PATH="$LAB/bin:$PATH" \
   timeout 180 "$BASH_BIN" -c 'printf "%s\n" "$$" >> "$B2_PID_LOG"; exec "$@"' _ "$LAB/.agents/scripts/nao-fleet.sh" status
-unset NAO_TERMINAL
 RC_H=$T4_RC; OUT_H="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"; ERR_H="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
 t4_assert_eq "0" "$RC_H" "B1② herdr 模式 status rc=0（桩 protocol 22）"
 t4_assert_eq "0" "$(grep -c '^tmux ' "$LAB/tmux-calls.log" || true)" \
@@ -662,6 +663,77 @@ t4_assert_eq "1" "$(grep -c '^herdr .*pane list' "$LAB/herdr-calls.log" || true)
 t4_assert_eq "1" "$(grep -c '^herdr .*agent list' "$LAB/herdr-calls.log" || true)" \
   "B1⑤ 空 label 夹具：agent list 仍恰 1 次"
 t4_assert_eq "0" "$(ls -A "$LAB/tmp" 2>/dev/null | wc -l | tr -d ' ')" "B1⑤ 空 label 夹具：快照临时文件零残留"
+
+# ============================================================================
+# B1①（#96 三期 P2 · BR1 三期改写）：**默认值反向断言**
+#   未设 NAO_TERMINAL ⇒ **herdr**（新 golden，由夹具生成）· 显式 =tmux ⇒ 旧 golden · 两者必不同。
+#   golden 生成（未设 / 显式 =herdr 两次 invocation 必须逐字同源；herdr 侧 status 有后端专有头行）：
+#     env -u NAO_TERMINAL ${HENV[@]} … status | md5sum   ⇒ herdr golden
+#     env NAO_TERMINAL=herdr ${HENV[@]} … status | md5sum ⇒ 必须逐字相同（默认值唯一）
+#   反向负控：tmux 夹具场里未设 ⇒ exit 3（**不回落** tmux）；变异「默认改回 tmux」⇒ herdr 场未设必红。
+# ============================================================================
+GOLD_HERDR_MD5="$(printf '%s' "$OUT_H" | md5sum | awk '{print $1}')"
+# 已记录的 herdr golden（**由夹具生成，禁手抄**）：生成命令 = 上面这次 herdr 夹具 status 的 md5
+#   （`env NAO_TERMINAL=herdr ${HENV[@]} … status`；与「未设」两跑同源）。两次独立跑次实测同值
+#   （lab 路径含 $$ 但 herdr status 不回显路径 ⇒ 跨跑/跨机稳定）。
+#   **有意改 herdr 渲染（文案/节标题/列）时须同步更新本行** —— 与 C2 tmux golden 同一纪律（BR1）。
+GOLD_HERDR_MD5_RECORDED="123bf85ba92783fb4210b19126849c42"
+t4_assert_eq "$GOLD_HERDR_MD5_RECORDED" "$GOLD_HERDR_MD5" \
+  "P2① herdr golden == 记录的 golden（herdr 渲染零漂移；$GOLD_HERDR_MD5_RECORDED）"
+t4_assert_contains "$OUT_H" "herdr 后端：label 命中 ≠ 在线" \
+  "P2① herdr golden 确为 herdr 渲染（后端专有头行在位 ⇒ 不是 tmux 文本）"
+t4_assert_ne "$GOLD_TMUX_MD5" "$GOLD_HERDR_MD5" \
+  "P2① 反向断言：herdr golden ≠ 旧 tmux golden（$GOLD_HERDR_MD5 ≠ $GOLD_TMUX_MD5）"
+: > "$LAB/herdr-calls.log"
+t4_run_in_dir "$LAB" "${HENV[@]}" NAO_TERMINAL=herdr NAO_SKILLS="$LAB" TMPDIR="$LAB/tmp" \
+  PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" PATH="$LAB/bin:$PATH" \
+  timeout 180 "$BASH_BIN" -c 'printf "%s\n" "$$" >> "$B2_PID_LOG"; exec "$@"' _ "$LAB/.agents/scripts/nao-fleet.sh" status
+RC_HX=$T4_RC; MD5_HX="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g' | md5sum | awk '{print $1}')"
+t4_assert_eq "0" "$RC_HX" "P2① 显式 =herdr ⇒ status rc=0（golden 生成侧的对照）"
+t4_assert_eq "$GOLD_HERDR_MD5" "$MD5_HX" "P2① 显式 =herdr == herdr golden（同一夹具两次同源）"
+
+# >>> default-value-probe BEGIN（#96 P2：未设探针 —— 全仓唯一允许 unset 的位置）
+: > "$LAB/herdr-calls.log"
+t4_run_in_dir "$LAB" env -u NAO_TERMINAL "${HENV[@]:1}" NAO_SKILLS="$LAB" TMPDIR="$LAB/tmp" \
+  PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" PATH="$LAB/bin:$PATH" \
+  timeout 180 "$BASH_BIN" -c 'printf "%s\n" "$$" >> "$B2_PID_LOG"; exec "$@"' _ "$LAB/.agents/scripts/nao-fleet.sh" status
+RC_UNSET=$T4_RC; OUT_UNSET="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+MD5_UNSET="$(printf '%s' "$OUT_UNSET" | md5sum | awk '{print $1}')"
+t4_assert_eq "0" "$RC_UNSET" "P2① 未设 NAO_TERMINAL（herdr 场）⇒ status rc=0（默认已翻 herdr）"
+t4_assert_eq "$GOLD_HERDR_MD5" "$MD5_UNSET" "P2① 未设 == herdr golden（默认值唯一：未设与显式 =herdr 不可分叉）"
+t4_assert_ne "$GOLD_TMUX_MD5" "$MD5_UNSET" "P2① 未设 ≠ 旧 tmux golden（旧口径已按设计失效，不假绿）"
+t4_info "P2① 双 golden：tmux=$GOLD_TMUX_MD5 · herdr=$GOLD_HERDR_MD5 · 未设=$MD5_UNSET"
+
+# 反向负控 A：**tmux 夹具场**里未设 ⇒ exit 3（fail loud，不静默回落 tmux —— PM 裁定 D2）
+: > "$LAB/tmux-calls.log"
+#   （不用 run_in：它在 P2 起恒注入 NAO_TERMINAL=tmux；本负控要的正是「未设」）
+t4_run_in_dir "$LAB" env -u TMUX -u TMUX_PANE -u NAO_TERMINAL TMUX="$SOCK_B,0,0" TMUX_PANE="$CALLER_B" \
+  TMUX_TMPDIR="$SOCK_B_DIR" NAO_SKILLS="$LAB" PI_CODING_AGENT_DIR="$LAB/pi-empty" \
+  NAO_TASKS_STATE="$TASKS_FIX" PATH="$LAB/bin:$PATH" \
+  timeout 180 "$BASH_BIN" -c 'printf "%s\n" "$$" >> "$B2_PID_LOG"; exec "$@"' _ "$LAB/.agents/scripts/nao-fleet.sh" status
+RC_NOFALL=$T4_RC
+T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "3" "$RC_NOFALL" "P2① 反向负控A：tmux 场里未设 ⇒ exit 3（不自动回落 tmux）"
+t4_assert_contains "$T4_ERR_ANSI" "HERDR_ENV=1 缺失" "P2① 反向负控A：点名 herdr 前提（HERDR_ENV）而非 tmux"
+t4_assert_contains "$T4_ERR_ANSI" "NAO_TERMINAL=tmux" "P2① 反向负控A：exit 3 文案给回退指路"
+
+# 变异自证：把默认改回 tmux ⇒ 上面的「未设 == herdr golden」必红（判据非空转）
+#   （本段仍在默认值探针块内：它跑的就是「未设」状态，只是换了一份变异脚本）
+MUT_DEF="$T4_CACHE_DIR/p2-mut-default-$$.sh"
+sed 's/^NAO_TERMINAL="${NAO_TERMINAL:-herdr}"$/NAO_TERMINAL="${NAO_TERMINAL:-tmux}"/' \
+  "$LAB/.agents/scripts/nao-fleet.sh" > "$MUT_DEF"
+t4_assert_eq "1" "$(grep -cE '^NAO_TERMINAL="\$\{NAO_TERMINAL:-tmux\}"$' "$MUT_DEF" || true)" \
+  "P2① 变异：副本确已把默认改回 tmux（变异锚点有效）"
+t4_run_in_dir "$LAB" env -u NAO_TERMINAL "${HENV[@]:1}" NAO_SKILLS="$LAB" TMPDIR="$LAB/tmp" \
+  PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" PATH="$LAB/bin:$PATH" \
+  timeout 180 "$BASH_BIN" -c 'printf "%s\n" "$$" >> "$B2_PID_LOG"; exec "$@"' _ "$MUT_DEF" status
+MUT_RC=$T4_RC; MUT_MD5="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g' | md5sum | awk '{print $1}')"
+t4_assert_ne "$GOLD_HERDR_MD5" "$MUT_MD5" \
+  "P2① 变异自证：默认改回 tmux ⇒ 未设不再等于 herdr golden（判据必红，不是空转）"
+t4_assert_ne "0" "$MUT_RC" \
+  "P2① 变异自证：默认改回 tmux 后 herdr 场未设 ⇒ rc≠0（herdr 场的默认前提全缺）"
+rm -f "$MUT_DEF"
+# >>> default-value-probe END
 
 # ============================================================================
 # B2（#96 二期 + 三期 P1 布局 A）：放置 / 就绪门 / 幽灵 pane / 同名歧义 / 迁移
@@ -1281,6 +1353,9 @@ if [ "$MDB_A" != "$MDB_B" ]; then
 fi
 t4_assert_eq "$MDB_A" "$MDB_B" \
   "C2② 新版 ensure「已拉起」行 + pi --name 值与基线逐字等价（md5 $MDB_A；scope 为空 ⇒ 零回归）"
+# 与 status 同一口径（BR1 五处之一）：显式 =tmux 的 ensure blob 还必须等于**钉住的旧 golden**
+t4_assert_eq "$GOLD_ENSURE_TMUX" "$MDB_B" \
+  "C2② 显式 =tmux 的 ensure blob == 旧 golden（$GOLD_ENSURE_TMUX；9 条已拉起 + 9 个 --name 值）"
 t4_info "C2② ensure blob md5 = $MDB_A（已拉起 $LAUNCH_N_B 条 + --name $(printf '%s\n' "$BLOB_B" | grep -c '^$' >/dev/null; printf '%s' "$BLOB_B" | sed -n '/已拉起/,$p' | grep -cE '^[a-z]' || true) 值）"
 
 # ============================================================================
@@ -2030,10 +2105,10 @@ t4_assert_eq "3" "$T4_RC" "B3⑧ 错误根的 HERDR_SOCKET_PATH ⇒ rc=3（stale
 t4_assert_contains "$T4_ERR_ANSI" "不在目标根" "B3⑧ rc=3：拒绝理由点名目标根"
 t4_assert_eq "0" "$(b3_calls "^herdr .*session (stop|delete)( |$)")" "B3⑧ rc=3：零拆场动作"
 # tmux 侧守卫逐字不变：cleanup 无 -S ⇒ rc=2；--session 误用 ⇒ rc=2
-t4_run_in_dir "$B3_LAB" env -u NAO_TERMINAL -u HERDR_ENV -u HERDR_SESSION PATH="$B3_BIN:$PATH" \
+t4_run_in_dir "$B3_LAB" env -u HERDR_ENV -u HERDR_SESSION NAO_TERMINAL=tmux PATH="$B3_BIN:$PATH" \
   timeout 60 "$BASH_BIN" "$FLEET" cleanup
 t4_assert_eq "2" "$T4_RC" "B3⑧ tmux cleanup 缺 -S ⇒ rc=2（既有守卫零回归）"
-t4_run_in_dir "$B3_LAB" env -u NAO_TERMINAL -u HERDR_ENV -u HERDR_SESSION PATH="$B3_BIN:$PATH" \
+t4_run_in_dir "$B3_LAB" env -u HERDR_ENV -u HERDR_SESSION NAO_TERMINAL=tmux PATH="$B3_BIN:$PATH" \
   timeout 60 "$BASH_BIN" "$FLEET" cleanup --session nao-x
 t4_assert_eq "2" "$T4_RC" "B3⑧ tmux cleanup 误用 --session ⇒ rc=2（按后端分派，不静默吞参）"
 

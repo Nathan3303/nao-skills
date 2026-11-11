@@ -5,6 +5,9 @@
 # 运行前提（ADR 2026-10-27-strict-tmux-pi · 唯一路径）
 #   必须在 tmux 会话内（$TMUX 非空且 tmux 命令可用）· pi ≥ MIN_PI_VERSION（check 断言；阈值单源，见下方常量区）
 #   非 tmux ⇒ ensure/status/close 一律 exit 3 + 一行提示，且不建 session/pane/lock、不写状态（BR3）
+#   **默认后端 = herdr（#96 三期 P2 · 2026-11-11）**：`NAO_TERMINAL` 未设/空串 ⇒ herdr；回退用 `NAO_TERMINAL=tmux`
+#     （保留 ≥2 MINOR 且 ≥90 天；退役另立项并先发弃用说明）。**不自动回落**（PM 裁定 D2）——
+#     默认 herdr 而环境不满足（未装 herdr / protocol≠22 / 非 herdr pane 内）⇒ fail loud exit 3，各条文案都带回退指路。
 #   cleanup 豁免本前提：其正常场景就是「非 tmux 的隔离实验场」（env -u TMUX ... -S <socket>）
 #   herdr 后端（NAO_TERMINAL=herdr · #96 二期 B1/B2/B3 · 三期 P1 布局 A）：前提改为「herdr pane 内 + HERDR_SESSION
 #     有效 + protocol 22」；B1 判定面（status）· B2 放置/就绪面（ensure）· B3 回收面（close/cleanup）—— 全部走门面，
@@ -73,8 +76,9 @@
 #   NAO_SKILLS=<dir>                          nao 机制包根目录（默认 <脚本>/../..；项目内 shim 会显式指向包根）
 #   NAO_MODEL_WHITELIST=<glob,...>            -m 白名单（默认空=不校验，支持 glob）
 #   NAO_CLOSE_BUSY_PATTERN=<ERE>             close 的在跑 turn 判定正则（默认内置 pi 状态行标记）
-#   NAO_TERMINAL=tmux|herdr                  终端后端（默认 tmux；herdr 侧 B1–B3：status / ensure / close / cleanup；
-#                                            ensure 须先 `session-start` 起专用 session 并在其 pane 内运行）
+#   NAO_TERMINAL=tmux|herdr                  终端后端（**默认 herdr**；未设/空串 = herdr）。tmux = 回退通道（≥2 MINOR/≥90 天）：
+#                                            `NAO_TERMINAL=tmux`。herdr 侧 status/ensure/close/cleanup 走门面，
+#                                            ensure 须先 `session-start` 起专用 session 并在其 pane 内运行
 #   NAO_HERDR_READY_TIMEOUT_MS=<ms>          herdr 就绪门 wall-clock 上限（默认 5000；只对 herdr 后端生效）
 #   NAO_TERM_MIN_COLS=<n>                     herdr 放置后空间判据最小列宽（默认 60；不足只 warn 不中断）
 #   NAO_TERM_MIN_ROWS=<n>                     herdr 放置后空间判据最小行数（默认 10；0 尺寸 pane ⇒ 计 SPAWN_FAIL）
@@ -126,8 +130,9 @@ MIN_PI_MINOR="${MIN_PI_MINOR%%.*}"
 
 # ---- 终端后端（#96 二期 B1 · PRD 附二「门面 + 双实现并存」）----
 # 默认值**唯一赋值点**：全脚本 `grep -cE '^NAO_TERMINAL='` 必须恰 1 处（tests/t4 静态 lint 断言）。
-# 三期 herdr 转默认只改这一行；本批 tmux 仍是默认（BR1 零回归）。
-NAO_TERMINAL="${NAO_TERMINAL:-tmux}"
+# 三期 P2（2026-11-11）：**herdr 转默认**只改这一行（B1 立的 lint 就是为这一步准备的）。
+#   `:-` 语义 ⇒ 未设与空串都落 herdr；回退通道 = `NAO_TERMINAL=tmux`（不自动回落，fail loud）。
+NAO_TERMINAL="${NAO_TERMINAL:-herdr}"
 # herdr 破坏性变更的唯一硬判据（version 只打印不比较：版本串比较脆）
 TERM_HERDR_PROTOCOL="22"
 # BR6：起 herdr server 前必须清掉的**宿主终端句柄**。名字表放通用区（herdr 实现区禁出现该字面量：
@@ -423,12 +428,12 @@ _term_herdr_require() {
     exit 3
   }
   if [[ "${HERDR_ENV:-}" != "1" ]]; then
-    printf '需要 herdr pane：HERDR_ENV=1 缺失（herdr 后端只在其 pane 内运行；从外部推断会话名属猜测面，禁）\n' >&2
+    printf '需要 herdr pane：HERDR_ENV=1 缺失（herdr 后端只在其 pane 内运行；从外部推断会话名属猜测面，禁）—— 在该 herdr 会话的 pane 内重试，或 NAO_TERMINAL=tmux 回退\n' >&2
     exit 3
   fi
   local s="${HERDR_SESSION:-}" sp="${HERDR_SOCKET_PATH:-}" root rootp spp
   if [[ -z "$s" || "$s" == "default" || ! "$s" =~ ^[A-Za-z0-9._-]+$ ]]; then
-    printf '需要 herdr 会话：HERDR_SESSION=%s 不可用（须非空、≠default、^[A-Za-z0-9._-]+$）\n' "${s:-<空>}" >&2
+    printf '需要 herdr 会话：HERDR_SESSION=%s 不可用（须非空、≠default、^[A-Za-z0-9._-]+$）—— 在有效 herdr 会话的 pane 内重试，或 NAO_TERMINAL=tmux 回退\n' "${s:-<空>}" >&2
     exit 3
   fi
   # BR6：socket 必须落在**目标根**下（不是「任意 */sessions/<名>/*」——后者对 stale/外贸 env 等于死守卫）。
@@ -437,13 +442,13 @@ _term_herdr_require() {
   rootp="$(_term_path_norm "$root/sessions/$s")"
   spp="$(_term_path_norm "$sp")"
   if [[ -z "$sp" || "$spp" != "$rootp"/* ]]; then
-    printf '需要 herdr 会话目录：HERDR_SOCKET_PATH=%s 不在目标根 %s/ 下（stale/外贸 env ⇒ 拒绝，防串台）\n' \
+    printf '需要 herdr 会话目录：HERDR_SOCKET_PATH=%s 不在目标根 %s/ 下（stale/外贸 env ⇒ 拒绝，防串台）—— 在目标会话 pane 内重试，或 NAO_TERMINAL=tmux 回退\n' \
       "${sp:-<空>}" "$rootp" >&2
     exit 3
   fi
   local schema proto
   if ! schema="$(_term_herdr_exec api schema 2>/dev/null)"; then
-    printf 'herdr api schema 不可用（server/CLI 异常）：无法校验 protocol ⇒ 拒绝执行\n' >&2
+    printf 'herdr api schema 不可用（server/CLI 异常）：无法校验 protocol ⇒ 拒绝执行（核对 herdr ≥0.9.1 / server 状态后重试，或 NAO_TERMINAL=tmux 回退）\n' >&2
     exit 3
   fi
   proto="$(printf '%s\n' "$schema" | sed -n 's/^protocol:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -1)"
@@ -3026,7 +3031,8 @@ cmd_check() {
     #   rc 口径（P3-4 订正）：显式指定 herdr 却**缺 herdr 可执行文件** ⇒ rc=1（明确错配，不能装没看见）；
     #   缺 `HERDR_SESSION`（未在 herdr pane 内，CI 常见）⇒ 只提示不置红（静态体检照跑）；
     #   `protocol≠22` ⇒ rc=1（唯一可置红的机械项）。
-    echo '  · 生效后端 NAO_TERMINAL=herdr（#96 二期 B4：status/ensure/close/cleanup 走门面；session-start 起 server；台账 0 条）'
+    # 三期 P2：herdr 是**默认**后端 ⇒ 本行在「未设/空串」时也打印（显式 `=tmux` 不打印，二期口径不破）。
+    echo '  · 生效后端 NAO_TERMINAL=herdr（默认后端；#96 二期 B4：status/ensure/close/cleanup 走门面；session-start 起 server；台账 0 条）'
     if command -v herdr >/dev/null 2>&1; then
       printf '  ✓ herdr 可用\n'
       if [[ -n "${HERDR_SESSION:-}" && "${HERDR_SESSION}" != "default" ]]; then
@@ -3041,13 +3047,13 @@ cmd_check() {
             rc=1
           fi
         else
-          printf '  · herdr api schema 不可用（status 将 exit 3）\n'
+          printf '  · herdr api schema 不可用（status 将 exit 3）—— 核对 herdr ≥0.9.1 / server 状态后重试，或 export NAO_TERMINAL=tmux 回退\n'
         fi
       else
-        echo '  · 未在 herdr pane 内（HERDR_SESSION 空/default）：status 将 exit 3；纯静态体检可照跑'
+        echo '  · 未在 herdr pane 内（HERDR_SESSION 空/default）：status 将 exit 3；纯静态体检可照跑（回退：export NAO_TERMINAL=tmux）'
       fi
     else
-      printf '  ✗ herdr 缺失（status 将 exit 3）\n'; rc=1
+      printf '  ✗ herdr 缺失（status 将 exit 3）—— 装 herdr ≥0.9.1，或 export NAO_TERMINAL=tmux 回退\n'; rc=1
     fi
     if command -v tmux >/dev/null 2>&1; then
       echo '  · tmux 可用（回退能力：NAO_TERMINAL=tmux）'
@@ -3427,7 +3433,7 @@ cmd_status() {
     # B1（BR3/BR7）：herdr 的身份/归属/忙闲全部来自结构化事实 ⇒ 快照**每命令一次**
     #   （≤1 次 pane list / agent list；逐名查询会 7×2 次 CLI，且同命令内两份快照不一致 = 新 flake 源）
     if ! term_snapshot >/dev/null; then
-      printf '需要 herdr server：pane list / agent list 不可用（核对 `herdr --session %s server` 是否在跑、protocol 是否 22）\n' "${HERDR_SESSION:-?}" >&2
+      printf '需要 herdr server：pane list / agent list 不可用（核对 `herdr --session %s server` 是否在跑、protocol 是否 22）—— 修好后重试，或 NAO_TERMINAL=tmux 回退\n' "${HERDR_SESSION:-?}" >&2
       exit 3
     fi
   else
@@ -4190,7 +4196,7 @@ case "$CMD" in
       grep -m1 -E '^  . codegraph ' "$REPFILE" || true
       # B1（BR1 六条机械保证之「check 打印生效后端」）：**仅 herdr 模式加行**；tmux 路径零新增输出
       if [[ "$NAO_TERMINAL" == "herdr" ]]; then
-        echo '  · 生效后端 NAO_TERMINAL=herdr（#96 二期 B4：status/ensure/close/cleanup 走门面；session-start 起 server；台账 0 条）'
+        echo '  · 生效后端 NAO_TERMINAL=herdr（默认后端；#96 二期 B4：status/ensure/close/cleanup 走门面；session-start 起 server；台账 0 条）'
       fi
     else
       cat "$REPFILE"

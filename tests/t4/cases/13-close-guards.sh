@@ -14,7 +14,7 @@
 #   ④ AC4 静态：`nao-fleet.sh` 内 `grep -c '无法确认在线'` = 0（T523 分支已删）
 #   ⑤ AC2 静态：宿主阶梯删除面 grep = 0（xdg-terminal-exec/hyprctl/swaymsg/xdotool/wmctrl/screen_*）
 #      **2026-11-10 #96 二期 B1 订正**：`NAO_TERMINAL` 已由 PM 设计**改作终端后端开关**
-#      （tmux|herdr，默认 tmux），不再是「终端模拟器选择」⇒ 从本判据的交替式中移出，
+#      （tmux|herdr，三期 P2 起**默认 herdr**），不再是「终端模拟器选择」⇒ 从本判据的交替式中移出，
 #      另加一条「旧宿主阶梯取值域（screen/xdg/hypr/…）仍为 0」把原语义钉住。
 #   ⑥ AC4 tmux 内 + 名册可用且为空 + 无句柄 ⇒ rc=0 + 「未运行（无需回收）」（不过度矫正为恒失败）
 #   ⑦ AC4 --force 不改变末段：rc 与 ⑥ 逐值一致、仍含「未运行（无需回收）」
@@ -39,7 +39,7 @@ tsx_ok=""
 if [ -f "$PI_AGENT_DIR/npm/node_modules/tsx/dist/cli.mjs" ] && command -v node >/dev/null 2>&1; then tsx_ok=1; fi
 
 # ---------------------------------------------------------------- ①②③ 非 tmux ⇒ exit 3
-t4_run_in_dir "$T4_ROOT" env -u TMUX -u NAO_TERMINAL \
+t4_run_in_dir "$T4_ROOT" env -u TMUX NAO_TERMINAL=tmux \
   PI_CODING_AGENT_DIR="$EMPTY_PI" NAO_TASKS_STATE="$TASKS_NONE" \
   timeout 60 bash "$FLEET" close --task "$C13_T" qa
 t4_assert_eq "3" "$T4_RC" "① 非 tmux 跑 close ⇒ rc=3（前提不满足，命令未执行）"
@@ -77,7 +77,7 @@ const raw = process.env.NAO_QA_FAKE_ROSTER || "[]";
 process.stdout.write(JSON.stringify({ ok: true, sessions: JSON.parse(raw) }));
 JS
   c13_close() { # 透传额外 fleet 参数（如 --force），恒以派生名收尾
-    t4_run_in_dir "$C13_FX" env TMUX="$C13_TMUX" NAO_SKILLS="$C13_FX" \
+    t4_run_in_dir "$C13_FX" env NAO_TERMINAL=tmux TMUX="$C13_TMUX" NAO_SKILLS="$C13_FX" \
       NAO_TASKS_STATE="$TASKS_NONE" NAO_QA_FAKE_ROSTER='[]' \
       timeout 60 bash "$C13_FX/.agents/scripts/nao-fleet.sh" close "$@" --task "$C13_T" qa
   }

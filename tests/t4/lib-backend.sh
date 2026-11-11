@@ -5,7 +5,7 @@
 #   同一组函数两种后端：tmux 实现与既有用例（cases/19–25）的隔离写法逐字等价；
 #   herdr 实现走**私有 `XDG_CONFIG_HOME` 根** ⇒ 用户 `default` 会话「碰不到」（不是「小心别碰」）。
 #
-# 开关：`NAO_TEST_TERMINAL=tmux|herdr|auto`（**默认 tmux**；`auto` 一期 = tmux —— herdr 转默认属三期）
+# 开关：`NAO_TEST_TERMINAL=tmux|herdr|auto`（#96 三期 P2：未设 = **herdr**，与生产默认一致；`auto` = herdr）
 #
 # 契约（后端差异只在本文件内；调用方只用下列函数）：
 #   be_backend                    打印解析后的后端（tmux|herdr）；非法取值 ⇒ 非 0
@@ -42,13 +42,15 @@ be_init_fail()  { printf 'BE-INIT-FAIL: %s\n' "$*" >&2; }
 be_ready_fail() { printf 'BE-READY-FAIL: %s\n' "$*" >&2; }
 be_stage_fail() { printf 'BE-STAGE-FAIL: %s\n' "$*" >&2; }
 
-# 后端解析：未设 = tmux（默认）；auto 一期 = tmux；未知取值 fail loud（不猜）
+# 后端解析（#96 三期 P2）：来源优先级 NAO_TEST_TERMINAL > NAO_TERMINAL > **生产默认 herdr**；
+#   auto = 生产默认 = herdr。未知取值 fail loud（不猜）。与 run.sh 的后端解析同口径（单点语义两处实现，
+#   cases/27 有交叉断言）。
 be_backend() {
-  case "${NAO_TEST_TERMINAL:-tmux}" in
+  case "${NAO_TEST_TERMINAL:-${NAO_TERMINAL:-herdr}}" in
     tmux)  printf 'tmux' ;;
     herdr) printf 'herdr' ;;
-    auto)  printf 'tmux' ;;
-    *)     be_guard_fail "NAO_TEST_TERMINAL=${NAO_TEST_TERMINAL:-} 非法（期望 tmux|herdr|auto）"; return 1 ;;
+    auto)  printf 'herdr' ;;
+    *)     be_guard_fail "后端取值 ${NAO_TEST_TERMINAL:-${NAO_TERMINAL:-}} 非法（期望 tmux|herdr|auto）"; return 1 ;;
   esac
 }
 
@@ -674,10 +676,12 @@ be_scene_signature() { # 现场签名（排序后逐行）：pane + 会话/works
 }
 
 be_fleet_handles() { # 打印运行生产脚本所需的后端句柄（每行 VAR=VAL），供 `env` 直接展开
+  # #96 三期 P2（默认翻 herdr）：**两后端都显式给 NAO_TERMINAL** —— 测试不得依赖生产默认值
+  #   （否则同一用例在不同默认下走不同后端）。tmux 侧多给一行 = 唯一差异，其余逐字不变。
   case "$BE_BACKEND" in
     tmux)
       local td; td="$(dirname "$(dirname "$BE_SOCK")")"
-      printf 'TMUX=%s,0,0\nTMUX_PANE=%s\nTMUX_TMPDIR=%s\n' "$BE_SOCK" "$(be_caller_pane)" "$td" ;;
+      printf 'NAO_TERMINAL=tmux\nTMUX=%s,0,0\nTMUX_PANE=%s\nTMUX_TMPDIR=%s\n' "$BE_SOCK" "$(be_caller_pane)" "$td" ;;
     herdr)
       printf 'NAO_TERMINAL=herdr\nHERDR_ENV=1\nHERDR_SESSION=%s\nHERDR_SOCKET_PATH=%s/herdr/sessions/%s/herdr.sock\nXDG_CONFIG_HOME=%s\n' \
         "$BE_SESSION" "$BE_CFGROOT" "$BE_SESSION" "$BE_CFGROOT" ;;
