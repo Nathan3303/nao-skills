@@ -6,8 +6,10 @@
 #   必须在 tmux 会话内（$TMUX 非空且 tmux 命令可用）· pi ≥ MIN_PI_VERSION（check 断言；阈值单源，见下方常量区）
 #   非 tmux ⇒ ensure/status/close 一律 exit 3 + 一行提示，且不建 session/pane/lock、不写状态（BR3）
 #   cleanup 豁免本前提：其正常场景就是「非 tmux 的隔离实验场」（env -u TMUX ... -S <socket>）
-#   herdr 后端（NAO_TERMINAL=herdr · #96 二期 B1/B2/B3）：前提改为「herdr pane 内 + HERDR_SESSION 有效 + protocol 22」；
-#     B1 判定面（status）· B2 放置/就绪面（ensure）· B3 回收面（close/cleanup）—— 全部走门面，不静默回退 tmux。
+#   herdr 后端（NAO_TERMINAL=herdr · #96 二期 B1/B2/B3 · 三期 P1 布局 A）：前提改为「herdr pane 内 + HERDR_SESSION
+#     有效 + protocol 22」；B1 判定面（status）· B2 放置/就绪面（ensure）· B3 回收面（close/cleanup）—— 全部走门面，
+#     不静默回退 tmux。**布局 A（AC3.1）**：1 workspace/仓（label=scope）+ 1 tab/角色（label=角色名）+ 每 tab 恰 1 pane；
+#     放置后自测空间（HERDR 不报空间不足 ⇒ rc 不可作判据，见 TERM_MIN_COLS/ROWS 与 J1/J5）。
 #     起 server 由独立入口 `session-start --session <名>` 负责（BR6：清宿主终端句柄 + 枚举清 HERDR_*）；
 #     拆场由姊妹入口 `cleanup --session <名>` 负责（stop+delete，判 effect 不看 rc）。
 #
@@ -74,6 +76,8 @@
 #   NAO_TERMINAL=tmux|herdr                  终端后端（默认 tmux；herdr 侧 B1–B3：status / ensure / close / cleanup；
 #                                            ensure 须先 `session-start` 起专用 session 并在其 pane 内运行）
 #   NAO_HERDR_READY_TIMEOUT_MS=<ms>          herdr 就绪门 wall-clock 上限（默认 5000；只对 herdr 后端生效）
+#   NAO_TERM_MIN_COLS=<n>                     herdr 放置后空间判据最小列宽（默认 60；不足只 warn 不中断）
+#   NAO_TERM_MIN_ROWS=<n>                     herdr 放置后空间判据最小行数（默认 10；0 尺寸 pane ⇒ 计 SPAWN_FAIL）
 #   NAO_TASKS_STATE=<path>                   任务状态文件（默认 docs/tasks-state.md，供残留检测/回收闸门）
 #   NAO_UPDATE_ON_ENSURE=0|false             ensure pm 的下游版本自检注入开关（默认开；0/false ⇒ 与本批之前逐字等价）
 #
@@ -135,6 +139,13 @@ TERM_READY_POLL_MAX=50
 TERM_READY_POLL_INT=0.1
 TERM_READY_TIMEOUT_MS="${NAO_HERDR_READY_TIMEOUT_MS:-5000}"
 [[ "$TERM_READY_TIMEOUT_MS" =~ ^[0-9]+$ ]] || TERM_READY_TIMEOUT_MS=5000
+# 三期 P1（AC3.2 J1/J5）：herdr **不报**空间不足（split 从不失败、pane 可被压到 0 行、resize 静默无效）
+#   ⇒ rc 不可作判据，必须**自测** `pane layout` 的 rect。阈值 = 常量（可覆盖）：不足只 warn（rc 保持 0），
+#   0 尺寸 pane（读不了内容）计 SPAWN_FAIL（否则摘要说「成功 7」而实际不可用）。
+TERM_MIN_COLS="${NAO_TERM_MIN_COLS:-60}"
+TERM_MIN_ROWS="${NAO_TERM_MIN_ROWS:-10}"
+[[ "$TERM_MIN_COLS" =~ ^[0-9]+$ ]] && (( TERM_MIN_COLS > 0 )) || TERM_MIN_COLS=60
+[[ "$TERM_MIN_ROWS" =~ ^[0-9]+$ ]] && (( TERM_MIN_ROWS > 0 )) || TERM_MIN_ROWS=10
 # B2：ghost pane 复用前只允许把命令送进**交互式 shell**（前台非 shell ⇒ 拒绝注入，fail loud）
 TERM_SHELL_NAMES=(bash zsh sh dash fish ksh mksh tcsh csh nu elvish xonsh)
 # herdr 快照缓存路径（#96 B1）：**每命令一份**。`$$` 在子 shell 里不变 ⇒ 快照由任一子 shell 建好后，
@@ -307,8 +318,10 @@ term_argv() {  # <pane_id> → 每行 "process-name<TAB>argv"
   esac
 }
 
-# ---- 5/8 放置（B2）：tmux = split-window / herdr = 现有 workspace 内 split + 先 label 后启动 ----
-# 返回三态码（SPAWN_RC_*）：0 成功 · 2 跳过 · 3 失败（含就绪超时；调用方计入 SPAWN_FAIL）。
+# ---- 5/8 放置（B2 + 三期 P1 布局 A）：tmux = split-window / herdr = 1 workspace/仓 + 1 tab/角色 ----
+# herdr 侧：tab label = 角色名，每 tab 恰 1 pane（结构判据，零几何算式）；既有 pane 若在共享 tab 里
+#   ⇒ `pane move --new-tab` + `tab rename` 迁移（pane_id 不变、被搬空的 tab 由 herdr 自动关闭）。
+# 返回三态码（SPAWN_RC_*）：0 成功 · 2 跳过 · 3 失败（含就绪超时 / 0 尺寸 pane；调用方计入 SPAWN_FAIL）。
 term_spawn() {  # <name> <inner> <repo> [force]
   case "$(term_backend)" in
     tmux) spawn_tmux "${1-}" "${2-}" ;;
@@ -927,9 +940,133 @@ _term_fg_list_is_shell() {  # <name...> → 0 全部在 TERM_SHELL_NAMES 白名�
   return 0
 }
 
+# ---- 布局 A（三期 P1 · AC3.1）：tab 视图 + 结构收敛 + 空间判据（全部经唯一入口）----
+# 结构判据（**非几何**）：每角色 tab `pane_count == 1` ∧ pane_id 唯一（`tab list` / `pane list` 的 tab_id 字段）
+#   ⇒ 零几何算式（对比 tmux 侧 main-row2 的列宽算式）；attach 尺寸变化只影响渲染，不影响拓扑判据。
+_term_herdr_tab_row() {  # <workspace_id> <tab_id> → "label<TAB>pane_count"（无该 tab ⇒ 空）
+  local wsid="${1-}" tid="${2-}" js obj
+  [[ -n "$wsid" && -n "$tid" ]] || return 0
+  js="$(_term_herdr_exec tab list --workspace "$wsid" 2>/dev/null)" || return 0
+  while IFS= read -r obj; do
+    [[ "$(_term_json_str "$obj" tab_id)" == "$tid" ]] || continue
+    printf '%s\t%s\n' "$(_term_json_str "$obj" label)" "$(_term_json_raw "$obj" pane_count)"
+    return 0
+  done < <(_term_json_objs <<< "$js")
+  return 0
+}
+
+_term_herdr_tab_id_for() {  # <workspace_id> <label> → tab_id（无 ⇒ 空）
+  local wsid="${1-}" want="${2-}" js obj
+  [[ -n "$wsid" && -n "$want" ]] || return 0
+  js="$(_term_herdr_exec tab list --workspace "$wsid" 2>/dev/null)" || return 0
+  while IFS= read -r obj; do
+    [[ "$(_term_json_str "$obj" label)" == "$want" ]] || continue
+    _term_json_str "$obj" tab_id
+    return 0
+  done < <(_term_json_objs <<< "$js")
+  return 0
+}
+
+_term_herdr_pane_tab() {  # <pane_id> → "tab_id<TAB>workspace_id"（无 ⇒ 空）
+  local pid="${1-}" js obj
+  [[ -n "$pid" ]] || return 0
+  js="$(_term_herdr_exec pane list 2>/dev/null)" || return 0
+  while IFS= read -r obj; do
+    [[ "$(_term_json_str "$obj" pane_id)" == "$pid" ]] || continue
+    printf '%s\t%s\n' "$(_term_json_str "$obj" tab_id)" "$(_term_json_str "$obj" workspace_id)"
+    return 0
+  done < <(_term_json_objs <<< "$js")
+  return 0
+}
+
+# J1 量测：`pane layout --pane <id>` → "width<TAB>height"（无该 pane / 无 rect ⇒ 空）
+#   只取**本 pane** 对象的 rect：同一 JSON 里还有 tab 级 `area`（直接 grep width 会量到整个 tab）。
+_term_herdr_pane_rect() {  # <pane_id>
+  local pid="${1-}" js seg w h
+  [[ -n "$pid" ]] || return 0
+  js="$(_term_herdr_exec pane layout --pane "$pid" 2>/dev/null)" || return 0
+  # `[^}]*` 不跨 `}` ⇒ 匹配必落在**同一个 pane 对象**内（herdr 0.9.1：pane_id 后紧跟 rect）
+  seg="$(printf '%s' "$js" | grep -oE "\"pane_id\":\"$pid\"[^}]*\"rect\":\{[^}]*\}" | head -1)" || seg=""
+  [[ -n "$seg" ]] || return 0
+  w="$(sed -nE 's/.*"rect":\{[^}]*"width":([0-9]+).*/\1/p' <<< "$seg" | head -1)"
+  h="$(sed -nE 's/.*"rect":\{[^}]*"height":([0-9]+).*/\1/p' <<< "$seg" | head -1)"
+  [[ -n "$w" && -n "$h" ]] || return 0
+  printf '%s\t%s\n' "$w" "$h"
+  return 0
+}
+
+# J1/J5 空间判据（放置后**自测**；herdr 不报空间不足、rc 不可作判据）：
+#   不足（< TERM_MIN_COLS/ROWS）⇒ 只 **warn**（rc 保持 0，跨后端 rc 语义一致）；
+#   0 尺寸 pane（读不了内容）⇒ 不可用 ⇒ 计 SPAWN_FAIL（否则摘要说「成功 7」而实际读不了）。
+#   文案三件套：① 哪个 pane 多少列/行 < 阈值 ② 三个可执行动作 ③ 文档指针。
+_term_herdr_space_check() {  # <pane_id> <name> → 0 可继续 / 1 不可用（0 尺寸）
+  local pid="${1-}" name="${2-}" rect w h
+  rect="$(_term_herdr_pane_rect "$pid")"
+  if [[ -z "$rect" ]]; then
+    warn "空间量测不可用（$name ⇒ pane=$pid）：\`pane layout --pane\` 未给出 rect ⇒ 无法核对 ${TERM_MIN_COLS}×${TERM_MIN_ROWS}（不阻断）"
+    warn "  该怎么办：\`herdr --session ${HERDR_SESSION:-<session>} pane layout --pane $pid\` 核对；必要时 attach 后重排"
+    return 0
+  fi
+  w="${rect%%$'\t'*}"; h="${rect#*$'\t'}"
+  if (( w < 1 || h < 1 )); then
+    warn "空间不可用：$name（pane=$pid）列=$w 行=$h —— 0 尺寸 pane 读不了内容 ⇒ 计 SPAWN_FAIL（摘要不再算成功）"
+    warn "  该怎么办：① 调 [server] headless_cols/headless_rows（config.toml）放大后重启会话（cleanup + session-start）"
+    warn "            ② attach 后重排：herdr session attach ${HERDR_SESSION:-<session>}，再调整窗口/分屏"
+    warn "            ③ 切布局：export NAO_TERMINAL=tmux（回退 tmux 后端）"
+    warn "  文档：docs/INSTALL.md「herdr 后端」· docs/prds/2026-11-10-herdr-base.md AC3.2（J1–J5）"
+    return 1
+  fi
+  if (( w < TERM_MIN_COLS || h < TERM_MIN_ROWS )); then
+    warn "空间不足：$name（pane=$pid）列=$w < ${TERM_MIN_COLS} 或 行=$h < ${TERM_MIN_ROWS} —— 仅 warn，不中断（rc 语义跨后端一致）"
+    warn "  该怎么办：① 调 [server] headless_cols/headless_rows（config.toml）放大后重启会话（cleanup + session-start）"
+    warn "            ② attach 后重排：herdr session attach ${HERDR_SESSION:-<session>}，再调整窗口/分屏"
+    warn "            ③ 切布局：export NAO_TERMINAL=tmux（回退 tmux 后端）"
+    warn "  文档：docs/INSTALL.md「herdr 后端」· docs/prds/2026-11-10-herdr-base.md AC3.2（J1–J5）"
+  fi
+  return 0
+}
+
+# J2 结构收敛（布局 A）：本角色 pane 必须独占一个 tab，且该 tab label = 角色名。
+#   旧布局（一个 tab 内 split 出多 pane）⇒ 迁移无损：`pane move <pane> --new-tab`（pane_id 不变，
+#   被搬空的 tab 由 herdr 自动关闭）+ `tab rename` 把新 tab 标成角色名；
+#   tab 已独占但 label 旧（如根 tab 的 "1"）⇒ 只改 tab 名（effect 零风险）。
+_term_herdr_layout_converge() {  # <pane_id> <name> → 0 布局 A 达成 / 1 未达成（fail loud）
+  local pid="${1-}" name="${2-}" pt tid wsid row label cnt js newtid
+  pt="$(_term_herdr_pane_tab "$pid")"
+  if [[ -z "$pt" ]]; then
+    warn "布局判据不可用：pane=$pid 不在 pane list（无法确认独立 tab）⇒ 计 SPAWN_FAIL"
+    return 1
+  fi
+  tid="${pt%%$'\t'*}"; wsid="${pt#*$'\t'}"
+  row="$(_term_herdr_tab_row "$wsid" "$tid")"
+  label="${row%%$'\t'*}"; cnt="${row#*$'\t'}"
+  if [[ "$label" == "$name" ]]; then
+    if [[ "$cnt" != "1" ]]; then
+      warn "布局 A 违例：tab=$tid（label=$name）含 ${cnt:-?} 个 pane（契约 = 每角色 tab 恰 1 pane）；不擅自搬动他人 pane"
+      warn "  该怎么办：attach 后人工收口（herdr session attach ${HERDR_SESSION:-<session>}），或 cleanup 后 session-start 重建会话"
+    fi
+    return 0
+  fi
+  if [[ "$cnt" == "1" ]]; then
+    if _term_herdr_exec tab rename "$tid" "$name" >/dev/null 2>&1; then return 0; fi
+    warn "tab rename 失败（tab=$tid → label=$name）⇒ 布局 A 未达成（计 SPAWN_FAIL）"
+    return 1
+  fi
+  js="$(_term_herdr_exec pane move "$pid" --new-tab 2>/dev/null)" \
+    || { warn "pane move --new-tab 失败（pane=$pid name=$name）⇒ 布局 A 未达成（计 SPAWN_FAIL）"; return 1; }
+  newtid="$(printf '%s' "$js" | sed -nE 's/.*"created_tab":\{[^}]*"tab_id":"([^"]+)".*/\1/p' | head -1)"
+  if [[ -z "$newtid" ]]; then pt="$(_term_herdr_pane_tab "$pid")"; newtid="${pt%%$'\t'*}"; fi
+  [[ -n "$newtid" ]] || { warn "pane move 后未取到新 tab_id（pane=$pid name=$name）⇒ 布局 A 未达成"; return 1; }
+  if ! _term_herdr_exec tab rename "$newtid" "$name" >/dev/null 2>&1; then
+    warn "tab rename 失败（tab=$newtid → label=$name）⇒ 布局 A 未达成（计 SPAWN_FAIL）"; return 1
+  fi
+  log "[herdr] 布局 A 迁移：$name（pane=$pid）已搬到独立 tab $newtid（pane_id 不变；被搬空的 tab 由 herdr 自动关闭）"
+  return 0
+}
+
 _term_herdr_spawn() {  # <name> <inner> <repo> [force] → SPAWN_RC_OK|FAIL
   local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="" pout="" pl="" obj js
-  local pane="" wsid="" first="" nmatch=0 hit="" verdict="" seq="" launched=0
+  local pane="" wsid="" tid="" first="" nmatch=0 hit="" verdict="" seq="" launched=0
   [[ -n "$name" && -n "$inner" ]] || { warn "herdr spawn 参数缺失（name/inner）"; return "$SPAWN_RC_FAIL"; }
   # workspace 匹配键 = scope（无 scope ⇒ 会话名）：WorkspaceInfo 无 cwd/worktree 字段 ⇒ 只能按 label；
   #   label 匹配同时满足一期契约「名字是路由标签」与重跑幂等（不会重复建 workspace）。
@@ -1010,7 +1147,10 @@ _term_herdr_spawn() {  # <name> <inner> <repo> [force] → SPAWN_RC_OK|FAIL
     fi
   fi
 
-  # ---- 放置：label 命中 workspace ⇒ 复用之；无 ⇒ 建**一个**根 workspace（不做 tab/拓扑设计，三期范围）----
+  # ---- 放置（三期 P1 · AC3.1 布局 A）：1 workspace/仓（label=scope）+ 1 tab/角色（label=角色名）+ 每 tab 恰 1 pane
+  #   · 新 pane 永远开在**角色 tab** 里（不再把多个角色 split 进同一个 tab ⇒ 零几何算式）；
+  #   · 空 workspace（pane 全关）⇒ 关旧建新（同名 label 仍唯一）；
+  #   · 角色 tab 已在场但无 pane 命中该角色 ⇒ **不猜**（fail loud：可能是 --force 撞上仍在场的 pi）。
   if (( ! launched )); then
     wsid="$(_term_herdr_workspace_id_for "$label")"
     if [[ -n "$wsid" ]]; then
@@ -1028,12 +1168,23 @@ _term_herdr_spawn() {  # <name> <inner> <repo> [force] → SPAWN_RC_OK|FAIL
         || { warn "herdr workspace create 失败（label=$label cwd=$repo）"; return "$SPAWN_RC_FAIL"; }
       pane="$(_term_json_str "$js" pane_id)"
       wsid="$(_term_json_str "$js" workspace_id)"
+      tid="$(_term_json_str "$js" tab_id)"
       [[ -n "$pane" ]] || { warn "herdr workspace create 未返回 root_pane.pane_id（label=$label）"; return "$SPAWN_RC_FAIL"; }
+      # 布局 A：workspace 的根 tab 归位为角色 tab（label = 角色名）
+      if [[ -z "$tid" ]] || ! _term_herdr_exec tab rename "$tid" "$name" >/dev/null 2>&1; then
+        warn "herdr tab rename 失败（tab=${tid:-<无>} label=$name）⇒ 布局 A 未达成"; return "$SPAWN_RC_FAIL"
+      fi
     else
-      js="$(_term_herdr_exec pane split "$first" --direction down --cwd "$repo" --no-focus 2>/dev/null)" \
-        || { warn "herdr pane split 失败（base=$first cwd=$repo）"; return "$SPAWN_RC_FAIL"; }
+      tid="$(_term_herdr_tab_id_for "$wsid" "$name")"
+      if [[ -n "$tid" ]]; then
+        warn "角色 tab 已在场但无 pane 命中该角色（workspace=$wsid tab=$tid label=$name）⇒ 不猜：既不新建第二个同名 tab，也不接管他人 pane"
+        warn "  该怎么办：attach 后核对/回收该 tab 内的 pane（回收面归 B3）后重跑 ensure；或 cleanup + session-start 重建会话"
+        return "$SPAWN_RC_FAIL"
+      fi
+      js="$(_term_herdr_exec tab create --workspace "$wsid" --cwd "$repo" --label "$name" --no-focus 2>/dev/null)" \
+        || { warn "herdr tab create 失败（workspace=$wsid label=$name cwd=$repo）"; return "$SPAWN_RC_FAIL"; }
       pane="$(_term_json_str "$js" pane_id)"
-      [[ -n "$pane" ]] || { warn "herdr pane split 未返回 pane_id"; return "$SPAWN_RC_FAIL"; }
+      [[ -n "$pane" ]] || { warn "herdr tab create 未返回 root_pane.pane_id（label=$name）"; return "$SPAWN_RC_FAIL"; }
     fi
     # ---- 先 label 后启动（顺序是契约：否则 status 可能抓到无 label 的 pi pane）----
     if ! _term_herdr_exec pane rename "$pane" "$name" >/dev/null 2>&1; then
@@ -1046,6 +1197,15 @@ _term_herdr_spawn() {  # <name> <inner> <repo> [force] → SPAWN_RC_OK|FAIL
   _TERM_SPAWN_PANE="$pane"
   # 快照失效：本命令后续目标（判重/归属）必须看到新 pane，不得复用 spawn 前的旧快照
   if [[ -n "${_TERM_SNAP_FILE:-}" ]]; then rm -f "$_TERM_SNAP_FILE" 2>/dev/null || true; _TERM_SNAP_FILE=""; fi
+
+  # ---- J2 结构收敛（布局 A）：复用路径也跑（旧布局的 pane 在共享 tab 里 ⇒ 迁移到独立 tab）----
+  if ! _term_herdr_layout_converge "$pane" "$name"; then
+    return "$SPAWN_RC_FAIL"
+  fi
+  # ---- J1/J5 空间判据（放置后自测；0 尺寸 ⇒ SPAWN_FAIL，不足 ⇒ 只 warn）----
+  if ! _term_herdr_space_check "$pane" "$name"; then
+    return "$SPAWN_RC_FAIL"
+  fi
 
   # ---- 就绪门（反假阳性）：全条件与，50×100ms / 5s，超时 fail loud（pane 保留，不自动 kill）----
   if ! _term_herdr_wait_ready "$pane" "$name"; then

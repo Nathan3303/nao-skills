@@ -382,9 +382,12 @@ t4_verify_term_ledger() { # <script> <台账文件>
   return 0
 }
 
-# herdr 实现区禁字（BR2/BR6 机械兜）：tmux 句柄与标题字段名都不得出现在 herdr 实现里。
+# herdr 实现区禁字（BR2/BR6 机械兜 + 三期 P1 的 J3 静态证明）：
+#   tmux 句柄与标题字段名都不得出现在 herdr 实现里；tmux 侧的**布局算式**（最小列宽闸门 / main-row2 列差 /
+#   长度常量 137/184）同样不得出现 —— herdr 布局 = tab 拓扑（结构判据），不靠列宽计算（AC3.2 J3）。
 t4_scan_term_herdr_forbidden() { # <script>
   local script="$1" rs s e off lnno body
+  local re='TMUX|terminal_title|pane_title|TMUX_MIN_PANE_WIDTH|main_row2_min_col|137|184'
   rs="$(_t4_term_ranges "$script" term-facade-herdr)"
   [ -n "$rs" ] || { printf 'herdr 实现区标记缺失（# >>> term-facade-herdr BEGIN）\n'; return 0; }
   while IFS=$'\t' read -r s e; do
@@ -394,7 +397,7 @@ t4_scan_term_herdr_forbidden() { # <script>
       lnno=$((s + off - 1))
       body="$(sed -n "${lnno}p" "$script")"
       printf '%s:%s\n' "$lnno" "$body"
-    done < <(sed -n "${s},${e}p" "$script" | grep -nE 'TMUX|terminal_title|pane_title' | cut -d: -f1)
+    done < <(sed -n "${s},${e}p" "$script" | grep -nE "$re" | cut -d: -f1)
   done <<< "$rs"
 }
 

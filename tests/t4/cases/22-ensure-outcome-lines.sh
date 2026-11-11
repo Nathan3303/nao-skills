@@ -210,4 +210,66 @@ else
     "AC4h 混合批次 pane 增量 = 2（成功 1 + 失败保留 1；跳过 0）"
 fi
 
+# ============================================================ AC5（三期 P1 · J1/J3/J5）
+#   herdr **不报**空间不足（split 从不失败、pane 可被压到 0 行、resize 静默无效）⇒ rc 不可作判据：
+#   ① J1 小空间（替身 rect ⇒ 40×8）：只 warn（rc 仍 0）+ 摘要计成功；
+#   ② 0 尺寸 pane（rect 高=0，读不了内容）：计 SPAWN_FAIL（不半启动：无成功行 + 摘要失败 1）；
+#   ③ J3 静态：herdr 实现区不出现 tmux 布局算式字样（带变异负控证明判据不空转）。
+if [ "$BE_NAME" = "herdr" ]; then
+  SPACE_STATE="$BE_CFGROOT/herdr/sessions/$BE_SESSION/double-state.json"
+  set_rect() { # <cols> <rows>
+    node -e '
+const fs=require("fs");const p=process.argv[1];const st=JSON.parse(fs.readFileSync(p,"utf8"));
+st.knobs=st.knobs||{};st.knobs.term_cols=Number(process.argv[2]);st.knobs.term_rows=Number(process.argv[3]);
+fs.writeFileSync(p,JSON.stringify(st));' "$SPACE_STATE" "$1" "$2"
+  }
+  # ---- J1：小空间只 warn（rc 保持 0，跨后端 rc 语义一致）----
+  be_teardown >/dev/null 2>&1 || true
+  be_ensure_scene || t4_bad "J1 夹具重置失败"
+  t4_assert_file "$SPACE_STATE" "J1 替身状态文件存在（$SPACE_STATE）"
+  set_rect 40 8
+  run_fleet ensure "qa@$LAB"
+  t4_assert_eq "0" "$T4_RC" "J1 小空间：ensure rc 仍 0（只 warn 不 die）"
+  t4_assert_contains "$T4_ERR_ANSI" "空间不足" "J1 小空间：warn「空间不足」在位"
+  t4_assert_contains "$T4_ERR_ANSI" "列=40" "J1 小空间：点名实际列数（量测真发生）"
+  t4_assert_contains "$T4_ERR_ANSI" "行=8" "J1 小空间：点名实际行数"
+  t4_assert_contains "$T4_ERR_ANSI" "< 60" "J1 小空间：回显阈值列宽 60（常量默认值）"
+  t4_assert_contains "$(summary_text)" "（成功 1 / 跳过 0 / 失败 0）" \
+    "J1 小空间：摘要仍计成功（warn 不改三态）"
+  # J5 文案三件套：三个可执行动作 + 文档指针
+  for act in "[server] headless_cols/headless_rows" "attach 后重排" "NAO_TERMINAL=tmux"; do
+    t4_assert_contains "$T4_ERR_ANSI" "$act" "J5 指路动作在位：$act"
+  done
+  t4_assert_contains "$T4_ERR_ANSI" "docs/INSTALL.md" "J5 文档指针在位（docs/INSTALL.md）"
+  t4_assert_contains "$T4_ERR_ANSI" "AC3.2" "J5 文档指针点到 AC3.2（J1–J5 口径）"
+  t4_assert_eq "0" "$(grep -cE '列=0|行=0' <<< "$T4_ERR_ANSI" || true)" \
+    "J4 小空间：无 0 尺寸 pane（40×8 下每个 pane 仍可读）"
+
+  # ---- J1/J5 负控：0 行 pane ⇒ 不可用态计 SPAWN_FAIL（不得冒充成功）----
+  be_teardown >/dev/null 2>&1 || true
+  be_ensure_scene || t4_bad "J1 负控：夹具重置失败"
+  set_rect 120 0
+  run_fleet ensure "rd-infra@$LAB"
+  t4_assert_eq "0" "$T4_RC" "J1 负控 0 尺寸：rc 仍 0（失败只进计数，D3）"
+  t4_assert_contains "$T4_ERR_ANSI" "空间不可用" "J1 负控：显式点名「空间不可用」"
+  t4_assert_contains "$T4_ERR_ANSI" "行=0" "J1 负控：回显实际行数 0（可定位）"
+  t4_assert_contains "$T4_ERR_ANSI" "SPAWN_FAIL" "J1 负控：明说计 SPAWN_FAIL（不半启动）"
+  t4_assert_contains "$(summary_text)" "（成功 0 / 跳过 0 / 失败 1）" \
+    "J1 负控：摘要计失败 1（不得说「成功 1」而实际读不了）"
+
+  # ---- J3 静态证明：herdr 实现区禁 tmux 布局算式字样（0 命中）+ 变异必报 ----
+  t4_assert_eq "" "$(t4_scan_term_herdr_forbidden "$LAB/.agents/scripts/nao-fleet.sh")" \
+    "J3 herdr 实现区 0 处 tmux 布局算式字样（TMUX_MIN_PANE_WIDTH / main_row2_min_col / 137 / 184）"
+  cp "$LAB/.agents/scripts/nao-fleet.sh" "$LAB/mut-herdr-region.sh"
+  sed -i '/^# >>> term-facade-herdr BEGIN/a TMUX_MIN_PANE_WIDTH=30  # 变异：tmux 列宽闸门混入 herdr 区' "$LAB/mut-herdr-region.sh"
+  t4_assert_contains "$(t4_scan_term_herdr_forbidden "$LAB/mut-herdr-region.sh")" "TMUX_MIN_PANE_WIDTH" \
+    "J3 变异负控：herdr 区混入 TMUX_MIN_PANE_WIDTH 必被同一判据点名（判据不空转）"
+  cp "$LAB/.agents/scripts/nao-fleet.sh" "$LAB/mut-herdr-region2.sh"
+  sed -i '/^# >>> term-facade-herdr BEGIN/a x=184  # 变异：tmux 布局容量常量混入 herdr 区' "$LAB/mut-herdr-region2.sh"
+  t4_assert_contains "$(t4_scan_term_herdr_forbidden "$LAB/mut-herdr-region2.sh")" "184" \
+    "J3 变异负控：184（tmux 容量常量）混入 herdr 区必被点名"
+else
+  t4_note backend-gate "J1/J3/J5 空间判据是 herdr 专有面（tmux 侧 split-window 自带失败信号，见用例 25 的宽度算式）"
+fi
+
 t4_exit

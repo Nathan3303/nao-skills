@@ -44,11 +44,12 @@ const cfg = process.env.XDG_CONFIG_HOME || path.join(process.env.HOME || '/tmp',
 const sdir = path.join(cfg, 'herdr', 'sessions', session);
 const sfile = path.join(sdir, 'double-state.json');
 
-const DEFAULT_KNOBS = { pi_seq: 1, pi_skip: true, pi_session: true, pi_status: 'idle' };
+const DEFAULT_KNOBS = { pi_seq: 1, pi_skip: true, pi_session: true, pi_status: 'idle', term_cols: 120, term_rows: 40 };
 const emptyState = () => ({
   panes: {},          // pane_id -> {pane_id, terminal_id, workspace_id, tab_id, label, cwd, fg, argv, cmd, shell_pid}
-  workspaces: {},     // ws_id  -> {workspace_id, label, order}
-  seq: { ws: 0, pane: {} },
+  workspaces: {},     // ws_id  -> {workspace_id, label, order, tab_id}
+  tabs: {},           // tab_id -> {tab_id, workspace_id, label, order}
+  seq: { ws: 0, pane: {}, tab: 0 },
   knobs: Object.assign({}, DEFAULT_KNOBS),
 });
 
@@ -147,6 +148,60 @@ function paneObj(p, st) {
 }
 function readKnobs(st) { return Object.assign({}, DEFAULT_KNOBS, st.knobs || {}); }
 
+// ---- 布局 A（三期 P1）夹具支持：tab 视图 / 迁移 / 尺寸（pane layout）----
+//   反向兼容：旧状态文件（无 tabs）按“每个 pane 的 tab_id 自动补登记”读，不报错。
+function ensureMaps(st) {
+  if (!st.tabs) st.tabs = {};
+  if (!st.seq) st.seq = { ws: 0, pane: {}, tab: 0 };
+  if (!st.seq.tab) st.seq.tab = 0;
+  for (const pid of Object.keys(st.panes)) {
+    const p = st.panes[pid];
+    if (!p.tab_id) continue;
+    if (!st.tabs[p.tab_id]) st.tabs[p.tab_id] = { tab_id: p.tab_id, workspace_id: p.workspace_id, label: '1', order: 1 };
+  }
+  return st;
+}
+function tabPanes(st, tid) {
+  return Object.keys(st.panes).filter((p) => st.panes[p].tab_id === tid).sort();
+}
+// pane/tab id 分配 = **max 现有索引 + 1**（不用 seq 计数器：`tab create` 与 `pane split` 必须同一套
+//   分配器，否则会撞号——撞号会把既有 pane 覆盖掉，夹具静默丢 pane）
+function nextPaneId(st, wid) {
+  let max = 0;
+  for (const p of Object.keys(st.panes)) {
+    if (st.panes[p].workspace_id !== wid) continue;
+    const m = /:p([0-9]+)$/.exec(p);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return wid + ':p' + (max + 1);
+}
+function nextTabId(st, wid) {
+  let max = 0;
+  for (const t of Object.keys(st.tabs)) {
+    if (st.tabs[t].workspace_id !== wid) continue;
+    const m = /:t([0-9]+)$/.exec(t);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return wid + ':t' + (max + 1);
+}
+function tabObj(st, tid) {
+  const t = st.tabs[tid];
+  const ps = tabPanes(st, tid);
+  const ag = ps.length && st.panes[ps[0]].fg === 'pi' ? (readKnobs(st).pi_status || 'idle') : 'unknown';
+  return {
+    agent_status: ag, focused: false, label: (t && t.label) || '',
+    number: (t && t.order) || 1, pane_count: ps.length, tab_id: tid,
+    workspace_id: (t && t.workspace_id) || (ps.length ? st.panes[ps[0]].workspace_id : ''),
+  };
+}
+// 掉空 tab（布局 A 的“被搬空的 tab 自动关闭”契约）
+function dropEmptyTab(st, tid) {
+  if (!tid || !st.tabs[tid]) return false;
+  if (tabPanes(st, tid).length) return false;
+  delete st.tabs[tid];
+  return true;
+}
+
 function agentObj(p, st) {
   const k = readKnobs(st);
   const pane = st.panes[p];
@@ -205,23 +260,26 @@ if (sub === 'session' && a1 === 'delete') {
 }
 
 if (sub === 'workspace' && a1 === 'list') {
-  const st = needState();
+  const st = ensureMaps(needState());
   const ws = Object.keys(st.workspaces)
     .sort((x, y) => st.workspaces[x].order - st.workspaces[y].order)
-    .map((w) => ({
-      active_tab_id: st.workspaces[w].tab_id,
-      agent_status: 'unknown',
-      label: st.workspaces[w].label,
-      number: st.workspaces[w].order,
-      pane_count: Object.keys(st.panes).filter((p) => st.panes[p].workspace_id === w).length,
-      tab_count: 1,
-      workspace_id: w,
-    }));
+    .map((w) => {
+      const tids = Object.keys(st.tabs).filter((t) => st.tabs[t].workspace_id === w);
+      return {
+        active_tab_id: st.workspaces[w].tab_id,
+        agent_status: 'unknown',
+        label: st.workspaces[w].label,
+        number: st.workspaces[w].order,
+        pane_count: Object.keys(st.panes).filter((p) => st.panes[p].workspace_id === w).length,
+        tab_count: tids.length,
+        workspace_id: w,
+      };
+    });
   out({ result: { workspaces: ws, type: 'workspace_list' } });
 }
 
 if (sub === 'workspace' && a1 === 'create') {
-  const st = needState();
+  const st = ensureMaps(needState());
   const cwd = flagValue(rest.join(' '), '--cwd') || process.cwd();
   const label = flagValue(rest.join(' '), '--label');
   st.seq.ws += 1;
@@ -229,6 +287,7 @@ if (sub === 'workspace' && a1 === 'create') {
   const tid = wid + ':t1';
   const pid = wid + ':p1';
   st.workspaces[wid] = { workspace_id: wid, label: label, order: st.seq.ws, tab_id: tid };
+  st.tabs[tid] = { tab_id: tid, workspace_id: wid, label: '1', order: 1 };
   st.panes[pid] = { pane_id: pid, terminal_id: 'term_' + wid + '_p1', workspace_id: wid, tab_id: tid, label: '', cwd: cwd, fg: 'bash', argv: ['bash'], cmd: '', shell_pid: 900000 + st.seq.ws * 10 };
   writeState(st);
   out({
@@ -237,9 +296,10 @@ if (sub === 'workspace' && a1 === 'create') {
       pane: paneObj(pid, st),
       root_pane: {
         agent_status: 'unknown', cwd: cwd, focused: true, foreground_cwd: cwd, pane_id: pid,
-        revision: 0, tab_id: tid, terminal_id: 'term_' + wid + '_p1', workspace_id: wid,
+        revision: 0, scroll: { max_offset_from_bottom: 0, offset_from_bottom: 0, viewport_rows: 40 },
+        tab_id: tid, terminal_id: 'term_' + wid + '_p1', workspace_id: wid,
       },
-      tab: { agent_status: 'unknown', focused: true, label: '1', number: 1, pane_count: 1, tab_id: tid, workspace_id: wid },
+      tab: tabObj(st, tid),
       type: 'workspace_created',
       workspace: { active_tab_id: tid, agent_status: 'unknown', focused: true, label: label, number: st.seq.ws, pane_count: 1, tab_count: 1, workspace_id: wid },
     },
@@ -251,8 +311,86 @@ if (sub === 'workspace' && a1 === 'close') {
   const wid = rest[2] || '';
   delete st.workspaces[wid];
   for (const p of Object.keys(st.panes)) if (st.panes[p].workspace_id === wid) delete st.panes[p];
+  for (const t of Object.keys(st.tabs || {})) if (st.tabs[t].workspace_id === wid) delete st.tabs[t];
   writeState(st);
   out({ result: { type: 'workspace_closed', workspace_id: wid } });
+}
+
+// ---- tab（三期 P1 布局 A：1 tab/角色，tab label=角色名，每 tab 恰 1 pane）----
+if (sub === 'tab' && a1 === 'list') {
+  const st = ensureMaps(needState());
+  const wflag = rest.indexOf('--workspace');
+  const only = wflag >= 0 ? rest[wflag + 1] : '';
+  const tabs = Object.keys(st.tabs)
+    .filter((t) => !only || st.tabs[t].workspace_id === only)
+    .sort((x, y) => (st.tabs[x].order - st.tabs[y].order) || x.localeCompare(y))
+    .map((t) => tabObj(st, t));
+  out({ result: { tabs: tabs, type: 'tab_list' } });
+}
+
+if (sub === 'tab' && a1 === 'create') {
+  const st = ensureMaps(needState());
+  const wid = flagValue(rest.join(' '), '--workspace');
+  const cwd = flagValue(rest.join(' '), '--cwd') || process.cwd();
+  const label = flagValue(rest.join(' '), '--label');
+  if (!wid || !st.workspaces[wid]) die({ error: { code: 'workspace_not_found', message: 'no workspace ' + (wid || '<empty>') } });
+  const tid = nextTabId(st, wid);
+  const pid = nextPaneId(st, wid);
+  st.tabs[tid] = { tab_id: tid, workspace_id: wid, label: label, order: Number(/:t([0-9]+)$/.exec(tid)[1]) };
+  st.panes[pid] = { pane_id: pid, terminal_id: 'term_' + wid + '_' + pid.split(':')[1], workspace_id: wid, tab_id: tid, label: '', cwd: cwd, fg: 'bash', argv: ['bash'], cmd: '', shell_pid: 900000 + Number(pid.split(':p')[1]) * 10 };
+  writeState(st);
+  out({
+    id: 'cli:tab:create',
+    result: {
+      root_pane: {
+        agent_status: 'unknown', cwd: cwd, focused: false, foreground_cwd: cwd, pane_id: pid,
+        revision: 0, scroll: { max_offset_from_bottom: 0, offset_from_bottom: 0, viewport_rows: 40 },
+        tab_id: tid, terminal_id: 'term_' + wid + '_' + pid.split(':')[1], workspace_id: wid,
+      },
+      tab: tabObj(st, tid),
+      type: 'tab_created',
+    },
+  });
+}
+
+if (sub === 'tab' && a1 === 'rename') {
+  const st = ensureMaps(needState());
+  const tid = rest[2] || '';
+  const label = rest[3] || '';
+  if (!st.tabs[tid]) die({ error: { code: 'tab_not_found', message: 'no tab ' + tid } });
+  st.tabs[tid].label = label;
+  writeState(st);
+  out({ id: 'cli:tab:rename', result: { tab: tabObj(st, tid), type: 'tab_info' } });
+}
+
+// ---- pane layout（J1 量测面）：rect 取 knobs.term_cols/term_rows（默认 120×40）；单 pane tab = 全区域 ----
+if (sub === 'pane' && a1 === 'layout') {
+  const st = ensureMaps(needState());
+  const pf = rest.indexOf('--pane');
+  const pid = pf >= 0 ? rest[pf + 1] : '';
+  if (!pid || !st.panes[pid]) die({ error: { code: 'pane_not_found', message: 'pane not found' } });
+  const k = readKnobs(st);
+  // 0 是**合法注入**（J1 负控：0 尺寸 pane）；只对缺失/非数值回退默认
+  const cols = Number.isFinite(Number(k.term_cols)) ? Number(k.term_cols) : 120;
+  const rows = Number.isFinite(Number(k.term_rows)) ? Number(k.term_rows) : 40;
+  const tid = st.panes[pid].tab_id;
+  const ps = tabPanes(st, tid);
+  const n = Math.max(ps.length, 1);
+  const panes = ps.map((p, i) => ({
+    focused: i === 0, pane_id: p,
+    rect: { height: Math.floor(rows / n), width: Math.floor(cols / n), x: 0, y: Math.floor((rows / n) * i) },
+  }));
+  out({
+    id: 'cli:pane:layout',
+    result: {
+      layout: {
+        area: { height: rows, width: cols, x: 0, y: 0 },
+        focused_pane_id: pid, panes: panes, splits: [], tab_id: tid,
+        workspace_id: st.panes[pid].workspace_id, zoomed: false,
+      },
+      type: 'pane_layout',
+    },
+  });
 }
 
 if (sub === 'pane' && a1 === 'list') {
@@ -267,16 +405,47 @@ if (sub === 'pane' && a1 === 'list') {
 }
 
 if (sub === 'pane' && a1 === 'split') {
-  const st = needState();
+  const st = ensureMaps(needState());
   const base = rest[2] || '';
   if (!st.panes[base]) die({ error: { code: 'pane_not_found', message: 'no pane ' + base } });
   const cwd = flagValue(rest.join(' '), '--cwd') || st.panes[base].cwd;
   const wid = st.panes[base].workspace_id;
-  st.seq.pane[wid] = (st.seq.pane[wid] || 1) + 1;
-  const pid = wid + ':p' + st.seq.pane[wid];
-  st.panes[pid] = { pane_id: pid, terminal_id: 'term_' + wid + '_p' + st.seq.pane[wid], workspace_id: wid, tab_id: st.panes[base].tab_id, label: '', cwd: cwd, fg: 'bash', argv: ['bash'], cmd: '', shell_pid: 900000 + st.seq.pane[wid] * 10 };
+  const pid = nextPaneId(st, wid);
+  st.panes[pid] = { pane_id: pid, terminal_id: 'term_' + wid + '_' + pid.split(':')[1], workspace_id: wid, tab_id: st.panes[base].tab_id, label: '', cwd: cwd, fg: 'bash', argv: ['bash'], cmd: '', shell_pid: 900000 + Number(pid.split(':p')[1]) * 10 };
   writeState(st);
   out({ id: 'cli:pane:split', result: { pane: paneObj(pid, st), type: 'pane_split' } });
+}
+
+// pane move（迁移面）：`--new-tab` 建独立 tab 并搬入（pane_id 不变）；旧 tab 变空 ⇒ 自动关（布局 A 契约）
+if (sub === 'pane' && a1 === 'move') {
+  const st = ensureMaps(needState());
+  const pid = rest[2] || '';
+  if (!pid || !st.panes[pid]) die({ error: { code: 'pane_not_found', message: 'no pane ' + (pid || '<empty>') } });
+  const wid = st.panes[pid].workspace_id;
+  const prevTab = st.panes[pid].tab_id;
+  let createdTab = null;
+  if (rest.indexOf('--new-tab') >= 0) {
+    const tid = nextTabId(st, wid);
+    st.tabs[tid] = { tab_id: tid, workspace_id: wid, label: String(/:t([0-9]+)$/.exec(tid)[1]), order: Number(/:t([0-9]+)$/.exec(tid)[1]) };
+    st.panes[pid].tab_id = tid;
+    createdTab = tid;
+  } else {
+    const tf = rest.indexOf('--tab');
+    const tid = tf >= 0 ? rest[tf + 1] : '';
+    if (!tid || !st.tabs[tid]) die({ error: { code: 'tab_not_found', message: 'no tab ' + (tid || '<empty>') } });
+    st.panes[pid].tab_id = tid;
+  }
+  const closed = dropEmptyTab(st, prevTab) ? prevTab : '';
+  writeState(st);
+  const result = {
+    move_result: {
+      changed: true, closed_tab_id: closed, focused_pane_id: pid,
+      pane: paneObj(pid, st), previous_pane_id: pid, previous_tab_id: prevTab, previous_workspace_id: wid,
+    },
+    type: 'pane_move',
+  };
+  if (createdTab) result.move_result.created_tab = tabObj(st, createdTab);
+  out({ id: 'cli:pane:move', result: result });
 }
 
 if (sub === 'pane' && a1 === 'rename') {
@@ -314,12 +483,17 @@ if (sub === 'pane' && a1 === 'run') {
 }
 
 if (sub === 'pane' && a1 === 'close') {
-  const st = needState();
+  const st = ensureMaps(needState());
   const pid = rest[2] || '';
   const wid = st.panes[pid] ? st.panes[pid].workspace_id : '';
+  const tid = st.panes[pid] ? st.panes[pid].tab_id : '';
   delete st.panes[pid];
-  // 真 herdr：关掉 workspace 的最后一个 pane ⇒ 该 workspace 随之消失（空 workspace 不复存在）
-  if (wid && !Object.keys(st.panes).some((p) => st.panes[p].workspace_id === wid)) delete st.workspaces[wid];
+  // 真 herdr：关掉 tab 的最后一个 pane ⇒ 该 tab 随之消失；workspace 的最后一个 pane 关掉 ⇒ workspace 消失
+  dropEmptyTab(st, tid);
+  if (wid && !Object.keys(st.panes).some((p) => st.panes[p].workspace_id === wid)) {
+    delete st.workspaces[wid];
+    for (const t of Object.keys(st.tabs)) if (st.tabs[t].workspace_id === wid) delete st.tabs[t];
+  }
   writeState(st);
   out({ id: 'cli:pane:close', result: { pane_id: pid, type: 'pane_closed' } });
 }
