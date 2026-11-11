@@ -221,3 +221,108 @@ herdr 侧**每条**（实测 7 条；arch 枚举的 6 条 + `cmd_status` 的「�
    若将来要求「同一断言面双后端」，需另立口径（不是本批范围）。
 4. **`--force` 语义收紧、attach 重排、`pane move` 长稳**等 P1 遗留项不变（见 P1 报告 §八）。
 5. **台账**：仍 **0**（本批未新增裸后端调用）。
+
+---
+
+## 十一、第二轮（QA「条件通过」后的必修项：2 P2 + 6 P3 · 只开这一轮）
+
+结论：**6 项全修**，每项都带「改前红 / 改后绿」实测或负控。P2-1（README/INSTALL 与 herdr 默认矛盾）由 PM 修（`8cbe28b`），不在本节。
+
+### 11.1 P2-2（发布闸门退化）`run-dual.sh` → **两后端各一组**
+
+缺陷：默认翻 herdr 后，旧 dual 的两组（只差 `$TMUX_PANE`、都不设 `NAO_TEST_TERMINAL`）**都落 herdr**
+⇒ tmux 后端（含 `12`/`25` tmux-only）在文档化 gate 里**永不执行**，直接顶 BR1。
+
+改法（PM 二选一里的①）：组 1 = `NAO_TERMINAL=tmux`（回退通道 · 保留 `$TMUX_PANE` 撞号态）/
+组 2 = `NAO_TEST_TERMINAL=herdr`（默认通道 · `TMUX_PANE` 未设），两组都跑 `test:t4:full`；
+**每组开跑前打印解析后的后端**（走 `lib-backend.sh::be_backend`，不是回显「我设了哪个变量」——防被更高优先级 env 盖掉仍假绿）。
+
+实测（`npm run test:t4:full:dual`，rc=**0**）：
+
+```
+########## 组 1/2：tmux 后端（回退通道 · NAO_TERMINAL=tmux · 保留 TMUX_PANE=%50）##########
+  本组解析后端 = tmux
+  … 25  PASS 布局守卫容量判据 …（12/25 两个 tmux-only 用例**真跑了**）
+########## 组 2/2：herdr 后端（默认通道 · NAO_TEST_TERMINAL=herdr · TMUX_PANE 未设）##########
+  本组解析后端 = herdr
+  … 后端索引（herdr）：共享 20 / 本后端专有 9 / tmux 专有 2 / PENDING 0 …
+  组 1（tmux 后端）  : rc=0
+  组 2（herdr 后端） : rc=0
+  结论: PASS（两后端各一组皆 rc=0；判据另含每组 SKIP=0 · DEGRADE=0 · 非白名单 NOTE=0）
+```
+
+`tests/README` 同步写死口径：**发布 = 两后端各跑一次、全部显式、不依赖默认值**（`NAO_TERMINAL=tmux` + `NAO_TEST_TERMINAL=herdr`）。
+
+### 11.2 P3-1（自相矛盾注释）`nao-fleet.sh` 门面区头注
+
+改前：`默认值唯一：常量区的 NAO_TERMINAL="${NAO_TERMINAL:-tmux}" 是全脚本唯一赋值点。`（与 `:135` 的 herdr 矛盾，
+且行首锚定的 `grep -cE '^NAO_TERMINAL='` 覆盖不到它）。
+改后（不再重述字面量，只指向常量区）：
+
+```
+#   默认值唯一：**常量区的 `NAO_TERMINAL` 赋值就是全脚本唯一的赋值点**（此处不重述默认值字面量 ——
+#   重述会与常量区脱钩把注释写成谎话；值只认常量区，grep 判据见 tests/t4 的 `grep -cE '^NAO_TERMINAL='`）。
+```
+
+复算：`grep -c 'NAO_TERMINAL:-tmux' .agents/scripts/nao-fleet.sh` = **0**（改前 1）；`grep -cE '^NAO_TERMINAL='` 仍 = **1**。
+
+### 11.3 P3-3（判据形态脆弱）exit 3 站点 → **两轴 + token 级**
+
+`cases/06` 新增 `exit3_token_sites`（命令位识别：行首 / `;` `|` `&` `(` `{` / `then|else|do` 之后；**排除整行注释**）
+与 `exit3_hint_scan`（逐 token 站点回看 3 行报文）。断言集：
+
+| 断言 | 值 |
+| :-- | :-- |
+| 独占行形态站点 | **8**（tmux 前置 1 + herdr 7） |
+| token 级站点 | **8**（当前无「非独占行」形态） |
+| 两轴相等 | 相等（差异出现即红，把新写法摆上台面） |
+| hint 全扫 | **0** 违规；含指路 **7** 条 |
+
+负控三条：① 摘掉一条指路 ⇒ 恰 1 条必红 ② 把一条站点改成 `cmd || exit 3` ⇒ **独占行 8→7 而 token 仍 8**
+（证明旧判据会漏、新轴能抓）③ 该形态**缺指路**时 hint 扫描同样必红（覆盖到位，不是只计数）。
+
+### 11.4 P3-4（会咬「两后端各跑一次」）`cases/18` 夹具不复位
+
+改：用例开头 `rm -rf "$T4_CACHE_DIR/c18"`（1 行）。实测（同一 **user-provided** cache 连跑两次）：
+
+- 改前（模拟：`mkdir -p $T4_CACHE_DIR/c18/repo/.codegraph` 预置残留）⇒ `A3 无索引` 恰 **2 条红**
+  （`未包含: ! codegraph 已就绪但当前仓无索引` / `未包含: codegraph init`）—— 与 QA 实测一致。
+- 改后：第 1 次 `RESULT: PASS`、**第 2 次（未手动清理）`RESULT: PASS`**，A3 三条全绿。
+
+### 11.5 P3-5（跨机假红）`cases/12` 三态 golden 依赖宿主 `pane-base-index`
+
+改（在 T517 冻结脚本里只动**夹具**，不动断言）：`TX(){ tmux -f "$LAB/tmux.conf" -S "$SOCK" "$@"; }` +
+`setup_lab` 写 `set -g pane-base-index 1`。`-f` 让 server **不读** `~/.tmux.conf` 与 `/etc/tmux.conf`（宿主无关），
+显式 `set -g` 让索引恒为 1 起（tmux 内建默认是 **0**，本机靠 `/etc/tmux.conf` 才是 1）。
+
+实测（用「用户 tmux 配置 `set -g pane-base-index 0`」的 HOME 模拟换机）：
+
+- 改前：`AC1 main-row2/main-col/grid` 三态 + `AC4/AC5c/AC5d/AC6③` 全红（8 条），几何全是 `0:…` 起；
+- 改后：`== T517 派生会话落点回归汇总：PASS=36 FAIL=0 SKIP=0 ==`；
+- 另一个 PM 点名的场景（**私有 HOME 无任何 tmux.conf**）：同样 **PASS=36 FAIL=0**。
+
+### 11.6 P3-6（与我们自己的「四件私有 env」纪律冲突）`cases/03` 3e
+
+根因：shim 的 tier-3 = `${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/npm/…`，而 3e 只把 `HOME` 指到夹具
+⇒ ambient `PI_CODING_AGENT_DIR`（真 pi 目录）盖过 `HOME` ⇒ 永远找不到夹具包 ⇒ 恒 DEGRADED。
+
+改（对齐「四件私有 env」）：3a–3d 显式 `-u PI_CODING_AGENT_DIR`（隔离 HOME 必须权威）；
+3e 把 `HOME` 与 `PI_CODING_AGENT_DIR` **成对**指向同一私有根；并新增**负控**「HOME 有包、`PI_CODING_AGENT_DIR` 指到别处 ⇒ 必 DEGRADED」，
+把「override 优先」钉成判据（上面两条绿不是碰巧 HOME 生效）。
+
+实测（把 ambient `PI_CODING_AGENT_DIR` 设成**真实 pi 目录** = QA 复现条件；本仓不写绝对路径）：
+`3e-ok rc=0` / `3e-bad rc=2`（3 条 DEGRADED 判据）/ `3e-decoy rc=2`（负控 3 条）⇒ `RESULT: PASS`。
+
+### 11.7 第二轮门禁（本机实测，修完 6 项之后）
+
+| 项 | 结果 |
+| :-- | :-- |
+| `check` | **rc=0 ×2**，两次输出 md5 相同 = `1bcb376727a5a6992aefe2fd48b897ee`（默认 herdr · 3 行） |
+| `check`（显式 `=tmux`） | md5 仍 = `31b5978e95e7f5b4dc7a9fd861548065`（2 行） |
+| `npm test`（默认 herdr） | **rc=0** · 断言 **1747** · 31 例 PASS · SKIP=0 DEGRADE=0 NOTE=9(全白名单) · 共享20/专有9/tmux专有2/**PENDING 0** |
+| `NAO_TERMINAL=tmux npm test` | **rc=0** · 断言 **1635** · SKIP=0 DEGRADE=0 NOTE=8 |
+| `test:t4:full:dual` | **rc=0**（组1 tmux / 组2 herdr，均含 SKIP=0 DEGRADE=0 非白名单 NOTE=0） |
+| 断言增量（对第一轮 P2） | tmux 1626 → **1635（+9）** · herdr 1738 → **1747（+9）**；`case03` 18 → **21**（+3 负控）· `case06` 218 → **224**（+6 token 轴/负控） |
+| 用例数 | `--list` = **31**（不变） |
+| BR1 五处 md5 | `status 144f3447…` · `ensure c2de6533…` · 句柄层 `9549f513…` · cleanup 体 `d8937134…` · socket 候选 `e4950f38…` —— 与第一轮逐字相同 |
+| 台账 / herdr 区禁字 / 敏感值 | 0 / 0 / 0 |

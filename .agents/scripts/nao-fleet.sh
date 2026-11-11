@@ -254,7 +254,8 @@ require_tmux() {
 #         term_spawn / term_session_start / term_reclaim / term_cleanup（+ 纯谓词 term_deliverable）。
 #         后端差异只允许出现在本区间与 `# >>> term-impl-tmux` 区间
 #         （静态 lint：tests/t4/lib.sh::t4_scan_term_bare_calls）。
-#   默认值唯一：常量区的 `NAO_TERMINAL="${NAO_TERMINAL:-tmux}"` 是全脚本**唯一**赋值点。
+#   默认值唯一：**常量区的 `NAO_TERMINAL` 赋值就是全脚本唯一的赋值点**（此处不重述默认值字面量 ——
+#   重述会与常量区脱钩把注释写成谎话；值只认常量区，grep 判据见 tests/t4 的 `grep -cE '^NAO_TERMINAL='`）。
 #   herdr 侧纪律（BR2/BR3/BR6）：身份取 pane.label（+ argv --name 交叉校验）、归属取
 #         pane.cwd/foreground_cwd（谓词复用 repo_contains_path）、忙闲取 agent_status +
 #         state_change_seq（权威源 = pane list / agent list；`agent explain` 只作诊断、禁作判据）；

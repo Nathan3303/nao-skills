@@ -827,50 +827,73 @@ t4_assert_eq "2" "$rc" "B1④ NAO_TERMINAL=TMUX（大小写不符）⇒ rc=2（�
 #   唯一例外 = 验默认值的探针段（`# >>> default-value-probe BEGIN/END`）。
 # ============================================================================
 # ---- ① exit 3 文案全扫（一条断言扫全部，不抽查）----
-EXIT3_TOTAL="$(grep -cE '^[[:space:]]*exit 3[[:space:]]*$' "$FLEET_B1" || true)"
-t4_assert_eq "8" "$EXIT3_TOTAL" "P2② 脚本内真 exit 3 站点 = 8（tmux 前置 1 + herdr 侧 7）—— 扫全面成立的前提"
-EXIT3_SCAN="$(awk '
-  { line[NR] = $0 }
-  END {
-    for (i = 1; i <= NR; i++) {
-      if (line[i] !~ /^[[:space:]]*exit 3[[:space:]]*$/) continue
-      ctx = ""
-      for (j = i - 3; j < i; j++) if (j >= 1) ctx = ctx "\n" line[j]
-      if (ctx ~ /NAO_TERMINAL=tmux/ || ctx ~ /tmux new -s nao/) continue
-      printf "%d: 报文缺回退指路: %s\n", i, line[i]
-    }
-  }' "$FLEET_B1")"
-t4_assert_eq "" "$EXIT3_SCAN" \
+# 站点识别：**token 级**（#96 P2-P3-3）。只用「独占行」形态会漏 `cmd || exit 3` / `… ; exit 3`，
+#   而计数断言照样绿 ⇒ 判据对未来写法脆。这里两轴并存：
+#     axis-1 独占行数（历史形态，也用于「8 站点」的稳定叙述）
+#     axis-2 token 级站点数（命令位：行首 / ; | & ( { / then|else|do 之后），排除整行注释
+#   两者当前相等（= 8，说明没有非独占形态）；若将来有人写成 `|| exit 3`，axis-2 会变而 axis-1 不变 ⇒ 断言咬。
+exit3_token_sites() { # <script> → 每行 "<行号>\t<该行原文>"（仅命令位站点）
+  awk '
+    /^[[:space:]]*#/ { next }
+    {
+      line = $0; ok = 0
+      while (match(line, /exit[[:space:]]+3([^0-9]|$)/)) {
+        pre = substr(line, 1, RSTART - 1)
+        t = pre; sub(/[[:space:]]+$/, "", t)
+        last = (length(t) ? substr(t, length(t), 1) : "")
+        if (last == "" || last ~ /[;&|({]/ || t ~ /(then|else|do)$/) ok = 1
+        line = substr(line, RSTART + RLENGTH)
+      }
+      if (ok) printf "%d\t%s\n", NR, $0
+    }' "$1"
+}
+exit3_hint_scan() { # <script> → 逐站点检查前 3 行报文是否带指路（无指路则打印行号）
+  local script="$1" ln body
+  while IFS= read -r ln; do
+    [ -n "$ln" ] || continue
+    body="$(awk -v n="$ln" 'NR >= n - 3 && NR <= n { buf = buf "\n" $0 } END { print buf }' "$script")"
+    case "$body" in
+      *"NAO_TERMINAL=tmux"*|*"tmux new -s nao"*) continue ;;
+    esac
+    printf '%s: 报文缺回退指路\n' "$ln"
+  done < <(exit3_token_sites "$script" | cut -f1)
+}
+EXIT3_STANDALONE="$(grep -cE '^[[:space:]]*exit 3[[:space:]]*$' "$FLEET_B1" || true)"
+EXIT3_TOKEN="$(exit3_token_sites "$FLEET_B1" | grep -c . || true)"
+t4_assert_eq "8" "$EXIT3_STANDALONE" "P2② 独占行形态 exit 3 = 8（tmux 前置 1 + herdr 侧 7）"
+t4_assert_eq "8" "$EXIT3_TOKEN" "P2② token 级 exit 3 站点 = 8（含「; exit 3」「|| exit 3」等命令位形态，排除注释行）"
+t4_assert_eq "$EXIT3_STANDALONE" "$EXIT3_TOKEN" \
+  "P2② 两轴相等（当前无「非独占行」形态）；若有人写成「cmd || exit 3」，本断言会把差异摆出来"
+t4_assert_eq "" "$(exit3_hint_scan "$FLEET_B1")" \
   "P2② herdr 侧每条 exit 3 文案都含 NAO_TERMINAL=tmux 指路（tmux 前置那条含 tmux new -s nao）"
-EXIT3_HINTED="$(awk '
-  { line[NR] = $0 }
-  END {
-    for (i = 1; i <= NR; i++) {
-      if (line[i] !~ /^[[:space:]]*exit 3[[:space:]]*$/) continue
-      ctx = ""
-      for (j = i - 3; j < i; j++) if (j >= 1) ctx = ctx "\n" line[j]
-      if (ctx ~ /NAO_TERMINAL=tmux/) n++
-    }
-    print n + 0
-  }' "$FLEET_B1")"
+EXIT3_HINTED="$(exit3_token_sites "$FLEET_B1" | cut -f1 | while IFS= read -r ln; do
+  body="$(awk -v n="$ln" 'NR >= n - 3 && NR <= n { buf = buf "\n" $0 } END { print buf }' "$FLEET_B1")"
+  case "$body" in *"NAO_TERMINAL=tmux"*) printf 'x\n' ;; esac
+done | grep -c . || true)"
 t4_assert_eq "7" "$EXIT3_HINTED" "P2② 含回退指路的 exit 3 = 7 条（herdr 侧全数；tmux 前置那条不计）"
-# 负控：拿掉其中一条的指路 ⇒ 扫描必点名（判据非空转）
+
+# 负控 A：摘掉一条 herdr 文案的回退指路 ⇒ hint 扫描恰 1 条必红（判据非空转）
 NEG_EXIT3="$T4_CACHE_DIR/p2-neg-exit3-$$.sh"
 sed 's/—— 在该 herdr 会话的 pane 内重试，或 NAO_TERMINAL=tmux 回退//' "$FLEET_B1" > "$NEG_EXIT3"
-NEG_OUT="$(awk '
-  { line[NR] = $0 }
-  END {
-    for (i = 1; i <= NR; i++) {
-      if (line[i] !~ /^[[:space:]]*exit 3[[:space:]]*$/) continue
-      ctx = ""
-      for (j = i - 3; j < i; j++) if (j >= 1) ctx = ctx "\n" line[j]
-      if (ctx ~ /NAO_TERMINAL=tmux/ || ctx ~ /tmux new -s nao/) continue
-      printf "%d\n", i
-    }
-  }' "$NEG_EXIT3")"
-t4_assert_eq "1" "$(printf '%s\n' "$NEG_OUT" | grep -c . || true)" \
-  "P2② 负控：摘掉一条 herdr 文案的回退指路 ⇒ 全扫恰 1 条必红（断言不是空转）"
+t4_assert_eq "1" "$(exit3_hint_scan "$NEG_EXIT3" | grep -c . || true)" \
+  "P2② 负控A：摘掉一条 herdr 文案的回退指路 ⇒ 全扫恰 1 条必红（断言不是空转）"
 rm -f "$NEG_EXIT3"
+
+# 负控 B（P3-3）：把一条「独占行」站点改成 `cmd || exit 3` 形态 ⇒ **独占行数 -1、token 数不变**
+#   ⇒ 证明 token 轴真的能捕获独占行判据漏掉的写法（也证明上面「两轴相等」不是恒等式）。
+NEG_EXIT3B="$T4_CACHE_DIR/p2-neg-exit3b-$$.sh"
+awk '{ if ($0 ~ /^[[:space:]]*exit 3[[:space:]]*$/ && !done) { sub(/^[[:space:]]*exit 3[[:space:]]*$/, "    : || exit 3"); done = 1 } print }' \
+  "$FLEET_B1" > "$NEG_EXIT3B"
+t4_assert_eq "7" "$(grep -cE '^[[:space:]]*exit 3[[:space:]]*$' "$NEG_EXIT3B" || true)" \
+  "P2② 负控B：改成「cmd || exit 3」后独占行数 8→7（旧判据会漏掉它）"
+t4_assert_eq "8" "$(exit3_token_sites "$NEG_EXIT3B" | grep -c . || true)" \
+  "P2② 负控B：token 级计数仍为 8 ⇒ 新写法被计入（≠ 旧判据的 7）"
+t4_assert_eq "" "$(exit3_hint_scan "$NEG_EXIT3B")" \
+  "P2② 负控B：该形态同样受报文指路判据约束（hint 仍在 ⇒ 0 命中）"
+sed -i 's/—— 在该 herdr 会话的 pane 内重试，或 NAO_TERMINAL=tmux 回退//' "$NEG_EXIT3B"
+t4_assert_eq "1" "$(exit3_hint_scan "$NEG_EXIT3B" | grep -c . || true)" \
+  "P2② 负控B2：该形态缺指路时 hint 扫描必红（覆盖到位，不是只计数）"
+rm -f "$NEG_EXIT3B"
 
 # ---- ② 测试不依赖默认值（静态面）----
 CASES_DIR="$T4_ROOT/tests/t4/cases"
