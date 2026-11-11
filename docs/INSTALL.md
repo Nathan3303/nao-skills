@@ -147,9 +147,9 @@ cd ~/proj/web  && .agents/scripts/nao-fleet.sh ensure rd-be     # → rd-be@web
 - `close rd-be`（裸别名/裸派生名）= 用**调用者所在仓**的 scope；`close rd-be@todo`（全名）= 用它自己带的 scope，**忽略** scope 文件。
 - 同 core 的带 scope 会话不止一个、而你又只给了裸名 ⇒ 拒绝并列出候选（用全名指定，不猜）。
 
-## herdr 后端（可选；当前默认仍是 tmux）
+## herdr 后端（0.23 起为默认后端）
 
-舰队支持两种终端后端：`tmux`（默认）与 `herdr`。用 `NAO_TERMINAL` 切换：
+舰队支持两种终端后端：**`herdr`（0.23 起默认）** 与 `tmux`（回退）。用 `NAO_TERMINAL` 切换：
 
 ```bash
 NAO_TERMINAL=herdr .agents/scripts/nao-fleet.sh status

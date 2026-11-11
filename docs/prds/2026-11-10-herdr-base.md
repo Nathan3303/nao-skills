@@ -122,6 +122,7 @@
 - **结论**：有条件可行。**布局 = A**（1 workspace/仓 + 1 tab/角色，每 tab 1 pane）：零几何算式、迁移无损（`pane move` 后 `pane_id` 不变）、`status` 零改动。不采 B（单 tab 平铺 = 把列宽算式换个形态搬回，且 60×10 对 pi TUI 偏小、attach 尺寸变化会重排）与 C（分组映射表 = 双源，违单一事实）。
 - **默认切换 = fail loud，不自动回落**：回落会让默认变**双稳态**（同命令不同机器不同后端）⇒ 破 NFR 可复现，并引入「误判回落 ⇒ 跨后端串台」缺陷类。降痛三件：可复制的两条命令 · release notes 置顶 · `check` 分级置红。
 - **回退承诺**：`NAO_TERMINAL=tmux` 保留 **≥2 MINOR 且 ≥90 天**；退役另立项并先发弃用说明；**文档不写死移除日期**。
+- **P2 实施补充（2026-11-11 PM 拍板）**：① **测试基座后端默认同步翻 herdr**（`NAO_TEST_TERMINAL` 未设 = herdr，与生产默认一致；`NAO_TERMINAL=tmux npm test` 为回退通道）—— 否则 AC3.3「未设跑全部门禁 ⇒ herdr」在门禁上不可达；发布前置仍须**两后端各跑一次**（显式）。② exit 3 站点实测 **7 条**（herdr 侧，含 `cmd_status` 的「需要 herdr server」），全扫断言逐条含 `NAO_TERMINAL=tmux`。③ `check` 全输出 md5 只在「codegraph 齐备态」断言（该行随环境变，无条件钉会跨机假红）；硬断言 = 首行逐字 + 行数（herdr 3 行 / tmux 2 行）。
 - **herdr 不报空间不足**（实测 split 从不失败、pane 可被压到 0 行且无 warn、`pane resize` 静默无效）⇒ 空间判据必须**自测**（J1–J5），**rc 不可作判据**。
 - **真机整轮可固化**（订正 B4 的推断）：`herdr integration install pi` **尊重 `PI_CODING_AGENT_DIR`**，实测装到私有目录、不写 `~/.pi`；全新私有 agent dir 无 `lastChangelogVersion` ⇒ **天然不触发 What's New 遮罩**。
 - **未验**：attach 客户端尺寸变化后的重排（仅文档口径）· pi TUI 真实最小可用行列 · `pane move` 迁移后 pi 会话长稳（只到 `pane_id`/即时 status 级）。

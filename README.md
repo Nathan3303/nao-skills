@@ -26,14 +26,17 @@ nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，�
 除 pi 之外还需要：
 
 - **pi ≥ 1.4.0** —— 舰队依赖它的多会话能力，版本低了体检直接报红。
-- **tmux** —— 7 个角色会话在你当前窗口里分屏跑；`ensure` / `status` / `close` 都必须在 tmux 会话内执行。
+- **终端后端（二选一）** —— 7 个角色会话需要落在终端里：
+  - **herdr ≥ 0.9.1（默认后端）** —— 会话落在 herdr 的专用 session 里，每个角色一个 tab。还需装 pi 集成：`herdr integration install pi`。
+  - **tmux（回退后端）** —— 在**当前窗口**里分屏跑，用法与 0.23 之前完全一致；`export NAO_TERMINAL=tmux` 即可切回。
+  - 两者的完整前提链、空间判据与回退说明见 [docs/INSTALL.md](docs/INSTALL.md#herdr-后端可选当前默认仍是-tmux)。
 - **Node.js ≥ 18** —— 命令入口是 Node 脚本。
 - **git**（建议顺手装 **GitHub CLI `gh`**）—— 分支、PR、发版都走它；没有 `gh` 时这些步骤降级成手动/本地操作，流程不变。
 
 30 秒自检：
 
 ```bash
-pi --version && tmux -V && node -v && git --version
+pi --version && node -v && git --version && (herdr --version || tmux -V)
 ```
 
 缺了什么都能在第一步装：pi 见 [pi.dev](https://pi.dev)，tmux 用系统包管理器（`brew install tmux` / `apt install tmux`），Node 用 [nvm](https://github.com/nvm-sh/nvm) 或系统包管理器。
