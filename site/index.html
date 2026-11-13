@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>nao-skills · 给你的 pi 配一支开发小队</title>
+<meta name="description" content="7 个 AI 角色分工干活，各管一段：需求、方案、界面、前后端、测试、发布。你只回答问题、点确认。一条命令装进你的项目。">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:title" content="nao-skills · 给你的 pi 配一支开发小队">
+<meta property="og:description" content="7 个 AI 角色分工干活，各管一段。你只做两件事：回答问题、点确认。纯静态、零外部依赖。">
+<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B0F14" media="(prefers-color-scheme: dark)">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="style.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">跳到主内容</a>
+
+<header class="header" id="top">
+  <div class="wrap header-inner">
+    <a class="brand" href="#top">nao-skills</a>
+    <nav class="nav" aria-label="主导航">
+      <ul>
+        <li><a href="#why">三个毛病</a></li>
+        <li><a href="#roles">七个角色</a></li>
+        <li><a href="#install">三步装好</a></li>
+        <li><a href="#faq">常见问题</a></li>
+      </ul>
+    </nav>
+    <a class="pill pill-ghost header-cta" href="https://github.com/Nathan3303/nao-skills" target="_blank" rel="noopener">GitHub <span class="arrow" aria-hidden="true">↗</span></a>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="wrap hero-inner">
+      <div class="hero-copy">
+        <p class="kicker">角色卡 + 协作规矩 + 小工具</p>
+        <h1 id="hero-title">给你的 pi<br>配一支开发小队</h1>
+        <p class="lead">7 个 AI 角色分工干活，各管一段。<br>你只做两件事：回答问题、点确认。</p>
+
+        <div class="cmd">
+          <div class="cmd-box">
+            <code class="cmd-code" id="install-cmd">pi install --local npm:@nathan33/nao-skill</code>
+            <p class="cmd-note">项目内版本 pin 见 <a href="https://github.com/Nathan3303/nao-skills/blob/main/README.md#三步装好">README 安装段</a></p>
+          </div>
+          <button class="pill pill-solid cmd-copy" id="copy-btn" type="button" aria-label="复制安装命令">复制</button>
+        </div>
+        <p class="copy-status" id="copy-status" role="status" aria-live="polite"></p>
+
+        <div class="cta-row">
+          <a class="pill pill-solid" href="https://github.com/Nathan3303/nao-skills" target="_blank" rel="noopener">GitHub</a>
+          <a class="cta-text" href="https://www.npmjs.com/package/@nathan33/nao-skill" target="_blank" rel="noopener">npm 最新版 <span class="arrow" aria-hidden="true">↗</span></a>
+        </div>
+        <p class="trust">MIT 开源 · Node ≥18 · 仅支持 pi</p>
+      </div>
+
+      <div class="term" aria-hidden="true">
+        <div class="term-bar">
+          <span class="term-dot term-dot-r"></span>
+          <span class="term-dot term-dot-y"></span>
+          <span class="term-dot term-dot-g"></span>
+        </div>
+        <p class="term-line"><span class="term-prompt">$</span> nao-fleet.sh check</p>
+        <p class="term-line term-ok">✓ exit 0 · 7 个角色可开工</p>
+        <p class="term-line term-gap"><span class="term-prompt">$</span> nao-fleet.sh ensure pm arch rd-fe</p>
+        <p class="term-line term-ok term-more">✓ 已拉起 3 个会话</p>
+        <p class="term-line term-muted term-more term-gap">你：想加个「导出 CSV」功能<span class="term-cursor"></span></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="why" aria-labelledby="why-title">
+    <div class="wrap">
+      <p class="kicker">为什么需要</p>
+      <h2 id="why-title">一个人对着 AI 写代码，常见三个毛病</h2>
+      <p class="lead">不是模型不够强，是缺分工与交付纪律。</p>
+      <ul class="cards">
+        <li class="card problem">
+          <p class="card-idx">01</p>
+          <h3>一个会话什么都干，聊到后面就糊涂了</h3>
+          <p>拆成 7 个专业角色，各管一段，互不干扰。</p>
+        </li>
+        <li class="card problem">
+          <p class="card-idx">02</p>
+          <h3>需求没问清楚就开写，写完发现不对</h3>
+          <p>PM 先追问、写清 PRD 和目标，你点头才开工。</p>
+        </li>
+        <li class="card problem">
+          <p class="card-idx">03</p>
+          <h3>干完不知道算不算干完</h3>
+          <p>每个任务必须回执并按清单自查，PM 逐条验收才归档。</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" id="roles" aria-labelledby="roles-title">
+    <div class="wrap">
+      <p class="kicker">分工</p>
+      <h2 id="roles-title">七个角色，各管一段</h2>
+      <p class="lead">不想要哪个角色，删掉对应文件即可；只留 PM + 一个研发角色也能跑。</p>
+      <ul class="cards cards-roles">
+        <li class="card role">
+          <h3>产品经理 <code class="role-id">pm</code></h3>
+          <p>拆需求、写 PRD、派活、验收，唯一的调度者</p>
+        </li>
+        <li class="card role">
+          <h3>架构师 <code class="role-id">arch-designer</code></h3>
+          <p>技术选型与方案评审，出 ADR，评影响面</p>
+        </li>
+        <li class="card role">
+          <h3>UI/UX 设计师 <code class="role-id">uiux-designer</code></h3>
+          <p>信息架构、交互流程、视觉令牌与断点</p>
+        </li>
+        <li class="card role">
+          <h3>前端研发 <code class="role-id">rd-fe</code></h3>
+          <p>实现界面与交互，自测通过后回执</p>
+        </li>
+        <li class="card role">
+          <h3>后端研发 <code class="role-id">rd-be</code></h3>
+          <p>实现服务与数据，自测通过后回执</p>
+        </li>
+        <li class="card role">
+          <h3>测试工程师 <code class="role-id">qa</code></h3>
+          <p>按验收标准出用例、跑门禁、报缺陷</p>
+        </li>
+        <li class="card role">
+          <h3>工程基座 <code class="role-id">rd-infra</code></h3>
+          <p>CI、发布、脚本守卫与仓库治理</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" id="install" aria-labelledby="install-title">
+    <div class="wrap">
+      <p class="kicker">三步装好</p>
+      <h2 id="install-title">从零到能派活，只要三步</h2>
+
+      <ol class="steps">
+        <li class="step">
+          <p class="step-num" aria-hidden="true">01</p>
+          <div class="step-body">
+            <h3>装前置</h3>
+            <p>pi ≥1.4.0、终端后端（herdr 默认 / tmux 回退）、Node ≥18、git 都齐了才装得起来。一条命令自检：</p>
+            <div class="code"><code>pi --version &amp;&amp; node -v &amp;&amp; git --version &amp;&amp; (herdr --version || tmux -V)</code></div>
+          </div>
+        </li>
+        <li class="step">
+          <p class="step-num" aria-hidden="true">02</p>
+          <div class="step-body">
+            <h3>把机制装进你的项目</h3>
+            <p>项目级安装：pin 写进 <code>.pi/settings.json</code> 进仓库，团队 clone 即得同款。</p>
+            <div class="code"><code>cd 你的项目
+pi install --local npm:@nathan33/nao-skill
+npx @nathan33/nao-skill init</code></div>
+          </div>
+        </li>
+        <li class="step">
+          <p class="step-num" aria-hidden="true">03</p>
+          <div class="step-body">
+            <h3>装协作插件，拉队开工</h3>
+            <p>插件负责多会话派活；体检 exit 0 就能拉动 7 个常驻会话。</p>
+            <div class="code"><code>npx @nathan33/nao-skill plugins install-all
+.agents/scripts/nao-fleet.sh check
+.agents/scripts/nao-fleet.sh ensure pm arch rd-fe rd-be qa rd-infra uiux</code></div>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="faq" aria-labelledby="faq-title">
+    <div class="wrap">
+      <p class="kicker">常见问题</p>
+      <h2 id="faq-title">装之前你大概会问这几句</h2>
+      <div class="faq">
+        <details>
+          <summary>会改我的代码库吗？</summary>
+          <div class="faq-body">
+            <p>只会新增项目根 <code>AGENTS.md</code>、<code>.pi/settings.json</code>，以及一个转发入口 <code>.agents/scripts/nao-fleet.sh</code>。角色卡、清单、技能这些机制文件都在依赖包里，不铺进你的仓库，也不碰你原有文件（已有 <code>AGENTS.md</code> 时是合并追加，不覆盖）。</p>
+          </div>
+        </details>
+        <details>
+          <summary>除了 pi，能配别的编程 Agent 吗？</summary>
+          <div class="faq-body">
+            <p>不能。nao 的多会话派活、回执、回收整套机制都建立在 pi 之上，只支持 pi，不为其他编程 Agent 做适配，也不承诺可互换。</p>
+          </div>
+        </details>
+        <details>
+          <summary>它会在 GitHub 上开 PR 吗？</summary>
+          <div class="faq-body">
+            <p>会。每个需求一条分支、一个 PR（草案早开、CI 早跑），你确认验收后由研发角色 squash 合并，main 上只留 1 条可读提交。没有远端或 <code>gh</code> 时降级为本地分支，流程不变。</p>
+          </div>
+        </details>
+        <details>
+          <summary>跑完的会话要留着吗？</summary>
+          <div class="faq-body">
+            <p>派生会话验收完就回收，常驻角色留着复用。<code>nao-fleet.sh status</code> 会提示哪些是残留，目标在别的项目里也能回收。</p>
+          </div>
+        </details>
+        <details>
+          <summary>为什么需要终端后端？</summary>
+          <div class="faq-body">
+            <p>舰队要把 7 个角色会话放进终端里，还要能可靠地找回与收掉。默认 herdr：每个角色一个 tab，身份靠结构化事实判定；tmux 是回退方案，在当前窗口分屏，SSH 下同样可用。</p>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <h2>现在就把小队拉起来</h2>
+    <p class="lead">装完只要一句话：在 PM 会话里说需求，剩下的它自己流转。</p>
+    <div class="cta-row">
+      <a class="pill pill-solid" href="https://github.com/Nathan3303/nao-skills" target="_blank" rel="noopener">GitHub</a>
+      <a class="cta-text" href="https://github.com/Nathan3303/nao-skills/blob/main/README.md">读 README <span class="arrow" aria-hidden="true">↗</span></a>
+      <a class="cta-text" href="https://www.npmjs.com/package/@nathan33/nao-skill" target="_blank" rel="noopener">npm 最新版 <span class="arrow" aria-hidden="true">↗</span></a>
+    </div>
+    <p class="legal">MIT © 2026 Nathan Lee · 仅支持 pi ≥1.4.0 · 零外部依赖：无 CDN、无字体外链、无统计</p>
+  </div>
+</footer>
+</body>
+</html>

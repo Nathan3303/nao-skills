@@ -11,7 +11,7 @@
 
 <p align="center"><sub>推荐配合模型 <b>deepseek-v4.1-flash</b> · 基于 <a href="https://pi.dev">pi</a> · Made by <a href="https://github.com/nathan">Nathan Lee</a></sub></p>
 
-[前置环境](#前置环境) · [三步装好](#三步装好) · [第一次跑起来](#第一次跑起来) · [七个角色](#七个角色) · [常见问题](#常见问题) · [想深入](#想深入)
+[前置环境](#前置环境) · [三步装好](#三步装好) · [第一次跑起来](#第一次跑起来) · [七个角色](#七个角色) · [常见问题](#常见问题) · [想深入](#想深入) · [官网](https://nathan3303.github.io/nao-skills/)
 
 nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，你的项目里会有 7 个分工明确的 AI 会话——产品经理负责拆需求、派活、验收；架构师把关方案；设计师管界面与交互；前端、后端、测试各自干活；工程基座管构建发布与治理。你只做两件事：**回答问题**、**点确认**。
 
@@ -62,6 +62,8 @@ pi --version && node -v && git --version && (herdr --version || tmux -V)
    pi install --local npm:@nathan33/nao-skill@0.21.3   # 声明 pin，并把机制包物化到项目内 .pi/npm
    npx @nathan33/nao-skill init                        # 写入转发入口 shim + 生成 AGENTS.md
    ```
+
+   > 示例带版本 pin（团队 clone 即得同款）。只想装最新版，可省略 `@0.21.3`：`pi install --local npm:@nathan33/nao-skill`。
 
 3. **装协作插件**（多会话派活必需）：
 
