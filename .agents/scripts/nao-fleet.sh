@@ -407,17 +407,26 @@ _term_tmux_snapshot() {
 # >>> term-facade-herdr BEGIN
 # herdr 后端实现（本区间**禁出现** tmux 句柄/标题字段名：静态 lint t4_scan_term_herdr_forbidden）
 #   会话名来源 = 环境变量 HERDR_SESSION（herdr pane 内天然存在）；所有调用经唯一入口注入 --session。
-_term_herdr_exec() {  # 唯一入口：--session 由此注入（调用方无法绕过）
-  local s="${HERDR_SESSION:-}" v
+_term_herdr_exec() {  # [--server-start] <herdr 子命令…> —— 唯一入口：--session 由此注入（调用方无法绕过）
+  local s="${HERDR_SESSION:-}" v ss=0
+  # T544（Issue #116）：起 server 的身份由**显式首参数**传，禁再用环境变量 ——
+  #   旧写法 `_TERM_HERDR_SERVER_START=1 _term_herdr_exec server` 会被 bash 连环境一起交给子进程
+  #   ⇒ herdr server 继承该旗标 ⇒ 它 spawn 的每个 pane 都带它 ⇒ pane 内**每次**调用都误走 server-start
+  #   分支（多一层 env -u + setsid，并清掉子进程的 HERDR_*，含 HERDR_SOCKET_PATH）。
+  #   参数不进 env：pane 环境里即使人为注入同名变量也不会触发本分支（负控见报告 T544 判据 3）。
+  if [[ "${1-}" == "--server-start" ]]; then ss=1; shift; fi
   if [[ -z "$s" || "$s" == "default" ]]; then
     warn "herdr 调用缺会话（HERDR_SESSION 空或 default）—— 拒绝执行（BR6④：无 --session 会静默读到用户 default）"
     return 1
   fi
   # BR6（B2）：起 server 的**唯一**实现点 —— 清宿主终端句柄（三项，名表在通用区声明）+ **枚举**清 HERDR_*
   #   （只 -u 已知变量会漏）；setsid 脱离进程组（无 setsid 的平台降级为普通后台）。
-  if [[ "${_TERM_HERDR_SERVER_START:-0}" == "1" ]]; then
+  if (( ss )); then
     local -a hu=() pre=()
     for v in "${_TERM_HOST_HANDLE_VARS[@]}"; do hu+=(-u "$v"); done
+    # T544 迁移带：调用方 pane 若由**旧** server 起（env 仍带历史旗标），不摘就会被新 server 继承、
+    #   再复制给它 spawn 的所有新 pane（新 pane 里没人读它，但「pane env 干净」判据会永久不成立）。
+    hu+=(-u _TERM_HERDR_SERVER_START)
     command -v setsid >/dev/null 2>&1 && pre=(setsid)
     env "${hu[@]}" "${pre[@]}" bash -c 'for v in $(env | grep -o "^HERDR_[A-Z_]*"); do unset "$v"; done; exec herdr --session "$0" "$@"' "$s" "$@"
     return $?
@@ -1336,7 +1345,7 @@ _term_herdr_session_start() {  # <session>
     return 0
   fi
   log="$(mktemp "${TMPDIR:-/tmp}/nao-fleet-herdr-server-${s}.XXXXXX.log" 2>/dev/null)" || log=""
-  ( _TERM_HERDR_SERVER_START=1 _term_herdr_exec server >"${log:-/dev/null}" 2>&1 & ) || true
+  ( _term_herdr_exec --server-start server >"${log:-/dev/null}" 2>&1 & ) || true
   for ((i = 1; i <= max; i++)); do
     if _term_herdr_exec api snapshot >/dev/null 2>&1; then ok=1; break; fi
     sleep "$int"
