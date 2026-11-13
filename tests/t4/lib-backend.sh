@@ -241,10 +241,15 @@ _be_scan_herdr_servers() {
   done
 }
 
-# 某进程的祖先里是否有 herdr（孤儿 server 的**子孙**会继承起跑方的 T4_CACHE_DIR；
-#   实测 server 会起 curl 子进程 ⇒ 只看「排除 argv0=herdr」不够，会把死 run 的 cache 错判成活）
-_be_pid_has_herdr_ancestor() {
-  local cur="${1:-}" ppid a0 i=0 rest
+# 某进程的祖先里是否有**实验场** herdr server（孤儿 server 的**子孙**会继承起跑方的 T4_CACHE_DIR；
+#   实测 server 会起 curl 子进程 ⇒ 只看「排除 argv0=herdr」不够，会把死 run 的 cache 错判成活）。
+#   #109（herdr 宿主环境，实测）：pane 内的 pi / 用例**本身**就是**生产** herdr server 的子孙
+#   （本机实测世系：bash ← pi ← herdr server ← 登录 shell），若只认 `argv0=herdr` 则所有活 run
+#   都被当成「死 run 血统」⇒ 活 cache 保护在 herdr 内**恒失效**，sweep 会停掉本 run 自己的 server
+#   （cases/27「孤儿 sweep⑤」连环红）。故按**祖先 herdr 自己的 XDG_CONFIG_HOME** 判：
+#   只有**实验根**（`nao-t4.*` 形态 / 当前 cache 下）的 server 世系才排除；生产用户 server 世系不算。
+_be_pid_has_lab_herdr_ancestor() {
+  local cur="${1:-}" ppid a0 i=0 rest root
   [ -n "$cur" ] || return 1
   while [ "$cur" != "1" ] && [ -n "$cur" ] && [ "$i" -lt 64 ]; do
     rest="$(sed 's/^[^)]*)//' "/proc/$cur/stat" 2>/dev/null)" || return 1
@@ -253,7 +258,13 @@ _be_pid_has_herdr_ancestor() {
     cur="$ppid"
     [ "$cur" = "1" ] && return 1
     a0="$(tr '\0' '\n' < "/proc/$cur/cmdline" 2>/dev/null | head -1)"; a0="${a0##*/}"
-    [ "$a0" = "herdr" ] && return 0
+    if [ "$a0" = "herdr" ]; then
+      root="$(tr '\0' '\n' < "/proc/$cur/environ" 2>/dev/null | sed -nE 's/^XDG_CONFIG_HOME=(.*)$/\1/p' | head -1)"
+      if [ -n "${root:-}" ]; then
+        case "$root" in */nao-t4.*/*) return 0 ;; esac
+        if [ -n "${BE_CACHE_ROOT:-}" ]; then case "$root" in "$BE_CACHE_ROOT"/*) return 0 ;; esac; fi
+      fi
+    fi
     i=$((i + 1))
   done
   return 1
@@ -269,7 +280,7 @@ _be_live_cache_dirs() {
     [ "$a0" = "herdr" ] && continue
     v="$(tr '\0' '\n' < "$d/environ" 2>/dev/null | sed -nE 's/^T4_CACHE_DIR=(.*)$/\1/p' | head -1)"
     [ -n "$v" ] || continue
-    _be_pid_has_herdr_ancestor "${d##*/}" && continue
+    _be_pid_has_lab_herdr_ancestor "${d##*/}" && continue
     printf '%s\n' "$v"
   done 2>/dev/null | sort -u
 }

@@ -1,6 +1,6 @@
 # 门户网站（nao-skills landing page）
 
-- 状态：待确认 · 更新：2026-11-13 · Owner：PM
+- 状态：已定稿（已交付 · PR [#108](https://github.com/Nathan3303/nao-skills/pull/108) squash `5b15563` · 本批不发版）· 更新：2026-11-13 · Owner：PM
 - 指针：事实源 `README.md` · 进阶口径 `docs/INSTALL.md` · 设计稿（待出）`docs/designs/`
 
 ## TL;DR

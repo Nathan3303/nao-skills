@@ -67,6 +67,16 @@ trap t4_cache_cleanup EXIT
 
 export T4_ROOT PKG_NAME PKG_VERSION T4_CACHE_DIR T4_ALLOW_MISSING T4_REQUIRE_FULL T4_TARBALL
 
+# ---------------------------------------------------------------- 宿主环境净化（#111 延展 · 本机实测）
+# herdr 宿主会把**生产脚本的内部旗标**漏进 pane env：`nao-fleet.sh` 起 server 时写
+#   `_TERM_HERDR_SERVER_START=1 _term_herdr_exec server …`，而 bash 把「函数调用的前置变量赋值」
+#   持久化到当前 shell ⇒ setsid 起的 herdr server 继承该旗标 ⇒ 它创建的 pane（pi / 用例）全量继承。
+# 用例若不摘，就会把「我是起 server 者」带进夹具：`_term_herdr_exec` 走 server-start 分支 ⇒
+#   **枚举清掉 HERDR_***（含 stub 的状态变量）⇒ 桩调用失败、夹具假红（cases/28 B2 实测）。
+# 这是生产内部实现量、不是终端契约变量（除本处摘除外，tests/ 无用例读它），故在用例侧单点摘除；
+# **不动** HERDR_* 契约变量 —— cases/06 的默认值探针与 cases/27 的生产端点锚需要宿主真实的 HERDR_*。
+unset _TERM_HERDR_SERVER_START
+
 T4_FAIL=0
 T4_DEGRADE=0
 T4_RC=0

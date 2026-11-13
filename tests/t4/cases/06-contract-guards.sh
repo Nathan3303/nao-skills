@@ -694,7 +694,10 @@ B1_ENV=(env NAO_TERMINAL=herdr HERDR_ENV=1 HERDR_SESSION=nao-b1-check \
   XDG_CONFIG_HOME="$B1_CFG" HERDR_SOCKET_PATH="$B1_CFG/herdr/sessions/nao-b1-check/herdr.sock" \
   PI_CODING_AGENT_DIR="$T4_CACHE_DIR/b1-pi-empty" PATH="$B1BIN:$PATH")
 # cleanup 不要求 pane 内 env（拆场是外部动作）：只给后端 + 私有根 + PATH 桩
-B3_CLEAN_ENV=(env NAO_TERMINAL=herdr XDG_CONFIG_HOME="$B1_CFG" \
+#   #111：必须**显式清掉**调用方（herdr pane）继承的 HERDR_SOCKET_PATH / HERDR_SESSION ——
+#   否则生产 socket 会被带进夹具（不在 "$B1_CFG" 目标根下 ⇒ cleanup 按「stale/外贸 env」拒绝，rc=3），
+#   夹具就从「空现场幂等」变成「拒绝执行」，假红/假绿都不再反映被测逻辑。
+B3_CLEAN_ENV=(env -u HERDR_SOCKET_PATH -u HERDR_SESSION NAO_TERMINAL=herdr XDG_CONFIG_HOME="$B1_CFG" \
   PI_CODING_AGENT_DIR="$T4_CACHE_DIR/b1-pi-empty" PATH="$B1BIN:$PATH")
 
 : > "$B1_LOG"
