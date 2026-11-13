@@ -25,6 +25,8 @@ herdr 后端的放置从「一个 workspace 里往同一 tab 里 split」改成 
 | 顺序 | 先建后起 | **先 `tab rename`（tab label）→ 先 `pane rename`（角色身份）→ 后 `pane run`**（顺序是契约：否则 `status` 可能抓到无 label 的 pi pane） |
 | 重入 | 判重跳过 | 同（`running_verdict=same` ⇒ 跳过；实测重跑 `0/2/0`、tab 结构零变化） |
 
+> **口径更新（2026-11-13 · Issue [#112](https://github.com/Nathan3303/nao-skills/issues/112)）**：上表「`label` = scope，无 scope ⇒ `HERDR_SESSION`」**已作废** —— 实测该回退会把跨仓会话落进调用方 workspace。现行口径 = `label` 取已声明 scope，否则仓 slug（`fleet_scope_slug`），`HERDR_SESSION` 回退删除。依据 ADR `docs/adr/2026-11-13-herdr-workspace-scope-key.md`。本节其余结论（1 tab/角色、结构判据、迁移无损）不变。
+
 角色 tab 已在场、但**没有 pane 命中该角色**（例如 `--force` 撞上仍在场的 pi）⇒ **不猜**：warn + `SPAWN_FAIL`（不新建第二个同名 tab、
 也不接管他人 pane）。这是相对二期的一处**语义收紧**（二期会新建 pane 并留下 2 个同名 label），理由是 AC3.1 的「每 tab 恰 1 pane」
 在重复 tab 下不可判定；改法已写进 warn（先回收/重建会话，再 `--force`）。
