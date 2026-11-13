@@ -1,6 +1,6 @@
 # 门户单页（nao-skills landing page）
 
-- 状态：待确认（待 PM 验收）· 更新：2026-11-13 · Owner：uiux-designer
+- 状态：已定稿（PM 验收 PASS 2026-11-13）· 更新：2026-11-13 · Owner：uiux-designer
 - 指针：PRD `docs/prds/2026-11-13-portal-site.md`（AC1–AC11）· 骨架 `deliverable-docs.md` §九 · 交付档位 ①+③（Penpot 本地文件）
 
 ## 一、信息架构
