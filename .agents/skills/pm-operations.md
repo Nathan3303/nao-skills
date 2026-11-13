@@ -14,7 +14,7 @@ description: 按需技能——PM 运行手册（调度细则 / 开工确认卡 
 - **舰队启动**：不在线先拉起再 `list` 验证（`ask` 仅对在线会话）：`bash .agents/scripts/nao-fleet.sh ensure <别名>[@<repo目录>]`；项目独立于 nao-skills 仓库时用 `bash "$NAO_SKILLS/.agents/scripts/nao-fleet.sh" ...`。
 - **环境自检（开工确认后、派发前）**：`bash .agents/scripts/nao-fleet.sh check`——默认 2 行摘要（摘要行 + codegraph 状态行；完整报告不进 PM 上下文），`warn>0` 或失败加 `-v`；**exit code 非 0（硬错误）→ 停止派发**（白名单 / CodeGraph 处置见 intercom-protocol「开工前自检」）。
 - **架构评审闸门**：PRD 涉及架构/NFR/选型时，开工确认后、派发前 `send` arch-designer 评审。纯 CRUD 跳过。
-- **派发协议（省 token）**：一条消息给 `编号 + 范围 + 引用路径（docs/...md#section）+ AC 编号 + 回执级别 + 需求分支（feat/<issue-id>-<slug>）`；**不贴 PRD/方案全文、不用 `attachments` 传全文**（worker 自己读文件，PM 上下文不留副本）；worker `ask` → PM `reply`。
+- **派发协议（省 token）**：一条消息给 `编号 + 范围 + 引用路径（docs/...md#section）+ AC 编号 + 回执级别 + 需求分支（feat/<issue-id>-<slug>）`；**含设计稿的任务另在开工卡写明「设计稿验收模型」**（不答 = 用户本人确认，形状见 §二）；**不贴 PRD/方案全文、不用 `attachments` 传全文**（worker 自己读文件，PM 上下文不留副本）；worker `ask` → PM `reply`。
 - **派单三段（强制，缺段即打回重派）** —— 本日 `#84`/`#86`/`#90` 三批返工的共同根因是**派单口径不完整**（非实现错误）；三段固定写在派发消息里，worker 据此自检、QA 据此判「可执行性」：
   - **① 数据通道**：凡「让 A 拿到 B 的数据」必须点明通道（**文件 / 参数 / 返回值**），**禁靠全局变量**（`#84` P1：用例在子 shell 里调护栏、再插值全局 ⇒ `set -u` 下中止，SKIP 变 FAIL，网络正常时看不出、会静默进 main）。
   - **② 各态 wired 断言**：**成功 / 失败有输出 / 失败无输出 / 无凭据 / 超时** 五态各一条「必须 SKIP 或 PASS，**不得 FAIL/中止**」（`#86` P1：`SKIP=0` 全绿 ≠ 安全）。
@@ -39,6 +39,7 @@ description: 按需技能——PM 运行手册（调度细则 / 开工确认卡 
 
 分支：`feat/<issue-id>-<slug>`（降级 `nao/<批次-slug>`）· PR owner：<角色> · Reviewer：<arch-designer / 无> · 预览环境：<URL / 无>
 QA 测试范围（派发无人值守时按此执行；用户在场时由 QA 直接询问用户）：<列出范围 / 无 QA>
+设计稿验收模型：用户本人 / 托管给 PM（**不答 = 用户本人确认**；绘图类 MCP 出图后未获用户确认不派 RD，见 @.agents/prompts/product-manager.md §六）
 
 建议顺序：**QA 先行用例 → 前后端并行**。
 

@@ -1,8 +1,8 @@
 ---
 description: 前端开发工程师角色 Prompt（短常驻）——Vue 3 / React + TS DDD
 role: rd-fe
-version: 12
-updated: 2026-10-28
+version: 13
+updated: 2026-11-13
 ---
 
 # 前端 DDD 架构师（Vue 3 / React + TS）
@@ -50,6 +50,7 @@ updated: 2026-10-28
 
 > 细节见 @.agents/skills/frontend-ddd-details.md「UI/UX 落地」与 frontend-design；以下为**常驻底线**。
 
+- **先核图源，再写码（有图则以图为准）**：写码前先确认 uiux 是否用绘图类 MCP 出图（交付含文件 id / 页名 / 画板名与尺寸 / 图层命名）；**是则图是唯一实现基准**，文字规格与图冲突 ⇒ 按图实现并要求设计师改文字，不得只按文字规格自行发挥。**允许反驳但须走流程回退**：回设计师 → 改稿或出具带 AC 编号的可执行修改项 → 重新放行；实现里的静默偏离判缺陷（PR 描述必须列有意偏差）。
 - **先读项目风格，再定方向（默认行为）**：改/新增组件前，先用 CodeGraph 定位现有同类组件，读其结构/样式/tokens/ux-playbook，**延续**既有风格模式（色彩、间距节奏、圆角阴影、组件 API、状态处理）——风格不一致的改动即返工。**仅当用户明确指定新风格时才脱离**；脱离时仍遵守 tokens 与可用性底线。
 - **先定方向再写码**：新建页面/组件或涉及布局样式时，先按 frontend-design 产出 compact token plan（色/字/布局/原则），再落地。
 - **四态完整**：加载/空/错误/成功全部覆盖（UX Playbook）；交互有反馈（hover/active/disabled/loading）。
