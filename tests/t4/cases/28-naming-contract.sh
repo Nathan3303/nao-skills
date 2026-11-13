@@ -35,7 +35,11 @@
 #      唯一构造点**不匹配** ⇒ 不会把合法用法误判成违规。已知盲区：拼接不落在 `name|disp|core`
 #      这三个变量名上（如 `c="$r-$t"`）—— 已全部改走 `fleet_core_build`，故本轮 0 命中。
 #   ③ `grep -c fleet_name_parse` ≥ 11（11 解析点全接线的**可见面**）+ 代码调用点数固定
-#   负控：close 里手写 `name="${NAME}-${task}"` ⇒ ②红；删一条 parse 调用 ⇒ ③红
+#   ④ herdr 放置键不得取会话名（T545 · ADR 2026-11-13-herdr-workspace-scope-key）：抽
+#      `_term_herdr_spawn` 函数体（`awk '/^_term_herdr_spawn\(\)/,/^}/'`）后 `grep -c HERDR_SESSION` == 0；
+#      **白名单为空**（`--session` 注入只在 `_term_herdr_exec`，不在这个函数里）⇒ 连 warn 文案也算命中。
+#      基线（T545 前）= 2 处（键回退 1 + 「无法确定 workspace label」文案 1）。本 lint **不进 `check`**（check 计数不漂）。
+#   负控：close 里手写 `name="${NAME}-${task}"` ⇒ ②红；删一条 parse 调用 ⇒ ③红；spawn 内注入 `HERDR_SESSION` ⇒ ④红
 #
 # 退出码沿用 lib.sh 约定；夹具根不得落在任何 git 仓内，收尾走机制 `cleanup -S`。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
@@ -301,6 +305,28 @@ if MUT_RE='^[[:space:]]*out="\$\(fleet_name_parse "\$n"\)"[[:space:]]*$' \
   t4_assert_ne "$N3C" "$(lint3c "$NEG_B")" "C3 负控B 删调用后 ③ 可见面变化（不是恒量）"
 else
   t4_bad "C3 负控B 变异锚点未命中（用例锚点须跟随实现）"
+fi
+
+# ============================================================================
+# C3④ herdr 放置键 lint（T545 · ADR 2026-11-13-herdr-workspace-scope-key）
+#   判据：`_term_herdr_spawn` 函数体内 `HERDR_SESSION` 命中数 == 0 —— 放置键必须来自
+#   「会话名 parse 出的 scope」或「fleet_scope_slug(目标仓)」，**不得**回退到这里唯一仍在场的外部事实
+#   （会话名），否则空 scope 的仓会被塞进会话名 workspace（现场 = 调用方窗口）。
+#   为何白名单为空：本函数的合法 `--session` 用法不存在（`_term_herdr_exec` 才注入），故任何命中都是缺陷。
+# ============================================================================
+spawn_body() { awk '/^_term_herdr_spawn\(\)/,/^}/' "$1"; }
+lint4() { spawn_body "$1" | grep -c 'HERDR_SESSION' || true; }
+T545_MSG='herdr 放置键不得取会话名：label 必须来自 scope 或 fleet_scope_slug(目标仓)（ADR 2026-11-13-herdr-workspace-scope-key）'
+t4_assert_eq "0" "$(lint4 "$SUBJECT")" "C3④ ${T545_MSG}（_term_herdr_spawn 内 HERDR_SESSION 命中 = 0）"
+# ---- C3④ 负控：往 spawn 里注入一行 HERDR_SESSION ⇒ 必红 - 并且计数变 1（lint 不是恒 0）----
+NEG_D="$T4_CACHE_DIR/c3-neg-d.sh"
+if mutate_file "$SUBJECT" "$NEG_D" \
+    '  pout="$(fleet_name_parse "$name")"' \
+    '  : "${HERDR_SESSION:-}"   # C3④ 负控注入
+  pout="$(fleet_name_parse "$name")"'; then
+  t4_assert_eq "1" "$(lint4 "$NEG_D")" "C3④ 负控：spawn 内注入 HERDR_SESSION ⇒ 命中 1 且点名【${T545_MSG}】"
+else
+  t4_bad "C3④ 负控变异锚点未命中（用例锚点须跟随实现）"
 fi
 
 # ============================================================================
@@ -982,6 +1008,10 @@ B2_ENV=(env HERDR_ENV=1 HERDR_SESSION=nao-b2-stub XDG_CONFIG_HOME="$LAB/cfg" \
   HERDR_STUB_CWD="$LAB" \
   NAO_SKILLS="$LAB" TMPDIR="$LAB/tmp" PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" \
   PATH="$B2ST_BIN:$PATH")
+# 放置键（T545 · ADR 2026-11-13）：label = 已声明 scope 否则**目标仓 slug**；本区用例的目标仓 = $LAB
+#   （roles.yaml workspace="." ⇒ repo=$PWD=$LAB，非 git 仓 ⇒ slug = basename）。$LAB 名形如 `lab28-<pid>`
+#   只含 [a-z0-9-]，slug 归一为恒等 ⇒ 可以直接用 basename 当期望值（不复制归一算式）。
+B2_WS_LABEL="${LAB##*/}"
 b2_reset() { # 清桩状态（每场景一份）
   rm -rf "$B2ST_ST"; mkdir -p "$B2ST_ST"; : > "$B2ST_ST/panes"; : > "$B2ST_ST/agents"; : > "$B2ST_ST/ws"; : > "$B2ST_ST/tabs"
   : > "$B2ST_ST/order.log"; : > "$B2ST_ST/calls.log"
@@ -1144,7 +1174,7 @@ done
 #           搬空的 tab 自动关；
 #        ③ 对照：全程零 pane split（布局不靠分屏算式）。
 b2_reset
-printf 'w1|nao-b2-stub\n' > "$B2ST_ST/ws"
+printf 'w1|%s\n' "$B2_WS_LABEL" > "$B2ST_ST/ws"
 printf 'w1:p1||bash|w1\n' > "$B2ST_ST/panes"
 : > "$B2ST_ST/agents"
 t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-x' \
@@ -1161,7 +1191,7 @@ t4_assert_eq "1" "$(awk -F'|' '$3=="rd-fe"{print $1}' "$B2ST_ST/tabs" | while re
   "J2① 该角色 tab 恰 1 个 pane（pane_count == 1）"
 # ② 旧布局迁移：两个 ghost pane 共处 w1:t1 ⇒ 各自 ensure 后搬到独立 tab，搬空的 t1 自动关
 b2_reset
-printf 'w1|nao-b2-stub\n' > "$B2ST_ST/ws"
+printf 'w1|%s\n' "$B2_WS_LABEL" > "$B2ST_ST/ws"
 printf 'w1:p1|rd-fe|bash|w1\nw1:p2|rd-be|bash|w1\n' > "$B2ST_ST/panes"
 printf 'w1:t1|w1|1\n' > "$B2ST_ST/tabs"
 : > "$B2ST_ST/agents"
@@ -1190,7 +1220,7 @@ t4_assert_eq "1" "$(awk -F'|' -v t=w1:t2 '$5==t' "$B2ST_ST/panes" | wc -l | tr -
 #   ⇒ 用户若照 close 提示「ensure --force 重开」会得到失败 1。本块把两条路径都钉住。
 #   ① 角色 tab 被他人 pane 占用（tab label=n、pane label=intruder）+ `--force` ⇒ fail loud + 指路 close
 b2_reset
-printf 'w1|nao-b2-stub\n' > "$B2ST_ST/ws"
+printf 'w1|%s\n' "$B2_WS_LABEL" > "$B2ST_ST/ws"
 printf 'w1:t1|w1|rd-fe\n' > "$B2ST_ST/tabs"
 printf 'w1:p1|intruder|bash|w1|w1:t1\n' > "$B2ST_ST/panes"
 : > "$B2ST_ST/agents"
@@ -1212,7 +1242,7 @@ t4_assert_eq "0" "$(grep -c 'pane split ' "$B2ST_ST/calls.log" || true)" "P2-1�
 
 #   ② 在线 pi 占位 + `--force` ⇒ fail loud；提示=先 close 再 ensure；close 后 `ensure --force` ⇒ 成功新建
 b2_reset
-printf 'w1|nao-b2-stub\n' > "$B2ST_ST/ws"
+printf 'w1|%s\n' "$B2_WS_LABEL" > "$B2ST_ST/ws"
 printf 'w1:t1|w1|rd-fe\n' > "$B2ST_ST/tabs"
 printf 'w1:p1|rd-fe|pi|w1|w1:t1\n' > "$B2ST_ST/panes"
 printf 'w1:p1|idle|3|1|sess-a\n' > "$B2ST_ST/agents"

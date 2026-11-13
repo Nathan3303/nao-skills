@@ -11,7 +11,9 @@
 #   cleanup 豁免本前提：其正常场景就是「非 tmux 的隔离实验场」（env -u TMUX ... -S <socket>）
 #   herdr 后端（NAO_TERMINAL=herdr · #96 二期 B1/B2/B3 · 三期 P1 布局 A）：前提改为「herdr pane 内 + HERDR_SESSION
 #     有效 + protocol 22」；B1 判定面（status）· B2 放置/就绪面（ensure）· B3 回收面（close/cleanup）—— 全部走门面，
-#     不静默回退 tmux。**布局 A（AC3.1）**：1 workspace/仓（label=scope）+ 1 tab/角色（label=角色名）+ 每 tab 恰 1 pane；
+#     不静默回退 tmux。**布局 A（AC3.1）**：1 workspace/仓（label=已声明 scope，否则仓 slug —— ADR
+#     2026-11-13-herdr-workspace-scope-key：放置键与身份键分离，**不得**取会话名）+ 1 tab/角色（label=角色名）
+#     + 每 tab 恰 1 pane；
 #     放置后自测空间（HERDR 不报空间不足 ⇒ rc 不可作判据，见 TERM_MIN_COLS/ROWS 与 J1/J5）。
 #     起 server 由独立入口 `session-start --session <名>` 负责（BR6：清宿主终端句柄 + 枚举清 HERDR_*）；
 #     拆场由姊妹入口 `cleanup --session <名>` 负责（stop+delete，判 effect 不看 rc）。
@@ -38,7 +40,11 @@
 #   --scope <slug>                                显式 scope（^[a-z0-9][a-z0-9_-]{0,15}$，≤16）；
 #                                                 覆盖 `<目标仓>/.agents/fleet-scope`（该文件缺失 ⇒ 空、静默；
 #                                                 存在但空/多行/非法/非常规文件/symlink 逃仓 ⇒ 一律 fail loud）。
-#                                                 两仓并发**必须**设 scope，否则第二仓 ensure 同 core 会话会 fail loud。
+#                                                 scope 只承担**会话名身份**（`<core>[@<scope>]`）与「已声明则作放置键」。
+#                                                 未声明 scope 时放置键 = 目标仓 slug（worktree 同键）⇒ 多仓并行
+#                                                 各自落自己的 workspace，**无需**为放置而设 scope；同 slug 两仓
+#                                                 共用同一 workspace，需分离就写 `<目标仓>/.agents/fleet-scope`。
+#                                                 两仓并发同 core 无 scope 仍 fail loud（名字撞车，与放置键无关）。
 #   nao-fleet.sh session-start --session <名>     起专用 herdr session 的 server（herdr 后端）。
 #                                                 --session 必填、≠default；起 server 前**清宿主终端句柄**
 #                                                 （TMUX/TMUX_PANE/TMUX_TMPDIR）+ **枚举清 HERDR_***（BR6），
@@ -895,6 +901,9 @@ _term_herdr_cleanup() {  # <session>
 #   所有 herdr 调用仍只经 `_term_herdr_exec`（本区间不出现 tmux 句柄/标题字段名）。
 # ---------------------------------------------------------------------------
 _term_herdr_workspace_id_for() {  # <label> → workspace_id（无则空）
+  #   判据恒为 **label 精确匹配**：WorkspaceInfo 无 cwd/worktree 字段（herdr 0.9.1 实测）⇒ 不能按 cwd/根 pane
+  #   反查（那会引入第二个放置键，同一个 workspace 可能被两种键指向）。label 恒非空（ADR 2026-11-13），
+  #   故下面防空守卫是**纯防御**（保持函数自洽，不依赖调用方）。
   local label="${1-}" js obj
   [[ -n "$label" ]] || return 0
   js="$(_term_herdr_exec workspace list 2>/dev/null)" || return 0
@@ -1080,12 +1089,15 @@ _term_herdr_spawn() {  # <name> <inner> <repo> [force] → SPAWN_RC_OK|FAIL
   local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="" pout="" pl="" obj js
   local pane="" wsid="" tid="" first="" nmatch=0 hit="" verdict="" seq="" launched=0
   [[ -n "$name" && -n "$inner" ]] || { warn "herdr spawn 参数缺失（name/inner）"; return "$SPAWN_RC_FAIL"; }
-  # workspace 匹配键 = scope（无 scope ⇒ 会话名）：WorkspaceInfo 无 cwd/worktree 字段 ⇒ 只能按 label；
-  #   label 匹配同时满足一期契约「名字是路由标签」与重跑幂等（不会重复建 workspace）。
+  # 放置键（ADR 2026-11-13-herdr-workspace-scope-key · D1=A 双键分离）：
+  #   label = 会话名 parse 出的 scope（**已声明**）否则仓 slug（下方**唯一**一处 slug 调用点；worktree 与主仓同键）。
+  #   为什么不能再退回会话名：空 scope 合法（只承担身份），把身份键当放置键会把别仓会话塞进当前窗口（T545）。
+  #   为什么此处**不重读** .agents/fleet-scope：名字已是单点事实（parse 一次），重读 = 双源 + 时序漂移
+  #   （名字里有 scope 就说明调用期已读走并写进名字）。
   pout="$(fleet_name_parse "$name")"
   if [[ "$pout" == "OK "* ]]; then IFS=',' read -r _ _ _ label <<< "${pout#OK }"; fi
-  [[ -n "$label" ]] || label="${HERDR_SESSION:-}"
-  [[ -n "$label" ]] || { warn "herdr spawn 无法确定 workspace label（名字无 scope 且 HERDR_SESSION 空）"; return "$SPAWN_RC_FAIL"; }
+  [[ -n "$label" ]] || label="$(fleet_scope_slug "$repo")"
+  [[ -n "$label" ]] || { warn "herdr spawn 无法确定 workspace label：scope 空且 slug 计算失败（repo=$repo）"; return "$SPAWN_RC_FAIL"; }
 
   # ---- 同名 label 已在场：0 ⇒ 正常放置；1 ⇒ 按证据分派；>1 ⇒ warn + 不猜 ----
   pl="$(_term_herdr_exec pane list 2>/dev/null)" || { warn "herdr pane list 失败（server 未就绪？）"; return "$SPAWN_RC_FAIL"; }
@@ -1162,7 +1174,7 @@ _term_herdr_spawn() {  # <name> <inner> <repo> [force] → SPAWN_RC_OK|FAIL
     fi
   fi
 
-  # ---- 放置（三期 P1 · AC3.1 布局 A）：1 workspace/仓（label=scope）+ 1 tab/角色（label=角色名）+ 每 tab 恰 1 pane
+  # ---- 放置（三期 P1 · AC3.1 布局 A）：1 workspace/仓（label = 已声明 scope，否则仓 slug）+ 1 tab/角色 + 每 tab 恰 1 pane
   #   · 新 pane 永远开在**角色 tab** 里（不再把多个角色 split 进同一个 tab ⇒ 零几何算式）；
   #   · 空 workspace（pane 全关）⇒ 关旧建新（同名 label 仍唯一）；
   #   · 角色 tab 已在场但无 pane 命中该角色 ⇒ **不猜**（fail loud：可能是 --force 撞上仍在场的 pi）。

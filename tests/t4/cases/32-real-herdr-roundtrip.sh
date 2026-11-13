@@ -133,6 +133,18 @@ t4_assert_eq "0" "$T4_RC" "② session-start rc=0（T4_ERR=$(printf '%s' "$T4_ER
 t4_assert_contains "$T4_OUT_ANSI" "server 已就绪" "② server 就绪行在位（轮询，非固定 sleep）"
 t4_assert_eq "1" "$([ -S "$HERDR_SOCKET_PATH" ] && echo 1 || echo 0)" "② socket 落在私有根内（$HERDR_SOCKET_PATH）"
 
+# ---- ③' 调用方场（T545）：模拟「用户在自己的 pane 里对其余仓 ensure」----
+#   调用方 workspace 必须先在场，否则「不落进调用方 workspace」这条断言无从判定（空转）。
+#   注意：三条断言能同时成立的前提是调用方 label ≠ 会话名（下面 rename 为 `caller`）——
+#   否则反向断言「无 label=会话名 的 workspace」会被调用方自己撞上（口径见 ADR 2026-11-13）。
+CALLER_PANE="$(be_new_pane "$LAB")" || { t4_bad "③ 调用方夹具：建 pane 失败"; t4_exit; }
+CALLER_WS="$(fld "$(obj_for "$(json_rows pane list)" pane_id "$CALLER_PANE")" workspace_id)"
+t4_assert_ne "" "$CALLER_WS" "③ 调用方夹具：pane=$CALLER_PANE 落在 workspace $CALLER_WS"
+json_rows workspace rename "$CALLER_WS" caller >/dev/null 2>&1 \
+  || t4_bad "③ 调用方夹具：workspace rename 失败（真 herdr ≥0.9.1 才有）"
+t4_assert_eq "caller" "$(fld "$(obj_for "$(json_rows workspace list)" workspace_id "$CALLER_WS")" label)" \
+  "③ 调用方夹具：调用方 workspace label=caller（≠ 会话名，反向断言才不是自撞）"
+
 # ---- ③ ensure 2 角色（pm + rd-fe）----
 ENSURE_T0="$(date +%s%N)"
 run_fleet ensure "pm@$LAB/repo" "rd-fe@$LAB/repo"
@@ -144,11 +156,17 @@ t4_assert_contains "$T4_OUT_ANSI" "[herdr] 已拉起 rd-fe @ $LAB/repo" "③ rd-
 t4_assert_eq "1" "$([ "$ENSURE_MS" -le 90000 ] && echo 1 || echo 0)" "③ 两角色 ensure wall clock ${ENSURE_MS}ms ≤ 90s（目标 3–6s）"
 t4_info "实测：ensure 2 角色 ${ENSURE_MS}ms（整轮含 session-start/status/close/cleanup 见末行）"
 
-# 布局 A（AC3.1）：1 workspace（label=会话名/scope）+ 1 tab/角色，每 tab 恰 1 pane
+# 布局 A（AC3.1）：1 workspace/仓（label = 已声明 scope，否则仓 slug）+ 1 tab/角色，每 tab 恰 1 pane
+#   放置键判据（ADR 2026-11-13-herdr-workspace-scope-key）：目标仓 $LAB/repo **不是 git 仓** ⇒
+#   slug = realpath 的 basename = `repo`。旧缺陷把「label = 会话名」写成了期望值，此处按判据改：
+#   ① 存在 label=repo 的 workspace · ② 新 pane 不在调用方 workspace · ③ 没有 label=会话名 的 workspace
 WS_JSON="$(json_rows workspace list)"
-WS_OBJ="$(obj_for "$WS_JSON" label "$SESS")"
+WS_OBJ="$(obj_for "$WS_JSON" label repo)"
 WS_ID="$(fld "$WS_OBJ" workspace_id)"
-t4_assert_ne "" "$WS_ID" "③ 布局 A：workspace（label=$SESS）已建立（$WS_ID）"
+t4_assert_ne "" "$WS_ID" "③ 布局 A：workspace（label=repo：非 git 仓 ⇒ slug=repo）已建立（$WS_ID）"
+t4_assert_ne "$CALLER_WS" "$WS_ID" "③ 放置键：新 workspace ≠ 调用方 workspace（$CALLER_WS）"
+t4_assert_eq "" "$(obj_for "$WS_JSON" label "$SESS")" \
+  "③ 放置键：无 label=$SESS 的 workspace（不得取会话名作放置键）"
 TABS_JSON="$(json_rows tab list --workspace "$WS_ID")"
 TAB_PM="$(obj_for "$TABS_JSON" label pm)"
 TAB_FE="$(obj_for "$TABS_JSON" label rd-fe)"

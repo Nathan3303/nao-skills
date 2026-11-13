@@ -906,7 +906,7 @@ t4_assert_eq "2" "$(grep -cE "printf 'NAO_TERMINAL=(tmux|herdr)" "$T4_ROOT/tests
   "P2③ 测试基座：be_fleet_handles 两后端都显式给 NAO_TERMINAL（不靠默认值）"
 t4_assert_eq "" "$(t4_scan_nao_terminal_default_probe "$CASES_DIR")" \
   "P2③ 全部用例：默认值探针块外 0 处 unset / env -u / 空串 NAO_TERMINAL ⇒ 无任何用例在 unset 下跑生产路径"
-t4_assert_eq "31" "$(ls -1 "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" "P2③ 扫描面 = 全部 31 个用例文件（不是子集）"
+t4_assert_eq "32" "$(ls -1 "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" "P2③ 扫描面 = 全部 32 个用例文件（不是子集；T545 增 cases/33）"
 t4_assert_eq "2" "$(grep -l 'default-value-probe BEGIN' "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" \
   "P2③ 默认值探针块白名单 = 2 个文件（cases/06 默认值段 · cases/28 B1① 反向断言）"
 # 负控：块外注入 unset ⇒ 必被扫到（并点名行号与形态）
