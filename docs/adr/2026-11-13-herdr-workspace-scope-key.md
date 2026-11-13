@@ -1,6 +1,6 @@
-# ADR：herdr workspace 放置键与 scope 分离（label = 仓 slug）
+# ADR：herdr workspace 放置键与 scope 分离（label = 声明 scope 否则仓 slug）
 
-- 状态：提议
+- 状态：已接受（待落地）
 - 更新：2026-11-13
 - Owner：arch-designer
 - 指针：Issue [#112](https://github.com/Nathan3303/nao-skills/issues/112) · 评审 `docs/reports/T545-scope-isolation-arch.md` · 上游 `docs/prds/2026-11-10-herdr-base.md`（AC3.1）· 既有放置口径 `docs/reports/96p3-layout-p1.md:22`
@@ -16,6 +16,8 @@
 ## 决策
 
 放置键改为**目标仓 slug**（`fleet_scope_slug`：git common-dir 父目录名 ⇒ worktree 同键；恒非空；≤16 字符），删除 `HERDR_SESSION` 回退；scope 只承担**会话名身份**（`<core>[@<scope>]`）与同名隔离。相对 `96p3-layout-p1.md:22` 的偏差：`label = scope（空 ⇒ HERDR_SESSION）` → `label = scope（已声明）否则仓 slug`。
+
+- **拍板记录（用户 ask-me · 2026-11-13）**：**D1** 采本方案（A · 双键分离）· **D2** **接受废止** `96p3-layout-p1.md:22` 的 `HERDR_SESSION` 回退 · **D3** label = 已声明 scope 优先、未声明用仓 slug · **D4** 增静态 lint（spawn 内禁会话名作放置键）并关闭遗留 `O2` · **D5** 发布形态 `PATCH`（行为修复，无新能力）。
 
 ## 理由
 
@@ -34,7 +36,7 @@
 ## 后果与风险
 
 - 正面：跨仓落错由结构消除（不再存在「调用方 workspace」这一概念）；workspace 与用户认知、herdr 原生行为一致；关闭 `O2`。
-- 负面：workspace label 不再等于 scope（自定义 label 的用户需改用 slug 或 `workspace rename`）；同 slug 两仓（同名仓 / 截断撞名）仍共用一个 workspace。
+- 负面：未声明 scope 的仓 label 由「会话名」变「仓 slug」（手工用自定义 label 的仓不再被复用，需 `workspace rename` 或声明 scope）；同 slug 两仓（同名仓 / 截断撞名）仍共用一个 workspace。
 - 迁移：已存在的 scope 命名 workspace（如 `todo`）升级后不再复用 ⇒ 每仓最多人工关闭一个旧 workspace；运行中会话不受影响（`status`/`close` 不按 workspace 判归属）。
 
 ## 限制与已知边界
@@ -44,8 +46,7 @@
 
 ## 相关指针
 
-- 复现步骤 / 候选对比 / 影响面：`docs/reports/T545-scope-isolation-arch.md`
-- 落实闸门与用例集：同报告 §四（实施类按 `deliverable-docs.md` §四 下沉，不进本 ADR）
+- 复现步骤 / 候选对比 / 实施闸门 G1–G9（rd-infra 照做）：`docs/reports/T545-scope-isolation-arch.md`
 
 ## 参考来源
 
