@@ -7,7 +7,7 @@
 ## 一、观察项
 
 - `O1`｜现象 = `ensure` 的判重不看下游卡 role：`fleet_roles_init` 不带 `--cards`（避免为判重引入 glob/IO 与 `CARD_SET_MAX` 告警）⇒ 卡会话名在 `running_verdict` 里 parse 成 `ERR` ⇒ 同 core 的跨仓卡会话**不判重**（首仓已起 `sec-review`，第二仓再 `ensure --card` 仍会拉起第二个）。｜来源 = #96 步 2a 第二轮 QA 的 P3-1｜严重度 = P3（静默重复而非崩溃；**旧行为延续、非回归**——`2692b42` 同样不判）｜出口 = **观察**（本批不动：修它会改卡路径初始化与判重语义，需单独测 `--cards` 对 `running_verdict`／`CARD_SET_MAX` 告警面的影响）｜到期 = **2027-01-31**（复核触发：步 2b herdr 后端落地后，或任一仓实际出现「卡会话跨仓重复」；届时优先在 `running_verdict` 里改用「目标 role 临时登记」而非全局 `--cards`）。
-- `O2`｜现象 = `fleet_scope_slug` 目前只被用例 28 与契约单测消费，生产路径**尚未**自动取 slug（scope 只来自 `--scope` / `.agents/fleet-scope`）。｜来源 = 报告 §0「可换面仅后两个符号」｜严重度 = —（设计内：二期才允许替换 scope 的**来源**与归一化）｜出口 = **观察**（二期若做「自动按仓名生成 slug」，直接接本函数；其 worktree 不分裂判据已由用例 28 ⑤b 守住）｜到期 = **2027-01-31**。
+- `O2`｜现象 = `fleet_scope_slug` 目前只被用例 28 与契约单测消费，生产路径**尚未**自动取 slug（scope 只来自 `--scope` / `.agents/fleet-scope`）。｜来源 = 报告 §0「可换面仅后两个符号」｜严重度 = —（设计内：二期才允许替换 scope 的**来源**与归一化）｜出口 = **已关闭（T545 · 2026-11-13）** —— `fleet_scope_slug` 已接生产放置键（放置键 = 已声明 scope 否则仓 slug，删 `HERDR_SESSION` 回退）；验收判据 = 函数体 `grep -c fleet_scope_slug`=1 + `cases/33` U1–U3 绿 + `cases/28` C3④ lint 空表；ADR `docs/adr/2026-11-13-herdr-workspace-scope-key.md`｜到期 = **已关闭**。
 
 > 字段固定顺序：编号 / 现象+来源 / 严重度 / 出口 / 到期（一行一条；技能 @.agents/skills/task-completion.md §三）。
 
