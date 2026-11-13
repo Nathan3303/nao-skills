@@ -1,0 +1,45 @@
+name: Deploy site to GitHub Pages
+
+# 零构建：直接把 site/ 目录当作静态产物上传，不跑 npm、不装依赖。
+# 线上地址：https://nathan3303.github.io/nao-skills/（项目页子路径；site/ 内全部为相对路径，无需 basePath 改写）
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+# 最小权限：读仓库内容（checkout）+ 发布 Pages（OIDC 部署令牌）
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时刻只允许一次 Pages 发布；不取消进行中的生产部署
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site/ as Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
