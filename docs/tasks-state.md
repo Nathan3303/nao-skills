@@ -46,6 +46,7 @@
 - ✅ **T544 O3 落地（2026-11-13 · `18ff0b4` · `cases/28` C3⑤ 静态闸）**：PM 拍板「加」—— 判据 = 读取形（`${_TERM_HERDR_SERVER_START` / 裸 `$…`）+ 命令行位前置赋值形，白名单空，命中点名到行；失败文案指路「起 server 用 `--server-start`」。**+5 断言（417 → 422）**：真脚本 0 命中 + 三负控各 1 + **正控**（迁移带 `-u _TERM_HERDR_SERVER_START` 仍在场，防「删干净凑绿」）。真脚本注入演练：注入历史读取形 ⇒ `--case 28` rc=1 且点名 `412:`；还原后 md5 逐字节一致 ⇒ 复跑 rc=0。门禁：`check` rc=0 files=54 · `npm test` rc=0 · **`dual` 两组 rc=0**。实现坑自曝：失败文案用反引号包 `${…}` 会被当命令替换吞掉，改单引号变量承载。
 - ⚠️ **PM 前提被证伪并认账（2026-11-13 · 第 N 例）**：我给 T544 派的判据 4 假设「server-start 分支清 `HERDR_*` ⇒ 自面板守卫拿空 `pane id` ⇒ 可能误杀（T534 同型）」。rd-infra 四环境实测**不成立**（分支只清子进程 env，fleet 自身取值不受影响）。**真实危害**（已写进报告与 release notes）：每次 pane 调用多套一层 `env -u`+setsid，且**子进程丢 `HERDR_SOCKET_PATH`** ⇒ 自定义 `XDG_CONFIG_HOME` / 符号链接配置下可能连到另一个会话的 socket。
 - ⚠️ **流程记事**：rd-infra 本轮顺手改了 `docs/tasks-state.md`（台账归 PM）。内容核对无误、已保留；已在派单侧提醒「台账我改」，后续复核时确认其不再动 `docs/`。
+- 📌 **计数口径（T544 · QA N2 采纳）**：`[PASS]` 断言总数**随环境浮动**（本次 1787 / rd 报 1782），因部分用例有环境相关断言。台账与回执**只记 `rc` + 例数 + SKIP/DEGRADE/NOTE**，`[PASS]` 仅作参考、不跨环境对比。
 - 🔄 **T542 立项（2026-11-13 · Issue [#110](https://github.com/Nathan3303/nao-skills/issues/110) · `feat/110-penpot-handoff` · PATCH 0.23.2）**：**Penpot 出图协作闭环** —— 用户 2026-11-13 两条口头约束 + T541 三处实证（rd-fe 首版按文字规格实现致返工 / PM PASS 后直接派 RD 未经用户确认 / 设计稿文字与画板矛盾）。PRD = `docs/prds/2026-11-13-penpot-handoff.md`（9 模块 · R1–R7 · AC1–AC10）。范围：`uiux-designer` 卡（v1→2 图源信息四项 + 必要时导出）· `frontend-developer` 卡（v12→13 写码前检查 + 按图实现 + 反驳走回退）· `product-manager` 卡（v34→35 派发闸门 + 开工卡新增一问，默认不托管）· `skills/uiux-design.md` 清单 · 开工卡模板（pm-operations §一 + comm-templates）。**非范围**：Penpot MCP 接入（T540 预占）· 导出格式规范 · 自动一致性检查。**待办** = 开工确认卡待用户确认。
 
 - ✅ **T542 开工确认（2026-11-13 · 用户 ask-me）**：开工 · **「设计稿验收模型」默认值 = 不答即「用户本人确认」**（不默认代用户拍板）。派 rd-infra 实施 5 处 + bump（pm v34→35 / uiux-designer v1→2 / rd-fe v12→13）+ 广播文本；qa 轻量复核；设计闸门不适用（机制文本非界面）；架构评审跳过（纯文本纪律）。
@@ -392,7 +393,7 @@
 | 任务编号 | 回执摘要（≤150字） | 详情路径 | 待办 |
 | :--- | :--- | :--- | :--- |
 | T541 | rd-fe `done(full)`：`site/` 四文件 32,183B 零外部依赖（请求数 4）、命令无 pin、AC1–AC9 实测（headless chromium）· `check` rc=0（roles=7/files=54）· Draft PR #108（含 7 条有意偏差）· HEAD `1196452` / 未推送 0 | 分支 `feat/107-portal-site` | PM 验收 → rd-infra Pages（AC10）→ qa 用户验收清单 |
-| T544 | rd-infra `done(full)`：方案 B（`--server-start` 显式首参数，脚本内零读取点）+ 迁移带 `-u`；新 server pane env `grep -c`=0（HEAD 正控 1）· 负控 spy 行为全同 · 自面板 `close` 两环境均拒 · `check` 54 / `npm test` / `dual` rc=0 · 删 `lib.sh` unset 并演练复红 | `docs/reports/2026-11-13-T544-impl.md` · 分支 `fix/116-herdr-flag-leak` · HEAD `9cc0b99` | PM 验收 → RD squash 合并（PATCH 0.23.3） |
+| T544 | rd-infra `done(full)`：方案 B（`--server-start` 显式首参数，脚本内零读取点）+ 迁移带 `-u`；新 server pane env `grep -c`=0（HEAD 正控 1）· 负控 spy 行为全同 · 自面板 `close` 两环境均拒 · `check` 54 / `npm test` / `dual` rc=0 · 删 `lib.sh` unset 并演练复红 | `docs/reports/2026-11-13-T544-impl.md` · 分支 `fix/116-herdr-flag-leak` · HEAD 代码 HEAD `18ff0b4`（O3 前 `9cc0b99`） | PM 验收 → RD squash 合并（PATCH 0.23.3） |
 
 
 
