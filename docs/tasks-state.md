@@ -42,6 +42,11 @@
 
 > 本区是 PM 的**悬空状态**（任务状态见下方五栏）；重开后逐行回读确认（当前阶段 · 未决决策 · 口头约束）。
 
+- 🔄 **T542 立项（2026-11-13 · Issue [#110](https://github.com/Nathan3303/nao-skills/issues/110) · `feat/110-penpot-handoff` · PATCH 0.23.2）**：**Penpot 出图协作闭环** —— 用户 2026-11-13 两条口头约束 + T541 三处实证（rd-fe 首版按文字规格实现致返工 / PM PASS 后直接派 RD 未经用户确认 / 设计稿文字与画板矛盾）。PRD = `docs/prds/2026-11-13-penpot-handoff.md`（9 模块 · R1–R7 · AC1–AC10）。范围：`uiux-designer` 卡（v1→2 图源信息四项 + 必要时导出）· `frontend-developer` 卡（v12→13 写码前检查 + 按图实现 + 反驳走回退）· `product-manager` 卡（v34→35 派发闸门 + 开工卡新增一问，默认不托管）· `skills/uiux-design.md` 清单 · 开工卡模板（pm-operations §一 + comm-templates）。**非范围**：Penpot MCP 接入（T540 预占）· 导出格式规范 · 自动一致性检查。**待办** = 开工确认卡待用户确认。
+
+- ✅ **T542 开工确认（2026-11-13 · 用户 ask-me）**：开工 · **「设计稿验收模型」默认值 = 不答即「用户本人确认」**（不默认代用户拍板）。派 rd-infra 实施 5 处 + bump（pm v34→35 / uiux-designer v1→2 / rd-fe v12→13）+ 广播文本；qa 轻量复核；设计闸门不适用（机制文本非界面）；架构评审跳过（纯文本纪律）。
+- ✅ **T542 rd-infra 交付 + QA 复核 = CONDITIONAL（2026-11-13 · `5747063` / QA `cde79e0` · 报告 55 行）**：五处落地（净 +6 行 / 6 文件 · 三卡 2/13/35 · `check` files 54 不变 · `npm test` rc=0 · 敏感面收紧 0）。**QA 判 8 达成 + 2 部分**：D1（P2）一问作用域三处不一（PM 卡嵌在「出图后」条件句 / `pm-operations §一` = 含设计稿任务 / 模板 = 无条件）⇒ 拆两句 + **bump pm v36**；D2（P2）`card …` 广播文本仓内无留档 ⇒ PM 处理（PR 描述 + 台账登记）。P3 观察三条接受（技能纪律句轻度双源等）。**comm-templates 一行注记判可接受**（卡形态单源在 `pm-operations §二`，新建节即双源）。
+- ✅ **T542 D1 已修 + QA 点检 = 收敛（2026-11-13 · 修 `99c9426`（pm v36）· QA 点检 `29147a3` · 报告追加 §点检 66 行）**：四处作用域同义（设计类任务必问含未出图 / 非设计类写不适用 / 不答 = 用户本人）；两闸真正分离（`:69` 只查出图 + 明写「不缩小下一条一问范围」）；「设计类」指回 `:68` BR2/BR2a 定义未新造；双源**保留不回退**（规则本体仍只在 PM 卡 §六 一处，另两处仅三短项 + 双指针）；`check` rc=0 files=54 · 本轮净增 +1 行 · 敏感面 0 · 变更仅 3 机制文件。**两个 P3**：P3-1（`:70` 指针 off-by-one，指向上两条而非紧邻上一条）→ **接受**，为 6 字再发 v37 + 广播不值，随下次动 PM 卡改；P3-2（PRD R5 口径差）→ **本批修**（R5 补「含问无条件 / 必答限设计类」，不改卡故不需 bump）。**D2 留档形态经 QA 认可**：PR 描述贴三条 `card` 文本 + 台账登记；台账须写清「文本留档 ≠ 已发」+「本仓（会话 pm）已发 / 下游三仓待唤醒补发」，版本号为 **v36**。
 - 🔄 **T541 开工（2026-11-13 · Issue [#107](https://github.com/Nathan3303/nao-skills/issues/107) · `feat/107-portal-site`）**：**门户单页**（中文 landing page · 纯静态零外部依赖 · GitHub Pages 项目页）。PRD = `docs/prds/2026-11-13-portal-site.md`（9 模块 · AC1–AC11）。**开工卡已确认（ask-me）**：现在开工 · 分工 = 设计→实现→部署→验收（uiux-designer 设计稿 PASS 才放行）· 建 Issue · 模型不指定。**串行链**：uiux-designer → rd-fe（`site/`）→ rd-infra（Pages workflow）→ PM（README 指针）→ qa（用户验收清单）→ 用户回填 → RD squash 合并。**DoD**：产物 `site/index.html`(+css/js) · `.github/workflows/pages.yml` · `docs/designs/2026-11-13-portal-site.md` · `docs/reports/2026-11-13-T541-user-acceptance.md` · README 指针 1 行；验证 `check` rc=0 + `npm test` rc=0 + AC1–AC11 + 外部请求 0 + ≤200KB + 敏感值 grep 空 + 本地双击可开；遗留三出口；交接含「Pages 首次启用需用户在仓库 Settings→Pages 选 GitHub Actions」。**已知降级**：本批不发版（不出 npm 包）。
 
 - 📌 **用户口头约束（2026-11-13 · 已即时落盘 → Issue #110 / T542 待派发）**：**Penpot 出图后的两条硬约束** —— ① uiux 用 Penpot MCP 出图 ⇒ 交付须写明 Penpot 页信息（文件 id / 画板名尺寸 / 图层命名），必要时导出文件入库作本地依据；**rd-fe 写代码前须检查 uiux 是否用 Penpot 出图，若是严格按图实现**，允许反驳但必须走流程回退。② **uiux 出图后 PM 不得立即派 RD**，须用户确认设计稿满意（例外 = 用户明确托管），**且须在任务开工前就问清**（开工卡新增一问）。**触发来源**：本批实测 —— rd-fe 首版按设计稿文字规格实现，用户当场点出与 Penpot 画板差距大、重做一版 ⇒ 本批设计验收实际走了「PM PASS → 直接派 RD」的旧路径，属已知缺陷，T542 修复。
@@ -64,6 +69,7 @@
 - ✅ **T545 rd-infra 交付 `done(full)`（2026-11-13 · `db7f8c4`）**：G1 键 = `[[ -n "$label" ]] || label="$(fleet_scope_slug "$repo")"`（不重读 fleet-scope）· G6 基线取证 **2→0**（必须连 warn 文案改）· G3 新判据三段 + 调用方夹具 · G4 `cases/33`（28 断言 U1–U5）· G5 三负控（③ 附旧实现必红反向证据）· lint 落 `cases/28` 未进 `check` · G7 O2 判据达成 · PATCH `0.23.1`（未 tag/未 Release）。门禁：`check` rc=0 files=54 · herdr 32 例 `[PASS]`=1782 · tmux 1639 · NOTE=10。
 - ✅ **T545 qa 复核 `done(full)` = GO（0 P0/P1/P2 · `b397f21` · 报告 54 行）**：先红后绿双桩（红：新 pane 落调用方 ws 零新 workspace；绿：新建 `w2 label=repo-b`）· `cases/32` 旧实现 11 FAIL → 新 PASS · `cases/33` 旧 9 FAIL → 新 28 PASS · **G3 逐段变异 8 轮真机**（旧×{full,no1,no2,no3} 全红；新×四组全绿；`caller-repo` 夹具 ⇒ 仅 ② FAIL ⇒ ② 非真空）· G5①②③ 自做（md5 前后一致）· `cases/06` 31→32 与 `cases/28` fixture 改 slug 均**必要**（回退即红）· 范围 16 文件无夹带（`.agents/prompts`/`bin`/`site` 各 0）· **迁移实证三场景**：旧 label=slug ⇒ 直接复用 · 旧 label=scope 且声明 scope ⇒ 复用 · 旧 label=会话名 ⇒ 新建 + 旧 ws 留孤儿需人工 close。**遗留**：O1（G7 文书面）→ PM 本提交已补（96a O2 行改「已关闭（T545）」）· O2（release notes）→ PM 发版时 · O3/O4 接受。
 - ✅ **T545 批次终态（2026-11-13 · 合并 `63a596b` · 发布 v0.23.1 PATCH）**：#112 CLOSED（回帖含迁移三情况）· 分支删净 · ADR 已落地 · release notes 随 PR 进 main · 门禁双绿后发版。
+- 📦 **v0.23.1 已发（2026-11-13）**：发布提交 `26911f2`（RD 显式 sha push）· tag `v0.23.1`（annotated，指向 `26911f2`，已 push）· Release 已发（`gh release create`，标题 = 裸 `v0.23.1`，正文 = `docs/releases/v0.23.1.md`）· **npm 待用户 `npm publish`**，核验判据 = `dist-tags.latest` = 0.23.1 且 `dist.integrity` 与本地 `npm pack` tarball 逐字节一致；回填「已核验」留下一批首提交（BR5）。派生会话 3 个已回收。
 - ✅ **T543 rd-infra 交付 `done(full)`（2026-11-13 · `1ac521d` · 代码 5 文件 +81/−12 · 工作区静默）**：#109 `cases/27` 生产端点按后端取（herdr 以 `HERDR_SOCKET_PATH` 为权威，`HERDR_SESSION` 仅降级派生，不可判定 fail loud + 锚点落实验根即红 + 快照改只读文件系统面）· #111 择「补 `-u HERDR_SOCKET_PATH -u HERDR_SESSION`」并说明为何不在 lib 统一清 · 另修两处 tests/t4 内宿主缺陷（`lib.sh` 摘 `_TERM_HERDR_SERVER_START`；`lib-backend` 活 cache 判定只排除实验根世系）。**门禁**：herdr `npm test` rc=0（29 PASS/0 FAIL/2 TMUX-ONLY · NOTE=9）· tmux rc=0（31 PASS/0 FAIL · NOTE=8）· 两例单跑 + 幂等 · **三负控真跑**（恒假必红 / 注入他会话 socket 仍绿 / 移除清理必红）· `git revert` 自证 rc=0 无冲突 · 敏感值 0。**PM 自证**：`git diff --stat main...HEAD` = **9 文件 +97 −17**（代码 5 文件全在 `tests/t4/`，另 4 为文档首提交）· 生产脚本零改动。
 - 🔄 **T543 qa 复核已派（2026-11-13）**：要求先红（`5b15563`）后绿（`1ac521d`）双 HEAD 对照 · 双后端门禁自跑 · 三负控自做 · 范围裁定（lib.sh/lib-backend 顺带修是否必要、cases/28 6 行有无夹带）· 疑点判定（herdr 锚点只断言 A 未断言 B）。
 - ✅ **T543 qa 复核 `done(full)` = GO（2026-11-13 · HEAD `f1ea4ab` · 报告 `docs/reports/2026-11-13-T543-qa-verify.md` 56 行）**：**0 P0/P1/P2**。**先红后绿两 HEAD 对照**：红 `5b15563`（27 崩 `行 182: TMUX` rc=1 · 06 223 PASS + 2 FAIL）→ 绿 `1ac521d`（27 = 65 PASS rc=0 · 06 = 224 PASS rc=0）；**根因自证**：`env -u HERDR_* ` 跑 06 ⇒ 0 FAIL；`TMUX=…` 跑 27 ⇒ 崩点消失但转 7 FAIL（sweep⑤）⇒ 两条红非 flake。**双后端门禁**：herdr rc=0（29 PASS/0 FAIL/2 TMUX-ONLY/[PASS]=1748/NOTE=9）· tmux rc=0（31 PASS/0 FAIL/[PASS]=1637/NOTE=8），与 rd 逐项一致。**三负控自做**（含附加 d–h 六项）：恒假必红（红点精确指 fail-loud 判据）· 注入他会话 socket 仍绿 · 摘 `-u` 必红（双向，含宿主真 env）· **`lib-backend` 必要**（回退 ⇒ 27 七红）· **`lib.sh` 摘 `unset` 只对 28 必要**（回退 ⇒ 28 186 红而 27 仍绿）· **`cases/28` 6 行独立泄漏无夹带**（回退 ⇒ 假绿 3 红）· **rd 择「补 `-u`」成立**（若 lib 统一清 ⇒ 27 rc=1）。**范围裁定**：零生产脚本改动成立（`.agents/`/`bin/`/`package.json`/`site/` 全 0）。**疑点判定**：herdr 锚点只断言 A 属**结构性无必要**（前置整体守卫强于两条不等式 + 负控 g 当场红）⇒ 降为 P3。**快照只读**：前后 `stat`/`ls -A -l` diff 全空。**敏感值** 0 命中。**遗留三出口**：O1 接受（B 对称行/注释）· **O2 转办 2026-12-31**（`HERDR_*` 清理清单三处手写 → 收敛 `lib.sh` 单源数组）· O3 归 T544 · O4 接受（符号链接夹具根，建议 `tests/README.md` 补一句）。
@@ -138,6 +144,13 @@
 - 会话体检：本 PM 会话（`01a1977d` · pane %74）已跨 T537 / M20261101 / M20261102 / T538 / T539 五批，ctx 约 35%；**建议下批开工前重开 PM**；本快照 = 接续唯一事实源（main = `38f678b`）
 
 ## 需求分支 / PR / 发布（PM 维护）
+
+### 本批 T542（Penpot 出图协作闭环 · Issue #110 · 实施中）
+
+- 通道：`feat`（新增纪律）· 分支 `feat/110-penpot-handoff` · PATCH 0.23.2
+- PRD：`docs/prds/2026-11-13-penpot-handoff.md`（9 模块 · R1–R7 · AC1–AC10）
+- PR owner / Reviewer：rd-infra / qa（轻量复核）· 设计闸门不适用 · 架构跳过
+- 落点：`prompts/{uiux-designer,frontend-developer,product-manager}.md` · `skills/uiux-design.md` · `skills/pm-operations.md` §一 · `checklists/comm-templates.md`
 
 ### 本批 T545（herdr 多 workspace scope 隔离 · Issue #112 · arch 阶段）
 
@@ -359,6 +372,7 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| T542 | rd-infra-T542 | Penpot 出图协作闭环：三张卡（图源契约 / 按图实现 / 派发闸门）+ 技能清单 + 开工卡一问 + bump + 广播文本 | 2026-11-13 | AC1–AC10 | （本 PR 首提交） |
 
 ## 已回执待验收
 
