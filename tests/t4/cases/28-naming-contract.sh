@@ -39,7 +39,11 @@
 #      `_term_herdr_spawn` 函数体（`awk '/^_term_herdr_spawn\(\)/,/^}/'`）后 `grep -c HERDR_SESSION` == 0；
 #      **白名单为空**（`--session` 注入只在 `_term_herdr_exec`，不在这个函数里）⇒ 连 warn 文案也算命中。
 #      基线（T545 前）= 2 处（键回退 1 + 「无法确定 workspace label」文案 1）。本 lint **不进 `check`**（check 计数不漂）。
-#   负控：close 里手写 `name="${NAME}-${task}"` ⇒ ②红；删一条 parse 调用 ⇒ ③红；spawn 内注入 `HERDR_SESSION` ⇒ ④红
+#   ⑤ 起 server 身份禁读 `_TERM_HERDR_SERVER_START`（T544 · Issue #116）：读取形（花括号 / 裸变量）
+#      与命令位前置赋值形均 == 0，白名单为空；合法唯一形态 = 迁移带 `-u _TERM_HERDR_SERVER_START`。
+#      它与「删测试侧兜底」互补：后者防**已发生的泄漏**（无泄漏环境下不红），本闸防**读取点被加回来**。
+#   负控：close 里手写 `name="${NAME}-${task}"` ⇒ ②红；删一条 parse 调用 ⇒ ③红；spawn 内注入 `HERDR_SESSION` ⇒ ④红；
+#      注入历史读取形 / 裸读取形 / 命令位赋值形 ⇒ ⑤红（三种形各一条）。
 #
 # 退出码沿用 lib.sh 约定；夹具根不得落在任何 git 仓内，收尾走机制 `cleanup -S`。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
@@ -328,6 +332,68 @@ if mutate_file "$SUBJECT" "$NEG_D" \
 else
   t4_bad "C3④ 负控变异锚点未命中（用例锚点须跟随实现）"
 fi
+
+# ============================================================================
+# C3⑤ 起 server 身份禁读环境变量（T544 · Issue #116）
+#   病根：旧实现用 `_TERM_HERDR_SERVER_START=1 _term_herdr_exec server` 传「我是起 server 者」——
+#     bash 把「函数调用的前置变量赋值」连环境交给子进程 ⇒ herdr server 继承 ⇒ 它 spawn 的每个 pane
+#     全继承 ⇒ pane 内每次 fleet 调用都误走 server-start 分支（多套 `env -u`+setsid，并清掉子进程
+#     `HERDR_*` 含 `HERDR_SOCKET_PATH` ⇒ 跨 root/符号链接配置时可串台）。
+#   现行形：身份由**显式首参数** `_term_herdr_exec --server-start` 传（不进 env）。本闸抓「把读取形/命令位
+#     赋值形加回来」——它防的是**回归**（无泄漏环境下套件不会红，故与「删测试侧兜底」互补）。
+#   判据（白名单为空，两类历史形态都纳管）：
+#     ① 读取形（花括号 / 无花括号）：`\$\{?_TERM_HERDR_SERVER_START` —— 含历史分支判断
+#        `[[ "${_TERM_HERDR_SERVER_START:-0}" == "1" ]]` 与裸 `$_TERM_HERDR_SERVER_START`；
+#     ② 命令行位前置赋值形：`^<空白>[(]<空白>?_TERM_HERDR_SERVER_START=`（旧泄漏写法；单靠它不生效，
+#        但会配一个读点 ⇒ 两者同报）。
+#   合法唯一形态：`-u _TERM_HERDR_SERVER_START`（迁移带：不带 `$`、非行首赋值）⇒ 不命中。
+#   已知边界：行级静态不剥引号/heredoc；命中即输出 `行号:内容`（便于点名）。
+# ============================================================================
+lint5() { # <script> → 违规行 "行号:内容"（空 = 合规）
+  grep -nE '\$\{?_TERM_HERDR_SERVER_START|^[[:space:]]*(\([[:space:]]*)?_TERM_HERDR_SERVER_START=' "$1" || true
+}
+T544_MSG='起 server 的身份请用 `_term_herdr_exec --server-start`，禁读 _TERM_HERDR_SERVER_START 环境变量（ADR/T544 · Issue #116）'
+# 历史读取形的**原文**（单引号书写 ⇒ 不展开、不当命令替换）：消息里要用它点名，不能直接写进双引号
+T544_READ_FORM='[[ "${_TERM_HERDR_SERVER_START:-0}" == "1" ]]'
+t4_assert_eq "" "$(lint5 "$SUBJECT")" "C3⑤ ${T544_MSG}（真脚本 0 命中）"
+# ---- C3⑤ 负控 1：历史读取形（花括号 + `:-0` 比较）⇒ 必红并点名行号 ----
+NEG_E="$T4_CACHE_DIR/c3-neg-e.sh"
+if mutate_file "$SUBJECT" "$NEG_E" \
+    '  local s="${HERDR_SESSION:-}" v ss=0' \
+    '  local s="${HERDR_SESSION:-}" v ss=0
+  if [[ "${_TERM_HERDR_SERVER_START:-0}" == "1" ]]; then :; fi'; then
+  e_out="$(lint5 "$NEG_E")"
+  t4_assert_match "$e_out" '^[0-9]+:.*_TERM_HERDR_SERVER_START' \
+    "C3⑤ 负控 1 历史读取形「${T544_READ_FORM}」注入副本 ⇒ 红并点名【${T544_MSG}】"
+else
+  t4_bad "C3⑤ 负控 1 变异锚点未命中（用例锚点须跟随实现）"
+fi
+# ---- C3⑤ 负控 2：裸变量读取形（无花括号）⇒ 同样必红（不只认一个写法）----
+NEG_F="$T4_CACHE_DIR/c3-neg-f.sh"
+if mutate_file "$SUBJECT" "$NEG_F" \
+    '  local s="${HERDR_SESSION:-}" v ss=0' \
+    '  local s="${HERDR_SESSION:-}" v ss=0
+  : "$_TERM_HERDR_SERVER_START"'; then
+  t4_assert_match "$(lint5 "$NEG_F")" '^[0-9]+:.*_TERM_HERDR_SERVER_START' \
+    "C3⑤ 负控 2 裸读取形「\$_TERM_HERDR_SERVER_START」（无花括号）⇒ 同样红（判据不只认一种拼法）"
+else
+  t4_bad "C3⑤ 负控 2 变异锚点未命中（用例锚点须跟随实现）"
+fi
+# ---- C3⑤ 负控 3：命令行位前置赋值形（旧泄漏写法）⇒ 必红 ----
+NEG_G="$T4_CACHE_DIR/c3-neg-g.sh"
+if mutate_file "$SUBJECT" "$NEG_G" \
+    '  local s="${HERDR_SESSION:-}" v ss=0' \
+    '  local s="${HERDR_SESSION:-}" v ss=0
+  _TERM_HERDR_SERVER_START=1 :'; then
+  t4_assert_match "$(lint5 "$NEG_G")" '^[0-9]+:.*_TERM_HERDR_SERVER_START=1' \
+    "C3⑤ 负控 3 命令位前置赋值形（旧泄漏写法）⇒ 同样红"
+else
+  t4_bad "C3⑤ 负控 3 变异锚点未命中（用例锚点须跟随实现）"
+fi
+# ---- C3⑤ 正控（不误伤）：迁移带 `-u _TERM_HERDR_SERVER_START` 必须仍在场且被本闸放行 ----
+#   为何要正控：否则「删干净」（连 `-u` 一起删）也能让 C3⑤ 绿 —— 而 `-u` 是迁移期承重件。
+t4_assert_eq "1" "$(grep -c -- '-u _TERM_HERDR_SERVER_START' "$SUBJECT" || true)" \
+  "C3⑤ 正控：迁移带「-u _TERM_HERDR_SERVER_START」仍在场（与本闸零命中并存 ⇒ 不是靠删干净凑绿）"
 
 # ============================================================================
 # C2 golden diff 空（status 全文 + ensure 已拉起行/--name 值）
