@@ -42,6 +42,7 @@
 
 > 本区是 PM 的**悬空状态**（任务状态见下方五栏）；重开后逐行回读确认（当前阶段 · 未决决策 · 口头约束）。
 
+- 🔄 **T544 开工（2026-11-13 · `fix` 通道 · Issue [#116](https://github.com/Nathan3303/nao-skills/issues/116) · 分支 `fix/116-herdr-flag-leak` · PATCH 0.23.3）**：**生产侧旗标泄漏** —— herdr server 由 `nao-fleet.sh:1339` 拉起时，内部旗标 `_TERM_HERDR_SERVER_START=1` 被 server 进程继承 ⇒ 它 spawn 的每个 pane 都带该旗标 ⇒ pane 内每次 fleet 调用误走 `:418` 的 server-start 分支（多一层 `env -u`+`setsid`，并枚举清 `HERDR_*` 含 `HERDR_PANE_ID`）⇒ 自面板/自我回收守卫在该路径拿空值（T534 踩过误杀）。**PM 实测**：pm 常驻 pane 内 `env | grep _TERM_HERDR` → `_TERM_HERDR_SERVER_START=1`。**修复方向**（具体由 rd 定）：起 server 的 `env` 前缀摘掉该旗标，分支判断保留；或改参数/临时文件传信号。**判据**：新 server 的 pane env `grep -c` = 0 · `session-start` 后 `api snapshot` OK · **负控**（人为注入该旗标 ⇒ 行为不变）· 自面板/自我回收守卫在有/无该旗标两环境都正常 · `check` rc=0 + `npm test` 双后端 rc=0。**迁移**：已运行 server/pane 仍带旧旗标，需重起 server。
 - 🔄 **T542 立项（2026-11-13 · Issue [#110](https://github.com/Nathan3303/nao-skills/issues/110) · `feat/110-penpot-handoff` · PATCH 0.23.2）**：**Penpot 出图协作闭环** —— 用户 2026-11-13 两条口头约束 + T541 三处实证（rd-fe 首版按文字规格实现致返工 / PM PASS 后直接派 RD 未经用户确认 / 设计稿文字与画板矛盾）。PRD = `docs/prds/2026-11-13-penpot-handoff.md`（9 模块 · R1–R7 · AC1–AC10）。范围：`uiux-designer` 卡（v1→2 图源信息四项 + 必要时导出）· `frontend-developer` 卡（v12→13 写码前检查 + 按图实现 + 反驳走回退）· `product-manager` 卡（v34→35 派发闸门 + 开工卡新增一问，默认不托管）· `skills/uiux-design.md` 清单 · 开工卡模板（pm-operations §一 + comm-templates）。**非范围**：Penpot MCP 接入（T540 预占）· 导出格式规范 · 自动一致性检查。**待办** = 开工确认卡待用户确认。
 
 - ✅ **T542 开工确认（2026-11-13 · 用户 ask-me）**：开工 · **「设计稿验收模型」默认值 = 不答即「用户本人确认」**（不默认代用户拍板）。派 rd-infra 实施 5 处 + bump（pm v34→35 / uiux-designer v1→2 / rd-fe v12→13）+ 广播文本；qa 轻量复核；设计闸门不适用（机制文本非界面）；架构评审跳过（纯文本纪律）。
@@ -145,6 +146,12 @@
 - 会话体检：本 PM 会话（`01a1977d` · pane %74）已跨 T537 / M20261101 / M20261102 / T538 / T539 五批，ctx 约 35%；**建议下批开工前重开 PM**；本快照 = 接续唯一事实源（main = `38f678b`）
 
 ## 需求分支 / PR / 发布（PM 维护）
+
+### 本批 T544（生产侧旗标泄漏 · Issue #116 · 实施中）
+
+- 通道：`fix`（3 字段：现象 / 复现 / 回退）· 分支 `fix/116-herdr-flag-leak` · PATCH 0.23.3
+- PR owner / Reviewer：rd-infra / qa（门禁类须非作者复核）
+- 面：`nao-fleet.sh:1339`（起 server 的 env 前缀）+ 可能 `:418` 分支判断；零测试改动（测试侧 T543 已兜底）
 
 ### 本批 T542（Penpot 出图协作闭环 · Issue #110 · 实施中）
 
@@ -345,7 +352,7 @@
 | ~~Issue #109~~（已开批 T543） | rd-infra-T543 | `npm test` 在 herdr 会话内必红：`tests/t4/cases/27-backend-selftest.sh:182` `PROD_SOCK="${TMUX%%,*}"` 在 `set -u` 下未定义，cases/28 连带 ~189 断言 FAIL；tmux 内同 HEAD 全绿 | 默认后端已是 herdr（v0.23.0）⇒ 全范围门禁在默认环境不可用；与门户批次无关，须单独立项修 |
 | ~~Issue #111~~（已开批 T543） | rd-infra-T543 | `tests/t4/cases/06` 的 `B3_CLEAN_ENV` 未清 `HERDR_SOCKET_PATH`；herdr pane 内该值指向别的会话 ⇒ 守卫判 stale 拒拆 ⇒ `cleanup --session` 期望 rc=0 实得 3（2 红）。tmux 内 `HERDR_*` 命中 0 故长期未暴露 | 与 Issue #109 叠加使默认后端门禁不可用，二者互相掩盖；须单独立项 |
 | T545（Issue [#112](https://github.com/Nathan3303/nao-skills/issues/112)） | arch-designer（方案）+ rd-infra（诊断/实现） | **herdr 多 workspace 下 scope 判定失真**：同一 server 两 workspace 并行 ensure ⇒ 跨仓会话落进调用方 workspace（`w1` 内有 `cwd` 指向 nao-todo 的 `rd-infra-T724`），且会话名丢 scope（该仓 `fleet-scope=todo` 未生效）；根因方向 = `_term_herdr_spawn` 的 workspace 匹配键为 scope，取不到时退回宿主 `HERDR_SESSION` ⇒ label 变调用方 workspace。**待 arch 裁**：scope 判定源（目标仓 / 显式 `--scope` / 禁止跨 workspace 落 pane）+ 同名角色冲突策略 | 用户 2026-11-13 报障；方案取舍属架构，PM 不单方面定；与 T543 无因果 |
-| T544（待立 Issue） | rd-infra | **生产侧同根因**：`nao-fleet.sh` 起 server 时 `_TERM_HERDR_SERVER_START=1 _term_herdr_exec server …` 因 bash「函数调用前置变量赋值持久化」漏进 pane env（T543 在测试侧 `unset` 兜底）。建议改 `env … bash -c` 或调用后显式 `unset`；须带负控（pane env 断言 `_TERM_HERDR_SERVER_START` 不存在） | 生产脚本改动面，与 T543（仅 tests/）分开；T543 回执转办 |
+| ~~T544~~（已开批 · Issue [#116](https://github.com/Nathan3303/nao-skills/issues/116)） | rd-infra-T544 | **生产侧同根因**：`nao-fleet.sh` 起 server 时 `_TERM_HERDR_SERVER_START=1 _term_herdr_exec server …` 因 bash「函数调用前置变量赋值持久化」漏进 pane env（T543 在测试侧 `unset` 兜底）。建议改 `env … bash -c` 或调用后显式 `unset`；须带负控（pane env 断言 `_TERM_HERDR_SERVER_START` 不存在） | 生产脚本改动面，与 T543（仅 tests/）分开；T543 回执转办 |
 | T542（Issue #110） | rd-infra（机制）+ 三张卡 | **Penpot 出图协作闭环**（用户口头约束 2026-11-13）：① uiux 交付须写明 Penpot 页信息（文件 id / 画板名与尺寸 / 图层命名），必要时导出文件入库作本地依据；rd-fe 写码前须检查 uiux 是否用 Penpot 出图，**是则严格按图实现**，允许反驳但须走流程回退（回设计师 → 改稿或出具带 AC 编号的修改项）② **PM 在设计稿产出后不得直接派 RD**，须用户确认设计稿满意；例外 = 用户明确托管。**且须在任务开工前就问清**（开工卡新增一问：设计稿验收模型 = 用户本人 / 托管 PM）。落点：`prompts/{uiux-designer,frontend-developer,product-manager}.md`（bump + 广播）· `skills/uiux-design.md` · 开工卡模板。 | 改角色卡须 bump version + intercom 广播；与 T541 并行会撞同一批文件 ⇒ 须等 T541 合并后单开批次 |
 
 > **队列口径（2026-11-09 起，用户提出「怎么越做越多了」后立）**：本表**只放需要动作的项**。「已接受 / 观察等复现 / 定时重评」一律进下一节 —— 那些不是任务，到期看一眼即可，不进待办计数。P3 级问题的默认处置 = **当批修**（#93 起实证：4 项 P3 全当批改、遗留 0；M20261109 批 3 项 P3 全当批收）。**2026-11-10 更新：本表已清空（真待办 0）** —— 最后一条 `T536-O1` 经实测早已由 T539 交付（三态 `0/2/3` + 只有成功分支打印 `[tmux] 已拉起 …` + 摘要三计数；`cases/22` 33 条断言覆盖），属陈旧行，已关闭。
@@ -373,6 +380,7 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| T544 | rd-infra-T544 | 生产侧 `_TERM_HERDR_SERVER_START` 泄漏：起 server 的 env 前缀摘旗标（或改传信号方式），保留分支判断 | 2026-11-13 | 判据见快照 T544 行 | （本 PR 首提交） |
 
 ## 已回执待验收
 
