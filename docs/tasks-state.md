@@ -42,9 +42,12 @@
 
 > 本区是 PM 的**悬空状态**（任务状态见下方五栏）；重开后逐行回读确认（当前阶段 · 未决决策 · 口头约束）。
 
-- 🔄 **T537 开工（2026-11-13 · Issue [#107](https://github.com/Nathan3303/nao-skills/issues/107) · `feat/107-portal-site`）**：**门户单页**（中文 landing page · 纯静态零外部依赖 · GitHub Pages 项目页）。PRD = `docs/prds/2026-11-13-portal-site.md`（9 模块 · AC1–AC11）。**开工卡已确认（ask-me）**：现在开工 · 分工 = 设计→实现→部署→验收（uiux-designer 设计稿 PASS 才放行）· 建 Issue · 模型不指定。**串行链**：uiux-designer → rd-fe（`site/`）→ rd-infra（Pages workflow）→ PM（README 指针）→ qa（用户验收清单）→ 用户回填 → RD squash 合并。**DoD**：产物 `site/index.html`(+css/js) · `.github/workflows/pages.yml` · `docs/designs/2026-11-13-portal-site.md` · `docs/reports/2026-11-13-T537-user-acceptance.md` · README 指针 1 行；验证 `check` rc=0 + `npm test` rc=0 + AC1–AC11 + 外部请求 0 + ≤200KB + 敏感值 grep 空 + 本地双击可开；遗留三出口；交接含「Pages 首次启用需用户在仓库 Settings→Pages 选 GitHub Actions」。**已知降级**：本批不发版（不出 npm 包）。
+- 🔄 **T541 开工（2026-11-13 · Issue [#107](https://github.com/Nathan3303/nao-skills/issues/107) · `feat/107-portal-site`）**：**门户单页**（中文 landing page · 纯静态零外部依赖 · GitHub Pages 项目页）。PRD = `docs/prds/2026-11-13-portal-site.md`（9 模块 · AC1–AC11）。**开工卡已确认（ask-me）**：现在开工 · 分工 = 设计→实现→部署→验收（uiux-designer 设计稿 PASS 才放行）· 建 Issue · 模型不指定。**串行链**：uiux-designer → rd-fe（`site/`）→ rd-infra（Pages workflow）→ PM（README 指针）→ qa（用户验收清单）→ 用户回填 → RD squash 合并。**DoD**：产物 `site/index.html`(+css/js) · `.github/workflows/pages.yml` · `docs/designs/2026-11-13-portal-site.md` · `docs/reports/2026-11-13-T541-user-acceptance.md` · README 指针 1 行；验证 `check` rc=0 + `npm test` rc=0 + AC1–AC11 + 外部请求 0 + ≤200KB + 敏感值 grep 空 + 本地双击可开；遗留三出口；交接含「Pages 首次启用需用户在仓库 Settings→Pages 选 GitHub Actions」。**已知降级**：本批不发版（不出 npm 包）。
 
-- ✅ **T537 设计 PASS（2026-11-13 · PM 验收）**：`docs/designs/2026-11-13-portal-site.md`（80 行 · 提交 `2e7ee52` · 未推送 0）—— 9 项骨架齐 · 六段 IA（Hero/三毛病/七角色/三步/FAQ/页脚）· token 亮暗双套 + 系统字体栈（零外链）· 360 首屏预算 ≤420px · 七角色顺序与 `roles.yaml` 逐字一致 · AC2 按裁定 A 落稿 · AC1/AC3/AC4/AC5/AC7/AC8/AC9 设计侧 PASS · Penpot 四画板（本地，未入库）· 待决 0。**验收动作**：状态行改「已定稿（PM 验收 PASS）」→ 派 rd-fe 实现 → `close uiux-designer-T537`。
+- ✅ **T541 设计 PASS（2026-11-13 · PM 验收）**：`docs/designs/2026-11-13-portal-site.md`（80 行 · 提交 `2e7ee52` · 未推送 0）—— 9 项骨架齐 · 六段 IA（Hero/三毛病/七角色/三步/FAQ/页脚）· token 亮暗双套 + 系统字体栈（零外链）· 360 首屏预算 ≤420px · 七角色顺序与 `roles.yaml` 逐字一致 · AC2 按裁定 A 落稿 · AC1/AC3/AC4/AC5/AC7/AC8/AC9 设计侧 PASS · Penpot 四画板（本地，未入库）· 待决 0。**验收动作**：状态行改「已定稿（PM 验收 PASS）」→ 派 rd-fe 实现 → `close uiux-designer-T537`（**会话名前缀沿用 T537**，见下条编号订正）。
+- ✅ **T541 rd-fe 交付 + PM 验收（2026-11-13 · HEAD `1196452` · Draft PR #108）**：`site/` 四文件 32,183B · 请求数 4 · 命令 `pi install --local npm:@nathan33/nao-skill` + 指针行 · 深色模式双套 · 复制三态 + `aria-live` · 七角色顺序 = roles.yaml。**PM 自证三条（不抄回执）**：敏感值 `grep` 0 行 · `grep -rcE '@[0-9]+\.[0-9]+' site/` 四文件全 0 · `du -cb site/*` = 32,183B（与回执一致）· 外链资源仅相对 `style.css`/`app.js`。**偏差裁定（AC9 列表第 4/5 条）**：接受 —— 窄屏保留 4 锚点 + 隐藏 GitHub 药丸（设计稿 §六「<720 一行锚点」）；窄屏保留 pin 指针行（AC2 裁定 A 硬要求）。**PM 未复跑 `npm test`**（我这一跑 400s 超时无结论；按纪律不重复跑 worker 门禁，采信其 tmux/herdr 归因）。
+- ⚠️ **F1 转办立项（2026-11-13 · Issue [#109](https://github.com/Nathan3303/nao-skills/issues/109)）**：`npm test` 在 **herdr** 会话内必红（`cases/27:182` 对 `TMUX` 做未定义假设）；tmux 内同 HEAD 全绿。**默认后端已是 herdr ⇒ 门禁在默认环境不可用**，故单独立项，不夹带门户 PR。已进待派发队列。
+- 🔄 **T541 rd-infra 派发（AC10 · Pages workflow）**：`.github/workflows/pages.yml`（零构建 · upload-pages-artifact `path: site` · `pages: write`/`id-token: write` · push main + `paths: site/**` + `workflow_dispatch`）· 禁改 site/ 与 `npm test`。**PM 已并做**：README 顶部加官网指针 + 安装段补「装最新版可省略 `@版本号`」（范围 3）。
 - ✅ **T535 QA 复核 `done(full)`（2026-10-31 · GO · 报告 `docs/reports/2026-10-31-T535-qa-verify.md` 54 行 · commit `fb5e526` · 未推送 0）**：AC1 自建夹具 **13/13**（`--case 19` PASS=38，不复用 rd 夹具）· AC2 **全量套件层面必红**（恒真 rc=1/8 FAIL · 恒假 rc=1/9 FAIL，唯一红点 = case 19）⇒ T534「17/17 无一翻红」已改变 · AC6 根因独立复现：**空载旧 0/100 · 重负载（16 忙循环）旧 2/40 假 FAIL → 新 0/40** · helper 级 16.5KB 旧 **55/200** → 新 0/200、98KB 旧 50/50 → 新 0/50 · `case 16` 新实现 **40/40** · 语义等价 7 正 + 7 反全过；`check` files 50→50 · `npm test` t4 `[PASS]` 437→475 · 19/19 · SKIP=0/DEGRADE=0/NOTE=2。**PM 处置**：`T535-O1` → **关闭 `T534-O1`**（本批 AC1 已交付）；`T535-O2` → **转办**待派发队列（`lib.sh:199` 低危同型）；`T535-O3` → **表述订正**：rd 报的「2/20」实为**重负载下**数字，空载未复现（QA 实测 0/100），台账与发布说明一律写「重负载 2/40 / 空载 0/100」。
 - 🔄 **T537 立项（2026-11-01 · Issue [#61](https://github.com/Nathan3303/nao-skills/issues/61) · `feat/61-downstream-role-sessions` · v0.21.0 MINOR）**：**下游仓自定义角色会话（`ensure --card`）** —— A 调用入口 `--card` / `--as`（可与 `--task` / `--repo` / `--force` / `-m` 正交）· B 一次性会话语义（默认 `<role>-<task>`，属派生线，`close` 正常回收、**不**弹常驻警告）· C 锚点同源（复用 `build_system_prompt`，禁第二份文案）· D 全托管三接线（`status` 可见含残留标注 / `close` 可回收 / 残留检测）· E `check` 新增「下游角色卡」节（`@.agents/...` 按包根解析，目录缺失则跳过不影响 rc）· F 文档三处（help / README / 协议脚注）。PRD = `docs/prds/2026-11-01-downstream-role-sessions.md`（AC1–AC5）。**关键约束**：BR1 不登记清单（`roles.yaml` diff = 0）· BR2 反冒充（role 不得命中常驻 id/别名）· BR3 卡 realpath 限于工作区内 · BR7 不带 `--card` 逐字零回归。**缘起**：用户 2026-11-01 诉求「下游自建角色卡 → PM 按开工卡 ensure 出来 → 用完回收」；与 `docs/tasks-state.md` 下批候选 ①（不新增第 7 常驻角色）结论一致。**开工卡已拍板（2026-11-01 ask-me D1–D4）**：现在开工 · **arch 完整评审** · **卡路径限定目录**（仅 `<repo>/.agents/prompts/`，已写回 PRD §三A/BR3/AC2 含 symlink 逃逸用例）· **`a8a678a` 派 RD 首步显式 sha push**（PM 不 push main）。**arch 回执 `done(full)`（2026-11-01 · `8085924` · 报告 `docs/reports/2026-11-01-T537-arch.md` 109 行 · ADR `docs/adr/2026-11-01-downstream-card-sessions.md`）= 有条件可行**：范围不改，**AC 5→8 条、BR 8→11 条**（PRD 已写回）。三个关键发现：① BR2 只做「精确不相交」不够 ⇒ 必补**前缀不相交**（`qa-audit` 抢 `qa-` 枚举 / `subagent-review` 拉起即失联）② `close` 常驻判别式 `[[ -z "$task" ]]` 结构错 ⇒ 改显式 `IS_RESIDENT`（否则 AC4③ 假绿）③ `--card` 语法未定 ⇒ 目标级绑定 + 两相执行（否则 BR6 零副作用不可达）。**PM 拍板 D5–D8 全采纳**：D5 `status` 新增「角色未识别」节 · D6 修既有 `${dname%-*}` 截断缺陷（AC5③ 该场景放宽，须给旧→新对照）· D7 `check` 内容 warn / 机制 error · D8 卡会话跳过 tasks-state active 闸门（在跑 turn 闸门不放宽）。**O1 防线已落**：`checklists/pm.md` 环境判定行追加「开工自检 · 本地 main 无领先提交」半句（不增清单项数，避免计数漂移）。**rd-infra 交付 `done(full)`（2026-11-01 · `227d86f`（实现 `50cd3d2`）· Draft PR [#62](https://github.com/Nathan3303/nao-skills/pull/62) · 未推送 0）**：`ensure --card` 落地（目标级修饰符 + 两相执行）· `status` 卡集 + 「角色未识别」节 · `close` 显式 `IS_RESIDENT` 分叉 · `check` 下游卡节（内容 warn / 机制 error）· 新用例 20（83 PASS）/ 21（98 PASS）。门禁：`check` exit=0 roles=6 **files=50（与 main 同值；本仓按 overlay 等价整节跳过）** · `npm test` exit=0 · `tests/t4` **20 用例全 PASS · SKIP=0/DEGRADE=0/NOTE=2（06:static-contract）** · `test:t4:full` 非白名单 NOTE=0 · 零回归探针唯一差异 = D6（符合放宽）· `roles.yaml` diff 0 行。**D4 已核（PM）**：`origin/main` = **a8a678a**（fetch 后 `merge-base --is-ancestor` = YES）。**PM 拍板 D9（O2 转判）**：`--as` 必须等于卡 role 或以 `<role>-` 为前缀，否则 die（不采用 warn —— warn 仍会起出 `status`/`close` 解析不到的会话）；已写回 PRD BR11/AC3⑤/附录B。**遗留三出口**：O1 → **转办**（`M20261101-status-pane-cwd-key`，`pane_cwds` 按 pane_id 建键致 pane-cwd 权威从未生效，须+用例19 pane-only 断言；到期 2026-12-31）· O2 → **本批关闭**（D9）· O3 → **接受**（卡路径含 `@` 歧义，因路径已限定目录、风险低；到期 2026-12-31）· O4 → **接受**（卡集上限/CRLF/`name:` 双用仅 warn，首用后定级；到期 2026-12-31）。**待办** = rd 补 D9 小改 → 拉 `qa-T537` 独立复核（自建夹具，不复用 RD 夹具；须验 `check` 下游卡节在**临时下游项目**里真生效 —— 本仓恒跳过）。
 - 🔄 **T535 rd 交付 `done(full)`（2026-10-31 · HEAD `2fded95` · Draft PR [#59](https://github.com/Nathan3303/nao-skills/pull/59) · 未推送 0）**：A 新例 `cases/19`（三态 + 单仓 + 夹具根不在 git 仓内）+ 内置双向变异 harness（恒真 5 FAIL / 恒假 6 FAIL 均点名；只动临时副本）· B BR5 改口径（下一 PR 首提交 / 不留脏改 / 带标签 stash，单源）· **D4 范围增补**：`tests/t4/lib.sh` 三 helper 的 `printf|grep -q` SIGPIPE 假 FAIL 改 here-string（`case 16` 2/20 → 0/20 = `T534-O2` 根因）。门禁：`check` files 50→50 · `npm test` t4 `[PASS]` **437→475** · **19/19** 用例 · SKIP=0/DEGRADE=0/NOTE=2 白名单 · `--case 19` PASS=38 · `test:t4:full` rc=0。**待办** = QA 独立复核（修前/修后对照 + 双向变异自做 + 三态断言自建夹具）→ PM 验收。
@@ -115,7 +118,9 @@
 
 ## 需求分支 / PR / 发布（PM 维护）
 
-### 本批 T537（门户单页 · Issue #107 · 开工中）
+### 本批 T541（门户单页 · Issue #107 · 开工中）
+
+- **编号订正（2026-11-13）**：初记 T537 ⇒ **改 T541**。T537 属 #61 下游卡批次（台账既有），T538/T539 已用、T540 预占（门禁数字口径 / 二期加固）⇒ 流水号取 T541。**已拉起的会话名沿用 `*-T537` 前缀**（改号需重建会话，代价大于收益）；回收时按实际名 `close --task T537 <别名>`。分支内历史提交 `wip(T537):` 两条同样保留（squash 合并后 main 无残留）。
 
 - PRD：`docs/prds/2026-11-13-portal-site.md`（已过开工卡，未归档）· Issue [#107](https://github.com/Nathan3303/nao-skills/issues/107) · 分支 `feat/107-portal-site`
 - 范围：`site/` 单页（HTML + 本地 CSS + 原生 JS：复制/锚点/主题）· `.github/workflows/pages.yml` · `docs/designs/2026-11-13-portal-site.md` · README 顶部指针 1 行
@@ -288,6 +293,7 @@
 
 | 任务编号 | 目标会话 | 概要 | 排队原因 |
 | :--- | :--- | :--- | :--- |
+| Issue #109（F1） | rd-infra | `npm test` 在 herdr 会话内必红：`tests/t4/cases/27-backend-selftest.sh:182` `PROD_SOCK="${TMUX%%,*}"` 在 `set -u` 下未定义，cases/28 连带 ~189 断言 FAIL；tmux 内同 HEAD 全绿 | 默认后端已是 herdr（v0.23.0）⇒ 全范围门禁在默认环境不可用；与门户批次无关，须单独立项修 |
 
 > **队列口径（2026-11-09 起，用户提出「怎么越做越多了」后立）**：本表**只放需要动作的项**。「已接受 / 观察等复现 / 定时重评」一律进下一节 —— 那些不是任务，到期看一眼即可，不进待办计数。P3 级问题的默认处置 = **当批修**（#93 起实证：4 项 P3 全当批改、遗留 0；M20261109 批 3 项 P3 全当批收）。**2026-11-10 更新：本表已清空（真待办 0）** —— 最后一条 `T536-O1` 经实测早已由 T539 交付（三态 `0/2/3` + 只有成功分支打印 `[tmux] 已拉起 …` + 摘要三计数；`cases/22` 33 条断言覆盖），属陈旧行，已关闭。
 
@@ -314,12 +320,13 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T537 | rd-fe-T537 | 门户单页实现：`site/`（index.html + style.css + app.js + favicon.svg），依据设计稿 §三–§六 | 2026-11-13 | AC1–AC9（AC10 归 rd-infra / AC11 归 PM） | （本 PR 首提交） |
+| T541 | rd-fe-T537 | 门户单页实现：`site/`（index.html + style.css + app.js + favicon.svg），依据设计稿 §三–§六 | 2026-11-13 | AC1–AC9（AC10 归 rd-infra / AC11 归 PM） | （本 PR 首提交） |
 
 ## 已回执待验收
 
 | 任务编号 | 回执摘要（≤150字） | 详情路径 | 待办 |
 | :--- | :--- | :--- | :--- |
+| T541 | rd-fe `done(full)`：`site/` 四文件 32,183B 零外部依赖（请求数 4）、命令无 pin、AC1–AC9 实测（headless chromium）· `check` rc=0（roles=7/files=54）· Draft PR #108（含 7 条有意偏差）· HEAD `1196452` / 未推送 0 | 分支 `feat/107-portal-site` | PM 验收 → rd-infra Pages（AC10）→ qa 用户验收清单 |
 
 
 
