@@ -1,6 +1,6 @@
 # ADR：herdr workspace 放置键与 scope 分离（label = 声明 scope 否则仓 slug）
 
-- 状态：已接受（待落地）
+- 状态：已接受（已落地 v0.23.1）
 - 更新：2026-11-13
 - Owner：arch-designer
 - 指针：Issue [#112](https://github.com/Nathan3303/nao-skills/issues/112) · 评审 `docs/reports/T545-scope-isolation-arch.md` · 上游 `docs/prds/2026-11-10-herdr-base.md`（AC3.1）· 既有放置口径 `docs/reports/96p3-layout-p1.md:22`
