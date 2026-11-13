@@ -31,7 +31,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 
-CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "30" "31" "32")
+CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "30" "31" "32" "33")
 CASE_TITLES=(
   "主路径足迹 + check exit=0（AC1）"
   "设计一致性：注册 skill 数==2 且无 collision（AC1/AC6）"
@@ -64,6 +64,7 @@ CASE_TITLES=(
   "herdr 幽灵 pane（#96 B4）：label 在、agent 无 ⇒ 不判在线 / ensure 不判已在运行（复用重跑）"
   "herdr 集成缺失 fail loud（#96 B4）：agent_session 空 / 钩子权威缺 ⇒ 点名不可投递，不退化 idle"
   "真机整轮 herdr（#96 三期 P1 · AC3.5/AC3.1/AC3.2）：四件私有 env + 布局 A + 迁移无损 + 小空间 J1/J4"
+  "herdr 放置键与 scope 解耦（T545 · ADR 2026-11-13）：U1–U5 跨仓/同仓/worktree/scope 优先/同 core 撞车 + N1/N2 变异负控"
 )
 
 mode="run"; only=""; arg_err=""
