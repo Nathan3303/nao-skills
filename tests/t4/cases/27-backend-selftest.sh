@@ -179,8 +179,49 @@ be_ctx a "$SESS_A" || { t4_bad "be_init A 失败（$BE_NAME）"; t4_exit; }
 SOCK_A="${BE_SOCK:-}"; ROOT_A="${BE_CFGROOT:-}"
 be_ctx b "$SESS_B" || { t4_bad "be_init B 失败（$BE_NAME）"; t4_exit; }
 SOCK_B="${BE_SOCK:-}"; ROOT_B="${BE_CFGROOT:-}"
-PROD_SOCK="${TMUX%%,*}"; [ -n "$PROD_SOCK" ] || PROD_SOCK="/tmp/tmux-$(id -u)/default"
-before_prod="$(tmux -S "$PROD_SOCK" list-panes -a -F '#{session_name}:#{pane_id}' 2>/dev/null || true)"
+# ---------------------------------------------------------------- 生产端点锚（**按生效后端**取 · 不可判定 ⇒ fail loud）
+# 渗透检查的对照面必须是**生产**端点，而不是本用例的实验端点（否则拿隔离端点自证 = 空转假绿）。
+#   tmux：`$TMUX` 首段 = host 直给的生产 server socket；未设 ⇒ 生产默认候选（原语义保留）。
+#   herdr：**HERDR_SOCKET_PATH 是权威** —— 它是 host 直给的实际端点（本机实测
+#     `$XDG_CONFIG_HOME/herdr/sessions/<会话>/herdr.sock`）；由 `HERDR_SESSION` 反推是**猜目录布局**，
+#     只在 socket 缺失时降级派生。两者都不可判定 ⇒ 红（静默跳过正是本仓反复打的假绿类型）。
+PROD_SOCK=""; PROD_HERDR_SOCK=""
+case "$BE_NAME" in
+  tmux)
+    PROD_SOCK="${TMUX:-}"; PROD_SOCK="${PROD_SOCK%%,*}"
+    [ -n "$PROD_SOCK" ] || PROD_SOCK="/tmp/tmux-$(id -u)/default" ;;
+  herdr)
+    PROD_HERDR_SOCK="${HERDR_SOCKET_PATH:-}"
+    if [ -z "$PROD_HERDR_SOCK" ] && [ -n "${HERDR_SESSION:-}" ]; then
+      PROD_HERDR_SOCK="${XDG_CONFIG_HOME:-$HOME/.config}/herdr/sessions/$HERDR_SESSION/herdr.sock"
+    fi ;;
+esac
+# 独立判据（**不依赖上面分支是否命中**）：herdr 后端必须拿到非空且真实存在的生产端点
+if [ "$BE_NAME" = "herdr" ]; then
+  [ -n "${PROD_HERDR_SOCK:-}" ] || { t4_bad "生产端点不可判定：herdr 后端需要 HERDR_SOCKET_PATH（或可派生的 HERDR_SESSION），实际均空 —— fail loud，不静默跳过"; t4_exit; }
+  [ -e "$PROD_HERDR_SOCK" ] || { t4_bad "生产端点不可判定：$PROD_HERDR_SOCK 不存在（stale env？）—— fail loud"; t4_exit; }
+  case "$PROD_HERDR_SOCK" in
+    "$ROOT_A"/*|"$ROOT_B"/*|"$T4_CACHE_DIR"/*)
+      t4_bad "生产端点锚落在实验根内（$PROD_HERDR_SOCK）—— 渗透检查会拿隔离端点自证"; t4_exit ;;
+  esac
+fi
+case "$BE_NAME" in
+  tmux) t4_assert_ne "$SOCK_A" "$PROD_SOCK" "锚点：生产 socket ≠ 实验 socket A（未拿隔离端点自证）";
+        t4_assert_ne "$SOCK_B" "$PROD_SOCK" "锚点：生产 socket ≠ 实验 socket B" ;;
+  herdr) t4_assert_ne "$(dirname "$PROD_HERDR_SOCK")" "$ROOT_A/herdr/sessions/$SESS_A" "锚点：生产端点目录 ≠ 实验会话 A 目录（未拿隔离端点自证）" ;;
+esac
+# 生产端点快照（只读；不连 server）：
+#   tmux  = 生产 server 的 pane 清单（原语义）
+#   herdr = socket 文件的 inode/size + 会话目录条目名（停/删/重建会话都会变；**连接**既有 server
+#           不改 inode ⇒ 不误报。不纳入会话日志 mtime：本 run 自身 pane 就在写它）
+prod_anchor_snapshot() {
+  case "$BE_NAME" in
+    tmux) tmux -S "$PROD_SOCK" list-panes -a -F '#{session_name}:#{pane_id}' 2>/dev/null || true ;;
+    herdr) { stat -c '%i %s' "$PROD_HERDR_SOCK" 2>/dev/null
+             ls -A "$(dirname "$PROD_HERDR_SOCK")" 2>/dev/null | sort; } || true ;;
+  esac
+}
+before_prod="$(prod_anchor_snapshot)"
 
 t4_assert_ne "$SESS_A" "$SESS_B" "隔离：两会话名唯一且不同（含 \$\$ 唯一化）"
 t4_assert_match "$SESS_A" '^nao-t4-27-a-[0-9]+$' "隔离：会话名带 \$\$（跨次/并发不撞名）"
@@ -353,7 +394,7 @@ case "$BE_NAME" in
     if tmux -S "$SOCK_A" list-sessions >/dev/null 2>&1; then t4_bad "零残留⑤：隔离 socket 上仍有 server"; else t4_ok "零残留⑤：隔离 socket 上无 server 存活"; fi
     if tmux -S "$SOCK_B" list-sessions >/dev/null 2>&1; then t4_bad "零残留⑤：B 隔离 socket 上仍有 server"; else t4_ok "零残留⑤：B 隔离 socket 上无 server 存活"; fi ;;
 esac
-after_prod="$(tmux -S "$PROD_SOCK" list-panes -a -F '#{session_name}:#{pane_id}' 2>/dev/null || true)"
-t4_assert_eq "$before_prod" "$after_prod" "default 不可达：生产 tmux server 快照 diff 空（本用例全程未触及用户 pane）"
+after_prod="$(prod_anchor_snapshot)"
+t4_assert_eq "$before_prod" "$after_prod" "default 不可达：生产端点快照 diff 空（tmux=pane 清单 / herdr=socket inode+目录条目；全程未触及生产端点）"
 
 t4_exit

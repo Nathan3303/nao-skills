@@ -707,7 +707,11 @@ t4_info "P2① 双 golden：tmux=$GOLD_TMUX_MD5 · herdr=$GOLD_HERDR_MD5 · 未�
 # 反向负控 A：**tmux 夹具场**里未设 ⇒ exit 3（fail loud，不静默回落 tmux —— PM 裁定 D2）
 : > "$LAB/tmux-calls.log"
 #   （不用 run_in：它在 P2 起恒注入 NAO_TERMINAL=tmux；本负控要的正是「未设」）
-t4_run_in_dir "$LAB" env -u TMUX -u TMUX_PANE -u NAO_TERMINAL TMUX="$SOCK_B,0,0" TMUX_PANE="$CALLER_B" \
+#   herdr 宿主会把生产 HERDR_* 带进夹具 ⇒ 必须显式清成「tmux 场」基线：否则「未设」会真的走 herdr
+#   （打到生产 server、rc=0，负控变假绿 —— #111 同类渗漏）。
+TMUX_FIELD_ENV=(env -u TMUX -u TMUX_PANE -u HERDR_ENV -u HERDR_SESSION -u HERDR_SOCKET_PATH -u HERDR_SOCKET_FILE
+  -u HERDR_PANE_ID -u HERDR_WORKSPACE_ID -u HERDR_TAB_ID -u HERDR_BIN_PATH)
+t4_run_in_dir "$LAB" "${TMUX_FIELD_ENV[@]}" -u NAO_TERMINAL TMUX="$SOCK_B,0,0" TMUX_PANE="$CALLER_B" \
   TMUX_TMPDIR="$SOCK_B_DIR" NAO_SKILLS="$LAB" PI_CODING_AGENT_DIR="$LAB/pi-empty" \
   NAO_TASKS_STATE="$TASKS_FIX" PATH="$LAB/bin:$PATH" \
   timeout 180 "$BASH_BIN" -c 'printf "%s\n" "$$" >> "$B2_PID_LOG"; exec "$@"' _ "$LAB/.agents/scripts/nao-fleet.sh" status
