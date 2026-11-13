@@ -42,7 +42,7 @@
 
 > 本区是 PM 的**悬空状态**（任务状态见下方五栏）；重开后逐行回读确认（当前阶段 · 未决决策 · 口头约束）。
 
-- 🔄 **T544 开工（2026-11-13 · `fix` 通道 · Issue [#116](https://github.com/Nathan3303/nao-skills/issues/116) · 分支 `fix/116-herdr-flag-leak` · PATCH 0.23.3）**：**生产侧旗标泄漏** —— herdr server 由 `nao-fleet.sh:1339` 拉起时，内部旗标 `_TERM_HERDR_SERVER_START=1` 被 server 进程继承 ⇒ 它 spawn 的每个 pane 都带该旗标 ⇒ pane 内每次 fleet 调用误走 `:418` 的 server-start 分支（多一层 `env -u`+`setsid`，并枚举清 `HERDR_*` 含 `HERDR_PANE_ID`）⇒ 自面板/自我回收守卫在该路径拿空值（T534 踩过误杀）。**PM 实测**：pm 常驻 pane 内 `env | grep _TERM_HERDR` → `_TERM_HERDR_SERVER_START=1`。**修复方向**（具体由 rd 定）：起 server 的 `env` 前缀摘掉该旗标，分支判断保留；或改参数/临时文件传信号。**判据**：新 server 的 pane env `grep -c` = 0 · `session-start` 后 `api snapshot` OK · **负控**（人为注入该旗标 ⇒ 行为不变）· 自面板/自我回收守卫在有/无该旗标两环境都正常 · `check` rc=0 + `npm test` 双后端 rc=0。**迁移**：已运行 server/pane 仍带旧旗标，需重起 server。
+- ✅ **T544 rd-infra 交付 `done(full)`（2026-11-13 · `9cc0b99` · 代码 2 文件 +21/−13 · 报告 80 行 · 工作区静默）**：方案 **B** —— `_term_herdr_exec --server-start` 显式首参数（**脚本内零读取点**）+ 迁移带 `-u _TERM_HERDR_SERVER_START`（旧 pane 起新 server 不繁殖死旗标）。**代价**：A（只加 `-u`）不足的判据 = 注入即触发分支 ⇒ 判据 3 结构上不成立；server-start 分支（原 `:418`）**保留**、`session-start` 语义不变。**实测**（我的常驻 pane 本身带该旗标 = 真实污染态）：新 server pane env `grep -c` = **0**（HEAD 版正控 = 1）· `session-start` 幂等 effect=0 + `api snapshot` OK · **负控** spy 桩：注入前后 argv/`HERDR_*` 条数/SID **全同**（HEAD 版注入则 `HERDR_*`=0 + 5 个互异 setsid）· 自面板 `close pm` 两环境均拒绝、pane 存活、输出 diff 空（HEAD 版亦同 ⇒ F1 读的是 fleet 自身 env）· 门禁全在带旗标环境取得。**门禁**：`check` rc=0（files 54）· `npm test` rc=0（30 PASS / 2 TMUX-ONLY / NOTE=10）· `dual` rc=0（两组）。**删测试侧兜底**并演练：换回 HEAD 版 ⇒ case 28 **18+ 条 FAIL**；换回本批 ⇒ 全 PASS。**遗留**：O1 观察（后台壳持已删 fd，非本批引入）· O2 接受（普通路径不摘注入变量，inert）· O3 转办（生产侧静态断言）。
 - 🔄 **T542 立项（2026-11-13 · Issue [#110](https://github.com/Nathan3303/nao-skills/issues/110) · `feat/110-penpot-handoff` · PATCH 0.23.2）**：**Penpot 出图协作闭环** —— 用户 2026-11-13 两条口头约束 + T541 三处实证（rd-fe 首版按文字规格实现致返工 / PM PASS 后直接派 RD 未经用户确认 / 设计稿文字与画板矛盾）。PRD = `docs/prds/2026-11-13-penpot-handoff.md`（9 模块 · R1–R7 · AC1–AC10）。范围：`uiux-designer` 卡（v1→2 图源信息四项 + 必要时导出）· `frontend-developer` 卡（v12→13 写码前检查 + 按图实现 + 反驳走回退）· `product-manager` 卡（v34→35 派发闸门 + 开工卡新增一问，默认不托管）· `skills/uiux-design.md` 清单 · 开工卡模板（pm-operations §一 + comm-templates）。**非范围**：Penpot MCP 接入（T540 预占）· 导出格式规范 · 自动一致性检查。**待办** = 开工确认卡待用户确认。
 
 - ✅ **T542 开工确认（2026-11-13 · 用户 ask-me）**：开工 · **「设计稿验收模型」默认值 = 不答即「用户本人确认」**（不默认代用户拍板）。派 rd-infra 实施 5 处 + bump（pm v34→35 / uiux-designer v1→2 / rd-fe v12→13）+ 广播文本；qa 轻量复核；设计闸门不适用（机制文本非界面）；架构评审跳过（纯文本纪律）。
@@ -147,11 +147,12 @@
 
 ## 需求分支 / PR / 发布（PM 维护）
 
-### 本批 T544（生产侧旗标泄漏 · Issue #116 · 实施中）
+### 本批 T544（生产侧旗标泄漏 · Issue #116 · 交付待验收）
 
 - 通道：`fix`（3 字段：现象 / 复现 / 回退）· 分支 `fix/116-herdr-flag-leak` · PATCH 0.23.3
 - PR owner / Reviewer：rd-infra / qa（门禁类须非作者复核）
-- 面：`nao-fleet.sh:1339`（起 server 的 env 前缀）+ 可能 `:418` 分支判断；零测试改动（测试侧 T543 已兜底）
+- 面（实施后）：`nao-fleet.sh` `_term_herdr_exec` 首参数 `--server-start` + 唯一调用点 + 分支 `-u` 迁移带；
+  `tests/t4/lib.sh` 删 `unset` 兜底（旧实现已无读取点）。报告 `docs/reports/2026-11-13-T544-impl.md`（80 行）
 
 ### 本批 T542（Penpot 出图协作闭环 · Issue #110 · 实施中）
 
@@ -380,13 +381,15 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| T544 | rd-infra-T544 | 生产侧 `_TERM_HERDR_SERVER_START` 泄漏：起 server 的 env 前缀摘旗标（或改传信号方式），保留分支判断 | 2026-11-13 | 判据见快照 T544 行 | （本 PR 首提交） |
+
+（当前无进行中任务；T544 已交付，见下节）
 
 ## 已回执待验收
 
 | 任务编号 | 回执摘要（≤150字） | 详情路径 | 待办 |
 | :--- | :--- | :--- | :--- |
 | T541 | rd-fe `done(full)`：`site/` 四文件 32,183B 零外部依赖（请求数 4）、命令无 pin、AC1–AC9 实测（headless chromium）· `check` rc=0（roles=7/files=54）· Draft PR #108（含 7 条有意偏差）· HEAD `1196452` / 未推送 0 | 分支 `feat/107-portal-site` | PM 验收 → rd-infra Pages（AC10）→ qa 用户验收清单 |
+| T544 | rd-infra `done(full)`：方案 B（`--server-start` 显式首参数，脚本内零读取点）+ 迁移带 `-u`；新 server pane env `grep -c`=0（HEAD 正控 1）· 负控 spy 行为全同 · 自面板 `close` 两环境均拒 · `check` 54 / `npm test` / `dual` rc=0 · 删 `lib.sh` unset 并演练复红 | `docs/reports/2026-11-13-T544-impl.md` · 分支 `fix/116-herdr-flag-leak` · HEAD `9cc0b99` | PM 验收 → RD squash 合并（PATCH 0.23.3） |
 
 
 
