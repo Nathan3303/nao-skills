@@ -121,6 +121,7 @@
 - PR owner / Reviewer：rd-fe（页面）/ rd-infra（工作流）· Reviewer = qa · arch 跳过（纯静态展示层，不改机制）
 - 顺序：uiux-designer PASS → rd-fe → rd-infra → PM（README）→ qa → 用户回填 → RD squash 合并
 - 非范围：文档站 · 双语 · 截图/动图 · 自定义域名 · 统计/评论/搜索
+- **口径裁定（2026-11-13 · 设计期发现，PM 拍板 A）**：AC2（复制内容 = README 命令，README 带 pin `@0.21.3`）与 §五（禁硬编码版本）互斥 ⇒ 站点给**无 pin** 命令 `pi install --local npm:@nathan33/nao-skill` + 指针行「项目内 version pin 见 README」；AC2 改机械判据（剪贴板逐字一致 + 命令块 `grep -E '@[0-9]+\.[0-9]+'`=0）。README 示例 pin 保留（团队同款语境，不算双源），并在本批 README 步骤补半句「装最新可省略版本号」
 
 ### 本批 T536（`ensure` 返回修正 · 已合并 · 发布 v0.20.4 · 降级无 PR）
 
