@@ -44,6 +44,7 @@
 
 - 🔄 **T542 立项（2026-11-13 · Issue [#110](https://github.com/Nathan3303/nao-skills/issues/110) · `feat/110-penpot-handoff` · PATCH 0.23.2）**：**Penpot 出图协作闭环** —— 用户 2026-11-13 两条口头约束 + T541 三处实证（rd-fe 首版按文字规格实现致返工 / PM PASS 后直接派 RD 未经用户确认 / 设计稿文字与画板矛盾）。PRD = `docs/prds/2026-11-13-penpot-handoff.md`（9 模块 · R1–R7 · AC1–AC10）。范围：`uiux-designer` 卡（v1→2 图源信息四项 + 必要时导出）· `frontend-developer` 卡（v12→13 写码前检查 + 按图实现 + 反驳走回退）· `product-manager` 卡（v34→35 派发闸门 + 开工卡新增一问，默认不托管）· `skills/uiux-design.md` 清单 · 开工卡模板（pm-operations §一 + comm-templates）。**非范围**：Penpot MCP 接入（T540 预占）· 导出格式规范 · 自动一致性检查。**待办** = 开工确认卡待用户确认。
 
+- ✅ **T542 开工确认（2026-11-13 · 用户 ask-me）**：开工 · **「设计稿验收模型」默认值 = 不答即「用户本人确认」**（不默认代用户拍板）。派 rd-infra 实施 5 处 + bump（pm v34→35 / uiux-designer v1→2 / rd-fe v12→13）+ 广播文本；qa 轻量复核；设计闸门不适用（机制文本非界面）；架构评审跳过（纯文本纪律）。
 - 🔄 **T541 开工（2026-11-13 · Issue [#107](https://github.com/Nathan3303/nao-skills/issues/107) · `feat/107-portal-site`）**：**门户单页**（中文 landing page · 纯静态零外部依赖 · GitHub Pages 项目页）。PRD = `docs/prds/2026-11-13-portal-site.md`（9 模块 · AC1–AC11）。**开工卡已确认（ask-me）**：现在开工 · 分工 = 设计→实现→部署→验收（uiux-designer 设计稿 PASS 才放行）· 建 Issue · 模型不指定。**串行链**：uiux-designer → rd-fe（`site/`）→ rd-infra（Pages workflow）→ PM（README 指针）→ qa（用户验收清单）→ 用户回填 → RD squash 合并。**DoD**：产物 `site/index.html`(+css/js) · `.github/workflows/pages.yml` · `docs/designs/2026-11-13-portal-site.md` · `docs/reports/2026-11-13-T541-user-acceptance.md` · README 指针 1 行；验证 `check` rc=0 + `npm test` rc=0 + AC1–AC11 + 外部请求 0 + ≤200KB + 敏感值 grep 空 + 本地双击可开；遗留三出口；交接含「Pages 首次启用需用户在仓库 Settings→Pages 选 GitHub Actions」。**已知降级**：本批不发版（不出 npm 包）。
 
 - 📌 **用户口头约束（2026-11-13 · 已即时落盘 → Issue #110 / T542 待派发）**：**Penpot 出图后的两条硬约束** —— ① uiux 用 Penpot MCP 出图 ⇒ 交付须写明 Penpot 页信息（文件 id / 画板名尺寸 / 图层命名），必要时导出文件入库作本地依据；**rd-fe 写代码前须检查 uiux 是否用 Penpot 出图，若是严格按图实现**，允许反驳但必须走流程回退。② **uiux 出图后 PM 不得立即派 RD**，须用户确认设计稿满意（例外 = 用户明确托管），**且须在任务开工前就问清**（开工卡新增一问）。**触发来源**：本批实测 —— rd-fe 首版按设计稿文字规格实现，用户当场点出与 Penpot 画板差距大、重做一版 ⇒ 本批设计验收实际走了「PM PASS → 直接派 RD」的旧路径，属已知缺陷，T542 修复。
@@ -141,6 +142,13 @@
 - 会话体检：本 PM 会话（`01a1977d` · pane %74）已跨 T537 / M20261101 / M20261102 / T538 / T539 五批，ctx 约 35%；**建议下批开工前重开 PM**；本快照 = 接续唯一事实源（main = `38f678b`）
 
 ## 需求分支 / PR / 发布（PM 维护）
+
+### 本批 T542（Penpot 出图协作闭环 · Issue #110 · 实施中）
+
+- 通道：`feat`（新增纪律）· 分支 `feat/110-penpot-handoff` · PATCH 0.23.2
+- PRD：`docs/prds/2026-11-13-penpot-handoff.md`（9 模块 · R1–R7 · AC1–AC10）
+- PR owner / Reviewer：rd-infra / qa（轻量复核）· 设计闸门不适用 · 架构跳过
+- 落点：`prompts/{uiux-designer,frontend-developer,product-manager}.md` · `skills/uiux-design.md` · `skills/pm-operations.md` §一 · `checklists/comm-templates.md`
 
 ### 本批 T545（herdr 多 workspace scope 隔离 · Issue #112 · arch 阶段）
 
@@ -362,6 +370,7 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| T542 | rd-infra-T542 | Penpot 出图协作闭环：三张卡（图源契约 / 按图实现 / 派发闸门）+ 技能清单 + 开工卡一问 + bump + 广播文本 | 2026-11-13 | AC1–AC10 | （本 PR 首提交） |
 
 ## 已回执待验收
 
