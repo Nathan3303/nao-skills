@@ -1,61 +1,56 @@
 # 门户单页（nao-skills landing page）
 
-- 状态：已定稿（PM 验收 PASS 2026-11-13）· 更新：2026-11-13 · Owner：uiux-designer
+- 状态：已定稿（T541 返工：与画板对齐）· 更新：2026-11-13 · Owner：uiux-designer
 - 指针：PRD `docs/prds/2026-11-13-portal-site.md`（AC1–AC11）· 骨架 `deliverable-docs.md` §九 · 交付档位 ①+③（Penpot 本地文件）
 
 ## 一、信息架构
 
 - 层级 ≤2：单页 6 段 + 顶栏，无子页 / 抽屉 / 弹层（文档站为非范围）；≥720 顶栏平铺 4 锚点，<720 同位置一行横滑锚点，无 JS 亦可用。
-- 段落与目标：顶栏（品牌 + 4 锚点 + GitHub）= 随时跳段；Hero = 30 秒懂定位并拿到命令（AC1）；三个毛病 = 为什么需要；七个角色 = 分工可信（AC3）；三步装好 = 前置与命令全貌；常见问题 = 消除「会改我代码吗 / 只能 pi 吗」；页脚 CTA = 二次转化。
-- 入口配比：主 CTA = 复制安装命令（全页唯一实心按钮）；GitHub 3 处、npm 文字链 2 处；不显示动态版本徽章（外部图片违反零依赖）。
+- 段落与目标：顶栏（品牌 + 4 锚点 + GitHub）；Hero = 30 秒懂定位并拿到命令（AC1）；三个毛病 = 为什么需要；七个角色 = 分工可信（AC3）；三步装好 = 前置与命令全貌；常见问题 = 消除「会改我代码吗 / 只能 pi 吗」；页脚 CTA = 二次转化。主 CTA = 复制安装命令（全页唯一实心按钮），GitHub 3 处、npm 文字链 2 处，不显示动态版本徽章（外部图片违反零依赖）。
 
 ## 二、流程
 
 1. 主路径：落页 → Hero 读定位 → 点「复制」→ 100ms 内变「已复制 ✓」→ 锚点看「三步装好」→ 页脚点 GitHub。
 2. 异常 · 剪贴板被拒：不弹窗，自动全选代码，文案变「已选中，请按 ⌘/Ctrl+C」，1.8s 复原。
-3. 异常 · JS 禁用：复制按钮保留但不生效（不遮挡内容）；代码为纯文本可手选；FAQ 用原生 `<details>`；锚点为 `#` 跳转（AC4）。
-4. 空 / 加载 / 错误 / 无权限：不适用：静态页无数据请求、无用户态（PRD §四）；外链一律新标签 + `rel="noopener"`，站内锚点不新开。
+3. 异常 · JS 禁用：复制按钮保留但不生效（不遮挡内容）；代码为纯文本可手选；FAQ 用原生 `<details>`；锚点为 `#` 跳转（AC4）；空 / 加载 / 错误 / 无权限：不适用（静态页无数据请求、无用户态，PRD §四）；外链一律新标签 + `rel="noopener"`，站内锚点不新开。
 
 ## 三、视觉规范
 
-- 层级：h1 39/1.2（窄 31/1.25）· h2 25/1.3 · 卡标题 16/600 · 正文 16/1.7 · 辅助 13/1.6；相邻字阶 ≥1.25 倍。
-- 节奏：区块上下 96（窄 64），段内块间 24，卡内 12；版心 1080（左右 24 / 窄 16），Hero 两栏 1.1:1（≥1080）。
+- 层级：h1 39/1.2（窄 31/1.25）· h2 25/1.3（窄 22）· 卡标题 16/600 · 正文 16/1.7 · 辅助 13/1.6；跨层级只用 39 / 25 / 20 / 16（相邻 ≥1.25 倍）。
+- 节奏：区块 80 上 / 64 下（窄 64 / 48），段内块间 24，卡内 20（宽屏 24）；版心内容 1080 + 左右 24（`max-width` 1128，窄 24）。
 - 卡片：1px `border-subtle` + `radius 12`；亮色仅 hover 升 `shadow-1`；七角色 3 列时第 3 行单卡左对齐不拉伸。
-- 强调唯一：`accent` 只给链接、实心 CTA、焦点环、当前段导航；其余靠字重与留白分层。
-- 终端示意用 CSS 绘制（三点窗口 + 5 行），`aria-hidden="true"`，<720 隐藏（保 AC1 首屏）；形态红线：无渐变 / 玻璃拟态 / 发光 / 装饰插画 / emoji 标题，圆角 ≤14。
+- 强调唯一：`accent` 只给链接、实心 CTA、焦点环、当前段导航；其余靠字重与留白分层；终端示意用 CSS 绘制（三点窗口 + 5 行），`aria-hidden="true"`，<720 隐藏（保 AC1 首屏）。
+- 形态红线：无渐变 / 玻璃拟态 / 发光 / 装饰插画 / emoji 标题，圆角 ≤14。
 
 ## 四、token
 
 - 颜色（`亮 / 暗`）：`surface-page` #FFFFFF / #0B0F14 · `surface-sunken` #F6F8FB / #121A26（代码块、终端、FAQ 展开、页脚带）· `border-subtle` #E3E8EF / #27313F（暗色只用描边分层）。
-- 文字与强调：`text-primary` #101828 / #E8EDF4 · `text-secondary` #475467 / #A9B4C2 · `accent` #1D4ED8 / #8FB4FF · `accent-solid` #1D4ED8 双套 + `on-accent` #FFFFFF。
+- 文字与强调：`text-primary` #101828 / #E8EDF4 · `text-secondary` #475467 / #A9B4C2 · `text-tertiary` #667085 / #8B98A9 · `accent` #1D4ED8 / #8FB4FF · `accent-solid` #1D4ED8 双套 + `on-accent` #FFFFFF。
 - 对比度（AC8，实现后复核）：正文 16.4:1 · 次要 8.0:1 · accent 链接 6.3:1 · 暗色次要 8.8:1 · 暗色 accent 8.1:1。
-- 字阶 `fs-100 13` / `fs-200 16` / `fs-300 20` / `fs-400 25` / `fs-500 31` / `fs-600 39`；字体栈零外链：正文 `-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif`，代码 `ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace`。
-- 间距 `4 / 8 / 12 / 16 / 24 / 32 / 48 / 64 / 96`；圆角 `6`（行内代码）/ `12`（卡片、代码块）/ `999`（胶囊）；阴影 `0 1px 2px rgba(16,24,40,.06)` 仅亮色 hover；层级 `z-header 10` / `z-toast 20`。
+- 字阶（px 直取，14 档，用途固定）：11 角色 id · 12 终端行与命令注脚 · 13 kicker / 代码 / 编号 / 职责 / 法务 · 14 导航 / FAQ 正文 · 15 实心按钮 / 步骤说明 · 16 正文 / 卡标题 / FAQ 问题 · 17 品牌 / hero 副标 · 18 FAQ 展开符 · 20 步骤标题 · 22 窄屏 h2 · 25 h2 · 30 步骤序号 · 31 窄屏 h1 · 39 桌面 h1。
+- 字体栈（零外链）：正文 `-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif`；代码 `ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace`。
+- 间距 `4 / 8 / 12 / 16 / 20 / 24 / 28 / 32 / 36 / 40 / 48 / 56 / 64 / 80`；圆角 `8`（小卡）/ `12`（卡片、代码块）/ `14`（终端）/ `999`（胶囊）；阴影 `0 1px 2px rgba(16,24,40,.06)` 仅亮色 hover；层级 `z-header 10` / `z-toast 20`。
 
 ## 五、状态
 
 - 加载 / 空 / 错误 / 无权限：不适用：静态页无数据、无用户态；深色模式跟随 `prefers-color-scheme`，不设手动开关（PRD Should 项）。
 - 复制按钮：默认「复制」→ 成功「已复制 ✓」（1.8s 回退）→ 失败「已选中，请按 ⌘/Ctrl+C」→ focus 2px 环；成功不单靠颜色（文案 + 图标）。
-- 锚点导航：默认 / hover 下划线 / 当前段 `aria-current="true"` + accent 文字 + 2px 下划线；无 JS 仅失高亮，不影响跳转。
-- FAQ：默认全部收起（一屏扫完 5 问），展开 `<details open>` 且 `+` → `−`；极值：命令超长走代码块 `overflow-x:auto` 不换行，职责文案限 2 行、超长截断 + `title`。
+- 锚点导航：默认 / hover 下划线 / 当前段 `aria-current="true"` + accent 文字 + 2px 下划线；无 JS 仅失高亮不影响跳转；FAQ 默认全部收起（一屏扫完 5 问），展开 `<details open>` 且 `+` → `−`；极值：命令超长走 `overflow-x:auto` 不换行，职责文案限 2 行、超长截断 + `title`。
 
 ## 六、断点
 
-- 宽 ≥1080：Hero 两栏（文案 | 终端），七角色 3 列（3+3+1）。
-- 中 720–1079：Hero 单栏（终端缩为 3 行置于命令块下），角色 2 列，导航全显；窄 <720：全单列、终端隐藏、导航一行横滑、区块留白 64。
-- 360（AC5 硬边界）：`padding 16`、正文 16 不缩、h1 31/1.25；卡片单列且 `min-width:0`；代码块 `overflow-x:auto` + 触摸滚动，禁 `100vw`，不用 `overflow-x:hidden` 掩盖溢出。
+- 宽 ≥1080：Hero 两栏（文案 | 终端），七角色 3 列（3+3+1）；中 720–1079：Hero 单栏（终端缩为 3 行置于命令块下），角色 2 列，导航全显；窄 <720：全单列、终端隐藏、导航一行横滑、区块留白 64 / 48。
+- 360（AC5 硬边界）：`padding 24`、正文 16 不缩、h1 31/1.25；卡片单列且 `min-width:0`；代码块 `overflow-x:auto` + 触摸滚动，禁 `100vw`，不用 `overflow-x:hidden` 掩盖溢出。
 - 首屏预算（360×640）：顶栏 56 + 定位 3 行 ≈116 + 副标 48 + 命令块 88 + 双入口 44 ≤ 420 ⇒ 不滚动即见定位 + 命令 + 双入口（AC1）。
 
 ## 七、可用性
 
-- 点击数：复制 1、看源码 1、找前置 ≤1（锚点直达），主任务 ≤3 次点击；点击 ≤100ms 出文案变化，无 >400ms 阻塞过渡，平滑滚动可被「减少动效」关闭。
-- 可读性：段首结论句 ≤40 字，段内要点 ≤3 条；七角色职责每条 ≤24 字。
+- 点击数：复制 1、看源码 1、找前置 ≤1（锚点直达），主任务 ≤3 次点击；点击 ≤100ms 出文案变化，无 >400ms 阻塞过渡，平滑滚动可被「减少动效」关闭；可读性：段首结论句 ≤40 字，段内要点 ≤3 条，七角色职责每条 ≤24 字。
 
 ## 八、无障碍
 
 - 对比度：正文 ≥4.5:1（数值见 §四），大字 ≥3:1；语义不单靠颜色；`h1` 唯一，`h2` / `h3` 不跳级；`<nav aria-label>` + `<main>` + `<footer>`；终端示意 `aria-hidden="true"`。
-- 键盘：首个 Tab = 「跳到主内容」；全部链接/按钮可 Tab 达，`focus-visible` 2px `accent` 环 + 2px offset（禁裸 `outline:none`）；命中区 ≥44×44。
-- 复制反馈：独立 `aria-live="polite"` 状态区，按钮 `aria-label="复制安装命令"`；SEO：`lang="zh-CN"`、`title`、`description` ≤70 字、`og:title` / `og:description`，无外链字体与脚本。
+- 键盘：首个 Tab = 「跳到主内容」；全部链接/按钮可 Tab 达，`focus-visible` 2px `accent` 环 + 2px offset（禁裸 `outline:none`）；命中区 ≥44×44；复制反馈走独立 `aria-live="polite"` 状态区，按钮 `aria-label="复制安装命令"`；SEO：`lang="zh-CN"`、`title`、`description` ≤70 字、`og:title` / `og:description`，无外链字体与脚本。
 
 ## 九、降级产物
 
@@ -63,18 +58,23 @@
 - 原型：本机 Penpot 文件「项目门户页面」· 文件 id `cca191f5-4d4c-802c-8008-f0224a2df446`（本地运行，未部署无公网链接；按角色卡 §六 只留可追溯标识，无实例 URL 与凭证）。
 - 画板：`page-desktop-1440`（1440×3424）· `page-mobile-360`（360×4070）· `frame-states`（560×540）· `frame-dark-hero`（720×470）；图层命名 `page-*` / `section-*` / `<段>-card-<序号>` / `frame-*`，token 同名（`surface-sunken`、`border-subtle`）。
 - 帧要点摘录：① 桌面单列六段，Hero 左文案右终端；② 360 单列、终端隐藏、代码块横滚；③ 深色帧验证 surface 抬亮 + 描边分层（不用阴影）；④ 状态帧给复制三态 / 导航当前段 / FAQ 展开 / focus 环。
-- favicon（`site/favicon.svg`，无外链）：32×32 viewBox、透明底、3 根圆角竖条（`x=6/14/22`、`w=4`、`h=14/22/18`、`rx=2`、底对齐 `y=26`）=「并排小队」；内部 `<style>` 亮 `#1D4ED8` / 暗 `#8FB4FF`；`<link rel="icon" type="image/svg+xml" href="favicon.svg">`。
 - 文案骨架：h1「给你的 pi 配一支开发小队」· 副标「7 个 AI 角色分工干活，各管一段；你只做两件事：回答问题、点确认」· 三毛病 3 条 · 七角色 7 条 · 三步 3 条 · FAQ 5 条；事实以 README 为准，角色名与顺序取 `roles.yaml`。
-- 交付文件清单（供 rd-fe，不含实现）：`site/index.html` · `site/style.css` · `site/app.js` · `site/favicon.svg`；零构建、零 CDN。
+- 交付文件（供 rd-fe，不含实现）：`site/index.html` · `site/style.css` · `site/app.js` · `site/favicon.svg`（favicon 规格：32×32 viewBox、透明底、3 根圆角竖条 `x=6/14/22`、`w=4`、`h=14/22/18`、`rx=2`、底对齐 `y=26`=「并排小队」，内部 `<style>` 亮 `#1D4ED8` / 暗 `#8FB4FF`）；零构建、零 CDN。
+
+## 实现对照（AC9 判定依据）
+
+- 裁决：**以画板为准**（A）—— 画板与实现一致，本文档原写 96 / 16 / 6 档字阶，是我把画板取值抽象成了理想刻度，属文本写漏，不是实现偏差。
+- 区块留白：画板 80 上 / 64 下（窄 64 / 48）= 实现 `.section`；原文「96 / 64」已订正（§三）。
+- 360 内边距：画板 24 = 实现 `.wrap` 24；原文「16」已订正（§六）。
+- 版心与字阶：画板内容 1080 = 实现 `max-width 1128`（含左右 24）；字阶以 §四 的 14 档为准，实现 `--fs-11…39` 逐档对齐，原「6 档」已订正。
+- 唯一有意偏差（保留）：角色 id 10 → 11px（rd-fe 已在 PR 列出）；除此之外文本与画板无差异，二者不再并存两套值。
 
 ## AC 结论（设计侧）
 
-- AC1 PASS：首屏（360×640 ≤420px）含定位 + 命令 + 双入口（§六）。
-- AC2 PASS（PM 2026-11-13 裁定 A）：站点命令 `pi install --local npm:@nathan33/nao-skill`（无版本 pin），下附「项目内版本 pin 见 README 安装段」；PRD §五 / AC2 由 PM 同步改。
-- AC3 PASS：七卡，名称与顺序取 `roles.yaml`（pm / arch-designer / uiux-designer / rd-fe / rd-be / qa / rd-infra），每卡「名称 + ≤24 字职责」，3/2/1 列一屏可扫。
-- AC4 PASS：无 JS 全文可见（§二 3、§五 FAQ / 锚点原生实现）；AC5 PASS：360 规则见 §六（单列、代码块横滚、不用隐藏溢出的假修法）。
-- AC7 / AC8 PASS（设计侧）：文件清单零外链；对比度与语义见 §八，实现后复核数值。
-- AC9 PASS：字阶 / 间距 / 主色 / 断点以 §三–§六 为唯一实现依据，Penpot 画板为实现对照物；有意偏差须在 PR 描述列出并说明理由。
-- 待决点：无（AC2 冲突已裁定）。
+- AC1 PASS：首屏（360×640 ≤420px）含定位 + 命令 + 双入口（§六）；AC3 PASS：七卡，名称与顺序取 `roles.yaml`（pm / arch-designer / uiux-designer / rd-fe / rd-be / qa / rd-infra），每卡「名称 + ≤24 字职责」，3/2/1 列一屏可扫。
+- AC2 PASS（PM 2026-11-13 裁定 A）：站点命令 `pi install --local npm:@nathan33/nao-skill` 无版本 pin + 「项目内版本 pin 见 README 安装段」指针（命令全称见 PRD §五）。
+- AC4 PASS：无 JS 全文可见（§二 3、§五 FAQ / 锚点原生实现）；AC5 PASS：360 规则见 §六（padding 24、单列、代码块横滚、不用隐藏溢出的假修法）。
+- AC7 / AC8 PASS（设计侧）：文件清单零外链；对比度与语义见 §八，实现后复核数值；AC9 PASS：以本文档 §三–§六 数值 + 画板为唯一基准（实现已逐项对齐，见上「实现对照」）。
+- 待决点：无（AC2 已裁定；F3 文本/画板不一致已按 A 关闭）。
 
-- 修订：2026-11-13 初稿（AC2 与 PRD §五 冲突经 PM 裁定 A；Penpot 四画板落地）
+- 修订：2026-11-13 初稿（AC2 冲突经 PM 裁定 A）；同日 T541 返工：留白 96→80、360 内边距 16→24、字阶 6 档→14 档，补「实现对照」并声明唯一事实源
