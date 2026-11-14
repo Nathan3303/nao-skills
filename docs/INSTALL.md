@@ -29,7 +29,7 @@ gh --version                          # 可选
 不满足时的表现（都是 fail loud，不静默回落）：
 
 - 默认 herdr 但**没装 herdr** ⇒ `check` 打红 `rc=1`（给「装 herdr」与「`export NAO_TERMINAL=tmux` 回退」两条命令）；`ensure` / `status` / `close` ⇒ `exit 3`。
-- 默认 herdr 但**不在 herdr pane 内**（例如你在 tmux 里跑）⇒ `exit 3` + 一行提示（去 herdr 会话的 pane 内重试，或 `export NAO_TERMINAL=tmux` 回退）。
+- 默认 herdr 但**不在 herdr pane 内**（例如你在 tmux 里跑，且 `HERDR_ENV` 未被继承时）⇒ `exit 3` + 一行提示（去 herdr 会话的 pane 内重试，或 `export NAO_TERMINAL=tmux` 回退）。
 - 选了 tmux 后端但不在 tmux 里 ⇒ `exit 3` + 一行提示 `tmux new -s nao`（不建任何窗口、不留副作用）。
 - pi 版本低于 1.4.0 ⇒ `check` 该项打红并 `rc=1`。
 

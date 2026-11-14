@@ -19,6 +19,7 @@
 - `.agents/prompts/product-manager.md`：`:66` 改「默认 **3 行**摘要（摘要 + codegraph + 生效后端；显式 `=tmux` 无第三行）」· `version 36 → **37**` · `updated 2026-11-14`。
 - `nao-fleet.sh`：新增 `SELF_SH`（读回自身以解析默认值，不重述字面量）+ `premise_declared_backend` + `check_backend_premise`（warn-only，`cmd_check` 内**单点调用** `|| true`）；顺带订正同批次同事实的陈旧文案：`check` 段标题（去掉「tmux 内」）、`✓ tmux 可用（唯一受支持宿主）`→`（回退后端）`、usage/摘要注释「2 行」→「2–3 行」（herdr 版另加生效后端行）。
 - ADR：正文 6 篇「待落地 vX.Y.Z」→「已落地 vX.Y.Z」（v0.17.2 / 0.18.0 / 0.18.3 / 0.18.5 / 0.20.0 / 0.21.0，`docs/releases/` 均在）+ `strict-tmux-pi` 加**被 herdr 默认取代（v0.23.x）**注记（正文保留历史）+ `derived-pane-window-addressing` 正文补「已落地 v0.16.2 · T517」（`git tag --contains 536d030` 实证）；`docs/adr/README.md` 索引 10 行同步（含 `:21`/`:23`/`:25` 三处矛盾行）。
+- 用户可见文档（PM 验收前小补 ②③）：`docs/INSTALL.md` §前置环境「不满足时的表现」第 2 条加限定「且 `HERDR_ENV` 未被继承时」；`docs/ARCHITECTURE.md` 在「工具层 · 运行前提（v0.19.0）」段**下方加一行注**（v0.23.0 起默认 herdr + ADR 取代注记指针，**正文不动**，尊重版本戳快照）。
 - 测试：新增 `cases/34`（4 组 32 条断言）+ `run.sh` 注册 + `backends/herdr.txt` 登记（shared）+ `tests/README.md` 计数同步（共享 20→21 · 32→33 例）；`cases/06` 两处随本批事实更新（小节标题插值常量仍命中；扫描面 32→33 个用例文件）。
 
 ## AC 逐条
@@ -44,7 +45,7 @@
   - `2026-11-13-herdr-workspace-scope-key`：已落地 v0.23.1 / 同 ✓（索引原写「待落地」）
   - 「全库 `待落地` 与已发版本不一致项」= **0**：`grep -rn 待落地 docs/adr` = 9 → **0**（另 1 处 `docs/research/2026-10-14-code-review-role.md`「决策待落地」是调研文档状态、非 ADR、不指版本，不动）。
 - **AC4 PM 卡**：`version=37` + `updated=2026-11-14` + `:66` 三行摘要。**广播文本**：`card pm v37` —— 「check 默认摘要 2 行 → **3 行**（摘要 + codegraph + 生效后端；显式 `NAO_TERMINAL=tmux` 时无第三行）；同时把「运行前提」表述改为『终端后端默认 herdr、`NAO_TERMINAL=tmux` 回退』（细节指针 `README.md`「前置环境」/`docs/INSTALL.md`「herdr 后端」）」。
-- **AC5 先红后绿（双向）**：三段证据 —— ① **实现缺失**：`cases/34` 落笔后 `RESULT: FAIL`（13 条未过，含 B2/B3/B3b/B4/B5 · C2/C3/C4 的「warn 不存在」+ D1/D2 静态面 + D4 仓库协议仍旧口径）；② **文档未对齐**：实现后直接 `check -v` ⇒ **2 条 warn**（协议 = tmux 旧口径 · `AGENTS.md` = nodecl）+ 摘要 `warn=2`；③ **对齐后**：warn 0 · `cases/34` **PASS 32/32**（tmux 与 herdr 两后端同）。双向：一致 ⇒ 零输出/无 `warn=`；不一致 ⇒ 1 条 warn 且摘要 `warn=1`；还原 ⇒ warn 消失（B8/C6）。
+- **AC5 先红后绿（双向）**：三段证据 —— ① **实现缺失**：`cases/34` 落笔后 `RESULT: FAIL`（13 条未过，含 B2/B3/B3b/B4/B5 · C2/C3/C4 的「warn 不存在」+ D1/D2 静态面 + D4 仓库协议仍旧口径）；② **文档未对齐**：实现后直接 `check -v` ⇒ **2 条 warn**（协议 = tmux 旧口径 · `AGENTS.md` = nodecl）+ 摘要 `warn=2`；③ **对齐后**：warn 0 · `cases/34` **tmux 32 PASS / 默认 herdr 31 PASS + 1 NOTE**（herdr 侧 `cases/34:75` 的 `if` 让 A4 只在 tmux 后端执行，herdr 走 `t4_note backend-gate` ⇒ 断言数不同轴，不是漏跑）。双向：一致 ⇒ 零输出/无 `warn=`；不一致 ⇒ 1 条 warn 且摘要 `warn=1`；还原 ⇒ warn 消失（B8/C6）。
 - **AC6 负控**：协议改回「唯一路径 … tmux」⇒ warn 出现（B2/B3/B7）；还原 ⇒ 消失（B8）；`AGENTS.md` 同名负控（C2/C3/C6）。两处均 `rc=0`（B1/B6/C1）⇒ warn 不改 rc。
 - **AC7 门禁**：`check` rc=0 ×2 且输出 `diff` 空（roles=7 · files=54 · layout=main-row2；`files=` 未变 = 本批未增删 `.agents/` 下文件）· `npm test`：`NAO_TEST_TERMINAL=tmux` rc=0（33 例全 PASS · SKIP=0 DEGRADE=0 · NOTE 9 全白名单）· 默认（herdr）rc=0（共享 21 / 专有 10 / tmux 专有 2 / PENDING 0 = 33 · SKIP=0 DEGRADE=0 · NOTE 10 全白名单）· 敏感值 grep（新增行：家目录绝对路径 · 令牌 · 私钥 · API 凭据字面量）= **0**（命令与正则见下「门禁命令」）。
 - **AC8 T1 实测**：见下节（结论：**条件性 exit 3**，非无条件）。
@@ -59,6 +60,9 @@ grep -rn 'herdr' .agents --include=*.md | wc -l              # AC1 正向（= 4�
 grep -rn '唯一路径.*tmux' .agents --include=*.md | wc -l     # AC1 负向（= 0）
 grep -rn '待落地' docs/adr | wc -l                           # AC3（= 0）
 git diff <base>..HEAD | grep '^+' | grep -cE '<家目录前缀>|<令牌前缀>|BEGIN .*PRIVATE KEY|api[_-]?key'   # = 0
+# cases/34 两后端断言数（32 / 31 不同轴：A4 只在 tmux 后端跑，herdr 走 NOTE backend-gate）
+NAO_TERMINAL=tmux bash tests/t4/run.sh --case 34 | grep -c '\[PASS\]'   # = 32
+bash tests/t4/run.sh --case 34 | grep -c '\[PASS\]'                     # = 31（另 1 条 NOTE backend-gate）
 ```
 
 ## T1 实测：tmux 内 `ensure` 是否 exit 3（#118 §五-5）
@@ -79,6 +83,6 @@ git diff <base>..HEAD | grep '^+' | grep -cE '<家目录前缀>|<令牌前缀>|B
 
 - 未跑：B 的「真实 `HERDR_SESSION` + 真实 socket 继承进 tmux」组合 —— 结构上与 B 同形（前提闸门只读 env 字符串 + 静态 schema），且会在用户真实 workspace 里建 pane（越安全边界），故不实跑。
 - 声明解析契约（注意）：`check` 只认「默认 herdr / 默认 tmux」原文（`默认` 与后端名之间允许空格 / `=`/`＝`）。改文案若插 `**` 等标记 ⇒ 解析为 `nodecl` ⇒ **warn**（fail loud，不会静默放过）；断言在 `cases/34` A/B/C。
-- 遗留 1（**转办**，owner PM 判定）：`docs/INSTALL.md` §前置环境「不满足时的表现」第 2 条需加限定「`HERDR_ENV` 未被继承时」；证据见上节 B。建议随下次 PATCH 修。
-- 遗留 2（**观察**，不阻断）：`docs/ARCHITECTURE.md:45` 的「工具层 · 运行前提（v0.19.0）」仍是 tmux 单路径表述 —— 该段自带版本戳（v0.19.0 快照），按「不追溯改写历史文档」未动；若 PM 认为该文档应跟现行口径，另立小批。
-- 遗留 3（**观察**）：`cases/06` 的 `CHECK_GOLD_LINE`/md5 golden 依赖「一致时零输出」；未来若把端前提 warn 改为 `✓` 正向行，会同时打破 tmux golden 与 `README` 口径，需同批评审。
+- ~~遗留 1~~ **已修（同批）**：`docs/INSTALL.md` §前置环境「不满足时的表现」第 2 条已加限定「且 `HERDR_ENV` 未被继承时」（依据 AC8 B 组实测）。
+- ~~遗留 2~~ **已修（同批）**：`docs/ARCHITECTURE.md`「工具层 · 运行前提（v0.19.0）」正文不动，**段下加一行注**：v0.23.0 起默认后端为 herdr（`NAO_TERMINAL=tmux` 回退），见 ADR `2026-10-27-strict-tmux-pi` 取代注记。
+- 遗留 3（**接受**，PM 2026-11-14 裁定「不用动」）：`cases/06` 的 `CHECK_GOLD_LINE`/md5 golden 依赖「一致时零输出」；若未来把端前提 warn 改为 `✓` 正向行，会同时打破 tmux golden 与 `README` 口径 ⇒ 须同批评审（当前不改）。

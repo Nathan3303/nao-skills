@@ -43,6 +43,9 @@
 | **工具层** | fleet 拉起/体检/状态（含残留检测）/回收；ui-tokens-check 硬编码色值扫描（可接 CI） | 一次性执行 |
 
 **工具层 · 运行前提（v0.19.0）**：`nao-fleet.sh` 只有一条路径——**tmux 会话内**（`$TMUX` 非空且 `tmux` 可用）+ **pi ≥ 1.4.0**；以派生宿主窗口（调用者 pane 所在 window）显式 `-t @<window_id>` 分屏拉起，句柄优先级 = tmux pane 标题 > 名册 `tmuxPane` > 本仓未认领 pi pane 唯一兜底。非 tmux ⇒ `ensure`/`status`/`close` 一律 `exit 3` + 单行提示（零副作用）；`close` 无「无法判定在线」分支（tmux 下必有句柄）。细则见 ADR `2026-10-27-strict-tmux-pi` 与 `2026-10-13-derived-pane-window-addressing`。
+
+> 注：v0.23.0 起默认后端为 herdr（`NAO_TERMINAL=tmux` 回退），见 ADR `2026-10-27-strict-tmux-pi` 的取代注记。
+
 | **外部能力** | CodeGraph：`context` 一次返回相关符号+代码块（实测约 1/17 于 grep+全文） | 查找精准化 |
 
 ## 核心设计：Token 优先
