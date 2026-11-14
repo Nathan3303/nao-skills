@@ -126,6 +126,8 @@ run_check -v
 t4_assert_eq "0" "$C34_RC" "C1b 仅 :${L18} 回退：warn 不改 rc（仍 0）"
 t4_assert_eq "1" "$(premise_warns)" "C1c 仅 :${L18} 回退：恰 1 条端前提 warn（**P2-1 盲区：旧实现此处为 0**）"
 t4_assert_contains "$C34_OUT" "AGENTS.md:${L18}" "C1d warn 点名 :${L18}（行号级定位）"
+t4_assert_contains "$C34_OUT" "端前提行未给出可比对的后端声明" \
+  "C1d2 nodecl 分支文案 = 「端前提行未给出可比对的后端声明」（P3-8：不再把下游项目的『运行前提』称作端前提声明）"
 t4_assert_eq "0" "$(printf '%s\n' "$C34_OUT" | grep -c "AGENTS\.md:${L33}" || true)" \
   "C1e 不误点名未改动的 :${L33}"
 restore
@@ -192,11 +194,17 @@ t4_assert_eq "0" "$C34_RC" "E3c 仅协议在场：rc=0"
 mv "$BAK/AGENTS.e3" "$AGENTS"
 
 # E4 回归位（真实安装信道的最小化形态）：无 AGENTS.md 时摘要**不得**出现 warn= 字段
+# P3-7（QA 三轮 · 防空转）：`not_contains` 单用会被「check 早退且输出为空」空转通过 ⇒ 每条各配**正锚**
+#   （E4 = 摘要行正锚 + rc；E4b = `-v` 的「运行前提」段正锚 + rc）。变异自证见报告 §P3-7。
 mv "$AGENTS" "$BAK/AGENTS.e4"
 run_check
-t4_assert_not_contains "$C34_OUT" "warn=" "E4 无 AGENTS.md：默认摘要无 warn= 字段（不常驻）"
+t4_assert_eq "0" "$C34_RC" "E4a 无 AGENTS.md：rc=0（正锚 ⇒ 早退且非 0 不会混过）"
+t4_assert_contains "$C34_OUT" "check: OK" "E4b 无 AGENTS.md：摘要行在场（正锚 ⇒ 空输出不会空转通过）"
+t4_assert_not_contains "$C34_OUT" "warn=" "E4c 无 AGENTS.md：默认摘要无 warn= 字段（不常驻）"
 run_check -v
-t4_assert_not_contains "$C34_OUT" "AGENTS.md:absent" "E4b 无 AGENTS.md：不再出现 \`AGENTS.md:absent\` 乱码式文案"
+t4_assert_eq "0" "$C34_RC" "E4d 无 AGENTS.md + -v：rc=0（正锚）"
+t4_assert_contains "$C34_OUT" "== 运行前提" "E4e 无 AGENTS.md + -v：报告正文在场（正锚 ⇒ 空输出不会空转通过）"
+t4_assert_not_contains "$C34_OUT" "AGENTS.md:absent" "E4f 无 AGENTS.md：不再出现 \`AGENTS.md:absent\` 乱码式文案"
 mv "$BAK/AGENTS.e4" "$AGENTS"
 
 # ============================================================ D 静态面（单点 + warn-only + 默认值单源）

@@ -1524,7 +1524,7 @@ check_backend_premise() {
       [[ -n "${n:-}" ]] || continue                  # 空行/不产生行 ⇒ 不适用（"absent" 不再作为 token 出现）
       [[ "$decl" == "$actual" ]] && continue         # 该行与实现一致 ⇒ 零输出
       if [[ "$decl" == "nodecl" ]]; then
-        printf '  ! 端前提声明不可比对：%s:%s 有端前提声明但未给出「默认 herdr / 默认 tmux」原文，实现默认 = %s（%s 的唯一赋值点）—— 补写声明或改实现\n' \
+        printf '  ! 端前提行未给出可比对的后端声明：%s:%s（若该行与终端后端无关，可忽略；或在 AGENTS.md 中删去该行的「运行前提」字样以免被纳入比对）—— 实现默认 = %s（%s 的唯一赋值点）\n' \
           "$rel" "$n" "$actual" "nao-fleet.sh"
       else
         printf '  ! 端前提声明不一致：%s:%s 声明默认后端 = %s，而实现默认 = %s（%s 的唯一赋值点）—— 改声明或改实现，同一事实勿双源\n' \
