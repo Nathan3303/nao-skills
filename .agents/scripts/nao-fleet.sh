@@ -2,12 +2,13 @@
 # =============================================================================
 # nao-fleet.sh — 按角色一键拉起 pi 会话窗口（nao 团队工具箱）
 #
-# 运行前提（ADR 2026-10-27-strict-tmux-pi · 唯一路径）
-#   必须在 tmux 会话内（$TMUX 非空且 tmux 命令可用）· pi ≥ MIN_PI_VERSION（check 断言；阈值单源，见下方常量区）
-#   非 tmux ⇒ ensure/status/close 一律 exit 3 + 一行提示，且不建 session/pane/lock、不写状态（BR3）
+# 运行前提（端前提 = 后端 pane 内 + pi ≥ MIN_PI_VERSION；ADR 2026-10-27-strict-tmux-pi 的「tmux 唯一」
+#   部分**已被 herdr 默认取代**，见 docs/adr 同名 ADR 状态注记；pi 阈值与 exit 3 语义仍现行）
 #   **默认后端 = herdr（#96 三期 P2 · 2026-11-11）**：`NAO_TERMINAL` 未设/空串 ⇒ herdr；回退用 `NAO_TERMINAL=tmux`
-#     （保留 ≥2 MINOR 且 ≥90 天；退役另立项并先发弃用说明）。**不自动回落**（PM 裁定 D2）——
-#     默认 herdr 而环境不满足（未装 herdr / protocol≠22 / 非 herdr pane 内）⇒ fail loud exit 3，各条文案都带回退指路。
+#     （保留 ≥2 MINOR 且 ≥90 天；退役另立项并先发弃用说明）。**不自动回落**（PM 裁定 D2）。
+#   两侧前提：herdr 侧见下段「herdr 后端」；tmux 侧 = $TMUX 非空且 tmux 可用（降为回退通道）。
+#   任一端不满足 ⇒ ensure/status/close 一律 fail loud exit 3 + 一行提示（各条文案都带回退指路），
+#     不建 session/pane/lock、不写状态。
 #   cleanup 豁免本前提：其正常场景就是「非 tmux 的隔离实验场」（env -u TMUX ... -S <socket>）
 #   herdr 后端（NAO_TERMINAL=herdr · #96 二期 B1/B2/B3 · 三期 P1 布局 A）：前提改为「herdr pane 内 + HERDR_SESSION
 #     有效 + protocol 22」；B1 判定面（status）· B2 放置/就绪面（ensure）· B3 回收面（close/cleanup）—— 全部走门面，
@@ -25,7 +26,7 @@
 #
 # 用法
 #   nao-fleet.sh check [--strict] [-v]            静态体检：roles.yaml/缩进/EOL/角色卡/交叉引用/PR 模板/白名单/布局/tmux+pi 前提
-#                                                 默认摘要 2 行：摘要行 + codegraph 状态行（四态之一）；-v 展开完整报告（六态全展开）；失败始终展开
+#                                                 默认摘要 2–3 行：摘要行 + codegraph 状态行（四态之一）+ herdr 的生效后端行；-v 展开完整报告；失败始终展开
 #   nao-fleet.sh status                           角色会话在线状态（tmux：终端标题/名册；herdr：pane label + agent 状态
 #                                                 （结构化事实，权威源 pane list/agent list）；非在线证据单列）
 #   nao-fleet.sh ensure <别名>[@<repo>] [更多...]  拉起角色窗口（默认工作区=roles.yaml workspace）
@@ -125,6 +126,9 @@ SKILLS_DIR="${NAO_SKILLS:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 PROMPTS_DIR="$SKILLS_DIR/.agents/prompts"
 COMMON_DIR="$SKILLS_DIR/.agents/common"
 SKILLS_SUB="$SKILLS_DIR/.agents/skills"
+# 本脚本自身路径（#124）：端前提 warn 需从**唯一赋值点**解析默认后端，故要读回自己的源码。
+#   不许在别处重述默认值字面量（tests/t4 的 `grep -cE '^NAO_TERMINAL='` 静态 lint 亦依赖唯一性）。
+SELF_SH="$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")"
 
 # pi 运行前提（ADR 2026-10-27-strict-tmux-pi）的**单源**：check 文案与比较判据全部由它派生，
 #   脚本内禁再出现该版本的字面量（tests/t4 用例 06 静态兜住）。改阈值只改这一行。
@@ -194,7 +198,8 @@ SPAWN_FAIL=0
 SPAWN_RC_OK=0
 SPAWN_RC_SKIP=2
 SPAWN_RC_FAIL=3
-# check 输出契约：默认摘要 2 行（摘要行 + codegraph 状态行，四态之一），-v 展开完整报告（六态全展开）；失败始终展开
+# check 输出契约：默认摘要 2–3 行（摘要行 + codegraph 状态行，herdr 后端另加「生效后端」行；四态之一），
+#   -v 展开完整报告（六态全展开）；失败始终展开
 VERBOSE=false
 # close 的在跑 turn 判定（pi 默认状态行：Working (esc to interrupt) / Thinking... / Retrying / Compacting）
 CLOSE_BUSY_PATTERN="${NAO_CLOSE_BUSY_PATTERN:-Working \(|Thinking\.\.\.|to interrupt|to cancel|Retrying \(|Compacting|Summarizing branch}"
@@ -244,7 +249,8 @@ CG_MSG_UNPARSABLE='codegraph status 输出不可解析（手工 codegraph status
 log()  { printf '\033[1;32m[fleet]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[fleet]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[fleet]\033[0m %s\n' "$*" >&2; exit 1; }
-# 唯一运行前提（BR1/BR3 · ADR 2026-10-27-strict-tmux-pi）：$TMUX 非空且 tmux 可用。
+# 唯一运行前提（BR1/BR3 · ADR 2026-10-27-strict-tmux-pi）：是指 tmux 后端的前提 —— $TMUX 非空且 tmux 可用。
+#   （默认后端已翻 herdr：herdr 侧对应 _term_herdr_require；两端都 exit 3 + 零副作用）
 # 不满足 ⇒ exit 3 + 单行提示；调用点在建 session / load_manifest / 写状态**之前**（失败零副作用）。
 # rc 语义：3 = 前提不满足 ⇒ 命令未执行；不复用 1（已执行但失败）/ 2（用法守卫，现仅 cleanup）。
 require_tmux() {
@@ -1473,6 +1479,59 @@ check_eol() {
     printf '      %s\n' "${bad[@]}"
   fi
   return $rc
+}
+
+# 端前提声明一致性（#124 · AC5/AC6；上游 #118 §八 D4 裁定 = **不加新闸门**，改单点 warn）
+#   比对面：机制文本声明的「默认后端」（`.agents/common/intercom-protocol.md` + `AGENTS.md`）
+#   vs 实现默认（`NAO_TERMINAL` 唯一赋值点，从本脚本源码解析 —— 不在此重述默认值字面量）。
+#   纪律：**只 warn、不改 rc**（BR4）；**一致时零输出** —— 显式 `NAO_TERMINAL=tmux` 的 check 输出
+#   必须与旧版逐字等价（tests/t4/cases/06 的 golden md5 依赖这一点）。
+#   声明写法契约（改文案别破坏）：声明行须含 **`默认 herdr`** 或 **`默认 tmux`** 原文（`默认` 与后端名
+#   之间只许空格 / `=`/`＝`；不要插 `**` 等标记）。解析不出 ⇒ `nodecl` ⇒ warn（fail loud，不静默放过）。
+#   输出：herdr|tmux（已声明）· nodecl（有端前提行但未给出后端）· absent（文件或端前提行不存在 ⇒ 不适用）
+premise_declared_backend() {
+  local f="$1" line decl
+  [[ -f "$f" ]] || { printf 'absent\n'; return 0; }
+  # 只信「端前提声明行」：其它行的「默认」与后端无关（如「默认 main-row2」布局）
+  if ! grep -qE '运行前提|机制只支持|端前提' "$f" 2>/dev/null; then
+    printf 'absent\n'; return 0
+  fi
+  while IFS= read -r line; do
+    decl="$(printf '%s\n' "$line" | grep -oE '默认(后端)?[ ]*(=[ ]*)?(herdr|tmux)' | head -1 | grep -oE '(herdr|tmux)$')"
+    [[ -n "$decl" ]] && { printf '%s\n' "$decl"; return 0; }
+  done < <(grep -E '运行前提|机制只支持|端前提' "$f" 2>/dev/null || true)
+  # 旧口径（v0.23.0 前）：「唯一路径 … tmux」= 声明 tmux 唯一 ⇒ 与现行默认 herdr 不一致
+  if grep -E '运行前提|机制只支持|端前提' "$f" 2>/dev/null | grep -qE '唯一路径.*tmux'; then
+    printf 'tmux\n'; return 0
+  fi
+  printf 'nodecl\n'
+}
+
+# warn-only 单点一致性检查（调用点必须 `|| true`）：不一致 ⇒ 逐来源一行 `  ! `（进摘要 warn=N）
+check_backend_premise() {
+  local actual decl label rel
+  actual="$(sed -n 's/^NAO_TERMINAL="\${NAO_TERMINAL:-\([A-Za-z][A-Za-z]*\)}"$/\1/p' "$SELF_SH" 2>/dev/null | head -1)"
+  if [[ -z "$actual" ]]; then
+    printf '  ! 端前提声明比对跳过：无法从 %s 的 NAO_TERMINAL 唯一赋值点解析默认后端\n' "${SELF_SH#"$SKILLS_DIR"/}"
+    return 0
+  fi
+  for label in "协议|$COMMON_DIR/intercom-protocol.md" "AGENTS.md|$SKILLS_DIR/AGENTS.md"; do
+    decl="$(premise_declared_backend "${label#*|}")"
+    rel="$(basename "${label#*|}")"
+    case "$decl" in
+      absent) continue ;;                      # 文件/端前提行不存在 ⇒ 不适用（非包根 / 下游 shim 仓）
+      "$actual") continue ;;                    # 一致 ⇒ 零输出
+      herdr|tmux)
+        printf '  ! 端前提声明不一致：%s（%s）声明默认后端 = %s，而实现默认 = %s（%s 的唯一赋值点）—— 改声明或改实现，同一事实勿双源\n' \
+          "${label%%|*}" "$rel" "$decl" "$actual" "nao-fleet.sh"
+        ;;
+      nodecl)
+        printf '  ! 端前提声明不可比对：%s（%s）有端前提声明但未给出「默认 herdr / 默认 tmux」原文，实现默认 = %s（%s 的唯一赋值点）—— 补写声明或改实现\n' \
+          "${label%%|*}" "$rel" "$actual" "nao-fleet.sh"
+        ;;
+    esac
+  done
+  return 0
 }
 
 # roles.yaml 缩进契约：角色 id 2 空格 / 字段 4 空格 / 禁 Tab（与 load_manifest 解析器同契约，独立报行号）
@@ -3047,7 +3106,7 @@ cmd_check() {
     done
   fi
 
-  echo "== 运行前提（tmux 内 + pi ≥$MIN_PI_VERSION；AC1/AC3）=="
+  echo "== 运行前提（端前提 = 后端 pane + pi ≥$MIN_PI_VERSION；AC1/AC3）=="
   if [[ "$(term_backend 2>/dev/null)" == "herdr" ]]; then
     # B1：仅 herdr 模式加行（tmux 路径零新增输出 —— BR1/AC2.6）。
     #   rc 口径（P3-4 订正）：显式指定 herdr 却**缺 herdr 可执行文件** ⇒ rc=1（明确错配，不能装没看见）；
@@ -3084,7 +3143,7 @@ cmd_check() {
     fi
   else
   if command -v tmux >/dev/null 2>&1; then
-    echo '  ✓ tmux 可用（唯一受支持宿主）'
+    echo '  ✓ tmux 可用（回退后端）'
   else
     printf '  ✗ tmux 缺失（ensure/status/close 将 exit 3）\n'; rc=1
   fi
@@ -3103,6 +3162,9 @@ cmd_check() {
   else
     printf '  ✗ pi 版本 %s < %s\n' "$pi_cur" "$MIN_PI_VERSION"; rc=1
   fi
+  # #124：端前提声明（协议 / AGENTS.md）vs 实现默认后端 —— **单点 warn，不进 rc**；
+  #   一致时零输出（不同后端、不同仓都不改既有输出形态；见函数注释与 tests/t4/cases/34）。
+  check_backend_premise || true
 
   echo "== tmux 布局 =="
   if [[ -z "${TMUX:-}" && "$(term_backend 2>/dev/null)" == "tmux" ]]; then
@@ -4190,7 +4252,8 @@ fi
 
 case "$CMD" in
   check)
-    # 默认摘要 2 行（派发前自检只需 exit code + 计数 + codegraph 态；完整报告 30+ 行不进 PM 上下文）；-v 或失败时展开
+    # 默认摘要 2–3 行（派发前自检只需 exit code + 计数 + codegraph 态；完整报告 30+ 行不进 PM 上下文）；
+    #   herdr 后端另加「生效后端」行（= 3 行）；-v 或失败时展开
     # warn 计数口径：只有**非 codegraph** 的 `  ! ` 行计入摘要 warn=N；codegraph 的四类 `!` 态
     #   （CLI 不在 PATH / 无索引 / pending / 不可解析）**既不计入 warn、也不进 rc**（BR1 + arch D4）——
     #   它的可见性由常驻的第 2 行（四态之一）承担，故不会因「不计数」而静默。
