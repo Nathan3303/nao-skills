@@ -2,7 +2,7 @@
 
 # ADR：npm test 门禁范围与严格性
 
-- 状态：已接受（待落地 v0.18.0）
+- 状态：已接受（已落地 v0.18.0）
 - 更新：2026-10-14
 - Owner：arch-designer
 - 指针：PRD `docs/prds/2026-10-14-t4-gate-wiring.md` · 评审报告 `docs/reports/2026-10-14-T522-arch-review.md`

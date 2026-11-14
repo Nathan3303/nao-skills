@@ -2,7 +2,7 @@
 
 # ADR：角色→子代理 agent 的单一事实（运行时注册扩展）
 
-- 状态：已接受（待落地 v0.18.5）
+- 状态：已接受（已落地 v0.18.5）
 - 更新：2026-10-14
 - Owner：arch-designer
 - 指针：PRD `docs/prds/2026-10-14-role-agents-runtime-registration.md` · 评审报告 `docs/reports/2026-10-14-T527-arch-review.md`

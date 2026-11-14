@@ -1,6 +1,6 @@
 # ADR：下游仓自定义角色会话（`ensure --card`）
 
-- 状态：已接受（待落地）
+- 状态：已接受（已落地 v0.21.0）
 - 更新：2026-11-01
 - Owner：arch-designer
 - 指针：PRD `docs/prds/2026-11-01-downstream-role-sessions.md` · 评审报告 `docs/reports/2026-11-01-T537-arch.md`（闸门与断言口径在此）

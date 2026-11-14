@@ -1,6 +1,6 @@
 # ADR：舰队绑死「tmux 内 + pi ≥1.4.0」，删净宿主阶梯
 
-- 状态：已接受（已落地 v0.19.1）
+- 状态：已接受（已落地 v0.19.1）· **已被 herdr 默认取代（v0.23.x）**：v0.23.0 起终端后端**默认 herdr**（`NAO_TERMINAL=tmux` 仅为回退通道）⇒ 本文「宿主唯一 = tmux」部分不再现行；`pi ≥1.4.0` 前提、`exit 3` + 零副作用语义、「删净宿主阶梯」决策仍现行（herdr 侧放置/治理见 `2026-11-13-herdr-workspace-scope-key.md`）。
 - 更新：2026-10-27
 - Owner：arch-designer
 - 指针：PRD `docs/prds/2026-10-27-strict-tmux-pi.md` · 评审报告 `docs/reports/48-arch-review.md` · 被取代 `docs/adr/2026-10-12-non-tmux-host-spawn.md`

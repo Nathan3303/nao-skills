@@ -1,6 +1,6 @@
 # ADR：引入 codegraph 插件为「可选增强」（warn-only 检测 + rc 语义收敛）
 
-- 状态：已接受（待落地 v0.20.0）
+- 状态：已接受（已落地 v0.20.0）
 - 更新：2026-10-28
 - Owner：arch-designer
 - 指针：PRD `docs/prds/2026-10-28-codegraph-plugin.md` · 评审报告 `docs/reports/2026-10-28-T532-arch-review.md` · 接缝报告 `docs/reports/2026-10-28-T532-qa-recon.md`
