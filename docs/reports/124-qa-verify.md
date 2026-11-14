@@ -47,3 +47,22 @@
 - 敏感值：`git diff … | grep '^+' | grep -cE '/home/|<令牌>|PRIVATE KEY|api[_-]?key'` = **1**，唯一命中是报告「门禁命令」行里的**占位符**（`<家目录前缀>`、`BEGIN .*PRIVATE KEY`），非真实值 ⇒ 实判 0。
 - 临时改动：`intercom-protocol.md` / `AGENTS.md` 各改回旧口径后**已还原**，md5 复原（`c78ae83…` / `262e1d8…`），复核结束时 `git status --porcelain` **空**；未用 `git checkout/switch`（一律 `git show <sha>:<path>` 写回）。隔离 tmux server 已清；自建 `/tmp` 夹具与失败缓存（`/tmp/nao-t4.bBng14`）已删。
 - 未复核：全量 `npm test` 双后端（按 PM 口径不重跑）；AC4 广播的实际投递；T1 B 组（RD 亦未跑，理由「会在用户真实 workspace 建 pane」我认同）。
+
+## 十一、二轮点检（`ba7b900`）· **NO-GO**
+
+- 结论：**NO-GO（1 条 P1，新回归）**；报的 P2-1 盲区本体已修好（三形态 1/1/2 + 行号级点名），五条 P3 中四条真落地、一条数字仍对不上。
+- **P1-1 `absent` 路径未处理 ⇒ npm 安装态每次 `check` 常驻假 warn（本批新回归）**
+  - 机理：`premise_declared_backend` 对不存在/无前提行的文件仍输出单 token `absent`，调用方 `while IFS=$'\t' read -r n decl` 把它读成 `n=absent, decl=""`，落进「不一致」分支（`[[ "$decl" == "absent" ]]` 永远不成立，是死代码）。
+  - 复现（真实安装信道）：npm 包 `files` = `bin/ .agents/ README.md LICENSE`（`npm pack --dry-run` 59 文件**无 `AGENTS.md`**）；拷出同布局到 `/tmp` 后 `cd /tmp && node <pkg>/bin/nao-skill.js exec check -v` ⇒ `! 端前提声明不一致：AGENTS.md:absent 声明默认后端 = ，而实现默认 = herdr…` + 摘要 `warn=1`。
+  - 是回归：同布局换 `0ee9866` 的脚本 ⇒ `check: OK` 两行、无 warn。rc 仍 0，但（a）用户侧每次体检一条乱码式假 warn、（b）与函数注释「absent ⇒ 不适用（非包根 / 下游 shim 仓 / 包内不带 AGENTS.md）」正面矛盾、（c）PM 的「`warn>0` 就 `-v`」会被永久触发。`cases/34` 无 absent 断言（`grep -c absent` = 0）。
+- 已点到 ✓：
+  - **三形态**：仅 `:18` 旧文 ⇒ 1 条点名 `AGENTS.md:18`（nodecl）；仅 `:33` 改 tmux ⇒ 1 条点名 `AGENTS.md:33`；两行都改 ⇒ **2 条**（`:18`/`:33` 各 1，无重复）。三者 rc 均 0，摘要 `warn=1/1/2`。条数口径（= 声明行数 = 事实数，不合并吞行号）与我判据自洽。
+  - **先红来自判据**：`0ee9866` 旧实现 × 新断言 × **当前文档** ⇒ **11 FAIL / rc=1**，红点 = `C1c`(0≠1)/`C2c`/`C2d`/`C3b`(1≠2)/`C3c`/`C3d`/`C3e` + `B3`/`B3b`（格式），**D 组 0 红** ⇒ 不是「文档旧」凑的。
+  - `cases/34` 自跑：tmux **44 PASS / 0 FAIL**；herdr **43 PASS / 0 FAIL + 1 NOTE**（rc=0）。
+  - **P3-3 ✓** 文案改 `文件:行号`（`AGENTS.md:18`、`.agents/common/intercom-protocol.md:36`），无 label 重复。
+  - **P3-4 ✓** `nao-fleet.sh:107` 已改「tmux 后端行为（回退通道…）」；`124-align.md` 不再裸引 `:141`，改「`NAO_TERMINAL` 唯一赋值点（现 `:145`）」，实测赋值仍在 `:145`。
+  - **P3-5 ✓** 索引 = `已接受（已落地 v0.19.1；已被 herdr 默认取代 v0.23.x）`，嵌套括号已去且与正文一致。
+  - **P3-1 ✓** `SKILL.md` 改「新增指针…非必需」；`pm-operations.md` 改「既有矛盾口径订正」。
+  - **禁夹带 ✓** `ba7b900` 仅 4 文件（脚本注释 + 两函数 / ADR 索引 1 行 / 报告 / `cases/34`），S1/S3/E1 零命中。
+- **P3-6（新）AC5①「13 条未过」不可复现**：忠实三元组（`23f76e9` 用例 × `23f76e9` 脚本 × `23f76e9` 文档）实测 **12 FAIL**（连跑两次同形；`RESULT: FAIL`）；可复现的是 9（旧用例 × 旧脚本 × 当前文档）。新用例 × 旧脚本 × 当前文档 = 11。建议写成「旧用例 12 / 当前文档 9」并标用例文件版本。
+- 纪律：三形态临时改 `AGENTS.md` 后由 `git show HEAD:AGENTS.md` 写回，md5 = `262e1d8…`（协议未动 = `c78ae83…`），`git status --porcelain` 空；未 `checkout`/`switch`；自建 `/tmp` 夹具与失败缓存已删。
