@@ -11,8 +11,8 @@ description: 按需技能——PM 运行手册（调度细则 / 开工确认卡 
 
 - **准入判定**：先 `intercom status` + `list`；不可用立即降级不重试。
 - **会话登记**：用户提供名称**及角色标注**（`fe-dev`/`be-dev`/`qa`/`infra`）；**未标注禁止猜测**，必须补问。
-- **舰队启动**：不在线先拉起再 `list` 验证（`ask` 仅对在线会话）：`bash .agents/scripts/nao-fleet.sh ensure <别名>[@<repo目录>]`；项目独立于 nao-skills 仓库时用 `bash "$NAO_SKILLS/.agents/scripts/nao-fleet.sh" ...`。
-- **环境自检（开工确认后、派发前）**：`bash .agents/scripts/nao-fleet.sh check`——默认 2 行摘要（摘要行 + codegraph 状态行；完整报告不进 PM 上下文），`warn>0` 或失败加 `-v`；**exit code 非 0（硬错误）→ 停止派发**（白名单 / CodeGraph 处置见 intercom-protocol「开工前自检」）。
+- **舰队启动**：不在线先拉起再 `list` 验证（`ask` 仅对在线会话）：`bash .agents/scripts/nao-fleet.sh ensure <别名>[@<repo目录>]`；项目独立于 nao-skills 仓库时用 `bash "$NAO_SKILLS/.agents/scripts/nao-fleet.sh" ...`。**端前提**：默认后端 = **herdr**（须在其 pane 内；`export NAO_TERMINAL=tmux` 回退到 tmux 会话内），两端都需 `pi ≥1.4.0`；前提不满足一律 `exit 3`（不自动回落）。细节见 `README.md`「前置环境」与 `docs/INSTALL.md`「herdr 后端」。
+- **环境自检（开工确认后、派发前）**：`bash .agents/scripts/nao-fleet.sh check`——默认 2–3 行摘要（摘要行 + codegraph 状态行；herdr 后端另加「生效后端」行；完整报告不进 PM 上下文），`warn>0` 或失败加 `-v`；**exit code 非 0（硬错误）→ 停止派发**（白名单 / CodeGraph 处置见 intercom-protocol「开工前自检」）。
 - **架构评审闸门**：PRD 涉及架构/NFR/选型时，开工确认后、派发前 `send` arch-designer 评审。纯 CRUD 跳过。
 - **派发协议（省 token）**：一条消息给 `编号 + 范围 + 引用路径（docs/...md#section）+ AC 编号 + 回执级别 + 需求分支（feat/<issue-id>-<slug>）`；**设计类任务的开工卡另须写明「设计稿验收模型」**（未出图同样必问；不答 = 用户本人确认，形状见 §二）；**不贴 PRD/方案全文、不用 `attachments` 传全文**（worker 自己读文件，PM 上下文不留副本）；worker `ask` → PM `reply`。
 - **派单三段（强制，缺段即打回重派）** —— 本日 `#84`/`#86`/`#90` 三批返工的共同根因是**派单口径不完整**（非实现错误）；三段固定写在派发消息里，worker 据此自检、QA 据此判「可执行性」：

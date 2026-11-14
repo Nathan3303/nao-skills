@@ -29,6 +29,7 @@ nao 是一套「多角色 AI 开发舰队」：7 个分工明确的常驻会话�
 
 1. **体检**：`bash .agents/scripts/nao-fleet.sh check`（exit=0 即可开工；非 0 看报告）。
 2. **拉起舰队**：`bash .agents/scripts/nao-fleet.sh ensure pm arch-designer uiux-designer rd-fe rd-be qa rd-infra`
+   - **端前提**：默认后端 = **herdr**（须在 herdr pane 内；`export NAO_TERMINAL=tmux` 回退到 tmux 会话内），两端都需 `pi ≥1.4.0`；不满足 ⇒ `exit 3`（不自动回落）。细节见 `README.md`「前置环境」与 `docs/INSTALL.md`「herdr 后端」。
    - 任务派生（并行隔离）：`ensure --task <编号> <别名>`
    - 状态 / 回收：`status` / `close --task <编号> <别名>`
    - 实验场清理：`cleanup -S <隔离socket>`（强制显式 socket；无 `-S`/指向默认 socket ⇒ exit 2 拒绝）
