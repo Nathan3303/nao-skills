@@ -104,7 +104,7 @@
 #   名册由 intercom-probe.mts（一次调用、进程内缓存，含 tmuxPane）取；探针不可用回退
 #   pi-intercom 官方 cli.ts（无 tmuxPane），再不可用回退 tmux 会话名。
 #
-# tmux 宿主行为（唯一路径）
+# tmux 后端行为（**回退通道**：默认后端为 herdr；本节仅 `NAO_TERMINAL=tmux` 时生效）
 #   - 以派生宿主窗口（调用者 pane 所在 window）分屏拉起，不新建窗口；
 #     显式 `-t @<window_id>` 目标（定位链：NAO_TMUX_HOST_WINDOW > $TMUX_PANE > 名册唯一命中；
 #     否则 warn + 跳过该 pane，不落入当前窗口）
@@ -1488,48 +1488,48 @@ check_eol() {
 #   必须与旧版逐字等价（tests/t4/cases/06 的 golden md5 依赖这一点）。
 #   声明写法契约（改文案别破坏）：声明行须含 **`默认 herdr`** 或 **`默认 tmux`** 原文（`默认` 与后端名
 #   之间只许空格 / `=`/`＝`；不要插 `**` 等标记）。解析不出 ⇒ `nodecl` ⇒ warn（fail loud，不静默放过）。
-#   输出：herdr|tmux（已声明）· nodecl（有端前提行但未给出后端）· absent（文件或端前提行不存在 ⇒ 不适用）
+#   **全部声明行参与判定**（P2-1 · QA 复核）：同文件内多行声明各判各的 —— 只回退其中一个症状行
+#   （如 `AGENTS.md:18` 而 `:33` 仍写 herdr）也必须被抓到；旧实现「取第一条可解析行」正是该盲区。
+#   输出（每行一条，TAB 分隔）：`<行号>\t<herdr|tmux|nodecl>`；
+#   单 token `absent` = 文件或端前提行不存在 ⇒ 不适用（非包根 / 下游 shim 仓 / 包内不带 AGENTS.md）
 premise_declared_backend() {
-  local f="$1" line decl
+  local f="$1" n line decl
   [[ -f "$f" ]] || { printf 'absent\n'; return 0; }
+  grep -qE '运行前提|机制只支持|端前提' "$f" 2>/dev/null || { printf 'absent\n'; return 0; }
   # 只信「端前提声明行」：其它行的「默认」与后端无关（如「默认 main-row2」布局）
-  if ! grep -qE '运行前提|机制只支持|端前提' "$f" 2>/dev/null; then
-    printf 'absent\n'; return 0
-  fi
-  while IFS= read -r line; do
+  while IFS=: read -r n line; do
+    [[ -n "${n:-}" ]] || continue
     decl="$(printf '%s\n' "$line" | grep -oE '默认(后端)?[ ]*(=[ ]*)?(herdr|tmux)' | head -1 | grep -oE '(herdr|tmux)$')"
-    [[ -n "$decl" ]] && { printf '%s\n' "$decl"; return 0; }
-  done < <(grep -E '运行前提|机制只支持|端前提' "$f" 2>/dev/null || true)
-  # 旧口径（v0.23.0 前）：「唯一路径 … tmux」= 声明 tmux 唯一 ⇒ 与现行默认 herdr 不一致
-  if grep -E '运行前提|机制只支持|端前提' "$f" 2>/dev/null | grep -qE '唯一路径.*tmux'; then
-    printf 'tmux\n'; return 0
-  fi
-  printf 'nodecl\n'
+    if [[ -z "$decl" ]]; then
+      # 旧口径（v0.23.0 前）：「唯一路径 … tmux」= 声明 tmux 唯一 ⇒ 与现行默认 herdr 不一致
+      if printf '%s\n' "$line" | grep -qE '唯一路径.*tmux'; then decl=tmux; else decl=nodecl; fi
+    fi
+    printf '%s\t%s\n' "$n" "$decl"
+  done < <(grep -nE '运行前提|机制只支持|端前提' "$f" 2>/dev/null || true)
 }
 
-# warn-only 单点一致性检查（调用点必须 `|| true`）：不一致 ⇒ 逐来源一行 `  ! `（进摘要 warn=N）
+# warn-only 单点一致性检查（调用点必须 `|| true`）：逐**声明行**一条 `  ! `（进摘要 warn=N，不合并吞行号）
 check_backend_premise() {
-  local actual decl label rel
+  local actual f decl n rel
   actual="$(sed -n 's/^NAO_TERMINAL="\${NAO_TERMINAL:-\([A-Za-z][A-Za-z]*\)}"$/\1/p' "$SELF_SH" 2>/dev/null | head -1)"
   if [[ -z "$actual" ]]; then
     printf '  ! 端前提声明比对跳过：无法从 %s 的 NAO_TERMINAL 唯一赋值点解析默认后端\n' "${SELF_SH#"$SKILLS_DIR"/}"
     return 0
   fi
-  for label in "协议|$COMMON_DIR/intercom-protocol.md" "AGENTS.md|$SKILLS_DIR/AGENTS.md"; do
-    decl="$(premise_declared_backend "${label#*|}")"
-    rel="$(basename "${label#*|}")"
-    case "$decl" in
-      absent) continue ;;                      # 文件/端前提行不存在 ⇒ 不适用（非包根 / 下游 shim 仓）
-      "$actual") continue ;;                    # 一致 ⇒ 零输出
-      herdr|tmux)
-        printf '  ! 端前提声明不一致：%s（%s）声明默认后端 = %s，而实现默认 = %s（%s 的唯一赋值点）—— 改声明或改实现，同一事实勿双源\n' \
-          "${label%%|*}" "$rel" "$decl" "$actual" "nao-fleet.sh"
-        ;;
-      nodecl)
-        printf '  ! 端前提声明不可比对：%s（%s）有端前提声明但未给出「默认 herdr / 默认 tmux」原文，实现默认 = %s（%s 的唯一赋值点）—— 补写声明或改实现\n' \
-          "${label%%|*}" "$rel" "$actual" "nao-fleet.sh"
-        ;;
-    esac
+  for f in "$COMMON_DIR/intercom-protocol.md" "$SKILLS_DIR/AGENTS.md"; do
+    rel="${f#"$SKILLS_DIR"/}"
+    while IFS=$'\t' read -r n decl; do
+      [[ -n "${n:-}" ]] || continue
+      [[ "$decl" == "absent" ]] && continue          # 文件/端前提行不存在 ⇒ 不适用
+      [[ "$decl" == "$actual" ]] && continue         # 该行与实现一致 ⇒ 零输出
+      if [[ "$decl" == "nodecl" ]]; then
+        printf '  ! 端前提声明不可比对：%s:%s 有端前提声明但未给出「默认 herdr / 默认 tmux」原文，实现默认 = %s（%s 的唯一赋值点）—— 补写声明或改实现\n' \
+          "$rel" "$n" "$actual" "nao-fleet.sh"
+      else
+        printf '  ! 端前提声明不一致：%s:%s 声明默认后端 = %s，而实现默认 = %s（%s 的唯一赋值点）—— 改声明或改实现，同一事实勿双源\n' \
+          "$rel" "$n" "$decl" "$actual" "nao-fleet.sh"
+      fi
+    done < <(premise_declared_backend "$f")
   done
   return 0
 }

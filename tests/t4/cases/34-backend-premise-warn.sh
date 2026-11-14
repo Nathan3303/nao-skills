@@ -93,10 +93,12 @@ t4_assert_eq "0" "$(grep -c '默认\(后端 \)\?herdr' "$PROTO" || true)" \
 run_check -v
 t4_assert_eq "0" "$C34_RC" "B1 协议回退 tmux：warn 不改 rc（仍 0）"
 t4_assert_eq "1" "$(premise_warns)" "B2 协议回退 tmux：恰 1 条端前提 warn（单点，不重复）"
-t4_assert_contains "$C34_OUT" "端前提声明不一致：协议" "B3 warn 点名声明来源（协议）"
-t4_assert_contains "$C34_OUT" "intercom-protocol.md" "B3b warn 给出声明来源文件"
+t4_assert_contains "$C34_OUT" "端前提声明不一致：.agents/common/intercom-protocol.md:" \
+  "B3 warn 点名声明来源（路径 + 行号形态）"
+t4_assert_match "$C34_OUT" 'intercom-protocol\.md:[0-9]+ 声明默认后端 = tmux' \
+  "B3b warn 给出「文件:行号 + 解析值」（不是只给文件名）"
 t4_assert_contains "$C34_OUT" "nao-fleet.sh" "B4 warn 点名实现来源（nao-fleet.sh 默认后端）"
-t4_assert_eq "0" "$(printf '%s\n' "$C34_OUT" | grep -c '端前提声明不一致：AGENTS.md' || true)" \
+t4_assert_eq "0" "$(printf '%s\n' "$C34_OUT" | grep -c 'AGENTS\.md:' || true)" \
   "B5 只点名真正不一致的那一处（不误伤 AGENTS.md）"
 run_check
 t4_assert_eq "0" "$C34_RC" "B6 摘要模式：rc 仍 0（warn 不改 rc）"
@@ -107,22 +109,57 @@ run_check -v
 t4_assert_eq "0" "$(premise_warns)" "B8 还原一致：warn 消失（双向）"
 t4_assert_eq "0" "$C34_RC" "B9 还原一致：rc=0"
 
-# ============================================================ C 负控②（AC2）：AGENTS.md 声明改成 tmux
-sed -i 's/默认 herdr/默认 tmux/g' "$AGENTS"
-t4_assert_ge "1" "$(grep -c '默认 tmux' "$AGENTS" || true)" \
-  "C0 变异自证：夹具 AGENTS.md 已把声明改成 tmux（判据非空转）"
+# ============================================================ C 负控②（AC2 + P2-1）：AGENTS.md 单行 / 双行回退
+# P2-1 背景（QA 复核）：旧实现只取「第一条能解析出后端的前提行」⇒ 只回退 `:18`（#124 的原始症状行）
+#   而 `:33` 仍是 herdr 时判「一致」⇒ 守护静默失效。本组三种形态都断言：
+#   ① 仅 `:18` 回退旧文（不可比对 ⇒ nodecl）② 仅 `:33` 声明改成 tmux ③ 两行都改（条数 = 声明行数，不刷屏）
+L18="$(grep -n '仅 pi 宿主' "$AGENTS" | head -1 | cut -d: -f1)"
+L33="$(grep -n '布局/宿主/句柄语义' "$AGENTS" | head -1 | cut -d: -f1)"
+t4_assert_ne "" "$L18" "C0a 夹具定位：AGENTS.md「仅 pi 宿主」行 = :$L18"
+t4_assert_ne "" "$L33" "C0b 夹具定位：AGENTS.md「布局/宿主/句柄语义」行 = :$L33"
+
+# C1 仅 :18 回退成 v0.23.0 前的原文（#124 的原始症状行；解析不出后端 ⇒ nodecl）
+sed -i "${L18}s/.*/- **仅 pi 宿主（唯一，无第二宿主）**：机制只支持 **pi ≥1.4.0 + tmux**。/" "$AGENTS"
+t4_assert_eq "0" "$(sed -n "${L18}p" "$AGENTS" | grep -c '默认' || true)" \
+  "C1a 变异自证：:${L18} 已无「默认 …」声明（回退到旧文形态）"
 run_check -v
-t4_assert_eq "0" "$C34_RC" "C1 AGENTS.md 声明 tmux：warn 不改 rc（仍 0）"
-t4_assert_eq "1" "$(premise_warns)" "C2 AGENTS.md 声明 tmux：恰 1 条端前提 warn"
-t4_assert_contains "$C34_OUT" "端前提声明不一致：AGENTS.md" "C3 warn 点名 AGENTS.md（check 认这处，不只认协议文件）"
-t4_assert_contains "$C34_OUT" "nao-fleet.sh" "C4 warn 点名实现来源"
-t4_assert_eq "0" "$(printf '%s\n' "$C34_OUT" | grep -c '端前提声明不一致：协议' || true)" \
-  "C5 不误伤协议文件（协议本就一致）"
+t4_assert_eq "0" "$C34_RC" "C1b 仅 :${L18} 回退：warn 不改 rc（仍 0）"
+t4_assert_eq "1" "$(premise_warns)" "C1c 仅 :${L18} 回退：恰 1 条端前提 warn（**P2-1 盲区：旧实现此处为 0**）"
+t4_assert_contains "$C34_OUT" "AGENTS.md:${L18}" "C1d warn 点名 :${L18}（行号级定位）"
+t4_assert_eq "0" "$(printf '%s\n' "$C34_OUT" | grep -c "AGENTS\.md:${L33}" || true)" \
+  "C1e 不误点名未改动的 :${L33}"
+restore
+
+# C2 仅 :33 声明改成 tmux（:18 仍 herdr）
+sed -i "${L33}s/默认 herdr/默认 tmux/" "$AGENTS"
+t4_assert_eq "1" "$(sed -n "${L33}p" "$AGENTS" | grep -c '默认 tmux' || true)" \
+  "C2a 变异自证：仅 :${L33} 改成 tmux"
+run_check -v
+t4_assert_eq "0" "$C34_RC" "C2b 仅 :${L33} 改 tmux：warn 不改 rc（仍 0）"
+t4_assert_eq "1" "$(premise_warns)" "C2c 仅 :${L33} 改 tmux：恰 1 条端前提 warn"
+t4_assert_contains "$C34_OUT" "AGENTS.md:${L33}" "C2d warn 点名 :${L33}（check 认这处，不只认协议文件）"
+t4_assert_contains "$C34_OUT" "nao-fleet.sh" "C2e warn 点名实现来源"
+t4_assert_eq "0" "$(printf '%s\n' "$C34_OUT" | grep -c 'intercom-protocol\.md:' || true)" \
+  "C2f 不误伤协议文件（协议本就一致）"
+restore
+
+# C3 两行都改 ⇒ 条数 = 声明行数（各 1 条，不重复刷屏、不合并吞行号）
+sed -i "${L18}s/.*/- **仅 pi 宿主（唯一，无第二宿主）**：机制只支持 **pi ≥1.4.0 + tmux**。/" "$AGENTS"
+sed -i "${L33}s/默认 herdr/默认 tmux/" "$AGENTS"
+run_check -v
+t4_assert_eq "0" "$C34_RC" "C3a 两行都改：warn 不改 rc（仍 0）"
+t4_assert_eq "2" "$(premise_warns)" "C3b 两行都改：恰 2 条（= 声明行数；不重复刷屏）"
+t4_assert_eq "1" "$(printf '%s\n' "$C34_OUT" | grep -c "AGENTS\.md:${L18}" || true)" \
+  "C3c :${L18} 恰 1 条（无重复）"
+t4_assert_eq "1" "$(printf '%s\n' "$C34_OUT" | grep -c "AGENTS\.md:${L33}" || true)" \
+  "C3d :${L33} 恰 1 条（无重复）"
+t4_assert_eq "0" "$(printf '%s\n' "$C34_OUT" | grep -c 'AGENTS\.md（AGENTS\.md）' || true)" \
+  "C3e warn 文案无 label 重复（P3-3：不再出现「AGENTS.md（AGENTS.md）」）"
 
 restore
 run_check -v
-t4_assert_eq "0" "$(premise_warns)" "C6 还原一致：warn 消失（双向）"
-t4_assert_eq "0" "$C34_RC" "C7 还原一致：rc=0"
+t4_assert_eq "0" "$(premise_warns)" "C4 还原一致：warn 消失（双向）"
+t4_assert_eq "0" "$C34_RC" "C5 还原一致：rc=0"
 
 # ============================================================ D 静态面（单点 + warn-only + 默认值单源）
 t4_assert_ge "2" "$(grep -c 'check_backend_premise' "$FLEET" || true)" \

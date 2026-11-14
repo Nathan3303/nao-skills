@@ -18,7 +18,7 @@
 | 2026-10-14 | [npm test 门禁范围与严格性（t4 升格 + prepack 解耦）](2026-10-14-npm-test-gate-scope.md) | npm test 默认全量门禁 | 已接受（已落地 v0.18.0） |
 | 2026-10-14 | [子代理会话（`subagent-*`）排除面与会话身份模型边界](2026-10-14-subagent-session-identity-exclusion.md) | 子代理不属舰队身份模型 | 已接受（已落地 v0.18.3） |
 | 2026-10-14 | [角色→子代理 agent 的单一事实（运行时注册扩展）](2026-10-14-role-agents-runtime-registration.md) | 运行时注册单一事实 | 已接受（已落地 v0.18.5） |
-| 2026-10-27 | [舰队绑死 tmux + pi ≥1.4.0（删净宿主阶梯）](2026-10-27-strict-tmux-pi.md) | 绑死 tmux + pi 前提 | 已接受（已落地 v0.19.1 · 已被 herdr 默认取代（v0.23.x）） |
+| 2026-10-27 | [舰队绑死 tmux + pi ≥1.4.0（删净宿主阶梯）](2026-10-27-strict-tmux-pi.md) | 绑死 tmux + pi 前提 | 已接受（已落地 v0.19.1；已被 herdr 默认取代 v0.23.x） |
 | 2026-10-28 | [引入 codegraph 插件为可选增强（warn-only + rc 收敛）](2026-10-28-codegraph-plugin-adoption.md) | 插件仅增强，不进 rc | 已接受（已落地 v0.20.0） |
 | 2026-10-31 | [status 残留判定加仓维度（按 pane 工作目录）](2026-10-31-fleet-status-repo-attribution.md) | 残留判定按 pane cwd 归属 | 已接受（已落地 v0.20.2） |
 | 2026-11-01 | [下游仓自定义角色会话（`ensure --card`）](2026-11-01-downstream-card-sessions.md) | 卡参数线 + 前缀不相交 | 已接受（已落地 v0.21.0） |
