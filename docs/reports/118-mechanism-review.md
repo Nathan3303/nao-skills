@@ -64,7 +64,16 @@
 
 ## 九、交叉复核（qa 回填）
 
-- 待 qa 填：声明 vs 判据落差 + 行段抽查 ≥5 条（AC4）。本报告行段引用均为 `文件:行号`，未用区间省略号。
+- **边界**：只读复核（HEAD `1f2cc9f`）。`.agents/`、`tests/` 自本报告提交 `f67062a` 起零 diff（`git diff --stat f67062a 1f2cc9f -- .agents tests` 空）⇒ 下述计数与报告写作时同源，差异不是快照问题。未实跑 `ensure`（需双后端环境）、未跑 `npm test`（AC8 免跑）；`check` 复跑 rc=0 · `files=54`。**判定 = CONDITIONAL**：结论与拆解可用（AC1 71 行 ≤80 ✓ · AC4 ✓ · AC7 ✓ · AC8 ✓），须订正 3 处计数 + 2 处口径 + 1 处行段，均为文本订正。**另注**：含本节全文 **80 行**（AC1 ≤80 恰好达线）—— 后续任何追加即超限，请 PM 明示 AC1 是「含复核节」还是「仅主审正文」。
+- **AC4 行段抽查 13 条（逐条自读，均可达且支持结论）**：T1 = `intercom-protocol.md:36`（逐字「只接受 tmux 会话内 … 不满足 ⇒ `exit 3`」）+ `AGENTS.md:18` / `:33`，旁证 `nao-fleet.sh:141` / `README.md:30` / `INSTALL.md:14` ✓；T2 三例 = `docs/adr/README.md:21` ↔ `2026-10-27-strict-tmux-pi.md:3`「已落地 v0.19.1」· `:23` ↔ `2026-10-31-fleet-status-repo-attribution.md:3`「v0.20.2」· `:25` ↔ `2026-11-13-herdr-workspace-scope-key.md:3`「v0.23.1」（三版本在 `docs/releases/` 均在）✓；L1 见下第 2 项；S1 `commit.md:38` + `:42` ✓；S2 `prompts/architecture-designer.md:96` + `checklists/architecture-designer.md:33`（`grep -c 不适用` = 0）✓；E1 `nao-fleet.sh:169` + `:2899` + `intercom-protocol.md:60` ✓；E3 `checklists/pm.md:105/:114/:138` ✓；S4 `output-format.md:33`（三件套定义在 `:34–:36`）+ `checklists/qa.md:23` + `checklists/rd-infra.md:19` ✓；T3 `2026-10-27-strict-tmux-pi.md` 全文 0 次 herdr、且只「取代」更早 ADR ✓；T4 `tasks-state.md:349` ⑫ 原文 ✓（实测 4234 行 / 133 函数 / `cmd_check` 275 行 ✓）；T5 `prompts/product-manager.md:66` ✓（实测 check 3 行 ✓）；T6 `reports/121-impl.md:50` + 订正 `:72` ✓。
+- **计数裁决 ① T2「8 篇待落地」[P2 · 不实]**：`grep -rl 待落地 docs/adr` = **7 文件** · `grep -rn | wc -l` = **15 行** · ADR 正文 = **6 篇**（各 1 行状态）· 索引 = **9 行（`README.md:17–25`）** · 涉及 ADR = **9 篇**；无任何口径得 8。**PM 的「正文 6 篇」对，但「索引 5 行 + 另 4 行属其它条目」亦不实** —— 9 行全是 ADR 索引行，其中 6 行与正文一致、3 行即 T2 的三处矛盾。建议写法 =「正文 6 篇 / 索引 9 行（含 3 处与正文矛盾的陈旧行）」。
+- **计数裁决 ② AC6 [P3 · 口径]**：应记「**12 行 / 真遗留 11**」。`awk` 计数 12 ✓；第 11 行 `M20261109-herdr-base` 类别列 =「已改判 → 立项 #96」、到期列空 ⇒ 决策轨迹（报告 §六 已移出）。§六 标题「12 条逐条处置」会被读成「12 条遗留」，建议同步改「12 行（真遗留 11）」。
+- **计数裁决 ③ 另 3 处不实 [P3]**：① E1 引用「`grep -rn CARD_MAX_LINES tests/` = 0」实跑 **6 行**（全在 `tests/t4/fixtures/nao-fleet-baseline-*.sh` 快照，非断言）—— 「无断言」结论成立（`… | grep -v fixtures` = 0），引用须换命令；② L1 引用「`grep -n '2027-01-31\|2027-06-30'` 仅 :1、:87」实跑 **4 行（:1 · :2 · :87 · :429）**，均不在三档表段 ⇒ 结论成立、行号订正；③ S3「14 处 / 9 文件」实测 **12 处 / 10 文件**（6 卡 + 3 清单 + `pm-operations`；`原生入口` 全集 22 行 / 11 文件含单源 `skills/codegraph.md`）⇒ 结论成立、须手改的是 10 文件；④ §七 AC 草稿「AC2 12 篇 ADR」应为 **16 篇**（`ls docs/adr/*.md` = 17 含 README）。
+- **声明 vs 判据落差 3 条**：
+  - **D1 [P2]** T1 把「tmux 内 `ensure` ⇒ `exit 3`」写成事实（§四），§五-5 又把**同一句**标「未实跑 · 需实测（rd-infra）」⇒ 违反 PRD §五「需实测项不得写成结论」。读码：`nao-fleet.sh:284` 只有 `tmux)` 分支调 `require_tmux`（`:250–253`），默认 herdr 走 `:440–474`，`:447` 是 `HERDR_ENV=1` 缺失 ⇒ `exit 3` ⇒ 成因是 **herdr 闸门**而非「tmux 被拒」，且 `HERDR_ENV` 若被继承进 tmux pane 则未必 exit 3（这正是要实跑的理由）。**更该进 P1 且可静态证的是反向**：herdr pane 内（唯一可用环境、无 `$TMUX`）`require_tmux` 不被调用、命令可用，而卡面「只接受 tmux 会话内」会让角色误以为不能跑。
+  - **D2 [P2]**「`.agents/**` 全域 **0** 次提到 herdr」强于判据：引用命令带 `--include=*.md`，只证 md 层 0 次；`nao-fleet.sh` 内 herdr **292 行 / 340 处**，而 `AGENTS.md` 不在 `.agents/` 下 ⇒ 应写「`.agents/**/*.md`（卡 / 清单 / 协议 / 技能）0 次」。
+  - **D3 [P3]** AC2 零容忍下 E2 **无行段**（16 处 / 75 处 / 78 条 / ≥83 判定点全无 `文件:行段`；我复核其计数成立：`grep -o` = 16 / 75，44 清单 + 34 红线 = 78）⇒ 补行段或降级「观察」。同类：T2 引 `docs/adr/README.md` 未给行号（应 `:21/:23/:25`）、L1「批次行标转办」未给行号。L2 与 §八 属建议/决策，不计。
+- **处置建议**：进 PR 前订正上述 ①②③ 与 D1/D2 口径 + E2 行段；不动结论、不扩批次，主审一轮可收。D1 的 `exit 3` 实跑仍归批次 A 的 rd-infra 验收项，不因本次读码而免。
 
 ## 十、修订
 
