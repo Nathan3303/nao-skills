@@ -46,6 +46,10 @@ T4_CACHE_DIR="${T4_CACHE_DIR:-}"
 # 兜底（BR3）：外部传入的 T4_CACHE_DIR 一律不归属本进程；并摘掉可能继承来的导出属性。
 export -n T4_CACHE_OWNED
 
+# 删除单点：两条回收路径（t4_cache_cleanup / t4_reclaim_stale_caches）共用，全 tests/t4 下唯一的
+# `rm -rf --` 语句（cases/14 ⑳ 的静态契约依赖此唯一性）。
+_t4_rm_cache_dir() { rm -rf -- "$1" 2>/dev/null; }
+
 # t4_cache_cleanup —— 清理逻辑唯一实现点（BR10：run.sh / cases 复用，不复制）。
 # BR5：EXIT trap 内 `local rc=$?; …; return $rc`，禁 exit（不得吞/改退出码）。
 t4_cache_cleanup() {
@@ -60,10 +64,79 @@ t4_cache_cleanup() {
   [ -d "$dir" ] || return "$rc"                                            # BR4③ 是目录
   [ ! -L "$dir" ] || return "$rc"                                          # BR4④ 非软链
   [ "$dir" != "/" ] || return "$rc"                                        # BR4⑤ 非根
-  rm -rf -- "$dir" 2>/dev/null || printf 'T4 缓存清理失败（已保留目录）: %s\n' "$dir" >&2  # BR9 不改 rc
+  _t4_rm_cache_dir "$dir" || printf 'T4 缓存清理失败（已保留目录）: %s\n' "$dir" >&2  # BR9 不改 rc
   return "$rc"
 }
 trap t4_cache_cleanup EXIT
+
+# ---------------------------------------------------------------- 陈旧缓存回收（#121）
+# 背景：EXIT trap 捕不到 SIGKILL，起跑 sweep 只在「下次运行」生效 ⇒ 硬掐（实测 32M / 63 条）的残留
+#   可能一直躺着。本段只在**启动期**（source lib.sh 时；run.sh 与各用例共用同一条路，无第二处调用点）
+#   回收「超过 T4_STALE_CACHE_HOURS 小时 **且** 无活进程关联」的兄弟缓存目录。
+# 判据双向（cases/14 ㉑–㉘）：正控 8h + 无进程 ⇒ 清；负控① 1h ⇒ 不清；负控② 8h + 活进程 ⇒ 不清。
+# 安全边界（与 t4_cache_cleanup 同源）：仅 $T4_CACHE_PARENT 下一层、名 nao-t4.*、是目录、非软链、
+#   非本次使用的 $T4_CACHE_DIR（用户传入的陈旧目录亦不删）。
+# 逃生口：T4_KEEP_CACHE=1 ⇒ 整段跳过（调试期一条都不删）；T4_CACHE_NO_CREATE=1（只读探测）⇒ 跳过。
+# 可观测：真清过才打印一行（条数 + 路径前缀）；删除失败逐条 WARN 点名；恒返回 0（不改退出码）。
+T4_STALE_CACHE_HOURS="${T4_STALE_CACHE_HOURS:-6}"
+
+# 有活进程关联的缓存根：进程 env 里的 T4_CACHE_DIR=<dir>，或 cwd 落在某个 nao-t4.* 目录下。
+# 只读 /proc（本套用例本就依赖 Linux /proc），不引 lsof / fuser；一次扫完供逐候选比对。
+_t4_cache_roots_in_use() {
+  local d val cwd
+  for d in /proc/[0-9]*; do
+    [ -r "$d/environ" ] || continue
+    val="$(tr '\0' '\n' < "$d/environ" 2>/dev/null | sed -nE 's/^T4_CACHE_DIR=(.*)$/\1/p' | head -1)"
+    [ -n "$val" ] && printf '%s\n' "$val"
+    cwd="$(readlink "$d/cwd" 2>/dev/null)" || continue
+    case "$cwd" in
+      */nao-t4.*|*/nao-t4.*/*)
+        printf '%s\n' "$(printf '%s' "$cwd" | sed -nE 's#^(.*/nao-t4\.[^/]+).*$#\1#p')" ;;
+    esac
+  done 2>/dev/null | sort -u
+}
+
+t4_reclaim_stale_caches() {
+  local parent="${T4_CACHE_PARENT:-}" dir mtime now limit n=0 live=""
+  local -a cands=() stale=()
+  [ -n "$parent" ] || return 0
+  [ "${T4_KEEP_CACHE:-0}" = "1" ] && return 0                          # 逃生口：一条都不删
+  [ "${T4_CACHE_NO_CREATE:-0}" = "1" ] && return 0                     # 只读探测：无副作用
+  case "$T4_STALE_CACHE_HOURS" in ''|*[!0-9]*) return 0 ;; esac          # 非法阈值不猜
+  command -v stat >/dev/null 2>&1 || {
+    printf '陈旧缓存回收: WARN 缺少 stat，跳过本轮（未删任何目录）\n' >&2; return 0; }
+  # 形态合格（一层 / 目录 / 非软链 / 非本次使用的目录）⇒ 收集 mtime，暂不扫 /proc
+  for dir in "$parent"/nao-t4.*; do
+    [ -d "$dir" ] && [ ! -L "$dir" ] || continue
+    [ "${dir%/*}" = "$parent" ] || continue
+    [ "$dir" = "${T4_CACHE_DIR:-}" ] && continue
+    mtime="$(stat -c %Y -- "$dir" 2>/dev/null)" || continue
+    case "$mtime" in ''|*[!0-9]*) continue ;; esac
+    cands+=("$dir|$mtime")
+  done
+  [ "${#cands[@]}" -gt 0 ] || return 0                                   # 稳态：不扫 /proc
+  now="$(date +%s)"; limit=$((T4_STALE_CACHE_HOURS * 3600))
+  for dir in "${cands[@]}"; do
+    mtime="${dir##*|}"; dir="${dir%|*}"
+    [ $((now - mtime)) -gt "$limit" ] && stale+=("$dir")                 # 未来时间戳 ⇒ 不清
+  done
+  [ "${#stale[@]}" -gt 0 ] || return 0
+  live="$(_t4_cache_roots_in_use)"
+  for dir in "${stale[@]}"; do
+    if [ -n "$live" ] && grep -qxF -- "$dir" <<< "$live"; then continue; fi  # 活进程关联 ⇒ 不清
+    if _t4_rm_cache_dir "$dir"; then
+      n=$((n + 1))
+    else
+      printf '陈旧缓存回收: WARN 删除失败（已保留）: %s\n' "$dir" >&2
+    fi
+  done
+  [ "$n" -gt 0 ] && printf '陈旧缓存回收: 已清 %d 个（> %sh 且无活进程）: %s/nao-t4.*\n' \
+    "$n" "$T4_STALE_CACHE_HOURS" "$parent"
+  return 0
+}
+
+# 启动期回收：挂在 source 末尾 ⇒ run.sh 与各用例同一条路（不再有第二处调用点）。
+t4_reclaim_stale_caches
 
 export T4_ROOT PKG_NAME PKG_VERSION T4_CACHE_DIR T4_ALLOW_MISSING T4_REQUIRE_FULL T4_TARBALL
 

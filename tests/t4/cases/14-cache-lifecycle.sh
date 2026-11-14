@@ -19,6 +19,9 @@
 #   ⑩–⑬ --list / --preflight / --case 99 / 裸位置参数 ⇒ 净增 0（BR8）
 #   ⑭ mktemp 失败 ⇒ 非 0 退出（BR9）    ⑮ 未进入 run 循环（堵 /fx.XXXXXX 空值续跑）
 #   ⑯–⑱ 收尾孤儿扫描（probe-tmp / probe-mode / probe-user 由本用例自清）
+#   ㉑–㉙ 启动期陈旧缓存回收（#121 · M20261114-t4-cache）：
+#        正控 8h+无进程 ⇒ 清 · 负控① 1h ⇒ 不清 · 负控② 8h+活进程 ⇒ 不清 · 用户传入目录不删 ·
+#        逃生口 T4_KEEP_CACHE=1 整段跳过 · 可观测（条数+前缀）· 释放活进程后下一轮回收 · 二跑 effect=0
 #   ⑲⑳ 静态契约（AC7/D-2/R-2）：定义单点（含 function 形态）· 删除语句唯一且限 tests/t4 下 *.sh · rm 词边界
 #
 # hermetic：全部操作在私有 TMPDIR（$T4_CACHE_DIR/probe-*）内，不依赖 tmux/tsx/网络/registry；
@@ -162,6 +165,66 @@ rm -rf "$PROBE_TMP" "$PROBE_MODE" "$PROBE_USER" "$PROBE_USER2"
 t4_assert_absent "$PROBE_TMP" "⑯ 收尾：probe-tmp 已自清"
 t4_assert_absent "$PROBE_MODE" "⑰ 收尾：probe-mode 已自清"
 t4_assert_absent "$PROBE_USER" "⑱ 收尾：probe-user 已自清"
+
+# ---------------------------------------------------------------- ㉑–㉙ 启动期陈旧缓存回收（#121）
+# 触发路径 = 真实启动期（探针 `source lib.sh`）：run.sh 与各用例共用同一条路，不需要第二处调用点。
+# 判据双向：正控（8h + 无活进程 ⇒ 清）/ 负控①（1h ⇒ 不清）/ 负控②（8h + 活进程 ⇒ 不清）。
+PROBE_STALE="$T4_CACHE_DIR/probe-stale"
+rm -rf "$PROBE_STALE"
+mkdir -p "$PROBE_STALE"
+ST_DEAD8H="$PROBE_STALE/nao-t4.dead8h"     # 正控：8h 前 + 无进程 ⇒ 回收
+ST_FRESH1H="$PROBE_STALE/nao-t4.fresh1h"   # 负控①：1h 前（可能是并发另一批）⇒ 不清
+ST_LIVE8H="$PROBE_STALE/nao-t4.live8h"     # 负控②：8h 前 + 活进程持有 ⇒ 不清
+ST_USER8H="$PROBE_STALE/nao-t4.user8h"     # 用户传入（陈旧也不得删）
+ST_KEEP8H="$PROBE_STALE/nao-t4.keep8h"     # 逃生口 T4_KEEP_CACHE=1 ⇒ 不清
+for d in "$ST_DEAD8H" "$ST_LIVE8H"; do mkdir -p "$d"; : > "$d/case-32.log"; done
+mkdir -p "$ST_FRESH1H"; : > "$ST_FRESH1H/case-32.log"
+touch -d '8 hours ago' "$ST_DEAD8H" "$ST_LIVE8H"
+touch -d '1 hour ago' "$ST_FRESH1H"
+cat > "$PROBE_STALE/probe.sh" <<EOF
+source "$LIB"
+t4_ok "probe-stale"
+t4_exit
+EOF
+run_stale_probe() { # $1=输出文件名；其余 = 额外 env（TMPDIR 私有 ⇒ 只扫本夹具目录）
+  local out="$1"; shift
+  env -u T4_CACHE_DIR -u T4_CACHE_OWNED -u T4_CACHE_PARENT -u T4_KEEP_CACHE TMPDIR="$PROBE_STALE" "$@" \
+    bash "$PROBE_STALE/probe.sh" >"$PROBE_STALE/$out" 2>&1
+}
+# 活进程关联：持有该目录的 T4_CACHE_DIR（与 sweep 的活 cache 判据同形）
+env T4_CACHE_DIR="$ST_LIVE8H" sleep 30 &
+ST_LIVE_PID=$!
+run_stale_probe s1.log; rc=$?
+t4_assert_eq "0" "$rc" "㉑ 正控：8h 前无进程的假缓存 ⇒ 启动期回收（探针 rc=0）"
+t4_assert_absent "$ST_DEAD8H" "㉑ 正控：nao-t4.dead8h 已被清（8h + 无进程）"
+t4_assert_dir "$ST_FRESH1H" "㉒ 负控①：1h 前无进程 ⇒ 不清（可能是并发另一批）"
+t4_assert_dir "$ST_LIVE8H" "㉓ 负控②：8h 前但有活进程持有 ⇒ 不清"
+S1_OUT="$(cat "$PROBE_STALE/s1.log" 2>/dev/null || true)"
+t4_assert_contains "$S1_OUT" "陈旧缓存回收: 已清 1 个" "㉔ 可观测：打印清理条数（已清 1 个）"
+t4_assert_contains "$S1_OUT" "$PROBE_STALE/nao-t4.*" "㉔ 可观测：打印路径前缀（$PROBE_STALE/nao-t4.*）"
+kill -TERM "$ST_LIVE_PID" 2>/dev/null; wait "$ST_LIVE_PID" 2>/dev/null
+# 逃生口：8h 死目录 + KEEP=1 ⇒ 一条都不删（活进程已释放也不再保留）
+mkdir -p "$ST_KEEP8H"; : > "$ST_KEEP8H/case-32.log"; touch -d '8 hours ago' "$ST_KEEP8H"
+run_stale_probe s2.log T4_KEEP_CACHE=1; rc=$?
+t4_assert_eq "0" "$rc" "㉖ 逃生口：T4_KEEP_CACHE=1 探针 rc=0"
+t4_assert_dir "$ST_KEEP8H" "㉖ 逃生口：T4_KEEP_CACHE=1 ⇒ 陈旧回收整段跳过（8h 死目录保留）"
+t4_assert_dir "$ST_LIVE8H" "㉖ 逃生口：活进程已释放 + 8h，KEEP=1 仍不删"
+t4_assert_not_contains "$(cat "$PROBE_STALE/s2.log" 2>/dev/null || true)" "陈旧缓存回收" "㉖ 逃生口：无回收输出（不虚报）"
+# 用户传入目录（8h 陈旧）⇒ 归属守卫不得删；同时释放后的 8h 死目录本轮被清
+mkdir -p "$ST_USER8H"; : > "$ST_USER8H/case-32.log"; touch -d '8 hours ago' "$ST_USER8H"
+run_stale_probe s3.log T4_CACHE_DIR="$ST_USER8H"; rc=$?
+t4_assert_eq "0" "$rc" "㉕ 用户传入 8h 目录：探针 rc=0"
+t4_assert_dir "$ST_USER8H" "㉕ 用户传入 T4_CACHE_DIR：即便 8h 陈旧也不删（归属守卫）"
+t4_assert_file "$ST_USER8H/case-32.log" "㉕ 用户目录内容不被回收"
+t4_assert_absent "$ST_LIVE8H" "㉗ 活进程释放后（无进程 + 8h）⇒ 下一轮启动回收（保留只因活进程）"
+t4_assert_absent "$ST_KEEP8H" "㉗ 逃生口只跳过本轮（不再 KEEP ⇒ 下一轮回收）"
+t4_assert_dir "$ST_FRESH1H" "㉗ 1h 目录跨轮仍不清（时效判据稳定）"
+# 幂等：没有新的陈旧项 ⇒ 不再打印回收（effect=0）
+run_stale_probe s4.log T4_CACHE_DIR="$ST_USER8H"; rc=$?
+t4_assert_eq "0" "$rc" "㉘ 二跑：探针 rc=0"
+t4_assert_not_contains "$(cat "$PROBE_STALE/s4.log" 2>/dev/null || true)" "已清 " "㉘ 幂等：无新的陈旧项 ⇒ 不再打印回收（effect=0）"
+rm -rf "$PROBE_STALE"
+t4_assert_absent "$PROBE_STALE" "㉙ 收尾：probe-stale 已自清"
 
 # ---------------------------------------------------------------- ⑲⑳ 静态契约（AC7 单点实现 · D-2）
 # 不吃死整句提示语：以「函数定义形态」「缓存删除语句形态」计数；期望值用 `|` 拼接，
