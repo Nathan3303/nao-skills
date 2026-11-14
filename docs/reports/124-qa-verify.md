@@ -66,3 +66,15 @@
   - **禁夹带 ✓** `ba7b900` 仅 4 文件（脚本注释 + 两函数 / ADR 索引 1 行 / 报告 / `cases/34`），S1/S3/E1 零命中。
 - **P3-6（新）AC5①「13 条未过」不可复现**：忠实三元组（`23f76e9` 用例 × `23f76e9` 脚本 × `23f76e9` 文档）实测 **12 FAIL**（连跑两次同形；`RESULT: FAIL`）；可复现的是 9（旧用例 × 旧脚本 × 当前文档）。新用例 × 旧脚本 × 当前文档 = 11。建议写成「旧用例 12 / 当前文档 9」并标用例文件版本。
 - 纪律：三形态临时改 `AGENTS.md` 后由 `git show HEAD:AGENTS.md` 写回，md5 = `262e1d8…`（协议未动 = `c78ae83…`），`git status --porcelain` 空；未 `checkout`/`switch`；自建 `/tmp` 夹具与失败缓存已删。
+
+## 十二、三轮点检（`03c8401`）· **GO**
+
+- 结论：**GO**（无 P1/P2；4 条 P3 均不阻断）。P1-1 真修，包根形态我独立复跑。
+- **包根形态（自己跑，不引 PM 输出）**：`npm pack` → 解包 `/tmp/qa124-pack/package` ⇒ `AGENTS.md` **不存在**（包 `files` = `bin/ .agents/ README.md LICENSE`）；`cd /tmp && env -u NAO_SKILLS node <pkg>/bin/nao-skill.js exec check -v` ⇒ `^  ! 端前提` = **0** · `absent` = **0** · rc=0；默认摘要 `grep -c 'warn='` = **0**，三行照常（含「生效后端」）。
+- 代码面：`premise_declared_backend` 对不存在/无前提行只 `return 0`（不再打印 `absent`），调用方删掉死代码 `[[ "$decl" == "absent" ]]`，仅留空行 `continue` —— 实现与注释「无输出 = 不适用」同口径。
+- **先红（P1-1 本体）**：用 **`ba7b900`** 的实现 × 当前断言 = **6 红**，恰为 `E1/E2/E3/E3b/E4/E4b`，实际值 1/1/2/1 + 两条「不应包含」命中 ⇒ **1≠0 / 2≠0 的形态红**，非文档旧。**注**：若按字面把 `0ee9866` 的 `premise_declared_backend` 塞进新调用方，是接口错配（旧函数输出单 token、无行号），实测 21 红（含 A/B/C 组）——不能作为 P1-1 的先红；P1-1 只在 `ba7b900` 成立。
+- **E 组作用域逐条**：E1/E2/E3/E3b 断的是**零 warn 计数**（不是「没崩」）；E1b/E2b/E3c 另有 `rc=0`。但 E3（协议+AGENTS 双缺）与 E4/E4b（`not_contains`）**既无 rc 也无正锚** ⇒ 若 check 将来早退且输出为空，这三条会空转通过。实测 E1 形态 check 跑满（`== 运行前提` 在、`-v` 64 行、rc=0），当前不空转 ⇒ P3-7。
+- **语义边界（第 4 项）**：正常信道（shim / npm 安装）`nao-skill` 一律 `NAO_SKILLS=PKG_ROOT`，`check` 只读**包内** `intercom-protocol.md` 与包根 `AGENTS.md` ⇒ 下游项目自己的 `AGENTS.md` 不参与判定 ⇒ **不会误报**；shim 写入项目的 AGENTS.md 来自 `.agents/templates/AGENTS.md.example`，模板无三个标记词 ⇒ 也不踩 nodecl。残留误报面 = legacy 全量副本 / `NAO_SKILLS` 指到项目根：实测项目 AGENTS.md 写「## 运行前提 / Node ≥ 20」⇒ `! 端前提声明不可比对：AGENTS.md:3 …`（warn-only、rc=0），且文案把用户的项目前提说成「端前提声明」略有误导 ⇒ P3-8（建议标记词加共现约束：同行须含 `pi ≥` 或 `后端`）。
+- **P3-2 三元组 ✓** 与报告文字一致：旧用例×旧脚本×旧文档 = **12** · 旧用例×旧脚本×当前文档 = **9** · 新用例×旧脚本(`0ee9866`)×当前文档 = **11**；小账 = 报告「旧文档」未标 `23f76e9` 版本戳 ⇒ P3-9。
+- 门禁面抽核：`cases/34` tmux **53 PASS / 0 FAIL**、herdr **52 PASS / 0 FAIL + 1 NOTE**；`check` rc=0 · files=54 · 工作区 `git status` 空；`03c8401` 仅 3 文件（脚本 11 行 / 报告 / `cases/34`），`CARD_MAX_LINES|hotfix|三段阶梯` 0 命中。
+- 纪律：本轮未改仓库任何文件；临时副本（`/tmp/qa124-r3|r4|fx3|fx4|pack`）与自建失败缓存 `nao-t4.mYB0Og` 已删；未 `checkout`/`switch`。
