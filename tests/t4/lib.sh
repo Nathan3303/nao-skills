@@ -98,10 +98,12 @@ _t4_realpath() {
 #      相对值按**该进程自己的 cwd** 解析（不是本进程的 cwd）。
 # 只读 /proc（本套用例本就依赖 Linux /proc），不引 lsof / fuser；一次扫完供逐候选比对。
 _t4_cache_roots_in_use() {
-  local d cwd val root c
+  local d rawcwd cwd val root c
   for d in /proc/[0-9]*; do
-    cwd="$(readlink "$d/cwd" 2>/dev/null)" || cwd=""
-    # 预筛（充要性：归一候选的末段恒为 nao-t4.* ⇒ 任何「等于/在其下」的路径必含该串）
+    rawcwd="$(readlink "$d/cwd" 2>/dev/null)" || rawcwd=""
+    cwd="$rawcwd"
+    # 预筛**只作用于 cwd 判据本身**（充要性：候选末段恒为 nao-t4.* ⇒ 等于/在其下的路径必含该串）；
+    # env 分支不得用被清空的 cwd（P3-5：相对值的基准必须是原始 cwd）。
     case "$cwd" in */nao-t4.*|*/nao-t4.*/*) ;; *) cwd="" ;; esac
     if [ -n "$cwd" ]; then
       for c in "$@"; do
@@ -112,10 +114,9 @@ _t4_cache_roots_in_use() {
     [ -r "$d/environ" ] || continue
     val="$(tr '\0' '\n' < "$d/environ" 2>/dev/null | sed -nE 's/^T4_CACHE_DIR=(.*)$/\1/p' | head -1)"
     [ -n "$val" ] || continue
-    case "$val" in *nao-t4*) ;; *) continue ;; esac   # 预筛（同上，不参与归一的绝大多数值直接跳过）
     case "$val" in
       /*) root="$val" ;;
-      *) [ -n "$cwd" ] && root="$cwd/$val" || continue ;;
+      *) [ -n "$rawcwd" ] && root="$rawcwd/$val" || continue ;;
     esac
     root="$(_t4_realpath "$root")" || continue
     [ -n "$root" ] || continue

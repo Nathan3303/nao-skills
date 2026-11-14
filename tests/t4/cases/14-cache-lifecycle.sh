@@ -279,12 +279,17 @@ run_path_probe p8-slash.log "$PROBE_PATH" -; rc=$?
 t4_assert_eq "0" "$rc" "㉝ AC8 活 env 尾斜杠：探针 rc=0"
 t4_assert_dir "$P_LIVE1" "㉝ AC8 活进程 env 带尾斜杠（$P_LIVE1/）⇒ 不清"
 kill -TERM "$P_LIVE_PID" 2>/dev/null; wait "$P_LIVE_PID" 2>/dev/null; rm -rf "$P_LIVE1"
-P_LIVE2="$PROBE_PATH/nao-t4.liverel"; mk_old_dir "$P_LIVE2"
-( cd "$PROBE_PATH" && exec env T4_CACHE_DIR=nao-t4.liverel sleep 30 ) & P_LIVE_PID=$!; sleep 0.2
-run_path_probe p8-rel.log "$PROBE_PATH" -; rc=$?
+# ㉞ 的活进程 cwd 必须**不在**任何 nao-t4.* 之下（A 形态）：否则 cwd 预筛会替相对值兜底，
+#   断言会「因错误原因变绿」（QA 点检 P3-5）。外层夹具故意不带 nao-t4. 段。
+P_OUTER="$(mktemp -d "$T4_CACHE_PARENT/t4-c14-rel.XXXXXX")" || t4_blocked "无法创建 ㉞ 外层夹具"
+P_LIVE2="$P_OUTER/nao-t4.liverel"; mk_old_dir "$P_LIVE2"
+( cd "$P_OUTER" && exec env T4_CACHE_DIR=nao-t4.liverel sleep 30 ) & P_LIVE_PID=$!; sleep 0.2
+t4_assert_eq "1" "$(case "$P_OUTER" in */nao-t4.*) echo 0 ;; *) echo 1 ;; esac)" \
+  "㉞ A 形态自证：活进程 cwd（$P_OUTER）不在任何 nao-t4.* 之下"
+run_path_probe p8-rel.log "$P_OUTER" -; rc=$?
 t4_assert_eq "0" "$rc" "㉞ AC8 活 env 相对：探针 rc=0"
-t4_assert_dir "$P_LIVE2" "㉞ AC8 活进程 env 为相对路径（按该进程 cwd 解析）⇒ 不清"
-kill -TERM "$P_LIVE_PID" 2>/dev/null; wait "$P_LIVE_PID" 2>/dev/null; rm -rf "$P_LIVE2"
+t4_assert_dir "$P_LIVE2" "㉞ AC8 活进程 env 相对路径（cwd 不含 nao-t4.*，按该进程 cwd 解析）⇒ 不清"
+kill -TERM "$P_LIVE_PID" 2>/dev/null; wait "$P_LIVE_PID" 2>/dev/null; rm -rf "$P_OUTER"
 P_REAL2="$PROBE_PATH/real2"; P_LINK2="$PROBE_PATH/link2"; mkdir -p "$P_REAL2" "$P_LINK2"
 P_LIVE3="$P_REAL2/nao-t4.sym"; mkdir -p "$P_LIVE3"; touch -d '8 hours ago' "$P_LIVE3"
 ln -sfn "$P_REAL2" "$P_LINK2/t"
