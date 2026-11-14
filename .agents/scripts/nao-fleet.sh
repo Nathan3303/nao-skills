@@ -1491,11 +1491,13 @@ check_eol() {
 #   **全部声明行参与判定**（P2-1 · QA 复核）：同文件内多行声明各判各的 —— 只回退其中一个症状行
 #   （如 `AGENTS.md:18` 而 `:33` 仍写 herdr）也必须被抓到；旧实现「取第一条可解析行」正是该盲区。
 #   输出（每行一条，TAB 分隔）：`<行号>\t<herdr|tmux|nodecl>`；
-#   单 token `absent` = 文件或端前提行不存在 ⇒ 不适用（非包根 / 下游 shim 仓 / 包内不带 AGENTS.md）
+#   **无输出 = 不适用**（文件不存在 / 存在但无端前提声明行）—— 只 `return 0`，**不打印 `absent`**
+#   （P1-1：单 token 会被调用方读成 `行号=absent, 声明=""` ⇒ npm 安装态每次 `check` 常驻假 warn；
+#    真实信道 = npm 包根 `files` 不含 `AGENTS.md`，下游 shim 仓也可能没有协议文件）
 premise_declared_backend() {
   local f="$1" n line decl
-  [[ -f "$f" ]] || { printf 'absent\n'; return 0; }
-  grep -qE '运行前提|机制只支持|端前提' "$f" 2>/dev/null || { printf 'absent\n'; return 0; }
+  [[ -f "$f" ]] || return 0
+  grep -qE '运行前提|机制只支持|端前提' "$f" 2>/dev/null || return 0
   # 只信「端前提声明行」：其它行的「默认」与后端无关（如「默认 main-row2」布局）
   while IFS=: read -r n line; do
     [[ -n "${n:-}" ]] || continue
@@ -1519,8 +1521,7 @@ check_backend_premise() {
   for f in "$COMMON_DIR/intercom-protocol.md" "$SKILLS_DIR/AGENTS.md"; do
     rel="${f#"$SKILLS_DIR"/}"
     while IFS=$'\t' read -r n decl; do
-      [[ -n "${n:-}" ]] || continue
-      [[ "$decl" == "absent" ]] && continue          # 文件/端前提行不存在 ⇒ 不适用
+      [[ -n "${n:-}" ]] || continue                  # 空行/不产生行 ⇒ 不适用（"absent" 不再作为 token 出现）
       [[ "$decl" == "$actual" ]] && continue         # 该行与实现一致 ⇒ 零输出
       if [[ "$decl" == "nodecl" ]]; then
         printf '  ! 端前提声明不可比对：%s:%s 有端前提声明但未给出「默认 herdr / 默认 tmux」原文，实现默认 = %s（%s 的唯一赋值点）—— 补写声明或改实现\n' \

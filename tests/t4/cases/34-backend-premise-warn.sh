@@ -161,6 +161,44 @@ run_check -v
 t4_assert_eq "0" "$(premise_warns)" "C4 还原一致：warn 消失（双向）"
 t4_assert_eq "0" "$C34_RC" "C5 还原一致：rc=0"
 
+# ============================================================ E 不适用面（P1-1）：absent ⇒ 零输出、零 warn
+# P1-1（QA 二轮）：`absent` 曾是**单 token**输出，调用方读成 `n=absent, decl=""` ⇒ 落进「不一致」分支 ⇒
+#   npm 安装态（包内不带 `AGENTS.md`）每次 `check` 常驻一条乱码式假 warn。本组把「不适用」钉成判据：
+#   **判定** = 文件不存在 / 存在但无任何端前提声明行 ⇒ **零输出**（不产生 warn、不进 warn=N）。
+# E1 夹具无 `AGENTS.md`（= npm 包根形态）：零 warn + rc=0
+mv "$AGENTS" "$BAK/AGENTS.e1"
+run_check -v
+t4_assert_eq "0" "$(premise_warns)" "E1 无 AGENTS.md（npm 包根形态）：零端前提 warn"
+t4_assert_eq "0" "$C34_RC" "E1b 无 AGENTS.md：rc=0（不因缺文件置红）"
+mv "$BAK/AGENTS.e1" "$AGENTS"
+
+# E2 `AGENTS.md` 存在但无任何声明行（下游项目常见）：零 warn + rc=0
+#   注意：夹具正文**不得**出现标记词（`运行前提|机制只支持|端前提`）—— 出现标记却无声明 = `nodecl` ⇒ 必 warn（by design）
+printf '# 夹具 AGENTS.md\n\n- 项目属性：仅测试夹具，不谈终端后端。\n' > "$AGENTS"
+run_check -v
+t4_assert_eq "0" "$(premise_warns)" "E2 AGENTS.md 无端前提声明行：零端前提 warn（不适用）"
+t4_assert_eq "0" "$C34_RC" "E2b AGENTS.md 无端前提行：rc=0"
+cp "$BAK/AGENTS.md" "$AGENTS"
+
+# E3 仅协议文件在场（AGENTS.md 缺失）+ 协议缺失对照：前者零 warn；后者 warn 也为 0（rc 由既有「公共规范缺失」判红）
+mv "$AGENTS" "$BAK/AGENTS.e3"
+mv "$PROTO" "$BAK/proto.e3"
+run_check -v
+t4_assert_eq "0" "$(premise_warns)" "E3 协议文件也缺失：端前提 warn 仍 0（不适用不刷屏）"
+mv "$BAK/proto.e3" "$PROTO"
+run_check -v
+t4_assert_eq "0" "$(premise_warns)" "E3b 仅协议在场：端前提 warn 0"
+t4_assert_eq "0" "$C34_RC" "E3c 仅协议在场：rc=0"
+mv "$BAK/AGENTS.e3" "$AGENTS"
+
+# E4 回归位（真实安装信道的最小化形态）：无 AGENTS.md 时摘要**不得**出现 warn= 字段
+mv "$AGENTS" "$BAK/AGENTS.e4"
+run_check
+t4_assert_not_contains "$C34_OUT" "warn=" "E4 无 AGENTS.md：默认摘要无 warn= 字段（不常驻）"
+run_check -v
+t4_assert_not_contains "$C34_OUT" "AGENTS.md:absent" "E4b 无 AGENTS.md：不再出现 \`AGENTS.md:absent\` 乱码式文案"
+mv "$BAK/AGENTS.e4" "$AGENTS"
+
 # ============================================================ D 静态面（单点 + warn-only + 默认值单源）
 t4_assert_ge "2" "$(grep -c 'check_backend_premise' "$FLEET" || true)" \
   "D1 单点实现 + 单点调用（定义 1 + 调用 1）"
