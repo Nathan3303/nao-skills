@@ -90,7 +90,7 @@ npm run test:t4:full:dual                      # 发布前置**双后端** gate�
 | 10 | T510 migrate 收尾：shim 判定式 / 开关 / 单行 lock 去重 | AC4 · BR5 · #21 | `migrate` / `init` |
 | 12 | 派生会话 tmux 落点：宿主窗口显式寻址（含幂等/同源） | AC1–AC7 · T517 | 无（真 tmux 隔离 socket + 桩 pi；无 tmux 则 SKIP） |
 | 13 | `close` 前提与末段：非 tmux ⇒ exit 3 单行提示且无副作用；tmux 内名册离线 ⇒ 「未运行」rc=0；`--force` 不改末段；`无法确认在线` 静态归零 | AC1/AC4 · T529 | `tsx`（名册探针夹具，缺则 ⑥⑦ DEGRADE）；①–⑤ 无依赖 |
-| 14 | 夹具缓存生命周期：成功清理 / 失败保留 / 用户目录永不删（守卫负控 + 早退净增 0） | AC4–AC7 · T524 | 无（私有 `TMPDIR` 内纯本地，不依赖 tmux/tsx/网络） |
+| 14 | 夹具缓存生命周期：成功清理 / 失败保留 / 用户目录永不删 / 启动期陈旧回收（守卫负控 + 早退净增 0） | AC4–AC7 · T524 · #121 | 无（私有 `TMPDIR` 内纯本地，不依赖 tmux/tsx/网络） |
 | 15 | 子代理会话（`subagent-*`）在 `status`/`close` 的显式识别与排除（汇总计数 / 显式拒绝且父 pane 存活 / E2 孤儿 pane 告警回归 / 前缀边界 / `check` 守卫） | AC2–AC8 · T525 | `tmux`（缺则 SKIP）· `tsx`（名册注入，缺则 T1–T9 DEGRADE）；T10 纯 bash |
 | 16 | 子代理桥口径：模板 G1–G3 契约 + 无目标占位符 + 安装说明 + 协议小节四条 + pi-subagents 配置 schema 接受/拒绝 | AC2–AC7 · T526 | `pi-subagents`（缺则 SKIP）；纯 Node 只读探针，不依赖 tmux/tsx/网络 |
 | 17 | 角色→子代理 agent 单一事实：装配字节比对（卡正文去 frontmatter）· 锚点 cross-assert · 命名双向 · 假总线注册 ×6 + 幂等 + 逃生阀 + 三态负控 | AC2–AC7 · T527 | `pi-subagents`（缺则 SKIP）；纯 Node 只读探针 + 夹具副本，零 LLM/零网络，不依赖 tmux/tsx |
@@ -125,6 +125,7 @@ NOTE = 用例产出的**事实性说明**（合法的能力/前提说明，不�
 ## 夹具缓存纪律
 
 - **成功清理**：跑批 `rc=0` 且缓存目录是本进程自建 ⇒ 退出时删除该目录（含 `case-<id>.log`）。
+- **启动期陈旧回收（#121）**：`source lib.sh` 时（run.sh 与各用例同一条路，无第二处调用点）回收 `$T4_CACHE_PARENT/nao-t4.*` 中「超过 `T4_STALE_CACHE_HOURS`（默认 **6**）小时 **且** 无活进程关联」的目录。**路径一律 `realpath -m` 归一后再判「等于 / 在其下」**（尾斜杠 / 相对路径 / 软链拼写不误判；env 指向缓存目录的**子目录**也算在用；env 的相对值按**该进程自己的 cwd** 解析）。活进程两条判据各自独立：cwd 落在候选下（**不依赖 environ 可读性**；该判据的 `nao-t4.*` 预筛**不参与** env 相对值的基准 —— 相对值一律按该进程**原始 cwd** 解析）· env `T4_CACHE_DIR` 命中。边界：仅一层 `nao-t4.*`、非软链、非本次使用的 `$T4_CACHE_DIR`（用户传入的陈旧目录也不删）；`T4_KEEP_CACHE=1` 整段跳过；`T4_STALE_CACHE_HOURS=0`/非整数 ⇒ 视为非法阈值跳过（不静默全清）；真清过才打印一行（条数 + 路径前缀），删除失败逐条 WARN。双向判据见 `cases/14` ㉑–㊵（正控 8h+无进程 ⇒ 清 / 负控 1h ⇒ 不清 / 负控 8h+活进程 ⇒ 不清 / 四形态路径与活进程内偏差各一条）。
 - **失败保留**：`rc≠0`（FAIL / BLOCKED / MISSING / NOT_RUN，含 `T4_REQUIRE_FULL=1` 因 SKIP/DEGRADE 判 FAIL）⇒ 目录保留并打印路径，便于查看 `case-<id>.log`。
 - **用户目录永不删**：显式传入 `T4_CACHE_DIR=<dir>` ⇒ 无论成败都不删，也不清理其中任何文件。
 - **逃生口**：`T4_KEEP_CACHE=1`（env-only）⇒ 成功/失败两情形均恒保留。
