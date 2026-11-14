@@ -1,6 +1,6 @@
 # ADR：子代理会话（subagent-*）排除面与会话身份模型边界
 
-- 状态：已接受（待落地 v0.18.3）
+- 状态：已接受（已落地 v0.18.3）
 - 更新：2026-10-14
 - Owner：arch-designer
 - 指针：`docs/prds/2026-10-14-subagent-isolation.md` · `docs/reports/2026-10-14-T525-arch-review.md`

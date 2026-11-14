@@ -2,7 +2,7 @@
 
 # ADR：ADR 结构契约（骨架单源 / 状态值域 / 职责下沉）
 
-- 状态：已接受（待落地 v0.17.2）
+- 状态：已接受（已落地 v0.17.2）
 - 更新：2026-10-14
 - Owner：arch-designer
 - 指针：PRD `docs/prds/2026-10-14-doc-templates-convention.md` · 评审报告 `docs/reports/2026-10-14-T520-arch-review.md`
