@@ -394,7 +394,7 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **M20261114-t4-cache**（Issue [#121](https://github.com/Nathan3303/nao-skills/issues/121)） | `rd-infra-M20261114-t4-cache`（已拉起 · idle） | t4 缓存启动期陈旧回收（>6h 且无活进程）+ 正控 1 / 负控 2；不改 `EXIT`/sweep/`T4_KEEP_CACHE`/用户目录语义；纯 shell 零依赖；清理可观测 | 2026-11-14 | AC1–AC6（开工确认卡 §范围） | 待回执 |
+| M20261114-t4-cache | `rd-infra-M20261114-t4-cache`（交付待验收）· `qa-M20261114-t4-cache`（复核中） | Issue [#121](https://github.com/Nathan3303/nao-skills/issues/121) · t4 缓存启动期陈旧回收（>6h 且无活进程）+ 正控 1 / 负控 2；不改 `EXIT`/sweep/`T4_KEEP_CACHE`/用户目录语义；纯 shell 零依赖；清理可观测 | 2026-11-14 | AC1–AC6（开工确认卡 §范围） | `3dfc8da`（实现）· `5099225`（报告） |
 
 （T544 已交付并发版 v0.23.3，见下节）
 
