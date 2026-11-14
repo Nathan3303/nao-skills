@@ -76,58 +76,92 @@ trap t4_cache_cleanup EXIT
 # 判据双向（cases/14 ㉑–㉘）：正控 8h + 无进程 ⇒ 清；负控① 1h ⇒ 不清；负控② 8h + 活进程 ⇒ 不清。
 # 安全边界（与 t4_cache_cleanup 同源）：仅 $T4_CACHE_PARENT 下一层、名 nao-t4.*、是目录、非软链、
 #   非本次使用的 $T4_CACHE_DIR（用户传入的陈旧目录亦不删）。
+# 路径口径（#121 二轮 AC7/AC8）：归属与活进程的比对一律先 `realpath -m` **归一**再判「等于/前缀」
+#   ⇒ 尾斜杠 / 相对路径 / 软链拼写的同一目录不会被误判为「不同目录」。
 # 逃生口：T4_KEEP_CACHE=1 ⇒ 整段跳过（调试期一条都不删）；T4_CACHE_NO_CREATE=1（只读探测）⇒ 跳过。
 # 可观测：真清过才打印一行（条数 + 路径前缀）；删除失败逐条 WARN 点名；恒返回 0（不改退出码）。
 T4_STALE_CACHE_HOURS="${T4_STALE_CACHE_HOURS:-6}"
 
-# 有活进程关联的缓存根：进程 env 里的 T4_CACHE_DIR=<dir>，或 cwd 落在某个 nao-t4.* 目录下。
+# 路径归一单点（AC7/AC8）：`realpath -m` 不要求路径存在，且会把尾斜杠 / 相对路径 / 软链统一成
+#   绝对物理路径。调用方必须先 `command -v realpath` 把关，否则本函数失败（不猜）。
+_t4_realpath() {
+  local p="${1:-}"
+  [ -n "$p" ] || return 1
+  realpath -m -- "$p" 2>/dev/null
+}
+
+# 活进程关联（$@ = **已归一**的候选目录）⇒ 输出「在用」的候选（去重）。
+# 两条判据各自独立生效（AC8/AC9）：
+#   ① cwd 判据：`readlink /proc/<pid>/cwd` 已给物理路径 ⇒ 与归一候选直接比「等于 / 在其下」；
+#      本分支**不依赖 environ 可读**（QA P3-1：旧写法先 `[ -r environ ] || continue` 会连带跳过 cwd）。
+#   ② env 判据：`T4_CACHE_DIR` 归一后「等于候选」或「落在候选之下」（后者 = 指向子目录也算在用）；
+#      相对值按**该进程自己的 cwd** 解析（不是本进程的 cwd）。
 # 只读 /proc（本套用例本就依赖 Linux /proc），不引 lsof / fuser；一次扫完供逐候选比对。
 _t4_cache_roots_in_use() {
-  local d val cwd
+  local d cwd val root c
   for d in /proc/[0-9]*; do
+    cwd="$(readlink "$d/cwd" 2>/dev/null)" || cwd=""
+    # 预筛（充要性：归一候选的末段恒为 nao-t4.* ⇒ 任何「等于/在其下」的路径必含该串）
+    case "$cwd" in */nao-t4.*|*/nao-t4.*/*) ;; *) cwd="" ;; esac
+    if [ -n "$cwd" ]; then
+      for c in "$@"; do
+        [ "$cwd" = "$c" ] && printf '%s\n' "$c"
+        case "$cwd" in "$c"/*) printf '%s\n' "$c" ;; esac
+      done
+    fi
     [ -r "$d/environ" ] || continue
     val="$(tr '\0' '\n' < "$d/environ" 2>/dev/null | sed -nE 's/^T4_CACHE_DIR=(.*)$/\1/p' | head -1)"
-    [ -n "$val" ] && printf '%s\n' "$val"
-    cwd="$(readlink "$d/cwd" 2>/dev/null)" || continue
-    case "$cwd" in
-      */nao-t4.*|*/nao-t4.*/*)
-        printf '%s\n' "$(printf '%s' "$cwd" | sed -nE 's#^(.*/nao-t4\.[^/]+).*$#\1#p')" ;;
+    [ -n "$val" ] || continue
+    case "$val" in *nao-t4*) ;; *) continue ;; esac   # 预筛（同上，不参与归一的绝大多数值直接跳过）
+    case "$val" in
+      /*) root="$val" ;;
+      *) [ -n "$cwd" ] && root="$cwd/$val" || continue ;;
     esac
+    root="$(_t4_realpath "$root")" || continue
+    [ -n "$root" ] || continue
+    for c in "$@"; do
+      [ "$root" = "$c" ] && printf '%s\n' "$c"
+      case "$root" in "$c"/*) printf '%s\n' "$c" ;; esac
+    done
   done 2>/dev/null | sort -u
 }
 
 t4_reclaim_stale_caches() {
-  local parent="${T4_CACHE_PARENT:-}" dir mtime now limit n=0 live=""
-  local -a cands=() stale=()
+  local parent="${T4_CACHE_PARENT:-}" dir norm mtime now limit n=0 live="" cur="" i
+  local -a raw=() normd=() mt=() stale=() stalend=()
   [ -n "$parent" ] || return 0
   [ "${T4_KEEP_CACHE:-0}" = "1" ] && return 0                          # 逃生口：一条都不删
   [ "${T4_CACHE_NO_CREATE:-0}" = "1" ] && return 0                     # 只读探测：无副作用
   case "$T4_STALE_CACHE_HOURS" in ''|*[!0-9]*) return 0 ;; esac          # 非法阈值不猜
-  command -v stat >/dev/null 2>&1 || {
-    printf '陈旧缓存回收: WARN 缺少 stat，跳过本轮（未删任何目录）\n' >&2; return 0; }
-  # 形态合格（一层 / 目录 / 非软链 / 非本次使用的目录）⇒ 收集 mtime，暂不扫 /proc
+  [ "$T4_STALE_CACHE_HOURS" -gt 0 ] || return 0                         # AC10：0 等同全清 ⇒ 跳过
+  command -v stat >/dev/null 2>&1 && command -v realpath >/dev/null 2>&1 || {
+    printf '陈旧缓存回收: WARN 缺少 stat/realpath，跳过本轮（未删任何目录）\n' >&2; return 0; }
+  cur="$(_t4_realpath "${T4_CACHE_DIR:-}")" || cur=""
+  # 形态合格（一层 / 目录 / 非软链 / 非本次使用的目录）⇒ 收集归一路径 + mtime，暂不扫 /proc
   for dir in "$parent"/nao-t4.*; do
     [ -d "$dir" ] && [ ! -L "$dir" ] || continue
     [ "${dir%/*}" = "$parent" ] || continue
-    [ "$dir" = "${T4_CACHE_DIR:-}" ] && continue
+    norm="$(_t4_realpath "$dir")" || continue
+    [ -n "$norm" ] || continue
+    [ -n "$cur" ] && [ "$norm" = "$cur" ] && continue                  # AC7 归属守卫（归一后判等）
     mtime="$(stat -c %Y -- "$dir" 2>/dev/null)" || continue
     case "$mtime" in ''|*[!0-9]*) continue ;; esac
-    cands+=("$dir|$mtime")
+    raw+=("$dir"); normd+=("$norm"); mt+=("$mtime")
   done
-  [ "${#cands[@]}" -gt 0 ] || return 0                                   # 稳态：不扫 /proc
+  [ "${#raw[@]}" -gt 0 ] || return 0                                     # 稳态：不扫 /proc
   now="$(date +%s)"; limit=$((T4_STALE_CACHE_HOURS * 3600))
-  for dir in "${cands[@]}"; do
-    mtime="${dir##*|}"; dir="${dir%|*}"
-    [ $((now - mtime)) -gt "$limit" ] && stale+=("$dir")                 # 未来时间戳 ⇒ 不清
+  for i in "${!raw[@]}"; do
+    [ $((now - mt[i])) -gt "$limit" ] || continue                        # 未来时间戳 ⇒ 不清
+    stale+=("${raw[$i]}"); stalend+=("${normd[$i]}")
   done
   [ "${#stale[@]}" -gt 0 ] || return 0
-  live="$(_t4_cache_roots_in_use)"
-  for dir in "${stale[@]}"; do
-    if [ -n "$live" ] && grep -qxF -- "$dir" <<< "$live"; then continue; fi  # 活进程关联 ⇒ 不清
-    if _t4_rm_cache_dir "$dir"; then
+  live="$(_t4_cache_roots_in_use "${stalend[@]}")"
+  for i in "${!stale[@]}"; do
+    if [ -n "$live" ] && grep -qxF -- "${stalend[$i]}" <<< "$live"; then continue; fi  # 活进程在用 ⇒ 不清
+    if _t4_rm_cache_dir "${stale[$i]}"; then
       n=$((n + 1))
     else
-      printf '陈旧缓存回收: WARN 删除失败（已保留）: %s\n' "$dir" >&2
+      printf '陈旧缓存回收: WARN 删除失败（已保留）: %s\n' "${stale[$i]}" >&2
     fi
   done
   [ "$n" -gt 0 ] && printf '陈旧缓存回收: 已清 %d 个（> %sh 且无活进程）: %s/nao-t4.*\n' \

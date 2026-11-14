@@ -22,6 +22,10 @@
 #   ㉑–㉙ 启动期陈旧缓存回收（#121 · M20261114-t4-cache）：
 #        正控 8h+无进程 ⇒ 清 · 负控① 1h ⇒ 不清 · 负控② 8h+活进程 ⇒ 不清 · 用户传入目录不删 ·
 #        逃生口 T4_KEEP_CACHE=1 整段跳过 · 可观测（条数+前缀）· 释放活进程后下一轮回收 · 二跑 effect=0
+#   ㉚–㊵ 二轮修（#121 QA P1/P2/P3-1/P3-3 ⇒ AC7–AC10）：
+#        归属守卫归一（尾斜杠 / 相对路径 / 软链拼写）· 活进程判据归一 + 前缀（env 尾斜杠 / env 相对 /
+#        软链 TMPDIR 仅 cwd / env 子目录）· cwd 判据与 environ 可读性解耦（静态顺序）·
+#        阈值 0 = 非法 ⇒ 跳过 · 归一不破坏正控（TMPDIR 尾斜杠的 8h 死目录照清）
 #   ⑲⑳ 静态契约（AC7/D-2/R-2）：定义单点（含 function 形态）· 删除语句唯一且限 tests/t4 下 *.sh · rm 词边界
 #
 # hermetic：全部操作在私有 TMPDIR（$T4_CACHE_DIR/probe-*）内，不依赖 tmux/tsx/网络/registry；
@@ -225,6 +229,98 @@ t4_assert_eq "0" "$rc" "㉘ 二跑：探针 rc=0"
 t4_assert_not_contains "$(cat "$PROBE_STALE/s4.log" 2>/dev/null || true)" "已清 " "㉘ 幂等：无新的陈旧项 ⇒ 不再打印回收（effect=0）"
 rm -rf "$PROBE_STALE"
 t4_assert_absent "$PROBE_STALE" "㉙ 收尾：probe-stale 已自清"
+
+# ---------------------------------------------------------------- ㉚–㊵ 二轮修：路径归一 + 判据解耦（#121 AC7–AC10）
+# QA 缺陷同根因：判据用「原始字符串相等」而非归一化 + 等于/前缀比对。夹具在私有 TMPDIR 内。
+PROBE_PATH="$T4_CACHE_DIR/probe-path"
+rm -rf "$PROBE_PATH"
+mkdir -p "$PROBE_PATH"
+cat > "$PROBE_PATH/probe.sh" <<EOF
+source "$LIB"
+t4_ok "probe-path"
+t4_exit
+EOF
+mk_old_dir() { mkdir -p "$1"; : > "$1/case-1.log"; touch -d '8 hours ago' "$1"; }
+run_path_probe() { # $1=日志名 $2=TMPDIR $3=cwd（- = 当前）$4...=额外 env
+  local out="$1" tmp="$2" wd="$3"; shift 3
+  if [ "$wd" = "-" ]; then
+    env -u T4_CACHE_DIR -u T4_CACHE_OWNED -u T4_CACHE_PARENT -u T4_KEEP_CACHE -u T4_STALE_CACHE_HOURS \
+      TMPDIR="$tmp" "$@" bash "$PROBE_PATH/probe.sh" >"$PROBE_PATH/$out" 2>&1
+  else
+    ( cd "$wd" && env -u T4_CACHE_DIR -u T4_CACHE_OWNED -u T4_CACHE_PARENT -u T4_KEEP_CACHE -u T4_STALE_CACHE_HOURS \
+        TMPDIR="$tmp" "$@" bash "$PROBE_PATH/probe.sh" >"$PROBE_PATH/$out" 2>&1 )
+  fi
+}
+# ---- AC7 归属守卫：归一后判等（尾斜杠 / 相对路径 / 软链拼写）
+P_SLASH="$PROBE_PATH/nao-t4.userslash"; mk_old_dir "$P_SLASH"
+run_path_probe p7-slash.log "$PROBE_PATH" - T4_CACHE_DIR="$P_SLASH/"; rc=$?
+t4_assert_eq "0" "$rc" "㉚ AC7 尾斜杠：用户传入 8h 目录，探针 rc=0"
+t4_assert_dir "$P_SLASH" "㉚ AC7 尾斜杠（$P_SLASH/）⇒ 不被回收"
+t4_assert_file "$P_SLASH/case-1.log" "㉚ AC7 尾斜杠 ⇒ 用户目录内容仍在"
+rm -rf "$P_SLASH"
+P_REL="$PROBE_PATH/nao-t4.userrel"; mk_old_dir "$P_REL"
+run_path_probe p7-rel.log "$PROBE_PATH" "$PROBE_PATH" T4_CACHE_DIR=nao-t4.userrel; rc=$?
+t4_assert_eq "0" "$rc" "㉛ AC7 相对路径：用户传入 8h 目录，探针 rc=0"
+t4_assert_dir "$P_REL" "㉛ AC7 相对路径（nao-t4.userrel，按探针 cwd 解析）⇒ 不被回收"
+t4_assert_file "$P_REL/case-1.log" "㉛ AC7 相对路径 ⇒ 用户目录内容仍在"
+rm -rf "$P_REL"
+P_REAL="$PROBE_PATH/real"; P_LINK="$PROBE_PATH/link"; mkdir -p "$P_REAL" "$P_LINK"
+P_SYM="$P_REAL/nao-t4.usersym"; mk_old_dir "$P_SYM"
+ln -sfn "$P_SYM" "$P_LINK/u"
+run_path_probe p7-sym.log "$P_REAL" - T4_CACHE_DIR="$P_LINK/u"; rc=$?
+t4_assert_eq "0" "$rc" "㉜ AC7 软链拼写：用户传入 8h 目录，探针 rc=0"
+t4_assert_dir "$P_SYM" "㉜ AC7 软链拼写（$P_LINK/u = $P_SYM）⇒ 不被回收"
+t4_assert_file "$P_SYM/case-1.log" "㉜ AC7 软链拼写 ⇒ 用户目录内容仍在"
+rm -rf "$P_SYM" "$P_LINK" "$P_REAL"
+# ---- AC8 活进程判据：归一 + 前缀（四个症状各一条）
+P_LIVE1="$PROBE_PATH/nao-t4.liveslash"; mk_old_dir "$P_LIVE1"
+env T4_CACHE_DIR="$P_LIVE1/" sleep 30 & P_LIVE_PID=$!; sleep 0.2
+run_path_probe p8-slash.log "$PROBE_PATH" -; rc=$?
+t4_assert_eq "0" "$rc" "㉝ AC8 活 env 尾斜杠：探针 rc=0"
+t4_assert_dir "$P_LIVE1" "㉝ AC8 活进程 env 带尾斜杠（$P_LIVE1/）⇒ 不清"
+kill -TERM "$P_LIVE_PID" 2>/dev/null; wait "$P_LIVE_PID" 2>/dev/null; rm -rf "$P_LIVE1"
+P_LIVE2="$PROBE_PATH/nao-t4.liverel"; mk_old_dir "$P_LIVE2"
+( cd "$PROBE_PATH" && exec env T4_CACHE_DIR=nao-t4.liverel sleep 30 ) & P_LIVE_PID=$!; sleep 0.2
+run_path_probe p8-rel.log "$PROBE_PATH" -; rc=$?
+t4_assert_eq "0" "$rc" "㉞ AC8 活 env 相对：探针 rc=0"
+t4_assert_dir "$P_LIVE2" "㉞ AC8 活进程 env 为相对路径（按该进程 cwd 解析）⇒ 不清"
+kill -TERM "$P_LIVE_PID" 2>/dev/null; wait "$P_LIVE_PID" 2>/dev/null; rm -rf "$P_LIVE2"
+P_REAL2="$PROBE_PATH/real2"; P_LINK2="$PROBE_PATH/link2"; mkdir -p "$P_REAL2" "$P_LINK2"
+P_LIVE3="$P_REAL2/nao-t4.sym"; mkdir -p "$P_LIVE3"; touch -d '8 hours ago' "$P_LIVE3"
+ln -sfn "$P_REAL2" "$P_LINK2/t"
+( cd "$P_LIVE3" && exec env -i PATH="$PATH" sleep 30 ) & P_LIVE_PID=$!; sleep 0.2
+run_path_probe p8-sym.log "$P_LINK2/t" -; rc=$?
+t4_assert_eq "0" "$rc" "㉟ AC8 软链 TMPDIR：探针 rc=0"
+t4_assert_dir "$P_LIVE3" "㉟ AC8 TMPDIR 经软链 + 活进程仅 cwd 命中 ⇒ 不清"
+kill -TERM "$P_LIVE_PID" 2>/dev/null; wait "$P_LIVE_PID" 2>/dev/null; rm -rf "$P_LIVE3" "$P_LINK2" "$P_REAL2"
+P_LIVE4="$PROBE_PATH/nao-t4.sub"; mkdir -p "$P_LIVE4/case-1"; touch -d '8 hours ago' "$P_LIVE4"
+env T4_CACHE_DIR="$P_LIVE4/case-1" sleep 30 & P_LIVE_PID=$!; sleep 0.2
+run_path_probe p8-sub.log "$PROBE_PATH" -; rc=$?
+t4_assert_eq "0" "$rc" "㊱ AC8 活 env 子目录：探针 rc=0"
+t4_assert_dir "$P_LIVE4" "㊱ AC8 活进程 env 指向缓存目录子目录 ⇒ 父目录不清（前缀判据）"
+kill -TERM "$P_LIVE_PID" 2>/dev/null; wait "$P_LIVE_PID" 2>/dev/null; rm -rf "$P_LIVE4"
+# ---- AC9 cwd 判据与 environ 可读性解耦（静态顺序：readlink cwd 行先于 [ -r environ ] 门）
+RN_FN="$(sed -n '/^_t4_cache_roots_in_use() {/,/^}/p' "$LIB")"
+CWD_LN="$(grep -n 'readlink "\$d/cwd"' <<< "$RN_FN" | head -1 | cut -d: -f1)"
+ENV_GATE_LN="$(grep -n '\[ -r "\$d/environ" \]' <<< "$RN_FN" | head -1 | cut -d: -f1)"
+t4_assert_eq "1" \
+  "$([ -n "$CWD_LN" ] && [ -n "$ENV_GATE_LN" ] && [ "$CWD_LN" -lt "$ENV_GATE_LN" ] && echo 1 || echo 0)" \
+  "㊲ AC9 cwd 判据先于 environ 可读性门（cwd 行=$CWD_LN · environ 门行=$ENV_GATE_LN）"
+# ---- AC10 阈值 0 = 非法 ⇒ 跳过（不静默全清）
+P_ZERO="$PROBE_PATH/nao-t4.zero"; mk_old_dir "$P_ZERO"
+run_path_probe p10.log "$PROBE_PATH" - T4_STALE_CACHE_HOURS=0; rc=$?
+t4_assert_eq "0" "$rc" "㊳ AC10 阈值 0：探针 rc=0（非法阈值不猜）"
+t4_assert_dir "$P_ZERO" "㊳ AC10 T4_STALE_CACHE_HOURS=0 ⇒ 视为非法阈值，跳过（不清）"
+t4_assert_not_contains "$(cat "$PROBE_PATH/p10.log" 2>/dev/null || true)" "已清" "㊳ AC10 阈值 0 ⇒ 无回收输出（不静默全清）"
+rm -rf "$P_ZERO"
+# ---- 归一不破坏正控：TMPDIR 带尾斜杠时 8h 死目录照清
+P_DEAD="$PROBE_PATH/nao-t4.deadslash"; mk_old_dir "$P_DEAD"
+run_path_probe p9.log "$PROBE_PATH/" -; rc=$?
+t4_assert_eq "0" "$rc" "㊴ 归一后正控：TMPDIR 带尾斜杠，探针 rc=0"
+t4_assert_absent "$P_DEAD" "㊴ 归一不破坏正控：8h 死目录仍被清"
+t4_assert_contains "$(cat "$PROBE_PATH/p9.log" 2>/dev/null || true)" "已清 1 个" "㊴ 归一后回收计数仍准确（已清 1 个）"
+rm -rf "$PROBE_PATH"
+t4_assert_absent "$PROBE_PATH" "㊵ 收尾：probe-path 已自清"
 
 # ---------------------------------------------------------------- ⑲⑳ 静态契约（AC7 单点实现 · D-2）
 # 不吃死整句提示语：以「函数定义形态」「缓存删除语句形态」计数；期望值用 `|` 拼接，
