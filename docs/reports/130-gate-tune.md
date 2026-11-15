@@ -48,11 +48,13 @@
 - D2（HEAD 测试树）⇒ D2① `0`（期望 1）· D2② 空集（期望 8）· D2③ 手写 6 行（期望 0）。现状全绿。
 - 还原自证：两处临时覆盖（fleet 脚本 / lib.sh）后 `md5sum` 与覆盖前逐字节一致。
 
-## 门禁（`git status --porcelain` 仅本批 7 文件 · 本会话独占 worktree）
+## 门禁（门禁时 HEAD=`9a59a8c` · `git status --porcelain` 空 · 本会话独占 worktree）
 
 - `bash .agents/scripts/nao-fleet.sh check` ×2 → `check: OK · roles=7 · files=54 · layout=main-row2` · rc=0/0（两次逐字一致；`.agents/` 本批只改 `nao-fleet.sh`）。
-- `npm test` → `RESULT: PASS（SKIP=0 · DEGRADE=0 · NOTE=10 · NOTE白名单=10）`。
-- `npm run test:t4:full:dual` → 组1 tmux rc=0 · 组2 herdr rc=0 ⇒ PASS（`cases/06`/`28`/`27`/`35`/`09` 均 PASS，golden 未破）。
+- `npm run check:agents`（tsc）→ rc=0。
+- `npm run test:t4:full:dual` → 组1 tmux `SKIP=0 · DEGRADE=0 · NOTE=9` rc=0 · 组2 herdr `SKIP=0 · DEGRADE=0 · NOTE=10` rc=0 ⇒ PASS（`cases/06`/`09`/`27`/`28`/`35` 均 PASS，golden 未破）。
+- 另：`npm test`（默认 herdr 后端）亦 PASS；提交前同内容跑过一轮 dual 也 PASS。
+- **一次瞬时 SKIP 已复跑排除**：某次 dual 的 herdr 组出现 `SKIP=1`（`T4_REQUIRE_FULL=1` 下计 FAIL）；随后同内容连跑两次 `SKIP=0` ⇒ 属用例 02/07 的外部依赖（pi 凭据 / registry）瞬时不可达，与本批改动无关（两者本轮均 PASS）。
 - 敏感值扫描（7 文件：token/私钥/绝对家目录）→ **0 命中**；`codegraph status` → Index is up to date。
 
 ## 风险 / 边界
