@@ -198,7 +198,10 @@ if [ "$BE_NAME" = "herdr" ]; then
   { printf '#!/usr/bin/env bash\n# 伪造 ps：ppid 查询恒失败（模拟祖先链不可读）\ncase "$*" in *ppid*) exit 1 ;; esac\nexec %q "$@"\n' "$(command -v ps)"; } > "$C09_FPSBIN/ps"
   chmod +x "$C09_FPSBIN/ps"
   PATH_SAVE="$PATH"; PATH="$C09_FPSBIN:$PATH"
-  NAO_QA_FAKE_ROSTER="[{\"name\":\"qa-T509T\",\"id\":\"qa-T509T\",\"status\":\"idle\",\"cwd\":\"$OTHER\"}]" \
+  #   #130 D2：HERDR_* 默认全集清（防宿主渗漏）⇒ 本判据要的「故意注入」必须显式声明 BE_HERDR_KEEP，
+  #   否则被单源清理一起磨掉（那会把「自 pane 保守拒」测成「目标被回收」—— 假红/假绿都失真）。
+  BE_HERDR_KEEP="HERDR_PANE_ID" \
+    NAO_QA_FAKE_ROSTER="[{\"name\":\"qa-T509T\",\"id\":\"qa-T509T\",\"status\":\"idle\",\"cwd\":\"$OTHER\"}]" \
     HERDR_PANE_ID="$H_PANE2" fx_fleet "$FX_N" close --task T509T qa
   PATH="$PATH_SAVE"
   t4_assert_ne "0" "$T4_RC" "AC3h③: 目标 pane == HERDR_PANE_ID（调用者自身）⇒ 必须拒（rc≠0）"

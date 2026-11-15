@@ -190,6 +190,23 @@ T4_RC=0
 T4_OUT=""
 T4_ERR=""
 
+# ---------------------------------------------------------------- 宿主终端句柄：HERDR_* 清除清单（**单源**）
+# 背景（#130 D2 = T543-O2）：herdr 宿主会把 HERDR_ENV / HERDR_SESSION / HERDR_SOCKET_PATH … 导出进 pane；
+#   夹具若漏清一个，就会「打到生产 server / 读到生产会话 / 拿生产 socket 当夹具端点」—— 这类假绿
+#   （#111 同类渗漏）不报错、只让断言失真。旧实现把清单手写在 4 处（lib-backend `envs` /
+#   cases/06 `B3_CLEAN_ENV` / cases/28 `TMUX_FIELD_ENV` + 两处直连 `env` 逐项清 HERDR_ENV/HERDR_SESSION）
+#   ⇒ 加一个新的 HERDR_* 要改 3–5 处，漏一处即渗漏。
+# 形态（单一事实 + 派生参数）：
+#   T4_HERDR_ENV_VARS   = 变量名数组（**唯一**需要维护的地方）
+#   T4_HERDR_UNSET_ARGS = 由上面派生的 `env -u <名>` 参数数组（调用点只用这个，**不得**再手写变量名）
+# ⇒ 新增一个 HERDR_* 只改 T4_HERDR_ENV_VARS 一行。枚举集合由 cases/06 的 golden 断言钉死（只增不减）。
+# 注意：cases/35 的动态枚举（`env | grep -o '^HERDR_[A-Z_]*'`）是**超集**清法，不需要登记，故意不改。
+T4_HERDR_ENV_VARS=(HERDR_ENV HERDR_SESSION HERDR_SOCKET_PATH HERDR_SOCKET_FILE
+                   HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_BIN_PATH)
+T4_HERDR_UNSET_ARGS=()
+for _t4_hv in "${T4_HERDR_ENV_VARS[@]}"; do T4_HERDR_UNSET_ARGS+=(-u "$_t4_hv"); done
+unset _t4_hv
+
 # ---------------------------------------------------------------- 输出 / 断言
 t4_log()  { printf '%s\n' "$*"; }
 t4_ok()   { printf '  [PASS] %s\n' "$*"; }
