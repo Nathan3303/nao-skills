@@ -2973,13 +2973,14 @@ cmd_check() {
   check_alias_resolution || rc=1
 
   echo "== 常驻角色卡（阈值 ${CARD_MAX_LINES} 行，frontmatter 校验）=="
-  local a role version updated
+  local a role version updated max_card="" max_lines=0 pct10=0
   for a in "${ROLE_ORDER[@]}"; do
     f="$PROMPTS_DIR/${ROLE_CARDS[$a]}"
     if [[ ! -f "$f" ]]; then
       printf '  ✗ %-26s 缺失\n' "${ROLE_CARDS[$a]}"; rc=1; continue
     fi
     lines=$(wc -l < "$f")
+    if (( lines > max_lines )); then max_lines=$lines; max_card="${ROLE_CARDS[$a]}"; fi
     if (( lines > CARD_MAX_LINES )); then
       printf '  ! %-26s %3d 行（超阈值，建议拆到 skills/）\n' "${ROLE_CARDS[$a]}" "$lines"
     else
@@ -2998,6 +2999,11 @@ cmd_check() {
       printf '  ✗ %s frontmatter updated 缺失（应如 2026-09-21）\n' "${ROLE_CARDS[$a]}"; rc=1
     fi
   done
+  # #128 E1：卡预算基线（`-v` 可见；只观测，不进 rc —— 不设硬限，超阈值仍有逐卡 `!`）
+  if (( max_lines > 0 )); then
+    pct10=$(( max_lines * 1000 / CARD_MAX_LINES ))
+    printf '  · 卡预算基线：最大 %s %d 行 / 阈值 %d 行（%d.%d%%）\n' "$max_card" "$max_lines" "$CARD_MAX_LINES" "$((pct10 / 10))" "$((pct10 % 10))"
+  fi
 
   echo "== prompts/ 孤儿检查 =="
   local cf found c2 orphan=0
