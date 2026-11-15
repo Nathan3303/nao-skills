@@ -37,7 +37,7 @@ description: 按需技能——Git 提交规范（仅在执行 git commit 前读
 
 ## 特殊情况白名单（封闭列举，其余一律走需求分支 + PR）
 
-只有以下情况可**直接提交并推送目标分支**（不经 PR 流程）；均须在 `docs/tasks-state.md` 标注原因：
+只有以下情况可**直接提交并推送目标分支**（**目标分支 ≠ main；合入 main 仍走 PR**：hotfix 用 PR 快速合并以保留审计链，main 只收 squash；白名单免的是「等完整评审」，不是 PR 本身）；均须在 `docs/tasks-state.md` 标注原因：
 
 1. 线上 Hotfix（走 `hotfix/<issue-id>` 分支 + PR 快速合并，事后补 Release 与变更单）；
 2. 前后端分离且后端契约需先提交/推送，前端才能消费；

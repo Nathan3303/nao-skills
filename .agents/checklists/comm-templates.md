@@ -33,7 +33,7 @@ description: 派发消息与回执模板（按需，派发/回执前读取）
 
 > `commit=`（仅 git 流程任务）：work 分支最新提交短 hash，便于 PM 核对归因（commit.md 约定）；无 push/纯文档任务写 `commit=—`。
 > `遗留：` 取值枚举 `无 | <n> 项 → <台账|tasks-state|Issue|接受(到期)>`；零遗留写 `无`，禁省略字段（三出口定义见 @.agents/skills/task-completion.md §四）。
-> **`测试：` 段三件套（静默工作区 / HEAD sha / 命令 + 输出）口径单源见 @.agents/common/output-format.md「回执硬性」第 3 条** —— 本文件只给可复制形态，**不复写三件套全文**（PM / QA / RD 三侧同源）。
+> **`测试：` 段三件套口径单源见 @.agents/common/output-format.md「回执硬性」第 3 条** —— 本文件只给可复制形态，**不复写三件套全文**（PM / QA / RD 三侧同源）。
 > **`HEAD=` ≠ `commit=`**：前者 = **跑门禁时**的 HEAD（数字的归属），后者 = **交付提交**（归因）；门禁后又补提交时两者必然不同 —— 混用即「同一命令两种结论」的根源。
 
 ## 回执 done(full)：出现阻塞/风险/需决策，或 PM 指定

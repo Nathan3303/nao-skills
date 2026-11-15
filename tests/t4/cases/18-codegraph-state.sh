@@ -232,8 +232,11 @@ t4_assert_eq "" "$(grep -rnE 'codegraph_(search|callers|callees|impact|node|cont
   "G4 禁用工具名零命中（只允许 codegraph_explore，BR7）"
 CARDS_WITH_CG="$(grep -rl "codegraph" "$T4_ROOT/.agents/prompts" | wc -l | tr -d ' ')"
 t4_assert_eq "6" "$CARDS_WITH_CG" "G5 六张角色卡均含 codegraph 口径"
-BAD_CARDS="$(grep -rL "codegraph_explore" $(grep -rl "codegraph" "$T4_ROOT/.agents/prompts") 2>/dev/null || true)"
-t4_assert_eq "" "$BAD_CARDS" "G5 每张提及 codegraph 的卡都给出原生入口（codegraph_explore）"
+# #128 S3：三段阶梯改为**单源**（skills/codegraph.md 写全，卡只给指针）。
+#   原判据「每张卡必须含 codegraph_explore」会逼回复写；改为「每张提及 codegraph 的卡
+#   必须指向单源」—— 判据仍在（提及即须给口径去处），只把重复的工具名换成指针。
+BAD_CARDS="$(grep -rL "@.agents/skills/codegraph.md" $(grep -rl "codegraph" "$T4_ROOT/.agents/prompts") 2>/dev/null || true)"
+t4_assert_eq "" "$BAD_CARDS" "G5 每张提及 codegraph 的卡都给出单源指针（@.agents/skills/codegraph.md）"
 
 # ============================================================ H 真装类（能力门 → NOTE static-contract）
 if command -v codegraph >/dev/null 2>&1 && [ -d "$T4_ROOT/.codegraph" ]; then

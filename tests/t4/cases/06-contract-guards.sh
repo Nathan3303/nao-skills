@@ -983,6 +983,75 @@ t4_assert_eq "" "$(t4_scan_nao_terminal_default_probe "$PROBE_NEG_DIR/y.sh")" \
 rm -rf "$PROBE_NEG_DIR"
 # >>> default-value-probe END
 
+# ============================================================================
+# E1（#128）：卡预算基线可观测 + 超阈值有信号（warn-only，不改 rc）
+#   判据（PRD AC5）：
+#     ① `check -v` 能报「各卡行数 + 最大占比」；数字与实测一致（不是抄死值）。
+#     ② 超阈值仍有逐卡 `!` + 基线 >100%，但 rc 仍 0（不设硬限、不改闸门语义）。
+#     ③ 移除基线实现 ⇒ 同一判据取值为 0（非空转，先红后绿的机检面）。
+#   CARD_MAX_LINES 保持 200；本段从脚本抽常量，不在用例里复制第二份阈值。
+E1_FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+E1_CARD_MAX="$(sed -n 's/^CARD_MAX_LINES=\([0-9][0-9]*\)$/\1/p' "$E1_FLEET" | head -1)"
+t4_assert_eq "200" "$E1_CARD_MAX" "E1: CARD_MAX_LINES 保持 200（不设硬限；阈值仍由脚本单点给）"
+
+E1_REAL_MAX=0; E1_REAL_NAME=""
+for f in "$T4_ROOT"/.agents/prompts/*.md; do
+  n="$(wc -l < "$f" | tr -d ' ')"
+  if [ "$n" -gt "$E1_REAL_MAX" ]; then E1_REAL_MAX="$n"; E1_REAL_NAME="$(basename "$f")"; fi
+done
+E1_REAL_OUT="$( cd "$T4_ROOT" && env NAO_STASH_ROOT="$C6_STASH_NONE" timeout 120 bash .agents/scripts/nao-fleet.sh check -v 2>&1 )"
+E1_REAL_RC=$?
+t4_assert_eq "0" "$E1_REAL_RC" "E1: 真仓 check -v rc=0（基线不改 rc）"
+E1_LINE="$(printf '%s\n' "$E1_REAL_OUT" | grep -m1 '卡预算基线' || true)"
+t4_assert_ne "" "$E1_LINE" "E1: check -v 输出卡预算基线行（可观测）"
+E1_FIELDS="$(printf '%s\n' "$E1_LINE" | sed -nE 's/.*最大 ([^ ]+) ([0-9]+) 行 \/ 阈值 ([0-9]+) 行（([0-9]+\.[0-9]+)%）.*/\1 \2 \3 \4/p')"
+read -r E1_GOT_NAME E1_GOT_LINES E1_GOT_THR E1_GOT_PCT <<< "$E1_FIELDS"
+E1_PCT10=$(( E1_REAL_MAX * 1000 / E1_CARD_MAX ))
+E1_EXP_PCT="$((E1_PCT10 / 10)).$((E1_PCT10 % 10))"
+t4_assert_eq "$E1_REAL_NAME" "${E1_GOT_NAME:-}" "E1: 基线最大卡与实测最大卡同名（$E1_REAL_NAME）"
+t4_assert_eq "$E1_REAL_MAX" "${E1_GOT_LINES:-}" "E1: 基线行数与实测一致（$E1_REAL_MAX 行）"
+t4_assert_eq "$E1_CARD_MAX" "${E1_GOT_THR:-}" "E1: 基线阈值取自脚本常量（$E1_CARD_MAX 行）"
+t4_assert_eq "$E1_EXP_PCT" "${E1_GOT_PCT:-}" "E1: 基线最大占比与实测一致（$E1_EXP_PCT%）"
+
+# 超阈值负控：副本里把最大卡垫到 CARD_MAX+1 行（真仓零触碰）⇒ 逐卡 ! + 基线 >100%，rc 仍 0
+E1_LAB="$T4_CACHE_DIR/e1-card-$$"
+E1_BIN="$T4_CACHE_DIR/e1-bin-$$"
+mkdir -p "$E1_LAB" "$E1_BIN"
+cp -r "$T4_ROOT/.agents" "$E1_LAB/.agents" || t4_bad "E1: 复制 .agents 到夹具失败"
+printf '#!/usr/bin/env bash\n[ "${1:-}" = "--version" ] && { echo "%s"; exit 0; }\nexit 0\n' "$MINPI" > "$E1_BIN/pi"
+chmod +x "$E1_BIN/pi"
+E1_TARGET="$E1_LAB/.agents/prompts/$E1_REAL_NAME"
+E1_HAVE="$(wc -l < "$E1_TARGET" | tr -d ' ')"
+if [ "$E1_HAVE" -le "$E1_CARD_MAX" ]; then
+  E1_NEED=$(( E1_CARD_MAX + 1 - E1_HAVE ))
+  for ((E1_I = 0; E1_I < E1_NEED; E1_I++)); do printf -- '- E1 padding\n' >> "$E1_TARGET"; done
+fi
+E1_LAB_MAX=0; E1_LAB_NAME=""
+for f in "$E1_LAB"/.agents/prompts/*.md; do
+  n="$(wc -l < "$f" | tr -d ' ')"
+  if [ "$n" -gt "$E1_LAB_MAX" ]; then E1_LAB_MAX="$n"; E1_LAB_NAME="$(basename "$f")"; fi
+done
+t4_assert_ge "$((E1_CARD_MAX + 1))" "$E1_LAB_MAX" "E1 夹具：最大卡已超阈值（$E1_LAB_NAME $E1_LAB_MAX 行）"
+E1_LAB_OUT="$( cd "$E1_LAB" && env -u NAO_STASH_ROOT PATH="$E1_BIN:$PATH" timeout 120 bash .agents/scripts/nao-fleet.sh check -v 2>&1 )"
+E1_LAB_RC=$?
+t4_assert_eq "0" "$E1_LAB_RC" "E1 超阈值：check rc 仍 0（warn-only，不设硬限）"
+t4_assert_contains "$E1_LAB_OUT" "! $E1_LAB_NAME" "E1 超阈值：逐卡行报 !（点名 $E1_LAB_NAME）"
+t4_assert_contains "$E1_LAB_OUT" "$E1_LAB_MAX 行" "E1 超阈值：报出实际行数 $E1_LAB_MAX"
+E1_LAB_PCT10=$(( E1_LAB_MAX * 1000 / E1_CARD_MAX ))
+E1_LAB_PCT="$((E1_LAB_PCT10 / 10)).$((E1_LAB_PCT10 % 10))"
+t4_assert_contains "$E1_LAB_OUT" "最大 $E1_LAB_NAME $E1_LAB_MAX 行 / 阈值 $E1_CARD_MAX 行（$E1_LAB_PCT%）" \
+  "E1 超阈值：基线给最大占比 $E1_LAB_PCT%（>100% 可见）"
+
+# 变异自证：删掉副本脚本里的基线输出行 ⇒ 同一判据取值为 0（实现承重，不是空转）
+E1_MUT="$E1_LAB-mut"
+cp -r "$E1_LAB" "$E1_MUT" || t4_bad "E1 变异：副本创建失败"
+sed -i '/卡预算基线/d' "$E1_MUT/.agents/scripts/nao-fleet.sh"
+E1_MUT_OUT="$( cd "$E1_MUT" && env -u NAO_STASH_ROOT PATH="$E1_BIN:$PATH" timeout 120 bash .agents/scripts/nao-fleet.sh check -v 2>&1 )"
+E1_MUT_HIT=0
+if printf '%s\n' "$E1_MUT_OUT" | grep -qF '卡预算基线'; then E1_MUT_HIT=1; fi
+t4_assert_eq "0" "$E1_MUT_HIT" "E1 变异：移除基线实现 ⇒ 同一判据取值为 0（断言非空转）"
+rm -rf "$E1_LAB" "$E1_MUT" "$E1_BIN"
+
 rm -rf "$B1BIN" "$B1_LOG" "$NEG_B1A" "$NEG_B1B" "$NEG_B1C" "$NEG_B1D" "$NEG_LED"
 
 t4_exit
