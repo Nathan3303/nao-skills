@@ -19,7 +19,7 @@ t4_require_shim "$fx"
 if t4_bwrap_available; then
   of="$(mktemp)"; ef="$(mktemp)"
   bwrap --unshare-net --ro-bind / / --dev-bind /dev /dev --proc /proc --bind /tmp /tmp \
-        --chdir "$fx" /bin/bash -c 'bash .agents/scripts/nao-fleet.sh check' >"$of" 2>"$ef"
+        --chdir "$fx" /bin/bash -c 'env -u NAO_STASH_ROOT bash .agents/scripts/nao-fleet.sh check' >"$of" 2>"$ef"
   rc=$?
   out="$(cat "$of")"; err="$(cat "$ef")"; rm -f "$of" "$ef"
   t4_info "4a rc=$rc out=$(printf '%s' "$out" | head -1)"
@@ -28,7 +28,7 @@ if t4_bwrap_available; then
 else
   t4_degrade "bwrap 不可用，4a 降级为代理黑洞环境（弱证据，4b 仍为强证据）"
   of="$(mktemp)"; ef="$(mktemp)"
-  ( cd "$fx" && env http_proxy=http://127.0.0.1:9 https_proxy=http://127.0.0.1:9 \
+  ( cd "$fx" && env -u NAO_STASH_ROOT http_proxy=http://127.0.0.1:9 https_proxy=http://127.0.0.1:9 \
         ALL_PROXY=http://127.0.0.1:9 npm_config_offline=true PI_OFFLINE=1 \
         bash .agents/scripts/nao-fleet.sh check ) >"$of" 2>"$ef"
   rc=$?; out="$(cat "$of")"; rm -f "$of" "$ef"
@@ -39,7 +39,7 @@ fi
 # --- 4b strace：无 AF_INET 连接 --------------------------------------------
 if t4_strace_available; then
   st="$T4_CACHE_DIR/strace-net.txt"
-  ( cd "$fx" && strace -f -e trace=connect -o "$st" bash .agents/scripts/nao-fleet.sh check ) >/dev/null 2>&1
+  ( cd "$fx" && env -u NAO_STASH_ROOT strace -f -e trace=connect -o "$st" bash .agents/scripts/nao-fleet.sh check ) >/dev/null 2>&1
   inet="$(grep -E 'connect\(.*(AF_INET|AF_INET6)' "$st" 2>/dev/null | grep -v EINPROGRESS || true)"
   t4_info "4b connect 总数=$(grep -c 'connect(' "$st" 2>/dev/null || echo 0) · AF_INET 命中=$(printf '%s\n' "$inet" | grep -c . || true)"
   t4_assert_eq "" "$inet" "4b 全程无 AF_INET/AF_INET6 connect（nao 零网络）"
@@ -51,7 +51,7 @@ fi
 empty_home="$(mktemp -d "$T4_CACHE_DIR/home.XXXXXX")"
 rm -rf "$fx/.pi/npm/node_modules"
 of="$(mktemp)"; ef="$(mktemp)"
-( cd "$fx" && env -u NAO_SKILLS -u NAO_SHIM_ENTERED "HOME=$empty_home" \
+( cd "$fx" && env -u NAO_SKILLS -u NAO_SHIM_ENTERED -u NAO_STASH_ROOT "HOME=$empty_home" \
       timeout 60 bash .agents/scripts/nao-fleet.sh check ) >"$of" 2>"$ef"
 rc=$?; out="$(cat "$of")"; err="$(cat "$ef")"; rm -f "$of" "$ef"
 joined="$(printf '%s\n%s\n' "$out" "$err")"

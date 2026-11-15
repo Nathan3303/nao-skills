@@ -708,7 +708,8 @@ be_run_fleet() { # <cwd 目录> <args...>
   command -v t4_run_in_dir >/dev/null 2>&1 || { be_guard_fail "be_run_fleet 需要 lib.sh（t4_run_in_dir）"; return 1; }
   local script="${BE_FLEET_SCRIPT:-${BE_FLEET_ROOT:-$BE_LAB}/.agents/scripts/nao-fleet.sh}"
   local -a envs=(env -u TMUX -u TMUX_PANE -u TMUX_TMPDIR
-                 -u HERDR_ENV -u HERDR_SESSION -u HERDR_SOCKET_PATH -u HERDR_SOCKET_FILE)
+                 -u HERDR_ENV -u HERDR_SESSION -u HERDR_SOCKET_PATH -u HERDR_SOCKET_FILE
+                 -u NAO_STASH_ROOT)   # #126 P3④：夹具 check 不该读到宿主导出的 stash 根
   local kv
   # BE_FLEET_NO_HANDLES=1：不注入后端句柄（负控用：验「不在终端内」时入口闸门必须 exit 3）
   if [ "${BE_FLEET_NO_HANDLES:-0}" != "1" ]; then

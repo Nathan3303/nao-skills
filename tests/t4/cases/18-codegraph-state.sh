@@ -90,7 +90,7 @@ run_cg_check() {
   [ "$kind" = "stub" ] && path="$STUB:$TOOLS:$NO_CG_PATH"
   local of ef; of="$(mktemp)"; ef="$(mktemp)"
   # C18_EXTRA_ENV：额外环境（显式传入，不依赖 `VAR=… func` 这种函数前缀赋值的隐式作用域）
-  ( cd "$FX" && env PI_CODING_AGENT_DIR="$AG" PATH="$path" \
+  ( cd "$FX" && env -u NAO_STASH_ROOT PI_CODING_AGENT_DIR="$AG" PATH="$path" \
       CG_STUB_MODE="$mode" CG_STUB_LOG="$LOG" "${C18_EXTRA_ENV[@]}" \
       bash .agents/scripts/nao-fleet.sh check "$@" ) >"$of" 2>"$ef"
   C18_RC=$?

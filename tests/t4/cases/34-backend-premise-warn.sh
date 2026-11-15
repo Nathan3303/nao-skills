@@ -51,7 +51,7 @@ chmod +x "$BIN/herdr" "$BIN/pi" "$BIN/tmux"
 
 # 环境：清掉宿主继承的 HERDR_*（枚举清，不只 -u 已知变量 —— 与 lib-backend 同纪律），
 #   否则在 herdr pane 内跑本用例会把真实 HERDR_SESSION 带进夹具 ⇒ check 去问真 server（假红/串台）。
-C34_CLEAN=(env)
+C34_CLEAN=(env -u NAO_STASH_ROOT)   # #126 P3④：夹具 check 不适用 stash 闸 ⇒ 摘掉宿主注入根
 for _v in $(env | grep -o '^HERDR_[A-Z_]*' || true); do C34_CLEAN+=(-u "$_v"); done
 C34_ENV=("${C34_CLEAN[@]}" NAO_SKILLS="$FX" PI_CODING_AGENT_DIR="$AGENT_EMPTY" PATH="$BIN:$PATH")
 
