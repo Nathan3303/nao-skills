@@ -11,6 +11,13 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 t4_require_cmd node
 t4_require_cmd npm
 
+# #126（QA P2-1）：`check` 的 stash 闸读 `$SKILLS_DIR` 的 `git stash list` ⇒ 本用例在 `$T4_ROOT`（真仓）上
+#   做的 golden 面会被「仓里有一条 stash」污染（首行多 `warn=1`、md5 变）。本用例全部**真实仓** `check`
+#   调用一律显式注入 `NAO_STASH_ROOT=<非仓目录>`（= 该闸「不适用」分支），**不剥行、不改 golden、不改闸门语义**；
+#   闸门本身是否真在跑，由下面「P2-1 双向」组用**临时 git 仓**旁证钉住（防注入把闸门一起废成空转）。
+C6_STASH_NONE="$T4_CACHE_DIR/c6-stash-none"
+mkdir -p "$C6_STASH_NONE"
+
 # --- AC8：manifest 不承载 prompt / 常驻注入不变 -----------------------------
 pi_refs="$(node -e '
 const p=require(process.argv[1]+"/package.json");
@@ -27,7 +34,7 @@ t4_assert_ge 1 "$(grep -c -- '--append-system-prompt' "$T4_ROOT/.agents/scripts/
 
 # --- AC6（机制侧）：check 交叉引用 + 引用一致性 ------------------------------
 of="$(mktemp)"; ef="$(mktemp)"
-( cd "$T4_ROOT" && timeout 120 bash .agents/scripts/nao-fleet.sh check ) >"$of" 2>"$ef"
+( cd "$T4_ROOT" && env NAO_STASH_ROOT="$C6_STASH_NONE" timeout 120 bash .agents/scripts/nao-fleet.sh check ) >"$of" 2>"$ef"
 rc=$?; out="$(cat "$of")"; err="$(cat "$ef")"; rm -f "$of" "$ef"
 t4_info "check rc=$rc · $(printf '%s' "$out" | head -1)"
 t4_assert_eq "0" "$rc" "AC6: 机制 check（含交叉引用校验）exit=0"
@@ -692,7 +699,7 @@ B1_CFG="$T4_CACHE_DIR/b1-cfg-$$"
 mkdir -p "$T4_CACHE_DIR/b1-pi-empty"
 B1_ENV=(env NAO_TERMINAL=herdr HERDR_ENV=1 HERDR_SESSION=nao-b1-check \
   XDG_CONFIG_HOME="$B1_CFG" HERDR_SOCKET_PATH="$B1_CFG/herdr/sessions/nao-b1-check/herdr.sock" \
-  PI_CODING_AGENT_DIR="$T4_CACHE_DIR/b1-pi-empty" PATH="$B1BIN:$PATH")
+  PI_CODING_AGENT_DIR="$T4_CACHE_DIR/b1-pi-empty" PATH="$B1BIN:$PATH" NAO_STASH_ROOT="$C6_STASH_NONE")
 # cleanup 不要求 pane 内 env（拆场是外部动作）：只给后端 + 私有根 + PATH 桩
 #   #111：必须**显式清掉**调用方（herdr pane）继承的 HERDR_SOCKET_PATH / HERDR_SESSION ——
 #   否则生产 socket 会被带进夹具（不在 "$B1_CFG" 目标根下 ⇒ cleanup 按「stale/外贸 env」拒绝，rc=3），
@@ -708,7 +715,7 @@ t4_assert_eq "0" "$(grep -c '^tmux ' "$B1_LOG" || true)" "B1④ herdr 模式 che
 
 : > "$B1_LOG"
 # 三期 P2：默认已翻 herdr ⇒ 「tmux 模式」必须**显式 =tmux**（不再靠「未设」搭车 —— 测试不依赖默认值）
-out="$(cd "$T4_ROOT" && env NAO_TERMINAL=tmux PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" bash .agents/scripts/nao-fleet.sh check 2>&1)"; rc=$?
+out="$(cd "$T4_ROOT" && env NAO_TERMINAL=tmux PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" NAO_STASH_ROOT="$C6_STASH_NONE" bash .agents/scripts/nao-fleet.sh check 2>&1)"; rc=$?
 t4_assert_eq "0" "$rc" "B1④ 显式 NAO_TERMINAL=tmux check rc=0（零回归）"
 t4_assert_eq "0" "$(printf '%s\n' "$out" | grep -c 'NAO_TERMINAL' || true)" \
   "B1④ 显式 =tmux check 输出**零** NAO_TERMINAL 字样（仅 herdr 模式加行；二期口径不破）"
@@ -730,9 +737,55 @@ else
   t4_info "P2④ 全输出 md5 未断言（本机 codegraph 态非「齐备」；首行逐字 + 行数已断言，不假红）"
 fi
 
+# ---- P2-1（#126 · QA 复核）：stash 闸对真仓也生效 ⇒ golden 面与「仓 stash」解耦（注入非仓根）----
+#   机理：`check_stash_residue` 读 `$SKILLS_DIR`（= 本仓）的 `git stash list`；仓里只要有 1 条 stash
+#   （BR5 自己鼓励的 `git stash push -m …` 形态），摘要首行就多 `warn=1`、md5 也变 ⇒ 本用例假红。
+#   修法取 **①（注入非仓根）**：上面全部真实仓 `check` 调用已带 `NAO_STASH_ROOT=$C6_STASH_NONE`。
+#   为什么不取 ②（剥掉 `warn=` / `  ! ` 行）：那会把闸门一起废掉 —— 闸门坏了 / 被删了也无人抓（空转）。
+#   反空转（双向 · 判据落在闸门本身，不与 golden 混）：
+#     有 stash（临时仓旁证）⇒ warn 真出现（与 golden 首行**不同**，即 QA 实测的假红面）；
+#     注入非仓根 / pop 掉 ⇒ 逐字回 golden。全程只碰 `$T4_CACHE_DIR` 下的临时仓（真仓 stash 零触碰）。
+C6_GIT="$T4_CACHE_DIR/c6-git$$"
+mkdir -p "$C6_GIT"
+git -C "$C6_GIT" init -q 2>/dev/null \
+  && git -C "$C6_GIT" config user.email "t4@example.invalid" \
+  && git -C "$C6_GIT" config user.name "t4" \
+  && printf 'a\n' > "$C6_GIT/f.txt" \
+  && git -C "$C6_GIT" add f.txt \
+  && git -C "$C6_GIT" commit -qm init
+printf 'b\n' >> "$C6_GIT/f.txt"
+git -C "$C6_GIT" stash push -q -m "c6: sentinel-stash" -- f.txt 2>/dev/null || true
+t4_assert_eq "1" "$(git -C "$C6_GIT" stash list 2>/dev/null | grep -c . || true)" \
+  "P2-1 夹具自证：临时仓已有 1 条 stash（判据非空转；真仓全程未造 stash）"
+warn_n() { local n; n="$(printf '%s\n' "$1" | grep -oE 'warn=[0-9]+' | head -1 | grep -oE '[0-9]+' || true)"; printf '%s' "${n:-0}"; }
+c6_check() { # <NAO_STASH_ROOT> [check 参数...] · 在真仓跑（与 golden 同一条调用形态）
+  local root="$1"; shift
+  ( cd "$T4_ROOT" && env NAO_TERMINAL=tmux PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" \
+      NAO_STASH_ROOT="$root" bash .agents/scripts/nao-fleet.sh check "$@" 2>&1 )
+}
+OUT_STASHED="$(c6_check "$C6_GIT")"
+t4_assert_contains "$OUT_STASHED" "check: OK" "P2-1① 注入「有 stash 的临时仓」：摘要行仍在（正锚）"
+t4_assert_ne "$CHECK_GOLD_LINE" "$(printf '%s\n' "$OUT_STASHED" | head -1)" \
+  "P2-1① 该形态首行 ≠ golden（QA 实测的假红面 —— 现由注入规避，而非剥行）"
+t4_assert_eq "1" "$(( $(warn_n "$OUT_STASHED") - $(warn_n "$OUT_B1_TMUX_CHECK") ))" \
+  "P2-1② 相对基线（同形态无 stash 注入的那一轮）恰 +1 条 warn（闸门真在跑）"
+OUT_STASHED_V="$(c6_check "$C6_GIT" -v)"
+t4_assert_eq "1" "$(printf '%s\n' "$OUT_STASHED_V" | grep -c '^  ! git stash' || true)" \
+  "P2-1② warn 真出现时**断言仍能抓**：\`-v\` 恰 1 条 stash warn（未被本用例剥掉 ⇒ 非空转）"
+t4_assert_contains "$OUT_STASHED_V" "BR5" "P2-1② 该 warn 含 BR5 依据（与 cases/35 同文案契约）"
+OUT_NOSTASH="$(c6_check "$C6_STASH_NONE")"
+t4_assert_eq "$CHECK_GOLD_LINE" "$(printf '%s\n' "$OUT_NOSTASH" | head -1)" \
+  "P2-1③ 注入非仓根：首行 == golden（不受仓 stash 影响）"
+t4_assert_not_contains "$OUT_NOSTASH" "warn=" "P2-1③ 注入非仓根：无 warn= 字段（不新增噪音）"
+git -C "$C6_GIT" stash pop -q 2>/dev/null || true
+t4_assert_eq "0" "$(git -C "$C6_GIT" stash list 2>/dev/null | grep -c . || true)" \
+  "P2-1 夹具自证：pop 后临时仓无 stash"
+OUT_POPPED="$(c6_check "$C6_GIT")"
+t4_assert_not_contains "$OUT_POPPED" "warn=" "P2-1④ pop 掉 ⇒ warn 消失（双向，判据非恒真）"
+
 # >>> default-value-probe BEGIN（#96 P2：验「默认值」的探针段 —— 全仓唯一允许 unset 的位置）
 : > "$B1_LOG"
-out="$(cd "$T4_ROOT" && env -u NAO_TERMINAL PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" bash .agents/scripts/nao-fleet.sh check 2>&1)"; rc=$?
+out="$(cd "$T4_ROOT" && env -u NAO_TERMINAL PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" NAO_STASH_ROOT="$C6_STASH_NONE" bash .agents/scripts/nao-fleet.sh check 2>&1)"; rc=$?
 t4_assert_eq "0" "$rc" "P2① 未设 NAO_TERMINAL（默认）check rc=0"
 t4_assert_contains "$out" "生效后端 NAO_TERMINAL=herdr" \
   "P2① 未设 ⇒ herdr（默认已翻；B1 的「仅 herdr 模式加行」靠本行反向验）"
@@ -815,7 +868,7 @@ t4_assert_contains "$err" "NAO_TERMINAL=bogus 非法" "B1④ 非法后端回显�
 # P3-2（PM 拍板）：`NAO_TERMINAL=`（空串）= 未设（`:-` 是 shell 标准语义）⇒ **herdr** 默认（三期 P2 改写：
 #   空串仍不是错配，但默认已不是 tmux）；大小写敏感：`=TMUX` 仍 rc=2。两条一起钉住「空串放过、拼错不放」。
 # >>> default-value-probe BEGIN（#96 P2：空串探针 —— 全仓唯一允许空串的位置）
-out="$(cd "$T4_ROOT" && env NAO_TERMINAL= PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" bash .agents/scripts/nao-fleet.sh check 2>&1)"; rc=$?
+out="$(cd "$T4_ROOT" && env NAO_TERMINAL= PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" NAO_STASH_ROOT="$C6_STASH_NONE" bash .agents/scripts/nao-fleet.sh check 2>&1)"; rc=$?
 t4_assert_eq "0" "$rc" "P2① NAO_TERMINAL=（空串）= 未设 ⇒ 按 **herdr** 默认跑（rc=0）"
 t4_assert_contains "$out" "生效后端 NAO_TERMINAL=herdr" \
   "P2① 空串 ⇒ herdr（:- 语义；不是 tmux、也不是非法）"

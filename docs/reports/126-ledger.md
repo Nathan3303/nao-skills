@@ -24,6 +24,7 @@
 - `.agents/checklists/pm.md`（**只加指针，不加勾选项**）：既有「为文档 / 台账单开 PR」条追加「引用易变载体禁裸行号 ⇒ 条目 ID + as-of sha + 唯一 locator，细则只写一处 = `github-flow.md` §BR7」。条数保持 34/44（未动标题与 PM 卡 `34 项/44 项` 文案）。
 - `.agents/scripts/nao-fleet.sh`：新增 `check_stash_residue`（根 = `${NAO_STASH_ROOT:-$SKILLS_DIR}`；`[[ -e "$root/.git" ]]` 不满足即 `return 0`；`git -C "$root" stash list` 计数 + `-1 --format='%s'` 取最新一条消息；非空 ⇒ 一条 `  ! `，含条数、根（相对 `$SKILLS_DIR` 显示，等于根时显示 `.`）、`BR5`、`pop 或归口`、最新消息）+ `cmd_check` 内单点调用 `check_stash_residue || true`（放在「PR 模板（GitHub Flow）」节后，Git 卫生语境）。
 - 测试：新增 `cases/35`（36 断言、7 组）；`run.sh` 注册 `35`；`backends/herdr.txt` 登记 `35 shared —`；`tests/README.md` 计数同步（**共享 21→22 · 33→34 例**）+ 用例表增行；`cases/06` 扫描面硬编码 `33 → 34`（并点名 `#126 增 cases/35`）。
+- **P2-1（QA 复核 · 追加）**：`cases/06` 的全部真实仓 `check` 调用注入 `NAO_STASH_ROOT=<非仓目录>`（golden 面与「仓 stash」解耦）+ 新增 **10** 条双向断言（闸门真在跑，非空转；`cases/06` 断言总数 224 → **234**）；`cases/35` 补 `-u NAO_STASH_ROOT` 防宿主注入泄漏。详见「P2-1」节。
 
 ## 先红后绿（B2-2 AC③）
 
@@ -50,6 +51,28 @@
 2. **正例 `grep '| **T543** |'` = 1**：在 `929b51d` 成立，但**在 HEAD = 2** —— 因为 PM 自己的 B1 新增台账条目（`docs/tasks-state.md:417`「引用规范」）把 `| **T543** |` 写进了正文 ⇒ locator 被引述后自伤。已改用行首锚定形 `^| \*\*T543\*\* |`（HEAD 实测 = 1），并把「用前先 `grep -c` 自证」写进 BR7。
 3. **反例 `grep 'O2 转办 2026-12-31'` = 3**：HEAD 实测 = **5** 命中。仍是非唯一反例（结论不变），但数字按实测写。
 4. 附：`tests/README.md` 的 `共享 N / M 例` 汇总行在 `#124 增 case34` 那次只加了句子、没更新数字 ⇒ 改动前该行仍写 `共享 21 / 33 例`（当时事实 = 22/34）。本批已按 `--list` 与登记集实测同步为 **22 / 34**（现两者互证一致）。
+
+## P2-1（QA 复核 · 本批修复）：`cases/06` 真仓 stash 假红面
+
+**机理**（QA 实测，本批已复现）：`check_stash_residue` 读 `$SKILLS_DIR`（本仓）的 `git stash list`，而 `cases/06` 的 P2④ 在 `$T4_ROOT`（真仓）上钉「首行逐字 + 全输出 md5」⇒ 仓里只要有 1 条 stash（正是 BR5 自己鼓励的 `git stash push -m …` 形态），首行就多 `warn=1`、md5 也变 ⇒ **门禁假红**。
+
+**修法 = ①（注入非仓根）**，不是 ②（剥 `warn=` / `  ! ` 行）：
+- `cases/06` 的**全部真实仓 `check` 调用**（5 处：AC6 一处 + `B1_ENV`（herdr）+ 显式 `=tmux` golden + 未设探针 + 空串探针）一律注入 `NAO_STASH_ROOT=$C6_STASH_NONE`（`$T4_CACHE_DIR` 下的普通目录 = 该闸「不适用」分支）⇒ **golden 逐字不变、闸门语义不变、不改 `nao-fleet.sh`**。
+- 不取 ② 的理由：剥行会让「闸门坏掉 / 被删掉」同样静默通过 = **空转**（正是本仓反复打的假绿类型）。
+- 反空转（判据落在闸门本身，不与 golden 混）：新增「P2-1 双向」组 **10** 条断言 —— 用 `$T4_CACHE_DIR` 下的**临时 git 仓**造 1 条 stash 当旁证 ⇒ warn **真出现**（`-v` 恰 1 条、含 BR5；摘要相对基线**恰 +1**）；注入非仓根 / pop 掉 ⇒ 逐字回 golden。
+
+**双向证据（clone 实验 · 真仓 stash 零触碰）**：`git clone -b nao/M20261114-ledger . /tmp/…`（= 本批 HEAD，含 B2-2 闸门、不含本修复）后在 clone 里 `git stash push` 造 1 条，`T4_ROOT=<clone>` 跑 `cases/06`：
+- 修前（clone 内原版用例）：`RESULT: FAIL (2 项)` —— `P2④ 首行` 实际 `… · warn=1（-v 看详情）`；`P2④ md5` 实际 `3934a6cdb06480bcc8c71ee83590bbe3` ≠ golden `31b5978e…`。
+- 修后（同一 clone、stash 仍在）：`RESULT: PASS`，md5 复回 `31b5978e…`。
+- clone 内 `git stash pop` 后再跑：`RESULT: PASS`（无 stash ⇒ 逐字不变）。
+- 真仓 `git stash list` 全程 **0**（`cases/06` 的临时仓在 `$T4_CACHE_DIR/c6-git$$`，跑完随缓存清理）。
+
+**是否波及 `cases/28` / `cases/35`**：
+- `cases/28`：**结构性免疫** —— 全文无 `check` 调用（golden 面是 `status` 全文 / `ensure` blob / tmux 落地段），stash 闸不参与；实测在「有 stash 的 clone」上跑 `RESULT: PASS`。
+- `cases/35`：**免疫**（全部 `check` 都跑在夹具 `$FX` 且显式注入 `NAO_STASH_ROOT`）。另补一条**环境泄漏**硬化：`C35_BASE` 加 `-u NAO_STASH_ROOT`（否则宿主导出的注入根会污染 E1「默认根 = 夹具包根」这条判据）——实测旧版在 `NAO_STASH_ROOT=<有 stash 的仓>` 下 `E2` 红 1 条，新版同条件 PASS。
+- 观测（不阻断）：其他夹具用例（如 `cases/34`）的 `check` 未显式清 `NAO_STASH_ROOT`，若**宿主**导出该变量且指向有 stash 的仓会被污染；当前仓内无任何脚本导出它（只有 `cases/35` 逐次注入），故不构成假红面。
+
+**本轮门禁（P2-1 修复；未改 `nao-fleet.sh` ⇒ 不重跑双后端）**：`check` rc=0 ×2 逐字一致（`files=54` 不变）· `--case 06` PASS（`NOTE=2` 白名单）· `--case 28` PASS · `--case 35` PASS（`SKIP=0/DEGRADE=0`）· 真仓 `git stash list` = 0。
 
 ## 判据映射（AC）
 

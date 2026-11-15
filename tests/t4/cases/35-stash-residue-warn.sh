@@ -58,7 +58,9 @@ make_stash() { # $1=根 $2=消息：造一条 stash（工作区改动 ⇒ stash 
 }
 
 # 环境：清掉宿主继承的 HERDR_*（枚举清 —— 与 lib-backend / cases/34 同纪律；否则在 herdr pane 内跑会问真 server）
-C35_CLEAN=(env)
+#   `-u NAO_STASH_ROOT`：宿主若导出了注入根（外部演练/手工场景），一律摘掉 —— E 组验的是「**默认**根 =
+#   夹具包根（非仓）⇒ 零输出」，被外部注入盖掉就变成另一条判据（假红）。
+C35_CLEAN=(env -u NAO_STASH_ROOT)
 for _v in $(env | grep -o '^HERDR_[A-Z_]*' || true); do C35_CLEAN+=(-u "$_v"); done
 C35_BASE=("${C35_CLEAN[@]}" NAO_SKILLS="$FX" PI_CODING_AGENT_DIR="$AGENT_EMPTY" PATH="$BIN:$PATH")
 C35_ENV=("${C35_BASE[@]}" NAO_STASH_ROOT="$GITROOT")   # 注入根 = 自建仓
