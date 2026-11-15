@@ -73,3 +73,15 @@ git stash push -qm probe -- docs/tasks-state.md && bash tests/t4/run.sh --case 0
 - **P3-4** 宿主导出 `NAO_STASH_ROOT` 时只有 35 被硬化 ⇒ 实测 `cases/34` 红 3、`cases/18` 红 2（假红）。属你登记的低概率观察面；建议同法在 34/18（及 04/15）零成本加 `-u`。
 
 **回滚自证**：真实仓 3 文件 md5 与 RD 提交一致（`6b4a74c7…` / `0de29cec…` / `919e7c0a…`）、`git status` 空、stash 0、worktree 1；全部破坏性演练在 `/tmp` 副本内完成、副本 3 文件 md5 还原后复核并已删除。
+
+## 追加二 · 终检（as-of `2c057e1` · 只做两项，未重跑全量）
+
+**结论：GO。**
+
+1. **BR7 四要素齐备、按 as-of 复算成立**：`github-flow.md` BR7 行同时含规范句「**条目 ID + as-of `<sha>` + locator**」· `实测 @ f0f533b` · 「**引用前先 `grep -c` 自证**」· 「**引述 locator 自身也会自伤**」。复算（`git show f0f533b:docs/tasks-state.md`）：`grep -c 'O2 转办 2026-12-31'` = **4**（文本 4）· `| **T543** |` = **2**（文本 2）· 锚定 `^\| \*\*T543\*\* \|` = **1**；HEAD 同值 4/2/1。BR7 块仍 3 行、`grep -c as-of` = 3（未扩散）、`nao-fleet.sh` md5 `6b4a74c7…` 未动。
+2. **P3④ 单点覆盖完整、无作用域副作用**。
+   - 覆盖面穷举 `check` 调用点无遗漏：`t4_run_shim`（01/03/05/08）· `be_run_fleet`（09/15/19/20/21/22/23/24/27/29–33）· 直连 04（4 处）/15/18/34 · `06::lab_check` · 06 真实仓 5 处（注入非仓根）· 35（自建注入）。
+   - `cases/17:264` 的 `bash "$FLEET" check` 未硬化但**形态免疫**（只断言 rc≠0 + contains；warn 只加行不改 rc）—— export 态实测 PASS；28/25 跑的是 `ensure`，不含 check。
+   - **无新副作用**：全仓「故意设 `NAO_STASH_ROOT`」的只有 35 与 06，二者**直连脚本、不经两个 helper** ⇒ 自带注入不被摘掉（export 态 35 实测 PASS）。helper 的 `-u` 置于调用方 `"$@"` **之前** ⇒ 调用方仍可覆盖（当前无调用方覆盖）。
+   - 实测（宿主 `export NAO_STASH_ROOT=<含 1 条 stash 的临时仓>`）：修前 34 红 3 / 18 红 2 → 修后 **34 / 18 / 35 / 06 / 15 / 17 全 PASS**；真仓 stash 0、worktree 1、`check` rc=0 ×2 逐字一致。
+   - **P3（不必本批修）**：两个 helper 的 `-u` 与 04/15/18 的直连硬化**没有断言守卫**（全仓仅 06/34/35 文本提 stash）⇒ 未来被删不会被抓。建议下次动 34 时加一条「export 注入根 ⇒ `t4_run_shim` 输出无 `warn=`」即钉住 helper 单点。
