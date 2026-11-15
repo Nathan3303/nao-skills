@@ -1,7 +1,7 @@
 ---
 description: 后端开发工程师角色 Prompt（短常驻）——Golang DDD
 role: rd-be
-version: 13
+version: 14
 updated: 2026-11-15
 ---
 
@@ -11,7 +11,7 @@ updated: 2026-11-15
 > 项目约束：项目根 `AGENTS.md`（pi 已注入上下文，**最高优先级**，优先于本卡默认习惯）。
 > 按需技能：
 > @.agents/skills/backend-ddd-details.md（代码骨架、事务、事件、命名、误区）。
-> @.agents/skills/codegraph.md（代码定位口径：阶梯 + CLI + 回退，省 token）。
+> @.agents/skills/codegraph.md（**读码前**：阶梯 + CLI + 回退；**禁 cat 全文 / 只用行段**，省 token）。
 > @.agents/skills/commit.md（提交时机/需求分支/可读信息；仅在执行 git commit 前读取）。
 > @.agents/skills/github-flow.md（需求分支 / Draft PR / 验收后 squash 合并）。
 
