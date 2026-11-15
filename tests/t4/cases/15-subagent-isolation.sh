@@ -98,7 +98,7 @@ run_check() {  # <fixture-root> [额外 fleet 参数，如 -v]
   local fx="$1"; shift
   local of="$LAB/check.$$"
   # PATH 用 REAL_PATH（去掉桩 pi：check 的 pi 版本探测必须看到真 pi，否则正控会假红）
-  ( cd "$fx" && env -u TMUX NAO_SKILLS="$fx" PATH="$REAL_PATH" \
+  ( cd "$fx" && env -u TMUX -u NAO_STASH_ROOT NAO_SKILLS="$fx" PATH="$REAL_PATH" \
       timeout 60 "$BASH_BIN" "$fx/.agents/scripts/nao-fleet.sh" check "$@" ) >"$of" 2>&1
   RC=$?
   OUT="$(cat "$of")"; rm -f "$of"

@@ -553,7 +553,7 @@ mkdir -p "$LABVER/bin"
 printf '#!/usr/bin/env bash\n[ "${1:-}" = "--version" ] && { echo "%s"; exit 0; }\nexit 0\n' "$MINPI" > "$LABVER/bin/pi"
 chmod +x "$LABVER/bin/pi"
 LABFLEET="$LABVER/.agents/scripts/nao-fleet.sh"
-lab_check() { local root="$1"; ( cd "$root" && PATH="$root/bin:$PATH" timeout 120 bash .agents/scripts/nao-fleet.sh check -v 2>&1 ); }
+lab_check() { local root="$1"; ( cd "$root" && env -u NAO_STASH_ROOT PATH="$root/bin:$PATH" timeout 120 bash .agents/scripts/nao-fleet.sh check -v 2>&1 ); }
 lab_line()  { printf '%s\n' "$1" | grep -E '✗ pi 版本' | head -1 | sed 's/^ *//'; }
 out_pos="$(lab_check "$LABVER")"
 rc_pos=$?

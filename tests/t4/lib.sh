@@ -617,7 +617,9 @@ t4_run_shim() {
   local dir="$1"; shift
   local of ef
   of="$(mktemp)"; ef="$(mktemp)"
-  ( cd "$dir" && env "$@" timeout 60 bash .agents/scripts/nao-fleet.sh check ) >"$of" 2>"$ef"
+  # #126 P3④：统一摘掉宿主导出的 NAO_STASH_ROOT —— check 的 stash 闸在夹具里不适用；
+  #   不摘则宿主 `export NAO_STASH_ROOT=<有 stash 的仓>` 会让夹具 check 平白多一条 warn（假红）。
+  ( cd "$dir" && env -u NAO_STASH_ROOT "$@" timeout 60 bash .agents/scripts/nao-fleet.sh check ) >"$of" 2>"$ef"
   T4_RC=$?
   T4_OUT="$(cat "$of")"; T4_ERR="$(cat "$ef")"
   rm -f "$of" "$ef"

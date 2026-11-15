@@ -74,6 +74,30 @@
 
 **本轮门禁（P2-1 修复；未改 `nao-fleet.sh` ⇒ 不重跑双后端）**：`check` rc=0 ×2 逐字一致（`files=54` 不变）· `--case 06` PASS（`NOTE=2` 白名单）· `--case 28` PASS · `--case 35` PASS（`SKIP=0/DEGRADE=0`）· 真仓 `git stash list` = 0。
 
+## P2 / P3④（QA 点检 NO-GO · 本轮修复）
+
+### P2（BR7 范例数字被同批打掉）
+
+- 现象：`grep -c 'O2 转办 2026-12-31' docs/tasks-state.md` 现 = **4**，BR7 写的是 `= 5` —— PM 在 B1 修 P1 时改写了 `T543-O2` 行的来源列、删掉该短语（**数字随台账编辑漂移的实例本身**，正是 BR7 要防的）。
+- 取 **②**（数字 + as-of sha）：BR7 改写「实测 @ `f0f533b`：`grep -c 'O2 转办 2026-12-31'` = **4**、`| **T543** |` 因被正文引述 = **2**（数字随台账编辑漂移，**引用前先 `grep -c` 自证**；引述 locator 自身也会自伤）」。复核：`grep -c 'O2 转办 2026-12-31' docs/tasks-state.md` = 4 · `grep -c '^| \*\*T543\*\* |'` = 1 · `grep -c '| **T543** |'` = 2（均 @ `f0f533b`，与本条 as-of 一致）。
+- 为什么不取 ①（不写数字）：BR7 自己就要求「用前自证」，给一个可复算的 as-of 反例更一致；且保留「= 2 ≠ 1」的教训可读性。
+
+### P3④（宿主导出 `NAO_STASH_ROOT` 的污染面 · 零成本硬化）
+
+- 现象（QA 实测 + 本轮复现）：宿主 `export NAO_STASH_ROOT=<有 stash 的仓>` ⇒ **`cases/34` 红 3**（A2/B7/E4c：夹具 check 摘要平白多 `warn=`）、**`cases/18` 红 2**（I1/I2：codegraph warn 口径断言被 stash warn 搅乱）。
+- 做法（两个**单点** + 4 处直连；全部只加 `-u NAO_STASH_ROOT`，不动闸门语义、不动 `nao-fleet.sh`）：
+  - `tests/t4/lib.sh::t4_run_shim` ⇒ `env -u NAO_STASH_ROOT "$@"`（覆盖全部 shim 入口用例：01/03/04/05/09/10…）。
+  - `tests/t4/lib-backend.sh::be_run_fleet` 的 `envs` 数组 ⇒ 与既有 `-u TMUX…/-u HERDR_…` 同处加 `-u NAO_STASH_ROOT`（覆盖经 `be_*` 的夹具用例：09/15/19/20/21/22/23/24…）。
+  - 直连调用补 `-u`：`cases/04`（bwrap `-c` 串 / 代理黑洞 / strace / 未物化 4 处）、`cases/15`（T10 check）、`cases/18`（`run_cg_check`）、`cases/34`（`C34_CLEAN`）；`cases/06::lab_check` 同时补（其真实仓调用已在上轮显式**注入**非仓根）。
+  - `cases/35` 上一轮已补 `-u`（本轮不改）。
+- 双向证据（clone @ `f0f533b` 复现 → 真仓修后）：
+  - 修前（同一宿主 export）：`cases/34` = `RESULT: FAIL (3 项)`（A2「摘要无 `warn=`」/ B7「`warn=1`」/ E4c「无 `warn=`」）；`cases/18` = `RESULT: FAIL (2 项)`（I1 / I2）。
+  - 修后（真仓 + **同一** export）：`cases/34` PASS（`NOTE=1` 白名单）· `cases/18` PASS。
+  - 宿主 export 下**全 PASS 复核**：`04` / `05` / `06` / `09` / `15` / `18` / `21` / `28` / `34` / `35` 全部 `RESULT: PASS`。
+- 观测：`NAO_STASH_ROOT` 只由 `cases/35` 逐次注入；两个单点硬化后，宿主导出对夹具用例不再有影响面。
+
+**本轮门禁**：`check` rc=0 **×2 逐字一致**（`files=54` 不变）· `cases/06/18/28/34/35` 常规态各 PASS · 上述 export 态 10 例 PASS · `npm test`（默认 herdr，含 `check`+`tsc`）**rc=0**：34 例 · `SKIP=0 · DEGRADE=0 · NOTE=10`（全白名单）· 1935 PASS（较上轮 1925 +10 = P2-1 组）；登记集对账 `22+10+2+0 = 34`；真仓 `git stash list` = 0。
+
 ## 判据映射（AC）
 
 - B2-1：`grep -c 'as-of' .agents/skills/github-flow.md` = **3**（≥1）；新增块 = 3 行（≤4）；全仓仅 BR7 写全（`checklists/pm.md` 只指针、BR5 只一句指针）。
