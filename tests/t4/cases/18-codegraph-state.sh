@@ -238,6 +238,28 @@ t4_assert_eq "6" "$CARDS_WITH_CG" "G5 六张角色卡均含 codegraph 口径"
 BAD_CARDS="$(grep -rL "@.agents/skills/codegraph.md" $(grep -rl "codegraph" "$T4_ROOT/.agents/prompts") 2>/dev/null || true)"
 t4_assert_eq "" "$BAD_CARDS" "G5 每张提及 codegraph 的卡都给出单源指针（@.agents/skills/codegraph.md）"
 
+# G5 绝对形态（PM 2026-11-15 复核）：上面那条是**条件式**（先提及 codegraph 才受约束）——
+#   若卡把相关字样全删，条件式为假 ⇒ 静默通过。故补一条不依赖前件的绝对判据：
+#   除 uiux（纯设计角色）外，每张角色卡至少 1 处单源指针；删掉即红。
+cg_abs_missing() { # <prompts 目录>：输出缺少单源指针的卡文件名（uiux 豁免）
+  local dir="$1" f
+  for f in "$dir"/*.md; do
+    [ -f "$f" ] || continue
+    [ "$(basename "$f")" = "uiux-designer.md" ] && continue
+    grep -qF '@.agents/skills/codegraph.md' "$f" || printf '%s\n' "$(basename "$f")"
+  done
+}
+t4_assert_eq "" "$(cg_abs_missing "$T4_ROOT/.agents/prompts")" \
+  "G5 绝对形态：除 uiux 外每张角色卡至少 1 处单源指针（不以「先提及 codegraph」为前件）"
+# 负控：副本里删掉 frontend-developer 的全部指针 ⇒ 绝对判据必点名（证明删掉不能静默过）
+CG_NEG_DIR="$T4_CACHE_DIR/cg-neg-$$"
+mkdir -p "$CG_NEG_DIR"
+cp "$T4_ROOT"/.agents/prompts/*.md "$CG_NEG_DIR/"
+sed -i 's#@\.agents/skills/codegraph\.md#（已移除指针）#g' "$CG_NEG_DIR/frontend-developer.md"
+t4_assert_contains "$(cg_abs_missing "$CG_NEG_DIR")" "frontend-developer.md" \
+  "G5 绝对形态负控：删掉指针 ⇒ 必点名（不以提及为前件）"
+rm -rf "$CG_NEG_DIR"
+
 # ============================================================ H 真装类（能力门 → NOTE static-contract）
 if command -v codegraph >/dev/null 2>&1 && [ -d "$T4_ROOT/.codegraph" ]; then
   REAL_ST="$(cd "$T4_ROOT" && codegraph status 2>&1 || true)"

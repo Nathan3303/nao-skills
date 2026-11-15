@@ -21,21 +21,21 @@
 - S3 单源：`skills/codegraph.md` 保持唯一写全处；`prompts/{architecture-designer,backend-developer,infra-engineer,test-engineer,frontend-developer,product-manager}.md`、`checklists/{architecture-designer,rd-fe,qa}.md`、`skills/pm-operations.md` 全部改为 ≤1 行指针。6 张卡 bump：arch 14 / rd-be 13 / rd-fe 14 / infra 5 / pm 38 / qa 17。
 - S4 单源：`common/output-format.md` 保持唯一写全处；`checklists/{qa,rd-infra}.md` 改指针；`checklists/{comm-templates,pm}.md` 与 `common/intercom-protocol.md` 去掉重复列名（只留「三件套」+ 单源指针）。
 - `scripts/nao-fleet.sh`（E1）：`cmd_check` 的卡循环统计最大行数，新增 `  · 卡预算基线：最大 <卡> <N> 行 / 阈值 200 行（<pct>%）`；仅完整报告（`-v`）可见，默认 2–3 行摘要不变。超阈值原有逐卡 `!` 保留，rc 不变。
-- 测试：`cases/06` 新增 E1 组（13 条断言，含超阈值负控 + 移除实现变异自证）；`cases/18` 的 G5 判据由「每张卡必须含 `codegraph_explore`」改为「每张提及 codegraph 的卡必须指向单源 `@.agents/skills/codegraph.md`」——**判据保留、只换指向**（见下「关键决策」）。
+- 测试：`cases/06` 新增 E1 组（13 条断言，含超阈值负控 + 移除实现变异自证）；`cases/18` 的 G5 判据由「每张卡必须含 `codegraph_explore`」改为「每张提及 codegraph 的卡必须指向单源 `@.agents/skills/codegraph.md`」，并补一条**绝对形态**断言（除 uiux 外每卡至少 1 处单源指针，不以「先提及 codegraph」为前件）+ 删指针负控——**判据保留、只换指向且不留条件式后门**（见下「关键决策」）。
 - 报告：本文件。未动 `docs/tasks-state.md` / `docs/prds/*`（PM 面）。
 
 ## 关键决策
 
 - **S1 取「hotfix 走 PR 快速合并」**：项目红线是 main 只收 squash、禁直推 main；hotfix 若绕过 PR，事后补 Release/变更单会失去可审计的合并点。白名单真正放宽的是「等完整评审」的时效，而不是 PR 形式。因此标题与正文统一为「可直接推目标分支（非 main），合入 main 仍走 PR」。
-- **S3 未删 `cases/18` G5 判据**：该断言原本用「卡内必须出现 `codegraph_explore`」来防止「提及 codegraph 却不给入口」。S3 要求卡只留指针，故把断言改为「提及 codegraph 的卡必须含 `@.agents/skills/codegraph.md`」。判据仍然可执行、仍然会抓「裸提及无口径」，且技能单源仍由 G1 断言含 `codegraph_explore`。这不是削弱，而是把重复的工具名换成单源指针。
+- **S3 未删 `cases/18` G5 判据，且不留条件式后门**：该断言原本用「卡内必须出现 `codegraph_explore`」来防止「提及 codegraph 却不给入口」。S3 要求卡只留指针，故把断言改为「提及 codegraph 的卡必须含 `@.agents/skills/codegraph.md`」；但新判据以前件存在为条件（卡把 codegraph 字样全删即可规避）。PM 2026-11-15 复核指出后，本批补**绝对形态**：`cg_abs_missing` 对「除 uiux 外每张角色卡」断言至少 1 处单源指针，并加「删掉指针 ⇒ 必点名」负控。条件式判据保留（管「提及即须给去处」），绝对判据补「不许删到不管」；G1 仍钉技能含 `codegraph_explore`。这不是削弱，而是把重复的工具名换成单源指针并封住删除逃逸。
 - **E1 基线放在 `-v` 完整报告**：默认摘要被 `cases/06` 的 2 行 golden 钉住（`check: OK …` + codegraph 状态行），加行会破既有契约。基线属于诊断信息，放完整报告即可观测；`-v` 下同时保留各卡行数与最大占比。
 - **S2 连带改 `intercom-protocol` 一行**：不改则 arch 回执仍强制「ADR 路径」，与「本批不需要 ADR」冲突。该行只补条件，不改回执结构。
 
 ## AC 逐条（before → after）
 
 - **AC1（S1）**：`grep -n '不经 PR 流程' .agents/skills/commit.md`：1 行（`:40`）→ **0 行**；`grep -c 'hotfix/'`：1 → **1**（正文保持 PR 快速合并）。标题段与正文同口径，文中无互斥表述。
-- **AC2（S2）**：arch 清单 `grep -c '不适用'`：**0 → 1**；`grep -c '结构性决策'`：清单 **0 → 3**、卡 **0 → 5**。arch 卡 `version 13 → 14`、`updated 2026-10-28 → 2026-11-15`。
-- **AC3（S3）**：`grep -rn '原生入口' .agents --include=*.md | wc -l`：**22 → 5**；`grep -rl … | wc -l`：**11 → 1**（唯一文件 = `.agents/skills/codegraph.md`）。卡内该主题均 ≤1 行指针（逐卡 `grep -c 'codegraph\|三段阶梯'`：arch/rd-be/rd-fe/qa/infra 各 1；pm 的第 2 处是 `check` 的 codegraph 状态行，不是三段阶梯）。
+- **AC2（S2）**：arch 清单 `grep -c '不适用'`：**0 → 1**；`grep -c '结构性决策'`：清单 **0 → 3**、卡 **0 → 7**。arch 卡 `version 13 → 14`、`updated 2026-10-28 → 2026-11-15`。
+- **AC3（S3）**：`grep -rn '原生入口' .agents --include=*.md | wc -l`：**22 → 5**；`grep -rl … | wc -l`：**11 → 1**（唯一文件 = `.agents/skills/codegraph.md`）。卡内该主题均 ≤1 行指针（逐卡 `grep -c 'codegraph\|三段阶梯'`：arch / rd-be / rd-fe / qa（test-engineer）/ infra 各 1；pm 的第 2 处是 `check` 的 codegraph 状态行，不是三段阶梯）。`cases/18` 另有绝对形态断言：除 uiux 外每卡至少 1 处单源指针（删掉即红）。
 - **AC4（S4）**：`grep -rn '静默工作区' .agents --include=*.md | wc -l`：**7 → 2**；`grep -rl … | wc -l`：**6 → 1**（唯一文件 = `.agents/common/output-format.md`，两行为定义 + 反例）。`qa` / `rd-infra` 清单已改指针。
 - **AC5（E1）**：`grep -rn 'CARD_MAX_LINES' tests/ | grep -v fixtures | wc -l`：**0 → 3**；`CARD_MAX_LINES`：**200 → 200**。`check -v` 基线实测：`最大 product-manager.md 144 行 / 阈值 200 行（72.0%）`（改动前最大卡 145 行 / 72.5%；本批卡缩 1 行后为 144）。
   - **先红**：`NAO_TEST_TERMINAL=tmux bash tests/t4/run.sh --case 06` ⇒ `RESULT: FAIL`，E1 组 **6 FAIL**（基线行/最大值/阈值/占比/超阈值基线均缺失）。
