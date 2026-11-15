@@ -1535,6 +1535,31 @@ check_backend_premise() {
   return 0
 }
 
+# stash 出口机械闸（#126 B2-2 · github-flow BR5「批间收尾」）—— `check` 内**只读**告警，不改 rc。
+#   动机（2026-11-14 实测）：3 条滞留 stash（`v0.22.6` 压 7 天 · `M20261113` 压 7.5 小时且其 sha
+#   `0863ab2` 在台账 grep = 0）⇒ 合并后事实留在 stash 里 = 终态从未入库。
+#   根（可注入 · 测试纪律）：`NAO_STASH_ROOT` ⇒ 默认 `$SKILLS_DIR`；**根上无 `.git` ⇒ 零输出**，
+#   **不向上 walk**（临时目录落在父仓里也不会被误判；npm 安装态 / 非仓目录同样不适用）。
+#   只读契约：本闸**绝不** push/pop/apply/drop —— 滞留事实的处置权在提交人。
+#   输出：非空 ⇒ **一条** `  ! `（进摘要 warn=N、`-v` 可见，不逐条刷屏）；空 / 不适用 ⇒ 零输出。
+check_stash_residue() {
+  local root="${NAO_STASH_ROOT:-$SKILLS_DIR}" n newest label
+  [[ -e "$root/.git" ]] || return 0
+  command -v git >/dev/null 2>&1 || return 0
+  n="$(git -C "$root" stash list 2>/dev/null | grep -c . || true)"
+  [[ "$n" =~ ^[0-9]+$ ]] || return 0
+  (( n > 0 )) || return 0
+  newest="$(git -C "$root" stash list -1 --format='%s' 2>/dev/null || true)"
+  label="$root"
+  case "$root" in
+    "$SKILLS_DIR") label="." ;;
+    "$SKILLS_DIR"/*) label="${root#"$SKILLS_DIR"/}" ;;
+  esac
+  printf '  ! git stash 非空（%s 条 @ %s）：合并后事实可能滞留 stash（BR5）⇒ 下批首提交须 pop 或归口（本闸只读，不自动 pop；最新一条=%s）\n' \
+    "$n" "$label" "${newest:-<无消息>}"
+  return 0
+}
+
 # roles.yaml 缩进契约：角色 id 2 空格 / 字段 4 空格 / 禁 Tab（与 load_manifest 解析器同契约，独立报行号）
 check_roles_indent() {
   awk '
@@ -3050,6 +3075,9 @@ cmd_check() {
       fi
     fi
   fi
+
+  # #126 B2-2：stash 滞留机械闸（单点 · warn-only ⇒ 不改 rc；无 stash / 不适用 ⇒ 零输出）
+  check_stash_residue || true
 
   echo "== 按需技能 =="
   if [[ -d "$SKILLS_SUB" ]]; then
