@@ -586,6 +586,106 @@ t4_assert_ne "✗ pi 版本 $MINPI < 9.9.9" "$mut_line" "P3-2 变异: 「✗ 行
 t4_assert_eq "1" "$(printf '%s' "$out_mut" | grep -cF "$MINPI < $MINPI" || true)" "P3-2 变异: 「无矛盾文案」判据在变异上计数 1（断言非空转）"
 t4_assert_eq "1" "$(grep -cF -- "$MINPI" "$T4_ROOT/.agents/scripts/nao-fleet.sh" || true)" "全段结束后真脚本未被改动（阈值仍为 $MINPI，只在副本里变异）"
 
+# ---------------------------------------------------------------------------
+# E2-1（#132 · backlog sweep）：文档面 pi 下限「**漂移即红**」（替代「清空文档数字」）
+#   背景：`MIN_PI_VERSION` 是脚本单源，但文档面另有独立字面量（README / AGENTS /
+#     intercom-protocol / INSTALL / SKILL.md / pm-operations / ARCHITECTURE）。用户要看到门槛
+#     ⇒ **不删文档里的版本号**，改为「文档声明的下限 == 脚本单源，漂移即红」。
+#   判据两条（缺一即空转）：
+#     ① **声明式下限**（`pi … ≥X.Y.Z` / `pi 版本低于 X.Y.Z`，含 `pi（≥ X.Y.Z）` 这类变体）
+#        的取值必须 == 该根下脚本的 `MIN_PI_VERSION`；
+#     ② **完备性**：现行文档里任何「pi … x.y.z」提及都必须被**归类** —— 或本身是 ① 的下限
+#        声明，或该行带 **「截至」**（历史时点标注，如 codegraph.md 的「截至 pi 1.4.0 /
+#        pi-codegraph 0.1.0」），否则红（防有人换一种写法写漂移，而 ① 抓不到）。
+#   扫描面（fail-closed，不是白名单文件清单）：`git ls-files` 的 `*.md` 减去**历史时点类**
+#     `docs/{adr,prds,releases,reports,notes,designs,research}/` · `docs/tasks-*.md`（台账/归档视图）
+#     · `tests/`（夹具与负控样本，故意构造漂移）。历史类只按**目录类**豁免（不逐个列文件名）；
+#     现行面里唯一的 as-of 行按**行内「截至」标注**豁免（机制，不是硬编码文件名）。
+#   口径：包版本 pin（`pi install npm:@x.y.z`）不是 pi 自身的门槛 ⇒ 完备性正则排除前导 `@`。
+E2_DOC_PRUNE_RE='^(docs/(adr|prds|releases|reports|notes|designs|research)/|docs/tasks-[^/]*$|tests/)'
+E2_DOC_FILES="$(git -C "$T4_ROOT" ls-files -- '*.md' 2>/dev/null | grep -vE "$E2_DOC_PRUNE_RE" | sort || true)"
+e2_min_of() { sed -n 's/^MIN_PI_VERSION="\([^"]*\)"$/\1/p' "$1/.agents/scripts/nao-fleet.sh" 2>/dev/null | head -1; }
+e2_scan() { # <根> decl|loose → "<相对路径>:<行>\t<版本或行文>…"（只读，不改任何文件）
+  local root="$1" mode="$2" rel
+  [ -n "$E2_DOC_FILES" ] || return 0
+  printf '%s\n' "$E2_DOC_FILES" | while IFS= read -r rel; do
+    [ -n "$rel" ] && [ -f "$root/$rel" ] || continue
+    case "$mode" in
+      decl) awk -v F="$rel" '{ line=$0; rest=$0
+              while (match(rest, /pi[^0-9]*(≥|>=|低于)[[:space:]]*v?[0-9]+\.[0-9]+\.[0-9]+/)) {
+                m=substr(rest, RSTART, RLENGTH)
+                sub(/^.*(≥|>=|低于)[[:space:]]*v?/, "", m); gsub(/[[:space:]]/, "", m)
+                printf "%s:%d\t%s\t%s\n", F, NR, m, substr(line, 1, 100)
+                rest=substr(rest, RSTART + RLENGTH)
+              } }' "$root/$rel" ;;
+      loose) awk -v F="$rel" '/pi[^0-9@]*[0-9]+\.[0-9]+\.[0-9]+/ { printf "%s:%d\t%s\n", F, NR, substr($0, 1, 100) }' "$root/$rel" ;;
+    esac
+  done
+}
+e2_gate() { # <根> → 漂移/未归类报告（空 = 全绿；基准 = 该根下脚本的 MIN_PI_VERSION）
+  local root="$1" min hits decl loc text
+  min="$(e2_min_of "$root")"
+  [ -n "$min" ] || { printf '夹具：%s 取不到 MIN_PI_VERSION\n' "$root"; return 0; }
+  hits="$(e2_scan "$root" decl)"
+  decl="$(printf '%s\n' "$hits" | cut -f1)"
+  printf '%s\n' "$hits" | awk -F'\t' -v want="$min" '$1 != "" && $2 != want { printf "%s 声明 %s ≠ 单源 %s\n", $1, $2, want }'
+  e2_scan "$root" loose | while IFS=$'\t' read -r loc text; do
+    [ -n "$loc" ] || continue
+    printf '%s\n' "$decl" | grep -Fxq "$loc" && continue
+    case "$text" in *截至*) continue ;; esac
+    printf '%s 未归类：既非下限声明（≥/低于），也无「截至」历史时点标注 —— %s\n' "$loc" "$text"
+  done
+  return 0
+}
+e2_decl_files() { e2_scan "$1" decl | cut -f1 | sed 's/:[0-9]*$//' | sort -u; }
+
+t4_assert_match "$MINPI" '^[0-9]+\.[0-9]+\.[0-9]+$' "E2-1 基准：脚本单源 MIN_PI_VERSION = $MINPI（x.y.z）"
+t4_assert_eq "" "$(e2_gate "$T4_ROOT")" "E2-1① 现仓全绿：文档面 pi 下限 == 脚本单源（漂移 0 · 未归类 0）"
+E2_DECL_N="$(e2_scan "$T4_ROOT" decl | grep -c . || true)"
+t4_assert_ge 11 "$E2_DECL_N" "E2-1① 扫描非空转：现行文档面下限声明 ≥ 11 处（实测 $E2_DECL_N）"
+for _f in README.md AGENTS.md .agents/common/intercom-protocol.md docs/INSTALL.md \
+          .agents/skills/nao-fleet/SKILL.md .agents/skills/pm-operations.md docs/ARCHITECTURE.md; do
+  t4_assert_eq "yes" "$(e2_decl_files "$T4_ROOT" | grep -Fxq "$_f" && echo yes || echo no)" \
+    "E2-1① 声明面覆盖 $_f（删掉该处版本号也会被本行抓到）"
+done
+t4_assert_eq "0" "$(e2_decl_files "$T4_ROOT" | grep -c '^\.agents/skills/codegraph\.md$' || true)" \
+  "E2-1④ 历史时点不参与下限比对：codegraph.md 无「≥/低于」声明（as-of 行按「截至」标注归类）"
+t4_assert_eq "1" "$(e2_scan "$T4_ROOT" loose | grep -c '^\.agents/skills/codegraph\.md:21' || true)" \
+  "E2-1④ codegraph.md:21 确在完备性扫描面内（靠「截至」被放过 —— 机制承重，不是文件名白名单）"
+
+# 夹具：现行面副本（.agents + README + AGENTS + docs/{INSTALL,ARCHITECTURE}）—— 变异只在副本
+E2_LAB="$T4_CACHE_DIR/e2-1-lab-$$"
+mkdir -p "$E2_LAB/docs"
+cp -r "$T4_ROOT/.agents" "$E2_LAB/.agents" || t4_bad "E2-1 夹具：复制 .agents 失败"
+cp "$T4_ROOT/README.md" "$T4_ROOT/AGENTS.md" "$E2_LAB/" || t4_bad "E2-1 夹具：复制 README/AGENTS 失败"
+cp "$T4_ROOT/docs/INSTALL.md" "$T4_ROOT/docs/ARCHITECTURE.md" "$E2_LAB/docs/" || t4_bad "E2-1 夹具：复制 docs 失败"
+t4_assert_eq "" "$(e2_gate "$E2_LAB")" "E2-1 夹具自证：未变异副本同样全绿（基准不是只有真仓能过）"
+
+# ② 只把**脚本常量**抬到 9.9.9（副本）⇒ 必红，并点名文件:行
+cp -r "$E2_LAB" "$E2_LAB-b"
+sed -i 's/^MIN_PI_VERSION=.*$/MIN_PI_VERSION="9.9.9"/' "$E2_LAB-b/.agents/scripts/nao-fleet.sh"
+t4_assert_eq "9.9.9" "$(e2_min_of "$E2_LAB-b")" "E2-1② 变异锚点：副本单源已抬到 9.9.9"
+E2B_GATE="$(e2_gate "$E2_LAB-b")"
+t4_assert_match "$E2B_GATE" "^README\.md:[0-9]+ 声明 $MINPI ≠ 单源 9\.9\.9$" \
+  "E2-1② 脚本常量抬 9.9.9（副本）⇒ 断言必红并点名 README.md:行（文档未动）"
+t4_assert_match "$E2B_GATE" "^docs/INSTALL\.md:[0-9]+ 声明 $MINPI ≠ 单源 9\.9\.9$" \
+  "E2-1② 同轮点名另一处（不是只报首个就收工）"
+
+# ③ 只把**某文档**改成 9.9.9（副本）⇒ 同样必红（双向）
+cp -r "$E2_LAB" "$E2_LAB-c"
+sed -i "0,/pi ≥ $MINPI/s//pi ≥ 9.9.9/" "$E2_LAB-c/README.md"
+t4_assert_eq "1" "$(grep -c 'pi ≥ 9\.9\.9' "$E2_LAB-c/README.md" || true)" "E2-1③ 变异锚点：副本 README 已改为 9.9.9（脚本未动）"
+t4_assert_match "$(e2_gate "$E2_LAB-c")" "^README\.md:[0-9]+ 声明 9\.9\.9 ≠ 单源 $MINPI$" \
+  "E2-1③ 文档改 9.9.9（副本）⇒ 同样必红（脚本→文档、文档→脚本两个方向都能抓）"
+
+# ④ 摘掉 as-of 行的「截至」标注（副本）⇒ 变「未归类」必红（豁免靠标注，不靠文件名）
+cp -r "$E2_LAB" "$E2_LAB-d"
+sed -i "s/截至 pi $MINPI/pi $MINPI/" "$E2_LAB-d/.agents/skills/codegraph.md"
+t4_assert_eq "0" "$(grep -c '截至' "$E2_LAB-d/.agents/skills/codegraph.md" || true)" "E2-1④ 变异锚点：副本 codegraph.md 的「截至」已摘掉"
+t4_assert_contains "$(e2_gate "$E2_LAB-d")" "codegraph.md:21 未归类" \
+  "E2-1④ 摘掉「截至」⇒ 完备性判据必红（历史时点豁免是标注机制，不是按文件名硬编码）"
+rm -rf "$E2_LAB" "$E2_LAB-b" "$E2_LAB-c" "$E2_LAB-d"
+
 
 # ============================================================================
 # #96 二期 B1：门面 + 双实现并存的**机械保证**（BR1 六条里的四条静态面）
@@ -1178,6 +1278,89 @@ t4_assert_not_contains "$D2H_OUT" "NAO_TERMINAL=tmux" "D2⑩② 注入真覆盖�
 rm -f "$D2_MUT" "$D2_ADD"
 rm -rf "$D2B_DIR" "$D2H_CFG"
 rm -rf "$D2B_DIR"
+
+# ============================================================================
+# E2-2（#132 · backlog sweep）：两个 helper 单点的 `-u NAO_STASH_ROOT` 硬化**必须有断言守卫**
+#   缺口（#126 遗留观察 `M20261114-helper-u-guard`）：硬化只存在于 helper 文本里 ⇒ 谁删掉它
+#     都没有任何用例会红（宿主若导出注入根，夹具 check 会平白多一条 stash warn = 假红面复活）。
+#   判据：
+#     ① 宿主导出 `NAO_STASH_ROOT=<含 stash 的临时仓>` ⇒ **经 helper** 跑的 check 输出 **无 `warn=`**；
+#     ② 「被清掉」这条路径的**证据**：同一份 env **直连**脚本 ⇒ 摘要 `warn=1`（根注入本来有效、
+#        闸门活着）⇒ helper 下的 `warn=0` 只能来自 `-u` 清场，排除「闸门压根没触发」的另一种解释；
+#        再加一跳：副本删掉 helper 里的 `-u NAO_STASH_ROOT` ⇒ `warn=1` 回来（反空转：断言咬得住）。
+#   覆盖两个单点：`tests/t4/lib.sh::t4_run_shim`（shim 入口用例）·
+#     `tests/t4/lib-backend.sh::be_run_fleet`（`be_*` 夹具用例）。
+#   纪律：stash 只造在 `$C6_GIT`（`$T4_CACHE_DIR` 下的临时仓，P2-1 段已 git init）；真实仓零触碰。
+#   为什么落在 cases/06 而不是 34/35：本组验的是**测试基座**（helper）而非端前提/闸门语义，
+#     与紧邻的 D2「helper 单点清理清单」同主题；且 06 已有 C6_GIT 临时仓夹具，无需新开仓/跨用例耦合。
+E2_STASH_SENTINEL="e2-2-helper-stash"
+printf 'c\n' >> "$C6_GIT/f.txt"
+git -C "$C6_GIT" stash push -q -m "$E2_STASH_SENTINEL" -- f.txt 2>/dev/null \
+  || t4_bad "E2-2 夹具：临时仓 stash push 失败"
+t4_assert_eq "1" "$(git -C "$C6_GIT" stash list 2>/dev/null | grep -c . || true)" \
+  "E2-2 夹具自证：临时仓有 1 条 stash（判据非空转；真仓未造 stash）"
+# 阈值 0 = 立即 ⇒ 不依赖 stash 年龄（fresh stash 也必 warn），判据与时钟解耦
+E2_ENV=(NAO_SKILLS="$T4_ROOT" PI_CODING_AGENT_DIR="$T4_CACHE_DIR/b1-pi-empty" \
+  PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" NAO_TERMINAL=tmux NAO_STASH_WARN_HOURS=0)
+e2_warn_n() { printf '%s\n' "$1" | grep -c 'warn=' || true; }
+
+# ---- ① 直连旁证：注入根有效 ⇒ warn=1（这一条把「warn=0」的两种解释分开）----
+E2_DIRECT="$( cd "$T4_ROOT" && env NAO_STASH_ROOT="$C6_GIT" "${E2_ENV[@]}" \
+  bash .agents/scripts/nao-fleet.sh check 2>&1 )"
+t4_assert_contains "$E2_DIRECT" "warn=1" \
+  "E2-2② 旁证（直连脚本）：注入根 + 阈值 0 ⇒ 摘要 warn=1（闸门活着、根注入本来生效）"
+
+# ---- ② 经 t4_run_shim（宿主导出注入根）⇒ 无 warn=（被 `-u` 清掉）----
+e2_shim_via() { # <lib.sh 路径> → "RC=…" + 输出
+  env NAO_STASH_ROOT="$C6_GIT" "${E2_ENV[@]}" T4_CACHE_DIR="$T4_CACHE_DIR" bash -c '
+    source "$1" >/dev/null 2>&1; shift
+    t4_run_shim "$@"
+    printf "RC=%s\n" "$T4_RC"; printf "%s\n" "$T4_OUT"' _ "$1" "$T4_ROOT"
+}
+E2_SHIM_OUT="$(e2_shim_via "$T4_ROOT/tests/t4/lib.sh")"
+t4_assert_contains "$E2_SHIM_OUT" "RC=0" "E2-2① t4_run_shim：宿主导出注入根下 check rc=0"
+t4_assert_contains "$E2_SHIM_OUT" "check: OK" "E2-2① t4_run_shim：正锚在场（空输出不会空转通过）"
+t4_assert_eq "0" "$(e2_warn_n "$E2_SHIM_OUT")" \
+  "E2-2① t4_run_shim：输出无 warn=（宿主注入根已被清掉，不是被剥行）"
+
+# ---- ③ 经 be_run_fleet（宿主导出注入根）⇒ 无 warn= ----
+e2_be_via() { # <lib-backend.sh 路径> → "BE_RC=…" + 输出
+  env NAO_STASH_ROOT="$C6_GIT" "${E2_ENV[@]}" T4_CACHE_DIR="$T4_CACHE_DIR" \
+    BE_FLEET_NO_HANDLES=1 BE_FLEET_SCRIPT="$T4_ROOT/.agents/scripts/nao-fleet.sh" bash -c '
+    source "$1/tests/t4/lib.sh" >/dev/null 2>&1
+    source "$2" >/dev/null 2>&1
+    be_run_fleet "$1" check
+    printf "BE_RC=%s\n" "$BE_RC"; printf "%s\n" "$BE_OUT"' _ "$T4_ROOT" "$1"
+}
+E2_BE_OUT="$(e2_be_via "$T4_ROOT/tests/t4/lib-backend.sh")"
+t4_assert_contains "$E2_BE_OUT" "BE_RC=0" "E2-2① be_run_fleet：宿主导出注入根下 check rc=0"
+t4_assert_contains "$E2_BE_OUT" "check: OK" "E2-2① be_run_fleet：正锚在场（非空转）"
+t4_assert_eq "0" "$(e2_warn_n "$E2_BE_OUT")" \
+  "E2-2① be_run_fleet：输出无 warn=（宿主注入根已被清掉）"
+
+# ---- ④ 反空转：副本删掉 helper 的 `-u NAO_STASH_ROOT` ⇒ 同一断言必红（warn 回来）----
+E2_MUT="$T4_CACHE_DIR/e2-2-mut-$$"; mkdir -p "$E2_MUT"
+sed 's/env -u NAO_STASH_ROOT "\$@"/env "\$@"/' "$T4_ROOT/tests/t4/lib.sh" > "$E2_MUT/lib.sh"
+sed 's/-u NAO_STASH_ROOT)/)/' "$T4_ROOT/tests/t4/lib-backend.sh" > "$E2_MUT/lib-backend.sh"
+t4_assert_eq "0" "$(grep -c 'env -u NAO_STASH_ROOT' "$E2_MUT/lib.sh" || true)" \
+  "E2-2④ 变异锚点：副本 lib.sh 的 \`-u NAO_STASH_ROOT\` 已删"
+t4_assert_eq "0" "$(grep -c 'NAO_STASH_ROOT' "$E2_MUT/lib-backend.sh" || true)" \
+  "E2-2④ 变异锚点：副本 lib-backend.sh 的 \`-u NAO_STASH_ROOT\` 已删"
+t4_assert_eq "0" "$(bash -n "$E2_MUT/lib.sh" 2>&1; echo $?)" "E2-2④ 变异副本 lib.sh 语法仍合法（红点只能来自判据）"
+t4_assert_eq "0" "$(bash -n "$E2_MUT/lib-backend.sh" 2>&1; echo $?)" "E2-2④ 变异副本 lib-backend.sh 语法仍合法"
+E2_SHIM_BAD="$(e2_shim_via "$E2_MUT/lib.sh")"
+t4_assert_eq "1" "$(e2_warn_n "$E2_SHIM_BAD")" \
+  "E2-2④ 反空转（t4_run_shim）：删掉 \`-u\` ⇒ 注入根复活 ⇒ warn=1 ⇒ 上面的断言必红"
+E2_BE_BAD="$(e2_be_via "$E2_MUT/lib-backend.sh")"
+t4_assert_eq "1" "$(e2_warn_n "$E2_BE_BAD")" \
+  "E2-2④ 反空转（be_run_fleet）：删掉 \`-u\` ⇒ 注入根复活 ⇒ warn=1 ⇒ 上面的断言必红"
+
+# ---- ⑤ 静态单点：两个 helper 各恰 1 处（行为判据之外的定位面）----
+t4_assert_eq "1" "$(grep -c 'env -u NAO_STASH_ROOT' "$T4_ROOT/tests/t4/lib.sh" || true)" \
+  "E2-2⑤ 单点①：t4_run_shim 带 \`env -u NAO_STASH_ROOT\` 恰 1 处"
+t4_assert_eq "1" "$(grep -c -- '-u NAO_STASH_ROOT' "$T4_ROOT/tests/t4/lib-backend.sh" || true)" \
+  "E2-2⑤ 单点②：be_run_fleet 的 envs 带 \`-u NAO_STASH_ROOT\` 恰 1 处"
+rm -rf "$E2_MUT"
 
 rm -rf "$B1BIN" "$B1_LOG" "$NEG_B1A" "$NEG_B1B" "$NEG_B1C" "$NEG_B1D" "$NEG_LED"
 
