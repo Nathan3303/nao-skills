@@ -23,3 +23,4 @@
 | 2026-10-31 | [status 残留判定加仓维度（按 pane 工作目录）](2026-10-31-fleet-status-repo-attribution.md) | 残留判定按 pane cwd 归属 | 已接受（已落地 v0.20.2） |
 | 2026-11-01 | [下游仓自定义角色会话（`ensure --card`）](2026-11-01-downstream-card-sessions.md) | 卡参数线 + 前缀不相交 | 已接受（已落地 v0.21.0） |
 | 2026-11-13 | [herdr workspace 放置键与 scope 分离](2026-11-13-herdr-workspace-scope-key.md) | 未声明 scope 时放置键取仓 slug | 已接受（已落地 v0.23.1） |
+| 2026-11-16 | [文档站构建与交付管线（独立包 + 编译期注入 + 构建后部署）](2026-11-16-docs-site-pipeline.md) | 独立包 + 编译期注入 + 构建 | 已接受（待落地） |
