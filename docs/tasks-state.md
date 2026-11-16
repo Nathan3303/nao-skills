@@ -173,7 +173,7 @@
 - **门禁顺序**：① Issue 立项（✅ #136）→ ② `arch-designer` 评审（构建/依赖/部署边界 · ADR 条件化）→ ③ `uiux-designer` 移植规格 `docs/designs/2026-11-16-docs-site.md` → ④ `rd-fe` 骨架/主题/注入脚本 + PM 写 `content/**/*.md` → ⑤ `rd-infra` 改 `pages.yml` + 打包边界断言 → ⑥ `qa` → ⑦ 用户验收清单
 - **写作分工（防同目录冲突）**：PM 只写 `apps/document/content/**/*.md`；`rd-fe` 只写 `apps/document/.vitepress/**` 与 `components/**`
 - **DoD**：产物（站点 + 6 章内容 + 注入脚本 + `pages.yml` + 删 `site/`）· 验证（`docs:build` rc=0 · AC3 注入一致性 · AC7 零外链 · AC9 `npm pack` 不含 `apps/` · `check` + `npm test` rc=0）· 遗留三出口 · 交接（线上 URL + 后续只改 `content/*.md`）
-- **当前状态**：已立项并建分支；PRD 已随首个文档提交上分支；待 `arch-designer` / `uiux-designer` 回执
+- **当前状态**：分支 `feat/136-docs-site` 已建并 push（首提交 `3ad916d` = PRD + 索引 + 本台账）；`arch-designer-136`（架构评审 `docs/reports/136-arch-review.md`）与 `uiux-designer-136`（移植规格 `docs/designs/2026-11-16-docs-site.md`）已派发，等 `done(full)` 回执
 
 
 ### 本批 T544（生产侧旗标泄漏 · Issue #116 · 已合并 `6486221` · 发布 v0.23.3）
