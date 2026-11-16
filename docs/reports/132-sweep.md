@@ -7,7 +7,7 @@
 
 - **E2-1（pi 阈值一致性断言）**：文档里的版本号**一个没删**（用户要看到门槛），改为「文档声明的 `pi` 下限必须 == 脚本单源 `MIN_PI_VERSION`，漂移即红并点名 `文件:行`」。判据两条：① 下限声明取值比对 ② **完备性**（现行文档里任何「pi … x.y.z」提及都必须归类：或本身是下限声明，或该行带「截至」历史时点标注）。
 - **E2-2（`NAO_STASH_ROOT` helper 守卫）**：`t4_run_shim` / `be_run_fleet` 两个单点的 `-u NAO_STASH_ROOT` 现在有断言守卫 —— 宿主导出注入根时**经 helper** 跑的 `check` 无 `warn=`，并给出「**是被清掉**（而非闸门没触发）」的区分证据 + 删 `-u` 必红的反空转。
-- **门禁**：`check` rc=0 ×2 输出**逐字一致**（`files=54` 不变）· `cases/06` PASS（断言 **284 → 321**，其中 E2 新增 **36** 条）· `npm test` rc=0（34 例 = 32 PASS + 2 TMUX-ONLY · SKIP=0 · DEGRADE=0 · NOTE=10 白名单）· golden 未破（`P2④` 旧 md5 断言仍 PASS）。
+- **门禁**：`check` rc=0 ×2 输出**逐字一致**（`files=54` 不变）· `cases/06` PASS（断言 **284 → 322**，其中 E2 新增 **37** 条）· `npm test` rc=0（34 例 = 32 PASS + 2 TMUX-ONLY · SKIP=0 · DEGRADE=0 · NOTE=10 白名单）· golden 未破（`P2④` 旧 md5 断言仍 PASS）。
 - **判据订正（实测）**：PM 给的行号/口径有 2 处不成立 ——
   1. 扫描面不是 4 个文件：实测 **8 个文件 / 9 行 / 11 处**（多了 `.agents/skills/nao-fleet/SKILL.md:32`、`.agents/skills/pm-operations.md:14`、`docs/ARCHITECTURE.md:45`）；
   2. PM 给的正则形态 `pi ≥?\s*x.y.z` **抓不到** `docs/INSTALL.md` 的三处（`:12` 是 `pi（≥ 1.4.0）`、`:22` 是 `需 ≥ 1.4.0`、`:34` 是 `pi 版本低于 1.4.0`）⇒ 扫描器改用「`pi` … `≥`/`低于`」两条形态 + 完备性兜底。
@@ -15,7 +15,7 @@
 
 ## 变更清单（1 测试 + 本报告）
 
-- `tests/t4/cases/06-contract-guards.sh`：新增 **E2-1** 组（pi 阈值文档面一致性，20 条断言）与 **E2-2** 组（两 helper 的 `-u NAO_STASH_ROOT` 守卫，16 条断言）。
+- `tests/t4/cases/06-contract-guards.sh`：新增 **E2-1** 组（pi 阈值文档面一致性，21 条断言）与 **E2-2** 组（两 helper 的 `-u NAO_STASH_ROOT` 守卫，16 条断言）。
 - `docs/reports/132-sweep.md`：本报告。
 - 未改：`.agents/scripts/nao-fleet.sh`（`MIN_PI_VERSION` 仍 `1.4.0`，脚本内该字面量仍恰 1 处）· `tests/t4/lib.sh` / `lib-backend.sh`（两个 `-u` 硬化本就存在，本批只补守卫）· 任何文档的版本号。
 
@@ -45,7 +45,7 @@
 - `docs/ARCHITECTURE.md:45`
 - `docs/INSTALL.md:12`（`pi（≥ 1.4.0）`）、`:22`（`需 ≥ 1.4.0`）、`:34`（`pi 版本低于 1.4.0`）
 
-断言形态：现仓全绿 + 声明处数下限（≥11，防扫描器坏了空转）+ **逐文件覆盖**（上列 8 个文件各至少 1 处声明 —— 谁把某处版本号删了，那条会红）+ `codegraph.md` 不进声明面的显式断言。
+断言形态：现仓全绿 + **扫描面**非空（现行 `*.md` ≥ 40 个，防 `git ls-files` 取不到而无对象空转）+ 声明处数下限（≥11）+ **逐文件覆盖**（上列 8 个文件各至少 1 处声明 —— 谁把某处版本号删了，那条会红）+ `codegraph.md` 不进声明面的显式断言。
 
 **先红后绿（全部在 `$T4_CACHE_DIR` 的副本里，真仓零触碰）**
 
@@ -77,7 +77,7 @@
 ## 门禁（本机实测 · HEAD 起点 `ff630c7` + 本批工作树）
 
 - `bash .agents/scripts/nao-fleet.sh check` ⇒ rc=0 **×2 输出 `diff` 空**（`check: OK · roles=7 · files=54 · layout=main-row2`；`files` 不变，只加测试断言）。
-- `bash tests/t4/run.sh --case 06` ⇒ **RESULT: PASS**（`[PASS]` 284 → **321**；E2 新增 **36** 条，其余 1 条差为按环境条件触发的既有 `P2④` md5 断言）。baseline 对照 = 同仓 `git worktree add /tmp/base132 HEAD`（已删）。
+- `bash tests/t4/run.sh --case 06` ⇒ **RESULT: PASS**（`[PASS]` 284 → **322**；E2 新增 **37** 条 = E2-1 21 + E2-2 16，其余差额来自按环境条件触发的既有 `P2④` md5 断言）。baseline 对照 = 同仓 `git worktree add /tmp/base132 HEAD`（已删）。
 - `npm test` ⇒ **rc=0**（**34 例 = 32 PASS + 2 TMUX-ONLY**；`SKIP=0 · DEGRADE=0 · NOTE=10` 全白名单；后端索引对账 34 = `--list` 计数（共享 22 / 本后端专有 10 / tmux 专有 2 / PENDING 0）；`P2④` 旧 golden md5 断言仍 PASS）。
 - 双后端 `test:t4:full:dual` **未重跑**（按 PM 口径：只加断言、未改 `lib*` 与生产脚本；且 E2 两段都不依赖父后端 —— `NAO_TERMINAL=tmux` 显式给定、`be_run_fleet` 走 `NO_HANDLES` 直连）。
 - 真仓零副作用：`git stash list` = 0 · `git worktree list` = 1（仅主工作树）。

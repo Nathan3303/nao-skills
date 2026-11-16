@@ -640,6 +640,8 @@ e2_gate() { # <根> → 漂移/未归类报告（空 = 全绿；基准 = 该根�
 e2_decl_files() { e2_scan "$1" decl | cut -f1 | sed 's/:[0-9]*$//' | sort -u; }
 
 t4_assert_match "$MINPI" '^[0-9]+\.[0-9]+\.[0-9]+$' "E2-1 基准：脚本单源 MIN_PI_VERSION = $MINPI（x.y.z）"
+t4_assert_ge 40 "$(printf '%s\n' "$E2_DOC_FILES" | grep -c . || true)" \
+  "E2-1 扫描面非空：现行文档 *.md ≥ 40 个（git ls-files 可用；否则下面「全绿」会无对象空转）"
 t4_assert_eq "" "$(e2_gate "$T4_ROOT")" "E2-1① 现仓全绿：文档面 pi 下限 == 脚本单源（漂移 0 · 未归类 0）"
 E2_DECL_N="$(e2_scan "$T4_ROOT" decl | grep -c . || true)"
 t4_assert_ge 11 "$E2_DECL_N" "E2-1① 扫描非空转：现行文档面下限声明 ≥ 11 处（实测 $E2_DECL_N）"
