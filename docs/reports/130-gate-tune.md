@@ -31,7 +31,7 @@
 - **P3③ 逗号分隔**：选择「**支持逗号**」（不改注释、改实现）：`be_herdr_unset_args` 先把 `BE_HERDR_KEEP` 的逗号归一为空格再匹配；断言 `D2⑧b`（`HERDR_PANE_ID,HERDR_ENV` ⇒ 12 行且两个变量都真被豁免）。
 - **P3④ 不改（QA 已实证）**：`AC3h③` 理由确为「判为调用者自身」、移除 `BE_HERDR_KEEP` ⇒ 3 红 ⇒ 非假绿，仅记录。
 - **D2⑩ 「清理 → 注入」顺序面（末轮 B 方案 · QA 4 点判据）**：给足 `BE_BACKEND`/`BE_SESSION`/`BE_CFGROOT`（`be_fleet_handles` 真能注入）、**不设** `NO_HANDLES`，父进程注入 8 个**可识别**值（`HOSTLEAK-*`，不用 `1`/空值）。判据：① 8 值**逐条** `not_contains`（不数条数；ENV/SESSION/SOCKET_PATH 会被句柄覆盖 ⇒ 真正承重的是另 5 个）② 实验句柄**具体值**在场（`HERDR_ENV=1` / `HERDR_SESSION=d2h-fixture-sess` / `HERDR_SOCKET_PATH=$T4_CACHE_DIR/…/<sess>/herdr.sock` / `NAO_TERMINAL=herdr` —— 父给定 `tmux` ⇒ 只能来自注入，两种后端都承重）③ 输出无 `BE_BACKEND: 未绑定的变量`（上下文真初始化）。
-  变异三连（各还原复绿；`lib-backend.sh` md5 `36923955…` 逐字节一致）：删 `"${hu[@]}"` ⇒ **① 5 红 / ② 全绿**（① 测清理）；`be_fleet_handles` 返回空 ⇒ **② 5 红 / ① 全绿**（② 测注入）；把注入挪到清理之前 ⇒ **② 5 红**（`env` 把 `-u` 当命令，连 `BE_RC` 都不是 0）。
+  变异四连（各还原复绿；`lib-backend.sh` md5 `36923955…` 逐字节一致）：删 `"${hu[@]}"` ⇒ **① 5 红 / ② 全绿**（① 测清理）；`be_fleet_handles` 返回空 ⇒ **② 5 红 / ① 全绿**（② 测注入）；**乱序（handles 排到 `-u` 之前）⇒ loud-fail**（`env` 把 `-u` 当命令 ⇒ 子进程没起、`BE_RC≠0`；属大声失败，**不**证「顺序错但进程仍起」）；**语义顺序变异**（QA 口径：`env "${envs[@]}" env "${hu[@]}" timeout …`，注入后再清、进程正常起 `BE_RC=0`）⇒ **① 全绿 / ② 3 红**（`HERDR_ENV`/`SESSION`/`SOCKET_PATH` 被清；`NAO_TERMINAL` 不在 `hu` 里 ⇒ 仍绿）—— 两者是不同层，后者才是顺序面的正面证据（本批复跑确认）。
 - **判据订正（PM 自认 + 本批落地）**：`D2⑨` 的 `BE_FLEET_NO_HANDLES=1` **不承重** —— 该子例是 bare 子壳、无 BE 上下文 ⇒ `be_fleet_handles` 本就注不出句柄（注入面为空）；注释已写明「顺序面由 D2⑩ 覆盖」。
 
 ## D1：年龄取法与时点口径
