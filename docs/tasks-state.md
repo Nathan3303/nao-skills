@@ -166,6 +166,16 @@
 
 ## 需求分支 / PR / 发布（PM 维护）
 
+### 本批 T546（门户迁移 Vue 3 + TS，并建文档站 · Issue [#136](https://github.com/Nathan3303/nao-skills/issues/136) · 开工中 · 分支 `feat/136-docs-site`）
+
+- **PRD**：`docs/prds/2026-11-16-docs-site.md`（9 模块 · AC1–AC11）· **设计基线** `docs/designs/2026-11-13-portal-site.md`（T541，不重做视觉）
+- **用户拍板（2026-11-16 ask-me 两轮）**：① 门户**融合进文档站首页** ⇒ 取消 `apps/landing`，只留 `apps/document` 单 VitePress 站 ② 视觉以现有门户为准（1:1 保真 + token 映射）③ 角色卡章 = 解说自写 + **卡原文构建时注入**（禁手抄）④ 文档站只做面向用户的呈现，细则仍在 README / `docs/INSTALL.md`（指针）⑤ 同批交付（landing 先、document 后 ⇒ 合并为单站）⑥ 允许新增 devDeps，dev 与 CI 提到 Node 22，产物仍零 CDN / 无外链字体 / 无统计 ⑦ 插件章只讲内置 5 个（缺了失去什么能力）⑧ 内容须通俗易懂 ⑨ 设计产物验收模型 = **用户本人确认**（uiux 移植规格 PASS 后才派 `rd-fe`）
+- **门禁顺序**：① Issue 立项（✅ #136）→ ② `arch-designer` 评审（构建/依赖/部署边界 · ADR 条件化）→ ③ `uiux-designer` 移植规格 `docs/designs/2026-11-16-docs-site.md` → ④ `rd-fe` 骨架/主题/注入脚本 + PM 写 `content/**/*.md` → ⑤ `rd-infra` 改 `pages.yml` + 打包边界断言 → ⑥ `qa` → ⑦ 用户验收清单
+- **写作分工（防同目录冲突）**：PM 只写 `apps/document/content/**/*.md`；`rd-fe` 只写 `apps/document/.vitepress/**` 与 `components/**`
+- **DoD**：产物（站点 + 6 章内容 + 注入脚本 + `pages.yml` + 删 `site/`）· 验证（`docs:build` rc=0 · AC3 注入一致性 · AC7 零外链 · AC9 `npm pack` 不含 `apps/` · `check` + `npm test` rc=0）· 遗留三出口 · 交接（线上 URL + 后续只改 `content/*.md`）
+- **当前状态**：已立项并建分支；PRD 已随首个文档提交上分支；待 `arch-designer` / `uiux-designer` 回执
+
+
 ### 本批 T544（生产侧旗标泄漏 · Issue #116 · 已合并 `6486221` · 发布 v0.23.3）
 
 - 通道：`fix`（3 字段：现象 / 复现 / 回退）· 分支 `fix/116-herdr-flag-leak` · PATCH 0.23.3
