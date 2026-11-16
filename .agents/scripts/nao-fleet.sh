@@ -1538,25 +1538,62 @@ check_backend_premise() {
 # stash 出口机械闸（#126 B2-2 · github-flow BR5「批间收尾」）—— `check` 内**只读**告警，不改 rc。
 #   动机（2026-11-14 实测）：3 条滞留 stash（`v0.22.6` 压 7 天 · `M20261113` 压 7.5 小时且其 sha
 #   `0863ab2` 在台账 grep = 0）⇒ 合并后事实留在 stash 里 = 终态从未入库。
+#   #130 D1（**年龄阈值**）：BR5 的合法用法是「合并后事实 ⇒ 带标签 stash、随下批首提交回填」——
+#   当天回填属正常节奏，而「任何 stash 都 warn」会让闸门自己变成常驻噪声（连撞两批）。故只对
+#   **最老一条**年龄 > `NAO_STASH_WARN_HOURS`（默认 6 小时）的才 warn；当天回填**静默**。
+#   年龄取法：`stash list --format='%ct'` 的**最小值**（= stash 提交的 committer date）。
+#     为什么不取 reflog 时间：`%ct` 是「事实被切出来」的时刻 —— `git stash store` 把**旧** stash 导入
+#     本仓时它保持原龄，而 reflog 时间会被刷成 now（旧事实被当成新的、永久静默）；且 `%ct` 一次
+#     `stash list --format` 即可取值，不必逐条 reflog 子进程。
+#   阈值取值口径：正整数 = 小时数；`0` = 立即（关闭年龄豁免，任何 stash 都 warn）；非数字 / 负数 = **非法**
+#     ⇒ 按 `0` 处理（配置坏了不得把闸门静默调松，宁可多报），并在文案里点名「取值无效」。
+#   时间不可判定（`%ct` 取不到 / 非数字）或**未来时间戳**（age < 0，时钟回拨 / 手工造未来日期）：**不 warn**
+#     （时间不可信时不误报；也不得因算术把闸门弄崩）。
 #   根（可注入 · 测试纪律）：`NAO_STASH_ROOT` ⇒ 默认 `$SKILLS_DIR`；**根上无 `.git` ⇒ 零输出**，
 #   **不向上 walk**（临时目录落在父仓里也不会被误判；npm 安装态 / 非仓目录同样不适用）。
 #   只读契约：本闸**绝不** push/pop/apply/drop —— 滞留事实的处置权在提交人。
-#   输出：非空 ⇒ **一条** `  ! `（进摘要 warn=N、`-v` 可见，不逐条刷屏）；空 / 不适用 ⇒ 零输出。
+#   输出：超阈值 ⇒ **一条** `  ! `（进摘要 warn=N、`-v` 可见，不逐条刷屏）；空 / 不适用 / 未超阈值 ⇒ 零输出。
 check_stash_residue() {
-  local root="${NAO_STASH_ROOT:-$SKILLS_DIR}" n newest label
+  local root="${NAO_STASH_ROOT:-$SKILLS_DIR}" n newest oldest now hours threshold age age_h label hint
   [[ -e "$root/.git" ]] || return 0
   command -v git >/dev/null 2>&1 || return 0
   n="$(git -C "$root" stash list 2>/dev/null | grep -c . || true)"
   [[ "$n" =~ ^[0-9]+$ ]] || return 0
   (( n > 0 )) || return 0
+  hours="${NAO_STASH_WARN_HOURS:-6}"
+  hint=""
+  if [[ "$hours" =~ ^[0-9]+$ ]]; then
+    # 前导零必须按**十进制**解释（#130 返修 P2-1）：`08`/`0008` 在算术里会被当八进制 ⇒
+    #   `$(( hours * 3600 ))` 直接报「值对于底数而言过大」⇒ check rc=1 且无汇总行（门禁自己崩）；
+    #   `010` 则会静默按 8 生效、文案却写 010。凡放行前导零，必须先 `10#`。
+    hours=$((10#$hours))
+  else
+    hint="（NAO_STASH_WARN_HOURS 取值无效 ⇒ 按立即处理）"; hours=0
+  fi
+  threshold=$(( hours * 3600 ))
+  # 最老一条 = 最小 `%ct`；取不到（非数字）⇒ 时间不可判定 ⇒ 不 warn，但必须留**降级注记**
+  #   （#130 返修 P2-2）：否则「能力缺失」与「无 stash」在输出上不可区分 ⇒ 闸门可被永久且无痕静默。
+  #   注记只走 `  ·`（只在 -v 报告里出现），不计 warn、不改 rc。
+  oldest="$(git -C "$root" stash list --format='%ct' 2>/dev/null | grep -E '^[0-9]+$' | sort -n | head -1 || true)"
+  if [[ ! "$oldest" =~ ^[0-9]+$ ]]; then
+    printf '  · 暂存滞留检查跳过：`stash list --format=%%ct` 不可解析（%s 条 stash 仍在）⇒ 无法做年龄判定（未 warn，也未据此判「无滞留」）\n' "$n"
+    return 0
+  fi
+  now="$(date +%s 2>/dev/null || true)"
+  [[ "$now" =~ ^[0-9]+$ ]] || return 0
+  age=$(( now - oldest ))
+  (( age < 0 )) && return 0                       # 未来时间戳 ⇒ 不误报（别炸）
+  # hours=0（显式 0 或非法值）⇒ 立即：任何年龄都 warn（fresh stash 的 age 可能 0，故不能靠 `> 0` 判）
+  (( hours > 0 )) && { (( age > threshold )) || return 0; }
+  age_h=$(( age / 3600 ))
   newest="$(git -C "$root" stash list -1 --format='%s' 2>/dev/null || true)"
   label="$root"
   case "$root" in
     "$SKILLS_DIR") label="." ;;
     "$SKILLS_DIR"/*) label="${root#"$SKILLS_DIR"/}" ;;
   esac
-  printf '  ! git stash 非空（%s 条 @ %s）：合并后事实可能滞留 stash（BR5）⇒ 下批首提交须 pop 或归口（本闸只读，不自动 pop；最新一条=%s）\n' \
-    "$n" "$label" "${newest:-<无消息>}"
+  printf '  ! git stash 非空（%s 条 @ %s，最老一条 %s 小时前 > 阈值 %s 小时%s）：合并后事实可能滞留 stash（BR5）⇒ 下批首提交须 pop 或归口（本闸只读，不自动 pop；最新一条=%s）\n' \
+    "$n" "$label" "$age_h" "$hours" "$hint" "${newest:-<无消息>}"
   return 0
 }
 

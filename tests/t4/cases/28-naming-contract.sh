@@ -801,8 +801,7 @@ t4_info "P2① 双 golden：tmux=$GOLD_TMUX_MD5 · herdr=$GOLD_HERDR_MD5 · 未�
 #   （不用 run_in：它在 P2 起恒注入 NAO_TERMINAL=tmux；本负控要的正是「未设」）
 #   herdr 宿主会把生产 HERDR_* 带进夹具 ⇒ 必须显式清成「tmux 场」基线：否则「未设」会真的走 herdr
 #   （打到生产 server、rc=0，负控变假绿 —— #111 同类渗漏）。
-TMUX_FIELD_ENV=(env -u TMUX -u TMUX_PANE -u HERDR_ENV -u HERDR_SESSION -u HERDR_SOCKET_PATH -u HERDR_SOCKET_FILE
-  -u HERDR_PANE_ID -u HERDR_WORKSPACE_ID -u HERDR_TAB_ID -u HERDR_BIN_PATH)
+TMUX_FIELD_ENV=(env -u TMUX -u TMUX_PANE "${T4_HERDR_UNSET_ARGS[@]}")   # HERDR_* 清单单源在 lib.sh（#130 D2）
 t4_run_in_dir "$LAB" "${TMUX_FIELD_ENV[@]}" -u NAO_TERMINAL TMUX="$SOCK_B,0,0" TMUX_PANE="$CALLER_B" \
   TMUX_TMPDIR="$SOCK_B_DIR" NAO_SKILLS="$LAB" PI_CODING_AGENT_DIR="$LAB/pi-empty" \
   NAO_TASKS_STATE="$TASKS_FIX" PATH="$LAB/bin:$PATH" \
@@ -2205,10 +2204,10 @@ t4_assert_eq "3" "$T4_RC" "B3⑧ 错误根的 HERDR_SOCKET_PATH ⇒ rc=3（stale
 t4_assert_contains "$T4_ERR_ANSI" "不在目标根" "B3⑧ rc=3：拒绝理由点名目标根"
 t4_assert_eq "0" "$(b3_calls "^herdr .*session (stop|delete)( |$)")" "B3⑧ rc=3：零拆场动作"
 # tmux 侧守卫逐字不变：cleanup 无 -S ⇒ rc=2；--session 误用 ⇒ rc=2
-t4_run_in_dir "$B3_LAB" env -u HERDR_ENV -u HERDR_SESSION NAO_TERMINAL=tmux PATH="$B3_BIN:$PATH" \
+t4_run_in_dir "$B3_LAB" env "${T4_HERDR_UNSET_ARGS[@]}" NAO_TERMINAL=tmux PATH="$B3_BIN:$PATH" \
   timeout 60 "$BASH_BIN" "$FLEET" cleanup
 t4_assert_eq "2" "$T4_RC" "B3⑧ tmux cleanup 缺 -S ⇒ rc=2（既有守卫零回归）"
-t4_run_in_dir "$B3_LAB" env -u HERDR_ENV -u HERDR_SESSION NAO_TERMINAL=tmux PATH="$B3_BIN:$PATH" \
+t4_run_in_dir "$B3_LAB" env "${T4_HERDR_UNSET_ARGS[@]}" NAO_TERMINAL=tmux PATH="$B3_BIN:$PATH" \
   timeout 60 "$BASH_BIN" "$FLEET" cleanup --session nao-x
 t4_assert_eq "2" "$T4_RC" "B3⑧ tmux cleanup 误用 --session ⇒ rc=2（按后端分派，不静默吞参）"
 

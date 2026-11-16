@@ -700,6 +700,29 @@ be_fleet_handles() { # 打印运行生产脚本所需的后端句柄（每行 VA
   esac
 }
 
+# HERDR_* 清理参数（单点派生 · #130 D2）：默认 = lib.sh 单源**全集**，减去调用方**显式声明**要故意注入的变量。
+#   为什么需要豁免：单源全集清（防宿主渗漏）若一刀切，会把用例**故意**给的 HERDR_* 一起磨掉 ——
+#   实测：cases/09 AC3h③（HERDR_PANE_ID = 目标 pane，验「自 pane 必须保守拒」）在无豁免时会变成
+#   「目标 pane 真被回收」的假红。豁免必须**显式**（默认安全侧 = 全清），写法：
+#     `BE_HERDR_KEEP="HERDR_PANE_ID" HERDR_PANE_ID=<值> fx_fleet …`（空格/逗号分隔均可）
+#   注：不用数组 —— bash 的「函数前缀赋值」对数组会退化成字符串 `(A B)`，匹配不上变量名。
+#   分隔符：空格或逗号均可（#130 返修 P3③：注释与实现必须一致 —— 原先注释写「逗号」但只按空格匹配）。
+#   输出：每行一个 argv（`-u` / 变量名 交替），供 `$(…)` 词分展开。
+be_herdr_unset_args() {
+  [ "${#T4_HERDR_ENV_VARS[@]}" -gt 0 ] \
+    || { be_guard_fail "HERDR_* 清理参数派生：需要 lib.sh（T4_HERDR_ENV_VARS 单源未定义 ⇒ 宁可 fail loud 也不带生产句柄跑）"; return 1; }
+  local -a hu=()
+  local _k keep keep_list
+  keep_list=" ${BE_HERDR_KEEP:-} "          # `set -u` 下必须 `:-`（未设时不能直接做模式替换）
+  keep_list="${keep_list//,/ }"             # 逗号归一为空格
+  for _k in "${T4_HERDR_ENV_VARS[@]}"; do
+    keep=0
+    case "$keep_list" in *" $_k "*) keep=1 ;; esac
+    (( keep )) || hu+=(-u "$_k")
+  done
+  printf '%s\n' "${hu[@]}"
+}
+
 # 跑生产脚本（本用例的后端句柄由 be_fleet_handles 注入；调用方只补业务 env）。
 # 结果：BE_RC / BE_OUT / BE_ERR / BE_OUT_ANSI / BE_ERR_ANSI（ANSI 已去色）。
 be_run_fleet() { # <cwd 目录> <args...>
@@ -707,8 +730,13 @@ be_run_fleet() { # <cwd 目录> <args...>
   [ -n "$dir" ] || { be_guard_fail "be_run_fleet 缺工作目录"; return 1; }
   command -v t4_run_in_dir >/dev/null 2>&1 || { be_guard_fail "be_run_fleet 需要 lib.sh（t4_run_in_dir）"; return 1; }
   local script="${BE_FLEET_SCRIPT:-${BE_FLEET_ROOT:-$BE_LAB}/.agents/scripts/nao-fleet.sh}"
+  # HERDR_* 清除清单的**单源**在 lib.sh（T4_HERDR_ENV_VARS）—— 调用点不得再手写 `-u` + 变量名（#130 D2）
+  local -a hu
+  hu=($(be_herdr_unset_args)) || { be_guard_fail "be_run_fleet：清理参数派生失败（见上）"; return 1; }
+  [ "${#hu[@]}" -gt 0 ] \
+    || { be_guard_fail "be_run_fleet：清理参数为空 ⇒ 不带生产句柄跑（宁可 fail loud）"; return 1; }
   local -a envs=(env -u TMUX -u TMUX_PANE -u TMUX_TMPDIR
-                 -u HERDR_ENV -u HERDR_SESSION -u HERDR_SOCKET_PATH -u HERDR_SOCKET_FILE
+                 "${hu[@]}"
                  -u NAO_STASH_ROOT)   # #126 P3④：夹具 check 不该读到宿主导出的 stash 根
   local kv
   # BE_FLEET_NO_HANDLES=1：不注入后端句柄（负控用：验「不在终端内」时入口闸门必须 exit 3）

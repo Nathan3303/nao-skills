@@ -704,7 +704,7 @@ B1_ENV=(env NAO_TERMINAL=herdr HERDR_ENV=1 HERDR_SESSION=nao-b1-check \
 #   #111：必须**显式清掉**调用方（herdr pane）继承的 HERDR_SOCKET_PATH / HERDR_SESSION ——
 #   否则生产 socket 会被带进夹具（不在 "$B1_CFG" 目标根下 ⇒ cleanup 按「stale/外贸 env」拒绝，rc=3），
 #   夹具就从「空现场幂等」变成「拒绝执行」，假红/假绿都不再反映被测逻辑。
-B3_CLEAN_ENV=(env -u HERDR_SOCKET_PATH -u HERDR_SESSION NAO_TERMINAL=herdr XDG_CONFIG_HOME="$B1_CFG" \
+B3_CLEAN_ENV=(env "${T4_HERDR_UNSET_ARGS[@]}" NAO_TERMINAL=herdr XDG_CONFIG_HOME="$B1_CFG" \
   PI_CODING_AGENT_DIR="$T4_CACHE_DIR/b1-pi-empty" PATH="$B1BIN:$PATH")
 
 : > "$B1_LOG"
@@ -745,6 +745,8 @@ fi
 #   反空转（双向 · 判据落在闸门本身，不与 golden 混）：
 #     有 stash（临时仓旁证）⇒ warn 真出现（与 golden 首行**不同**，即 QA 实测的假红面）；
 #     注入非仓根 / pop 掉 ⇒ 逐字回 golden。全程只碰 `$T4_CACHE_DIR` 下的临时仓（真仓 stash 零触碰）。
+#   #130 D1：stash 闸加了**年龄阈值**（默认 6h）⇒ 本段的旁证 stash 必须造固有**8 小时前**，否则
+#     「刚生成 = 当天回填」分支会静默（那不是闸门坏了，而是判据已按设计收紧）。
 C6_GIT="$T4_CACHE_DIR/c6-git$$"
 mkdir -p "$C6_GIT"
 git -C "$C6_GIT" init -q 2>/dev/null \
@@ -753,10 +755,18 @@ git -C "$C6_GIT" init -q 2>/dev/null \
   && printf 'a\n' > "$C6_GIT/f.txt" \
   && git -C "$C6_GIT" add f.txt \
   && git -C "$C6_GIT" commit -qm init
+C6_STASH_ENV=(env)   # 造 8 小时前的 stash 提交（`git stash push` 的提交时间受这两项影响）
+if C6_OLD="$(date -d '8 hours ago' -R 2>/dev/null)" && [ -n "$C6_OLD" ]; then
+  C6_STASH_ENV+=(GIT_COMMITTER_DATE="$C6_OLD" GIT_AUTHOR_DATE="$C6_OLD")
+else
+  t4_bad "P2-1 夹具：本机 date 不支持 -d『8 hours ago』⇒ 无法造超阈值 stash（年龄判据无法演练）"
+fi
 printf 'b\n' >> "$C6_GIT/f.txt"
-git -C "$C6_GIT" stash push -q -m "c6: sentinel-stash" -- f.txt 2>/dev/null || true
+"${C6_STASH_ENV[@]}" git -C "$C6_GIT" stash push -q -m "c6: sentinel-stash" -- f.txt 2>/dev/null || true
 t4_assert_eq "1" "$(git -C "$C6_GIT" stash list 2>/dev/null | grep -c . || true)" \
   "P2-1 夹具自证：临时仓已有 1 条 stash（判据非空转；真仓全程未造 stash）"
+t4_assert_eq "1" "$(git -C "$C6_GIT" stash list --format='%ct' | awk -v now="$(date +%s)" '{print (now-$1>=7*3600)?1:0}' | head -1)" \
+  "P2-1 夹具自证：该 stash 的 %ct 在 7 小时前以上（#130 D1 年龄阈值下仍会 warn）"
 warn_n() { local n; n="$(printf '%s\n' "$1" | grep -oE 'warn=[0-9]+' | head -1 | grep -oE '[0-9]+' || true)"; printf '%s' "${n:-0}"; }
 c6_check() { # <NAO_STASH_ROOT> [check 参数...] · 在真仓跑（与 golden 同一条调用形态）
   local root="$1"; shift
@@ -1051,6 +1061,123 @@ E1_MUT_HIT=0
 if printf '%s\n' "$E1_MUT_OUT" | grep -qF '卡预算基线'; then E1_MUT_HIT=1; fi
 t4_assert_eq "0" "$E1_MUT_HIT" "E1 变异：移除基线实现 ⇒ 同一判据取值为 0（断言非空转）"
 rm -rf "$E1_LAB" "$E1_MUT" "$E1_BIN"
+
+# ---- D2（#130 D2 = T543-O2）：HERDR_* 清除清单**单源化**（枚举集合只增不减 + 调用点零手写）----
+#   判据形态：单源 = `tests/t4/lib.sh::T4_HERDR_ENV_VARS`（变量名数组）；调用点只用派生数组
+#   `T4_HERDR_UNSET_ARGS`（= `env -u <名>` 参数）。
+#   为何要 golden 钉死：收敛的硬约束是「枚举集合**不得减少**」—— 单源化时顺手漏一个变量，
+#   后果是「宿主 HERDR_* 渗进夹具」的**假绿**（不报错、只让断言失真），没有报错面可接。
+#   golden = 收敛前（#130 开工时）四处手写清单的**并集**：
+#     lib-backend `envs` (ENV/SESSION/SOCKET_PATH/SOCKET_FILE) ∪ cases/06 `B3_CLEAN_ENV`
+#     (SOCKET_PATH/SESSION) ∪ cases/28 `TMUX_FIELD_ENV` (+PANE_ID/WORKSPACE_ID/TAB_ID/BIN_PATH)
+#     ∪ cases/28 两处直连 (ENV/SESSION) = 8 个。复核命令见 docs/reports/130-gate-tune.md。
+D2_LIB="$T4_ROOT/tests/t4/lib.sh"
+D2_GOLD="HERDR_BIN_PATH HERDR_ENV HERDR_PANE_ID HERDR_SESSION HERDR_SOCKET_FILE HERDR_SOCKET_PATH HERDR_TAB_ID HERDR_WORKSPACE_ID"
+d2_vars()     { sed -n '/^T4_HERDR_ENV_VARS=(/,/)/p' "$1" | grep -oE '\bHERDR_[A-Z_]+' | sort -u; }
+d2_vars_str() { d2_vars "$1" | tr '\n' ' ' | sed 's/ $//'; }
+d2_refs()     { grep -cE 'T4_HERDR_UNSET_ARG[S]|T4_HERDR_ENV_VAR[S]' "$1" || true; }
+d2_args_n()   { ( T4_CACHE_DIR="$T4_CACHE_DIR" bash -c 'source "$1" >/dev/null 2>&1; printf "%s" "${#T4_HERDR_UNSET_ARGS[@]}"' _ "$1" 2>/dev/null || true ); }
+# 夹具清理参数（be_herdr_unset_args）的实际 argv 数 / 是否含某个变量名（#130 D2 豁免面）
+d2_fixture_args() { ( T4_CACHE_DIR="$T4_CACHE_DIR" bash -c 'source "$1/tests/t4/lib.sh"; source "$1/tests/t4/lib-backend.sh"; be_herdr_unset_args' _ "$T4_ROOT" 2>/dev/null || true ); }
+d2_handwritten() { grep -rnE -- '-u HERD[R]_' "$T4_ROOT/tests" 2>/dev/null | wc -l | tr -d ' '; }
+
+t4_assert_eq "1" "$(grep -c '^T4_HERDR_ENV_VARS=(' "$D2_LIB" || true)" "D2① 单源定义处恰 1 处（tests/t4/lib.sh）"
+t4_assert_eq "$D2_GOLD" "$(d2_vars_str "$D2_LIB")" "D2② 单源集合 == 收敛前各点清理变量的**并集**（8 个，只增不减）"
+t4_assert_eq "0" "$(d2_handwritten)" "D2③ 调用点零手写（tests/ 下 `env -u <HERDR 变量>` 直写 = 0 行）"
+t4_assert_ge 2 "$(d2_refs "$T4_ROOT/tests/t4/lib-backend.sh")" "D2④ lib-backend 夹具经单源清（引用 + 缺失时 fail loud 的守卫）"
+t4_assert_eq "1" "$(grep -cE '^B3_CLEAN_ENV=\(env .*T4_HERDR_UNSET_ARG[S]' "$T4_ROOT/tests/t4/cases/06-contract-guards.sh" || true)" \
+  "D2④ cases/06 `B3_CLEAN_ENV` 改为引用单源"
+t4_assert_eq "1" "$(grep -cE '^TMUX_FIELD_ENV=\(env .*T4_HERDR_UNSET_ARG[S]' "$T4_ROOT/tests/t4/cases/28-naming-contract.sh" || true)" \
+  "D2④ cases/28 `TMUX_FIELD_ENV` 改为引用单源"
+t4_assert_eq "2" "$(grep -cE '^t4_run_in_dir .*env .*T4_HERDR_UNSET_ARG[S]' "$T4_ROOT/tests/t4/cases/28-naming-contract.sh" || true)" \
+  "D2④ cases/28 两条直连（B3⑧ tmux 守卫）改为引用单源"
+t4_assert_eq "16" "$(d2_args_n "$D2_LIB")" "D2⑤ 派生参数数 = 2×8（`env -u <名>` 成对；形态可运行）"
+# 变异 A（枚举减少 ⇒ 必红）：从副本的单源里删掉 `HERDR_SOCKET_FILE`
+D2_MUT="$T4_CACHE_DIR/d2-lib-mut-$$.sh"
+sed 's/ HERDR_SOCKET_FILE//' "$D2_LIB" > "$D2_MUT"
+t4_assert_eq "7" "$(d2_vars "$D2_MUT" | grep -c .)" "D2⑥ 变异锚点：副本单源只剩 7 个（`HERDR_SOCKET_FILE` 已删）"
+t4_assert_ne "$D2_GOLD" "$(d2_vars_str "$D2_MUT")" "D2⑥ 变异自证：删一个变量 ⇒ D2② 必红（枚举收紧蒙混不过）"
+# 变异 B（新增只改一处）：往副本单源加一个 HERDR_*，派生参数自动 +2，**调用点零改动**
+D2_ADD="$T4_CACHE_DIR/d2-lib-add-$$.sh"
+sed 's/HERDR_BIN_PATH)/HERDR_BIN_PATH HERDR_DEMO_NEW)/' "$D2_LIB" > "$D2_ADD"
+t4_assert_eq "9" "$(d2_vars "$D2_ADD" | grep -c .)" "D2⑦ 变异锚点：副本单源已含新增的 9 个变量"
+t4_assert_eq "18" "$(d2_args_n "$D2_ADD")" "D2⑦ 新增一个 HERDR_* 只改单源一行 ⇒ 派生参数自动 18（调用点零改动）"
+t4_assert_eq "0" "$(d2_handwritten)" "D2⑦ 新增后 tests/ 仍零手写（引用形态不变 ⇒ 不靠改调用点）"
+# D2⑧ 夹具侧豁免（#130 D2 实测回归）：单源全集清若一刀切，会把用例**故意**注入的 HERDR_*
+#   一起磨掉（cases/09 AC3h③ 的 HERDR_PANE_ID 自 pane 判据）⇒ 必须有显式豁免通道：
+#   默认全清（14 行 = 7 对）· 声明 BE_HERDR_KEEP=HERDR_PANE_ID ⇒ 12 行且不再含该变量名。
+t4_assert_eq "16" "$(d2_fixture_args | grep -c .)" "D2⑧ 夹具清理参数默认 = 单源全集（8 对 = 16 行）"
+D2_KEEP_OUT="$( BE_HERDR_KEEP="HERDR_PANE_ID" d2_fixture_args )"
+t4_assert_eq "14" "$(printf '%s\n' "$D2_KEEP_OUT" | grep -c .)" "D2⑧ 显式豁免一个变量 ⇒ 清理参数只剩 7 对（14 行）"
+t4_assert_eq "0" "$(printf '%s\n' "$D2_KEEP_OUT" | grep -c '^HERDR_PANE_ID$' || true)" \
+  "D2⑧ 被豁免的 HERDR_PANE_ID 不再出现在清理参数里（故意注入能活到子进程）"
+t4_assert_eq "2" "$(grep -c 'be_herdr_unset_args' "$T4_ROOT/tests/t4/lib-backend.sh" || true)" \
+  "D2⑧ 豁免逻辑单点派生（定义 1 + be_run_fleet 调用 1；不复制到各用例）"
+# D2⑧b（#130 返修 P3③）：分隔符口径 —— 空格与逗号都必须生效（注释与实现一致）
+D2_COMMA_OUT="$( BE_HERDR_KEEP="HERDR_PANE_ID,HERDR_ENV" d2_fixture_args )"
+t4_assert_eq "12" "$(printf '%s\n' "$D2_COMMA_OUT" | grep -c .)" "D2⑧b 逗号分隔也生效（8−2=6 对 = 12 行）"
+t4_assert_eq "0" "$(printf '%s\n' "$D2_COMMA_OUT" | grep -cE '^HERDR_(PANE_ID|ENV)$' || true)" \
+  "D2⑧b 逗号分隔时两个变量都真被豁免（不是只认首个）"
+# D2⑨ 行为反渗漏（#130 返修 P3②；**纯清理**面）：只验 argv 文本不够 —— 必须在**真实子进程 env** 里看不见它。
+#   否则「删掉 HERDR_ENV」只会在静态 golden 上红，行为面依旧 0 红。夹具：把 be_run_fleet 的被测脚本
+#   换成「打印自身 env 里的 HERDR_*」的桩，父进程注入全部 8 个宿主值。
+#   `BE_FLEET_NO_HANDLES=1` 的定位（#130 末轮定论）：本子例**不初始化 BE 上下文**（无 BE_BACKEND/…）
+#   ⇒ `be_fleet_handles` 根本注不了句柄（注入面为空）⇒ NO_HANDLES 在此**不承重**，只是为了把判据
+#   收窄到「清理」本身。「清理之后才注入句柄」的顺序面由 **D2⑩** 独立覆盖（那里给足 BE 上下文且不设
+#   NO_HANDLES）—— 后人不得把本行误读为「顺序面已被 NI_HANDLES 验过」。
+D2B_DIR="$T4_CACHE_DIR/d2b-$$"; mkdir -p "$D2B_DIR"
+D2B_STUB="$D2B_DIR/dump-herdr-env.sh"
+# 桩打印自身 env 里的 HERDR_* + NAO_TERMINAL（D2⑩② 要钉后端句柄；D2⑨ 只数 `^HERDR_` 行，不受影响）
+{ printf '#!/usr/bin/env bash\n'; printf 'env | grep -E "^(HERDR_[A-Z_]+|NAO_TERMINAL)=" || true\n'; } > "$D2B_STUB"
+chmod +x "$D2B_STUB"
+t4_assert_contains "$(env HERDR_ENV=1 bash "$D2B_STUB" 2>/dev/null)" "HERDR_ENV=1" \
+  "D2⑨ 探针自证：直接跑桩时能看见 HERDR_ENV（判据非空转）"
+D2B_OUT="$( T4_CACHE_DIR="$T4_CACHE_DIR" BE_FLEET_NO_HANDLES=1 BE_FLEET_SCRIPT="$D2B_STUB" \
+  HERDR_ENV=1 HERDR_SESSION=host-prod HERDR_SOCKET_PATH=/host/prod.sock HERDR_SOCKET_FILE=/host/f \
+  HERDR_PANE_ID=host-pane HERDR_WORKSPACE_ID=host-ws HERDR_TAB_ID=host-tab HERDR_BIN_PATH=/host/bin \
+  bash -c 'source "$1/tests/t4/lib.sh"; source "$1/tests/t4/lib-backend.sh"; be_run_fleet "$2" run; printf "BE_RC=%s\n" "$BE_RC"; printf "%s\n" "$BE_OUT"' \
+  _ "$T4_ROOT" "$D2B_DIR" 2>&1 )"
+t4_assert_contains "$D2B_OUT" "BE_RC=0" "D2⑨ 夹具自证：被测桩确实执行（rc=0，非空转）"
+t4_assert_eq "0" "$(printf '%s\n' "$D2B_OUT" | grep -cE '^HERDR_[A-Z_]+=' || true)" \
+  "D2⑨ 行为反渗漏：父进程注入 8 个 HERDR_* ⇒ 被测子进程 env 里 0 条（验进程真实 env，不是 argv 文本）"
+
+# D2⑩ 「清理 → 注入」**顺序**面（#130 末轮 B 方案）：给足 BE 上下文（让 be_fleet_handles 真能注入）、
+#   不设 NO_HANDLES，父进程再注入全部 8 个**可识别**宿主值。三条判据：
+#     ① 8 个宿主值**逐条**不在子进程 env（不数条数、不用可撞值 1/空；ENV/SESSION/SOCKET_PATH 三个
+#        即使清理被删也会被实验句柄覆盖 ⇒ 真正可观测的是另 5 个，但 8 条仍逐条钉，防以后改句柄集合）。
+#     ② 实验句柄**在场且值 = 本实验场**（HERDR_ENV / HERDR_SESSION / HERDR_SOCKET_PATH 落在实验根 /
+#        NAO_TERMINAL=herdr）—— 不能只断言「有 HERDR_* 在场」（宿主泄漏也满足那种弱断言）。
+#     ③ 无 `BE_BACKEND: 未绑定的变量`（上下文真的初始化了，否则 ① 会因为「根本无句柄」而空转通过）。
+#   为什么这条不可少：真实用例只靠「跑通」间接兜顺序；谁删 `${hu[@]}` 或把注入挪到清理之前，
+#   其间没有一条用例会点名（变异实测：删 `${hu[@]}` ⇒ ① 5 红 / ② 绿；注入前置 ⇒ ② 红）。
+D2H_HOST="HOSTLEAK"; D2H_SESS="d2h-fixture-sess"; D2H_CFG="$T4_CACHE_DIR/d2h-cfg-$$"
+mkdir -p "$D2H_CFG"
+D2H_NAMES=(HERDR_ENV HERDR_SESSION HERDR_SOCKET_PATH HERDR_SOCKET_FILE HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_BIN_PATH)
+D2H_VALS=( "$D2H_HOST-env" "$D2H_HOST-sess" "/$D2H_HOST/prod.sock" "/$D2H_HOST/f" \
+           "$D2H_HOST-pane" "$D2H_HOST-ws" "$D2H_HOST-tab" "/$D2H_HOST/bin" )
+D2H_OUT="$( T4_CACHE_DIR="$T4_CACHE_DIR" BE_BACKEND=herdr BE_SESSION="$D2H_SESS" BE_CFGROOT="$D2H_CFG" \
+  BE_FLEET_SCRIPT="$D2B_STUB" NAO_TERMINAL=tmux \
+  HERDR_ENV="${D2H_VALS[0]}" HERDR_SESSION="${D2H_VALS[1]}" HERDR_SOCKET_PATH="${D2H_VALS[2]}" \
+  HERDR_SOCKET_FILE="${D2H_VALS[3]}" HERDR_PANE_ID="${D2H_VALS[4]}" HERDR_WORKSPACE_ID="${D2H_VALS[5]}" \
+  HERDR_TAB_ID="${D2H_VALS[6]}" HERDR_BIN_PATH="${D2H_VALS[7]}" \
+  bash -c 'source "$1/tests/t4/lib.sh"; source "$1/tests/t4/lib-backend.sh"; be_run_fleet "$2" run; printf "BE_RC=%s\n" "$BE_RC"; printf "%s\n" "$BE_OUT"' \
+  _ "$T4_ROOT" "$D2B_DIR" 2>&1 )"
+t4_assert_contains "$D2H_OUT" "BE_RC=0" "D2⑩ 夹具自证：被测桩确实执行（rc=0，非空转）"
+t4_assert_not_contains "$D2H_OUT" "BE_BACKEND: 未绑定的变量" \
+  "D2⑩③ 上下文真初始化：输出里无『BE_BACKEND: 未绑定的变量』（否则 ① 会因「根本无句柄」空转）"
+for _i in "${!D2H_NAMES[@]}"; do
+  t4_assert_not_contains "$D2H_OUT" "${D2H_NAMES[$_i]}=${D2H_VALS[$_i]}" \
+    "D2⑩① 清理生效：宿主值 ${D2H_NAMES[$_i]}=${D2H_VALS[$_i]} 不在子进程 env（逐条钉值，不数条数）"
+done
+t4_assert_contains "$D2H_OUT" "HERDR_ENV=1" "D2⑩② 注入在清理之后：实验句柄 HERDR_ENV=1 在场"
+t4_assert_contains "$D2H_OUT" "HERDR_SESSION=$D2H_SESS" "D2⑩② 注入在清理之后：HERDR_SESSION = 本实验场会话名"
+t4_assert_contains "$D2H_OUT" "HERDR_SOCKET_PATH=$D2H_CFG/herdr/sessions/$D2H_SESS/herdr.sock" \
+  "D2⑩② 注入在清理之后：HERDR_SOCKET_PATH = 实验根下该会话目录（$D2H_CFG）"
+t4_assert_contains "$D2H_OUT" "NAO_TERMINAL=herdr" "D2⑩② 注入在清理之后：NAO_TERMINAL=herdr 在场（父给定为 tmux ⇒ 只能来自注入，两种后端下都承重）"
+t4_assert_not_contains "$D2H_OUT" "NAO_TERMINAL=tmux" "D2⑩② 注入真覆盖了父值（NAO_TERMINAL 不再是父给定的 tmux）"
+rm -f "$D2_MUT" "$D2_ADD"
+rm -rf "$D2B_DIR" "$D2H_CFG"
+rm -rf "$D2B_DIR"
 
 rm -rf "$B1BIN" "$B1_LOG" "$NEG_B1A" "$NEG_B1B" "$NEG_B1C" "$NEG_B1D" "$NEG_LED"
 

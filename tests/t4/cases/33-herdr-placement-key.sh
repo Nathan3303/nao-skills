@@ -51,9 +51,12 @@ ws_id_by_label() { fld "$(obj_for "$(ws_json)" label "${1:-}")" workspace_id; }
 ws_label_count() { split_objs <<< "$(ws_json)" | grep -cF "\"label\":\"${1:-}\"" || true; }
 ws_id_of_pane() { fld "$(obj_for "$(pane_json)" pane_id "${1:-}")" workspace_id; }
 pane_ws_by_label() { fld "$(obj_for "$(pane_json)" label "${1:-}")" workspace_id; }
-# 唯一运行入口 = `be_run_fleet`：它枚举清 `HERDR_*` 再注入**本实验场**的句柄
-#   （用例进程自己在真 herdr pane 里跑 ⇒ 直接继承 env 会打到用户真 server，实测该误用会把
-#    「pane list 失败」吃成 rc=0 而掩盖判据）。变异副本经 `BE_FLEET_SCRIPT` 换脚本，句柄仍走同一入口。
+# 唯一运行入口 = `be_run_fleet`：它按**单源清单**（`tests/t4/lib.sh::T4_HERDR_ENV_VARS`，8 个）清 `HERDR_*`
+#   再注入**本实验场**的句柄（用例进程自己在真 herdr pane 里跑 ⇒ 直接继承 env 会打到用户真 server，实测该误用会把
+#   「pane list 失败」吃成 rc=0 而掩盖判据）。变异副本经 `BE_FLEET_SCRIPT` 换脚本，句柄仍走同一入口。
+#   #130 返修 P3⑤：不是「枚举清」—— 固定 8 个名单靠 golden「只增不减」纪律兜（herdr 新增 `HERDR_*`
+#   必须登记进单源，否则不会被清；`cases/06` 的并集 golden 会在有人删变量时红，新增则靠评审纪律 + cases/35
+#   的动态枚举旁证）。
 fleet() { be_run_fleet "$LAB" "$@"; }
 
 CALLER_PANE="$(be_caller_pane)"
