@@ -1,13 +1,22 @@
-name: Deploy site to GitHub Pages
+name: Deploy docs site to GitHub Pages
 
-# 零构建：直接把 site/ 目录当作静态产物上传，不跑 npm、不装依赖。
-# 线上地址：https://nathan3303.github.io/nao-skills/（项目页子路径；site/ 内全部为相对路径，无需 basePath 改写）
+# 构建后部署（ADR 2026-11-16-docs-site-pipeline D4）：
+#   npm ci → 类型检查 → 构建（--base /nao-skills/）→ 卡一致性 / 零外链 → 上传 dist → 部署
+# 线上地址：https://nathan3303.github.io/nao-skills/（项目页子路径；base 只在这里传，
+# apps/document/.vitepress/config.mts 保持 '/'，否则 dev / preview 也要带前缀）
+#
+# 失败必须红：无 continue-on-error；build job 内任一 step 失败即不产出产物，
+# deploy job needs: build ⇒ 失败的提交永远不会把旧产物重新发上线。
 
 on:
   push:
     branches: [main]
     paths:
-      - 'site/**'
+      # 站点本身（内容 / 组件 / 配置 / 脚本 / 依赖锁定）
+      - 'apps/document/**'
+      # 角色卡原文与角色清单：构建期注入的来源（不覆盖 = 改卡后线上静默过期）
+      - '.agents/prompts/**'
+      - '.agents/roles.yaml'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -23,11 +32,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -35,11 +42,45 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload site/ as Pages artifact
+      # 版本单一事实 = apps/document/.nvmrc（与本地 nvm 同源）
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/document/.nvmrc
+          # 只缓存 npm 下载缓存，不缓存 node_modules（缓存 install 产物会静默吞掉依赖变更）
+          cache: npm
+          cache-dependency-path: apps/document/package-lock.json
+
+      # apps/document 是独立私有包（ADR D1）：只装站点依赖，不触碰根发布面
+      - name: Install site dependencies
+        run: npm ci --prefix apps/document
+
+      - name: Type check
+        run: npm --prefix apps/document run check:types
+
+      # 线上子路径部署：base 由 CLI 传入，构建失败即红
+      - name: Build
+        run: npm --prefix apps/document run build -- --base /nao-skills/
+
+      # 以下两项读 apps/document/.vitepress/dist，必须在 Build 之后
+      - name: Check role cards (AC3)
+        run: npm --prefix apps/document run check:cards
+
+      - name: Check external links (AC7)
+        run: npm --prefix apps/document run check:links
+
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: site
+          path: apps/document/.vitepress/dist
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5

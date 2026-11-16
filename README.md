@@ -163,6 +163,8 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 | 工具命令 | `bash .agents/scripts/nao-fleet.sh --help`（转发入口） |
 | 项目自己的约定 | 项目根 `AGENTS.md` |
 
+想**本地起文档站**：首次先 `npm install --prefix apps/document`（独立私有包，不进发布包），之后 `npm run docs:dev` 预览、`npm run docs:build` 构建；站点的内容与用法以[官网](https://nathan3303.github.io/nao-skills/)为准。
+
 `$NAO_SKILLS` 指机制包根目录（会话里 fleet 会自动注入该变量），也就是 npm 包 `@nathan33/nao-skill` 的安装位置。
 
 ## License
