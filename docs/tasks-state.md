@@ -176,7 +176,10 @@
 - **闸门 ② arch 已闭环**（`04f1202`）：评审 51 行 + ADR `docs/adr/2026-11-16-docs-site-pipeline.md` 52 行。D1 独立包（自 package.json + 自 lockfile，**不用根 workspaces**）· D2 `vitepress ^1.6.4` + `.nvmrc=22` + 包 `engines>=22`（根 `>=18` 不动）· D3 注入 = **config 内 markdown-it 指令**（编译期现读现渲染，零中间产物；`--strict` 由 `scripts/build.mjs` 包装承载）· D4 npm ci → build（`--base /nao-skills/` 走 CLI）→ 上传 dist，**失败必须红**，`paths` 必须加 `.agents/prompts/**` + `.agents/roles.yaml` · D5 `content/index.md` 归 `rd-fe`（首页是呈现壳），PM 只填既有页面正文 · D6 AC7 判据按属性角色扫 + 域名 denylist + 双防假绿守卫
 - **PM 裁定（回 arch）**：AC5 用**真参数** `--strict`（非 env）；Node 分叉接受（CI/`.nvmrc` 锁 22，本机 24 仅开发态，登记遗留到期 2027-01-31）
 - **闸门 ③ uiux 已闭环 + 用户 PASS**（`3a3723c` · 77 行 · 九项齐）：首页走 `layout: page` + 六段组件（不套默认 `home`）· 文案单一源在 `content/**` · 角色页两区（解说 ≤原文 1/3 + **卡原文默认展开** + 来源徽标「构建期注入」）· token 逐项映射 + **9 处默认残留清零点** · 内容页三档断点 · 术语「门禁/闸门」分列。**用户两次拍板**：设计产物 PASS；**顶栏放全局导航（文档/角色/插件），原 4 锚点降为 Hero 下方跳读条**
-- **当前状态**：`rd-fe-136` 已派发（实现骨架/主题/注入 + 建页面 stub；PM 随后填 `content/**/*.md` 正文）· `rd-infra` 待 `rd-fe` 骨架落地后接（`pages.yml` + 断言）· 后续：qa → 用户验收清单
+- **闸门 ④ rd-fe 已闭环**（PR #137 草案 · 自有提交至 `fdbeb54`）：`apps/document` 独立包（44 文件 + lock + `.nvmrc=22`）· 注入走 `.vitepress/markdown/card-raw.ts`（` ```card <id> ` 指令 + 来源徽标含卡 `v<N>`）· 主题移植 + 产物层守卫 `vite/strip-theme-residue.ts`（清默认 indigo / `Inter`，规则失效即构建失败）· 23 页骨架
+- **rd-fe 自证门禁（PM 已抽验）**：`docs:build` rc=0（dist 22 html = 20 内容页 + 首页 + 404）· `check` rc=0 roles=7 files=54 · `npm test` rc=0（NOTE=11 白名单）· `npm pack` 59 files 且 `apps/` 0 命中 · `check:links` 70 文件 / 151 资源属性 / **外链 0** · `check:cards` 7/7 逐段一致 · Node 24 与 22.23.5 双跑 rc=0 · AC5 两态实测（缺 `.agents/prompts` ⇒ rc=0 + 恰 1 条告警；`--strict` ⇒ rc=1）· AC10 9 处清零点逐条自查（含 `backdrop-filter` 全库唯一 = none）
+- **PM 交付内容**：20 页正文（`2f7b9f2`）—— 快速开始 4 · 需求旅程/验收 2 · 七角色解说（各 ≤卡原文 1/3，四问结构）· 角色配合 2 · 插件选择 5（包名与 `PI_PLUGINS` 一致、各给「缺了失去什么」）· 进阶 2 · FAQ（前 5 条与首页同口径 + 6 条追加）· 术语表（门禁 / 闸门分列）。PM 自跑：build rc=0 · `check:cards` 通过 · `check:links` 外链 0 · `check:types` 通过
+- **当前状态**：`rd-infra-136` 已派发（删 `site/` · 改 `pages.yml`（D4：`.nvmrc` 读版本 + 门禁 + `--base` + 失败必红 + `paths` 补 `.agents/prompts/**`、`roles.yaml`）· README 一句前置）· 之后 `qa` 全量验收 → 用户验收清单
 
 
 ### 本批 T544（生产侧旗标泄漏 · Issue #116 · 已合并 `6486221` · 发布 v0.23.3）
