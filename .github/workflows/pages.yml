@@ -14,7 +14,7 @@ name: Deploy docs site to GitHub Pages
 on:
   push:
     branches: [main]
-    paths: &site-paths
+    paths:
       # 站点本身（内容 / 组件 / 配置 / 脚本 / 依赖锁定）
       - 'apps/document/**'
       # 角色卡原文与角色清单：构建期注入的来源（不覆盖 = 改卡后线上静默过期）
@@ -22,8 +22,12 @@ on:
       - '.agents/roles.yaml'
       - '.github/workflows/pages.yml'
   pull_request:
-    # 与 push 同一份过滤：PR 只在涉及站点 / 卡源时跑，避免无关 PR 白等
-    paths: *site-paths
+    # 与 push 逐项一致（不用 YAML 锚点，避免对解析器特性的依赖；一致性由结构断言守）
+    paths:
+      - 'apps/document/**'
+      - '.agents/prompts/**'
+      - '.agents/roles.yaml'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 # 最小权限：读仓库内容（checkout）+ 发布 Pages（OIDC 部署令牌）
