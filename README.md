@@ -77,7 +77,7 @@ pi --version && node -v && git --version && (herdr --version || tmux -V)
 
 ```bash
 cd 你的项目
-.agents/scripts/nao-fleet.sh check                                    # 体检：exit 0 就能开工
+.agents/scripts/nao-fleet.sh check                                    # 体检：exit 0 就能开工（有提示行时加 -v 看明细）
 .agents/scripts/nao-fleet.sh ensure pm arch rd-fe rd-be qa rd-infra uiux    # 拉起 7 个会话（后端见「前置环境」：herdr 默认 / tmux 回退）
 ```
 
