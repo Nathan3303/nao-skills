@@ -380,17 +380,12 @@
 
 | 编号 | 类别 · 到期 | 内容 | 来源 |
 | :--- | :--- | :--- | :--- |
-| T529-D1 | **已关闭（2026-11-16）** | 下游三仓（nao-todo / nao-todo-server / nue-ui）的版本升级与 `AGENTS.md` 接入：用户 2026-11-02 定「**各仓自行负责**，nao-skills 不代做」。证据：三仓均存在（`ls -d nao-todo nao-todo-server nue-ui`），期间无异常上报 ⇒ 本项闭环 | 用户口径 2026-11-02 |
-| M20261028-F2 | **已关闭（2026-11-16）** | nao-todo-server 的 `.codegraph` 目录存在但无索引（实测 `du -sh` = **4.0K**，仅 `.gitignore`）⇒ 插件激活后空转（205.7MB/会话）。**归属**：下游仓自管（同 T529-D1 口径），nao-skills 不代做；若下游需要，在其仓内立项。判定命令：`du -sh ../nao-todo-server/.codegraph` | 定时项转下游自管 |
 | M20261116-pkgver-classified | 观察 · 2027-05-09 | **`#132` 完备性判据会把包版本判「未归类」**（`pi-subagents 0.x` 这类；现仓 0 命中）。处置口径已定（写 `≥` 或加「截至」），到期回看是否需要开特例。判定命令：`grep -rnE "pi-[a-z]+[[:space:]]+[0-9]+\.[0-9]+" $(git ls-files "*.md" \| grep -vE "^docs/(adr\|prds\|releases\|reports)/")` | 批次 E QA P3-3(c) |
 | M20261028-F5 | 定时 · 2026-12-28 | **到期重评** 插件 0.1.0 × CLI 1.6.2 版本耦合（工具集合/行为无版本承诺）；期间观察上游 | 定时：**2026-12-28** |
 | M20261014-F1 | 定时 · **续期 2027-02-14** | `pi-ask-me` 旧 SDK 子树 12 high（已接受）。**2026-11-16 复核**：上游仍 **0.1.1**（`npm view pi-ask-me version`），8 个月未发版 ⇒ 续期，期间观察上游升版；台账 `docs/reports/M20261014-pi-ext-update-followups.md` | 定时项续期 |
 | M20261102-F1 | 观察 · 2026-12-31 | **`check` 对 legacy 全量安装的同名机制卡副本跳过冲突检查**（T537 RD 范围外稳健性增补）：跳过逻辑若过宽，会漏报「下游卡与机制卡同名」这类人为异常；首次真实使用后决定是否文档化/加断言 | T537 观察项（PM 登记） |
 | M20261102-F2 | 观察 · 2026-12-31 | **`test:t4:full` 用例 02 真 `pi` 动态注册超时 flake**：RD 一次 5 跑中 2 次 `rc=124`（`timeout 120`，stdout 已出 82,900 B，非无凭据）；同批 QA 7 次运行（full ×3 + `--case 02` ×3 + `npm test` ×1）全 PASS、单跑 8–15 s ⇒ 量级差约 10× = 既有 O-1 类网络/负载抖动，非代码引入。候选处置：超时上调 /「真 pi 慢」与「无凭据」分开计数，独立任务做 | RD 转办（M20261102 报告 §四）· **复现率 ≈20 跑 3 次 ≈15%**（RD 5 跑 2 · QA 7 跑 0 + 本轮 2 跑 1 · PM 2 跑 0）⇒ 升级待派发候选 |
 | M20261109-install-scripts | 已接受 · 2027-05-09 | **`pi update --extensions` 报 3 条 install-scripts 未授权**（`protobufjs@1.6.6`/`1.6.5` postinstall 生成代码、`@google/genai@1.52.0` preinstall 为 no-op）：均为上游依赖脚本，`pi-subagents` 功能实测正常 ⇒ **不 approve**（维持默认安全姿态），到期动作 = 若 pi-subagents 出异常再回看 | PM 裁决（2026-11-09，用户报障输出） |
-| M20261114-stash-exit | **已关闭（2026-11-16）** | BR5 出口机械闸：`check_stash_residue` 已存在（批次 B）且 D1 加龄调优（`28b5d44`）；判定命令 `git stash list \| wc -l` + `bash .agents/scripts/nao-fleet.sh check`（>6h 才 warn）| 批次 B（#126）|
-| M20261114-helper-u-guard | **已关闭（2026-11-16）** | `NAO_STASH_ROOT` 的 `-u` 硬化此前**无断言守卫**（删掉不会被抓）；**#132 E2-2 已补**（`cases/06`，16 条）：直连旁证有 `warn=` → 经 `t4_run_shim` / `be_run_fleet` 无 `warn=` → 副本删各自 `-u` ⇒ warn 回来（必红）+ 两 helper 各恰 1 处静态定位。判定命令：`grep -c "E2-2" tests/t4/cases/06-contract-guards.sh`（现 18）| 批次 E（#132）|
-| M20261115-br5-stash-warn-tension | **已关闭（2026-11-16）** | BR5（stash 承载合并后事实）与新 stash 闸的张力：**D1 已交付 `28b5d44`**（阈值 >6h 才 warn）；**当场自证**：本批收尾存 BR5 stash（`git stash list` = 1）后 `check` = `check: OK … `（**无 `warn=`**），而上一批同样动作会 `warn=1` | 批次 D（#130）|
 | T545-O1 | 接受 · 2027-01-31 | **卡会话跨仓同 core 不判重**（旧行为延续、非回归）；到期重评是否加 `@scope` 强制。判定命令：`grep -n "fleet_scope_slug" .agents/scripts/nao-fleet.sh` —— 若结果只出现在放置键/显示名、未参与**判重**，则本条仍成立 | #96 全链路终态行 |
 | 96-未验三项 | 观察 · 2027-06-30 | **真机 attach 重排 / pi TUI 最小行列 / `pane move` 后长稳** —— PRD 标注「未验」。**人工判定型**（无机械命令：真机行为类；`grep` 只能命中设计/实现报告里的**提及**，不能当已验证据 —— 实测 8 处命中全为提及）。判定要点：到期时在 `docs/reports/` 找**真机实测结论**（有 ⇒ 关闭并回填该报告指针；无 ⇒ 续期）| #96 全链路终态行 |
 | T545-same-slug | 接受 · 2027-01-31 | **同 slug 两仓共用 workspace**（label=slug 兜底）；到期重评是否加仓标识。判定：`grep -n "fleet_scope_slug" .agents/scripts/nao-fleet.sh` 看放置键是否已含仓后缀 | T545 验收行 · 方案行 |
