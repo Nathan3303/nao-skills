@@ -69,11 +69,15 @@ export default defineConfig({
   cleanUrls: true,
   srcDir: 'content',
   head: [
-    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
     ['meta', { name: 'color-scheme', content: 'light dark' }],
     ['meta', { name: 'theme-color', content: '#FFFFFF', media: '(prefers-color-scheme: light)' }],
     ['meta', { name: 'theme-color', content: '#0B0F14', media: '(prefers-color-scheme: dark)' }],
   ],
+  // favicon 走 transformHead：`--base /nao-skills/` 时静态 head 不会被改前缀
+  transformHead({ siteData }) {
+    const base = siteData.base || '/'
+    return [['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}favicon.svg` }]]
+  },
   markdown: {
     // 代码块复制按钮与首页同文案（视觉统一在 theme/styles/content.css）
     codeCopyButtonTitle: '复制',

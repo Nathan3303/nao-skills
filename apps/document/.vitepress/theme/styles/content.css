@@ -172,7 +172,16 @@
 }
 
 :root .vp-doc [class*='language-'] > button.copy::before {
-  display: none; /* 默认的「已复制」气泡与新文案重复 */
+  /* 默认的「已复制」气泡与新文案重复（隐藏），改作命中区扩展（视觉 32 → 命中 44） */
+  display: block;
+  content: '';
+  position: absolute;
+  inset: -6px;
+  width: auto;
+  height: auto;
+  border: 0;
+  padding: 0;
+  background: none;
 }
 
 :root .vp-doc [class*='language-'] > button.copy::after {
@@ -445,8 +454,8 @@
 
 :root .vp-doc .card-raw-badge {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-wrap: nowrap;
+  align-items: flex-start;
   gap: 6px;
   margin: 0 0 8px;
   font-size: var(--nh-fs-13);
@@ -522,7 +531,7 @@
     left: 0;
     z-index: 60;
     padding: 32px 24px 96px;
-    width: calc(100vw - 64px);
+    width: calc(100% - 64px);
     max-width: 320px;
     box-shadow: none;
     border-right: 1px solid var(--nh-border);
