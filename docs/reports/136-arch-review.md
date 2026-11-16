@@ -1,6 +1,6 @@
 # T546 文档站（VitePress）架构评审 · Issue #136
 
-- 状态：待 PM 拍板（D1–D6 已给结论，见 §三）· 更新：2026-11-16 · Owner：arch-designer
+- 状态：**已拍板（PM 2026-11-16：D1–D6 全部采纳 · AC5 用真参数 · Node 分叉接受并登记遗留至 2027-01-31）** · 更新：2026-11-16 · Owner：arch-designer
 - 指针：PRD `docs/prds/2026-11-16-docs-site.md` · 设计基线 `docs/designs/2026-11-13-portal-site.md` · ADR `docs/adr/2026-11-16-docs-site-pipeline.md`
 
 ## 一、可行性结论
@@ -26,14 +26,14 @@
 
 1. **D1 依赖归属 = 独立包**：`apps/document` 自有 `package.json` + `package-lock.json`，不用根 workspaces；根只加三个 `npm --prefix` 薄脚本。理由：发布面与站点面靠目录边界隔离，根 `npm ci`（含 `prepack` 门禁）不背站点依赖。
 2. **D2 版本与运行时**：`vitepress ^1.6.4`，`vite` / `vue` **不单列**（由 vitepress 传递，单列会造双份 vite）；`apps/document/.nvmrc` = `22.23.5` + 该包 `engines.node >=22`；CI 用 `setup-node` 的 `node-version-file` 读同一文件；根 `engines >=18` 与 devDeps 一字不改。理由：版本的单一事实放包内，npm 用户的 Node 18 前提不受影响。
-3. **D3 注入形态 = `markdown.config` 指令（config 内 transform）**：markdown-it 插件在编译期读 `.agents/prompts/<card>.md`、去 frontmatter、现算现渲染；**零中间产物**。helper 写 TS（由 config 的 Vite 加载，不需要 tsx）。`--strict` 由 `apps/document/scripts/build.mjs` 包装 `vitepress build` 承载（VitePress 自身不认 `--strict`，直传给 CLI 会报未知参数）。理由：单管道 = 单失败面，且「产出不入版本库」自动成立。
+3. **D3 注入形态 = `markdown.config` 指令（config 内 transform）**：markdown-it 插件在编译期读 `.agents/prompts/<card>.md`、去 frontmatter、现算现渲染；**零中间产物**。helper 写 TS（由 config 的 Vite 加载，不需要 tsx）。`--strict` 由 `apps/document/scripts/build.mjs` 包装 `vitepress build` 承载为**真命令行参数**（PM 裁定；env 形式不作本批口径——VitePress 自身不认 `--strict`，直传给 CLI 会报未知参数）。理由：单管道 = 单失败面，且「产出不入版本库」自动成立。
 4. **D4 部署 = `npm ci` → build → 上传 dist**：`base` 由 CI 传 `--base /nao-skills/`（config 保持 `/`，否则 dev/preview 也要带前缀）；缓存只开 `setup-node` 的 npm 缓存 + `cache-dependency-path: apps/document/package-lock.json`（不缓存 `node_modules`）；**失败必须红**：无 `continue-on-error`、上传步骤在 build 之后、旧产物永不重传；`paths` 增 `apps/document/**`、`.agents/prompts/**`、`.agents/roles.yaml`。理由：AC3 的源在 `content/` 之外，filter 不覆盖就等于线上静默过期（R4）。
 5. **D5 写入分工 = 保留 `srcDir=content`，`content/index.md` 归 rd-fe**：首页是呈现壳（自建 `PortalHome.vue`），不是内容；PM 只填**已存在**的 `content/**/*.md` 正文，不新建文件、不动 nav/sidebar；页面骨架 + 导航 + 侧栏由 rd-fe 一次成型后交付。理由：把「谁新建文件」这条歧义消掉，剩余只要内容/结构两面。
 6. **D6 AC7 判据 = 按资源角色扫，不按字符串扫**：HTML 逐属性判（`script[src]`、`link[href]`（`rel=canonical/alternate` 除外）、`img/source[src|srcset]`、`video/audio[src|poster]`、`iframe[src]`、`object[data]`、`embed[src]`、`meta[property=og:image]`），凡解析出非本站 origin ⇒ 红；CSS 只扫 `url(http…)` 与 `@import` 外部；JS/JSON 用 **CDN · 统计域名 denylist**（jsdelivr / unpkg / cdnjs / fonts.googleapis / fonts.gstatic / googletagmanager / google-analytics / hm.baidu / sentry 等），并白名单命名空间与框架文档字符串（`w3.org/*`、`vuejs.org/error-reference`、`api.iconify.design`——实测均为死字符串）。**双守卫防假绿**：扫描命中文件数 0 ⇒ 直接红；并断言 `dist/index.html` 存在、`*.html` 数量 ≥ 内容页数（六章 + 7 卡 + FAQ + 术语 + 首页）。理由：`a href` 文本链接天然被属性角色排除，裸字符串扫描既假绿（漏 `link`）又假红（命名空间）。
 
 ## 四、风险清单（影响 → 应对）
 
-- **R1 dev 与 CI 工具链不一致**（本机 24 / CI 22）→ 构建产物不可复算；`apps/document/.nvmrc` 为 22.23.5 且 CI 同源读取，本机建议 mise 切换（`engines >=22` 让 24 仍可跑，但不算对齐）。
+- **R1 dev 与 CI 工具链不一致**（本机 24 / CI 22）→ 构建产物不可复算；`apps/document/.nvmrc` 为 22.23.5 且 CI 同源读取。**PM 2026-11-16 裁定：接受偏差**，本机 24 仅作开发态，登记遗留（到期 2027-01-31：若构建出现版本相关诊断再回看）。
 - **R2 默认主题残留**（Inter 字体族、`#3451b2`/`#a8b1ff` 品牌色）→ AC10 直接红；主题入口改 `vitepress/theme-without-fonts`，覆盖 `--vp-font-family-base` 与 `--vp-c-brand-*`；**判据**：dist CSS 不含 `3451b2` / `a8b1ff`、字体栈不含首项 `Inter`。
 - **R3 首页六段超 `layout: home` 能力**（home 只有 hero+features）→ AC2 保真被默认布局削；用 `layout: page` + 自建 `PortalHome.vue`（rd-fe 拥有），只复用 token 不套默认首页。
 - **R4 Pages `paths` 漏卡源** → 改卡不重建，AC3 线上静默过期；见 D4。
@@ -49,3 +49,4 @@
 - AC7 扫描器由 QA 自带（不入 build 脚本、不入 `tests/`），与 `--strict`（只管道卡源缺失）职责分离。
 
 - 修订：2026-11-16 首版（D1–D6 结论 + 取证 + 风险）
+- 修订：2026-11-16 PM 裁定：D1–D6 采纳 · AC5 走真参数 · Node 分叉接受并登记遗留（2027-01-31）
