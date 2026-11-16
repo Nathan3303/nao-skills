@@ -1,0 +1,205 @@
+/**
+ * Token 层：设计基准 docs/designs/2026-11-16-docs-site.md §四 的逐项映射。
+ * 基准值来自 docs/designs/2026-11-13-portal-site.md（T541，用户走查 15/15）。
+ * 只做映射，不新增颜色 / 字阶 / 间距 / 圆角数值。
+ */
+:root {
+  color-scheme: light dark;
+
+  /* ── 基准 token（nh = nao home，与门户同名同值） ── */
+  --nh-page: #ffffff;
+  --nh-sunken: #f6f8fb;
+  --nh-border: #e3e8ef;
+  --nh-text: #101828;
+  --nh-text-2: #475467;
+  --nh-text-3: #667085;
+  --nh-accent: #1d4ed8;
+  --nh-accent-solid: #1d4ed8;
+  --nh-accent-solid-hover: #1b45c0;
+  --nh-on-accent: #ffffff;
+  --nh-shadow-1: 0 1px 2px rgba(16, 24, 40, 0.06);
+
+  /* 终端始终暗面（设计稿 hero-terminal） */
+  --nh-term-bg: #0b0f14;
+  --nh-term-bar: #111823;
+  --nh-term-line: #d7e3f4;
+  --nh-term-muted: #a9b4c2;
+  --nh-term-ok: #7bd88f;
+  --nh-term-cursor: #8fb4ff;
+  --nh-term-border: transparent;
+
+  /* 字阶：14 档（11–39），内容页只用其中已有值 */
+  --nh-fs-11: 11px;
+  --nh-fs-12: 12px;
+  --nh-fs-13: 13px;
+  --nh-fs-14: 14px;
+  --nh-fs-15: 15px;
+  --nh-fs-16: 16px;
+  --nh-fs-17: 17px;
+  --nh-fs-18: 18px;
+  --nh-fs-20: 20px;
+  --nh-fs-22: 22px;
+  --nh-fs-25: 25px;
+  --nh-fs-30: 30px;
+  --nh-fs-31: 31px;
+  --nh-fs-39: 39px;
+
+  /* 间距：14 档（4–80），只取 4 的倍数 */
+  --nh-sp-1: 4px;
+  --nh-sp-2: 8px;
+  --nh-sp-3: 12px;
+  --nh-sp-4: 16px;
+  --nh-sp-5: 20px;
+  --nh-sp-6: 24px;
+  --nh-sp-7: 28px;
+  --nh-sp-8: 32px;
+  --nh-sp-9: 36px;
+  --nh-sp-10: 40px;
+  --nh-sp-12: 48px;
+  --nh-sp-14: 56px;
+  --nh-sp-16: 64px;
+  --nh-sp-20: 80px;
+
+  --nh-r-8: 8px;
+  --nh-r-12: 12px;
+  --nh-r-14: 14px;
+  --nh-r-pill: 999px;
+
+  --nh-z-header: 10;
+  --nh-z-toast: 20;
+
+  --nh-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --nh-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* ── VitePress 主题变量映射（AC10：无默认蓝 / 无默认字体族） ── */
+  --vp-c-bg: var(--nh-page);
+  --vp-c-bg-alt: var(--nh-sunken);
+  --vp-c-bg-soft: var(--nh-sunken);
+  --vp-c-bg-elv: var(--nh-page);
+
+  --vp-c-text-1: var(--nh-text);
+  --vp-c-text-2: var(--nh-text-2);
+  --vp-c-text-3: var(--nh-text-3);
+
+  --vp-c-divider: var(--nh-border);
+  --vp-c-border: var(--nh-border);
+  --vp-c-gutter: var(--nh-border);
+
+  --vp-c-brand: var(--nh-accent);
+  --vp-c-brand-1: var(--nh-accent);
+  --vp-c-brand-2: var(--nh-accent-solid-hover);
+  --vp-c-brand-3: var(--nh-accent-solid);
+  --vp-c-brand-soft: var(--nh-sunken);
+
+  /* 默认调色板同样归零，防止残留默认蓝（#3451b2 / #a8b1ff） */
+  --vp-c-indigo-1: var(--nh-accent);
+  --vp-c-indigo-2: var(--nh-accent-solid-hover);
+  --vp-c-indigo-3: var(--nh-accent-solid);
+  --vp-c-indigo-soft: var(--nh-sunken);
+
+  --vp-c-default-1: var(--nh-text-3);
+  --vp-c-default-2: var(--nh-text-2);
+  --vp-c-default-3: var(--nh-border);
+  --vp-c-default-soft: var(--nh-sunken);
+
+  /* 提示块：靠底色与描边区分，不引入黄绿红（§四） */
+  --vp-c-tip-1: var(--nh-text-2);
+  --vp-c-tip-2: var(--nh-text-2);
+  --vp-c-tip-3: var(--nh-border);
+  --vp-c-tip-soft: var(--nh-sunken);
+  --vp-c-note-1: var(--nh-text-2);
+  --vp-c-note-2: var(--nh-text-2);
+  --vp-c-note-3: var(--nh-border);
+  --vp-c-note-soft: var(--nh-sunken);
+  --vp-c-success-1: var(--nh-text-2);
+  --vp-c-success-2: var(--nh-text-2);
+  --vp-c-success-3: var(--nh-border);
+  --vp-c-success-soft: var(--nh-sunken);
+  --vp-c-important-1: var(--nh-text-2);
+  --vp-c-important-2: var(--nh-text-2);
+  --vp-c-important-3: var(--nh-border);
+  --vp-c-important-soft: var(--nh-sunken);
+  --vp-c-warning-1: var(--nh-text-2);
+  --vp-c-warning-2: var(--nh-text-2);
+  --vp-c-warning-3: var(--nh-border);
+  --vp-c-warning-soft: var(--nh-sunken);
+  --vp-c-danger-1: var(--nh-text-2);
+  --vp-c-danger-2: var(--nh-text-2);
+  --vp-c-danger-3: var(--nh-border);
+  --vp-c-danger-soft: var(--nh-sunken);
+  --vp-c-caution-1: var(--nh-text-2);
+  --vp-c-caution-2: var(--nh-text-2);
+  --vp-c-caution-3: var(--nh-border);
+  --vp-c-caution-soft: var(--nh-sunken);
+
+  --vp-custom-block-tip-border: var(--nh-border);
+  --vp-custom-block-tip-bg: var(--nh-sunken);
+  --vp-custom-block-tip-text: var(--nh-text-2);
+  --vp-custom-block-warning-border: var(--nh-border);
+  --vp-custom-block-warning-bg: var(--nh-sunken);
+  --vp-custom-block-warning-text: var(--nh-text-2);
+  --vp-custom-block-danger-border: var(--nh-border);
+  --vp-custom-block-danger-bg: var(--nh-sunken);
+  --vp-custom-block-danger-text: var(--nh-text-2);
+  --vp-custom-block-info-border: var(--nh-border);
+  --vp-custom-block-info-bg: var(--nh-sunken);
+  --vp-custom-block-info-text: var(--nh-text-2);
+  --vp-custom-block-details-border: var(--nh-border);
+  --vp-custom-block-details-bg: var(--nh-page);
+  --vp-custom-block-details-text: var(--nh-text-2);
+
+  /* 代码 */
+  --vp-code-color: var(--nh-text);
+  --vp-code-bg: var(--nh-sunken);
+  --vp-code-link-color: var(--nh-accent);
+  --vp-code-link-hover-color: var(--nh-accent-solid-hover);
+  --vp-code-block-bg: var(--nh-sunken);
+  --vp-code-block-color: var(--nh-text);
+  --vp-code-block-divider-color: var(--nh-border);
+  --vp-code-line-number-color: var(--nh-text-3);
+  --vp-code-line-highlight-color: var(--nh-sunken);
+  --vp-code-line-diff-add-color: var(--nh-sunken);
+  --vp-code-line-diff-add-symbol-color: var(--nh-text-2);
+  --vp-code-line-diff-remove-color: var(--nh-sunken);
+  --vp-code-line-diff-remove-symbol-color: var(--nh-text-2);
+  --vp-code-line-warning-color: var(--nh-sunken);
+  --vp-code-line-error-color: var(--nh-sunken);
+  --vp-code-copy-code-border-color: var(--nh-border);
+  --vp-code-copy-code-bg: var(--nh-sunken);
+  --vp-code-copy-code-hover-border-color: var(--nh-border);
+  --vp-code-copy-code-hover-bg: var(--nh-page);
+  --vp-code-copy-code-active-text: var(--nh-text-2);
+  --vp-code-copy-copied-text-content: '已复制 ✓';
+
+  /* 字体族：零外链（theme-without-fonts + 基准 sans/mono 栈） */
+  --vp-font-family-base: var(--nh-sans);
+  --vp-font-family-mono: var(--nh-mono);
+
+  /* 布局维度（§四） */
+  --vp-nav-height: 56px;
+  --vp-sidebar-width: 264px;
+  --vp-layout-max-width: 1128px;
+  --vp-shadow-1: var(--nh-shadow-1);
+  --vp-shadow-2: var(--nh-shadow-1);
+  --vp-shadow-3: 0 12px 32px rgba(16, 24, 40, 0.1), 0 2px 6px rgba(16, 24, 40, 0.08);
+  --vp-shadow-4: var(--vp-shadow-3);
+  --vp-shadow-5: var(--vp-shadow-3);
+}
+
+.dark {
+  --nh-page: #0b0f14;
+  --nh-sunken: #121a26;
+  --nh-border: #27313f;
+  --nh-text: #e8edf4;
+  --nh-text-2: #a9b4c2;
+  --nh-text-3: #8b98a9;
+  --nh-accent: #8fb4ff;
+  --nh-accent-solid: #1d4ed8;
+  --nh-accent-solid-hover: #2a5be0;
+  --nh-on-accent: #ffffff;
+  /* 暗色只用描边分层，不用阴影 */
+  --nh-shadow-1: none;
+  --nh-term-border: var(--nh-border);
+  --vp-shadow-3: none;
+}

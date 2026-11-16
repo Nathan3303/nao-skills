@@ -1,0 +1,25 @@
+{
+  "name": "@nathan33/nao-docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "nao-skills 文档站（VitePress + Vue 3 + TS）：门户首页 + 用户文档；角色卡原文构建期从 .agents/prompts/ 注入",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "node scripts/build.mjs",
+    "preview": "vitepress preview",
+    "check:links": "node scripts/check-links.mjs",
+    "check:types": "tsc -p tsconfig.json",
+    "check:cards": "node scripts/check-cards.mjs"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^22.9.0",
+    "markdown-it": "^14.1.0",
+    "typescript": "^5.4.5",
+    "vitepress": "^1.6.4"
+  }
+}
