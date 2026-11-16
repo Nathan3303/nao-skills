@@ -179,7 +179,11 @@
 - **闸门 ④ rd-fe 已闭环**（PR #137 草案 · 自有提交至 `fdbeb54`）：`apps/document` 独立包（44 文件 + lock + `.nvmrc=22`）· 注入走 `.vitepress/markdown/card-raw.ts`（` ```card <id> ` 指令 + 来源徽标含卡 `v<N>`）· 主题移植 + 产物层守卫 `vite/strip-theme-residue.ts`（清默认 indigo / `Inter`，规则失效即构建失败）· 23 页骨架
 - **rd-fe 自证门禁（PM 已抽验）**：`docs:build` rc=0（dist 22 html = 20 内容页 + 首页 + 404）· `check` rc=0 roles=7 files=54 · `npm test` rc=0（NOTE=11 白名单）· `npm pack` 59 files 且 `apps/` 0 命中 · `check:links` 70 文件 / 151 资源属性 / **外链 0** · `check:cards` 7/7 逐段一致 · Node 24 与 22.23.5 双跑 rc=0 · AC5 两态实测（缺 `.agents/prompts` ⇒ rc=0 + 恰 1 条告警；`--strict` ⇒ rc=1）· AC10 9 处清零点逐条自查（含 `backdrop-filter` 全库唯一 = none）
 - **PM 交付内容**：20 页正文（`2f7b9f2`）—— 快速开始 4 · 需求旅程/验收 2 · 七角色解说（各 ≤卡原文 1/3，四问结构）· 角色配合 2 · 插件选择 5（包名与 `PI_PLUGINS` 一致、各给「缺了失去什么」）· 进阶 2 · FAQ（前 5 条与首页同口径 + 6 条追加）· 术语表（门禁 / 闸门分列）。PM 自跑：build rc=0 · `check:cards` 通过 · `check:links` 外链 0 · `check:types` 通过
-- **当前状态**：`rd-infra-136` 已派发（删 `site/` · 改 `pages.yml`（D4：`.nvmrc` 读版本 + 门禁 + `--base` + 失败必红 + `paths` 补 `.agents/prompts/**`、`roles.yaml`）· README 一句前置）· 之后 `qa` 全量验收 → 用户验收清单
+- **闸门 ⑤ rd-infra 已闭环**（`985bc13`）：删 `site/` 4 文件（−1367 行）+ `pages.yml` 改构建式部署（`node-version-file: apps/document/.nvmrc` · `npm ci --prefix` · 四步门禁 **types→build→cards→links**（后两者读 dist，先跑必红）· `--base /nao-skills/` 只走 CLI · 失败必红无 `continue-on-error` · `paths` 补 `.agents/prompts/**` + `roles.yaml`）+ **PR 触发**（`pull_request` 只跑 build 五步；`configure-pages` / `upload` / `deploy` gate 到主干 push 或 dispatch —— 我原字面写法漏了 `workflow_dispatch` 一支，会让手动重发静默 skip，PM 接受该偏离）+ README 一行本地起站前置 · 台账 `docs/reports/136-followups.md`（38 行 · 四条三出口：audit 3 项 / install-scripts / Node 偏差 / action bump `136-F4`）
+- **PM 自补**：`docs/INSTALL.md` 增「## 文档站（`apps/document`）」5 条（形态 / 本地命令 / **顺序易错点** / 内容单一源与 `--strict` / 部署与 `paths`）—— `rd-infra` 核命令顺序与 workflow **逐字一致**（4/4）
+- **PM 门禁自证（干净工作树 · `2542d18`）**：`check` rc=0（roles=7 · files=54）· `npm test` **rc=0** · 34 例 = **32 PASS + 2 TMUX-ONLY** · SKIP=0/DEGRADE=0/**NOTE=10 全白名单** · `RESULT: PASS` · `npm pack` 59 files 且 `apps/` 0 命中
+- ⚠️ **PM 认账（本批第 1 次）**：首轮 `npm test` 我在套件运行中编辑了 `docs/INSTALL.md` ⇒ `用例 21` 的「M 真仓库 git status 前后一致」必红（rc=1）。这正是「门禁须在静默工作区跑」红线，责任在我；已改为「先提交再跑」，复跑 rc=0。**后续派发/验收一律先确认 `git status` 空**
+- **当前状态**：`qa-136` 已派发（全量独立验收 AC1–AC11 + 自建变异负控 + 产用户验收清单 `docs/reports/136-user-acceptance.md`）· 之后 PM 核 AC → 用户走查 → 授权合并（RD squash）→ 合并后盯 Pages 首跑
 
 
 ### 本批 T544（生产侧旗标泄漏 · Issue #116 · 已合并 `6486221` · 发布 v0.23.3）
