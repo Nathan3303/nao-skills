@@ -19,8 +19,9 @@
 #     （fresh + aged 混合 ⇒ warn；两条都 fresh ⇒ 静默）
 #   F 双向：pop 掉 ⇒ warn 消失（判据不是恒真）
 #   G 不适用 ⇒ 零输出：根上无 `.git`（默认根 = 夹具包根）**不向上 walk**
-#   H 时间不可判定口径：**未来时间戳** ⇒ 不 warn（时钟回拨/手工造未来日期不误报、不炸）；
-#     阈值非法（`abc` / `-1`）⇒ 按「立即」处理（配置坏了不得把闸门静默调松）+ 文案点名取值无效
+#   H 时间/取值口径：**未来时间戳** ⇒ 不 warn（不误报、不炸）；阈值非法（`abc` / `-1`）⇒ 按「立即」处理
+#     + 文案点名；**前导零**（`08`/`010`/`0008`）⇒ 按十进制 8/10/8 生效且 rc=0（#130 返修 P2-1：算术不得崩）；
+#     `%ct` 不可解析 ⇒ 不 warn 但留 `  ·` 降级注记（#130 返修 P2-2：不得与「无 stash」不可区分）
 #   I 零副作用自证：真实仓库 stash 存量前后一致 + 哨兵 stash 未出现在真实仓库（用例只碰临时仓）
 #   J 静态面：单点实现 + 单点调用且 warn-only（`|| true`）· 机制脚本**只读** stash（无 push/pop/apply/drop）
 #     · 年龄取自 `%ct` · 阈值走 env（默认 6）
@@ -242,6 +243,55 @@ C35_HOURS=-1 run_check inject -v
 t4_assert_eq "1" "$(stash_warns)" "H7 阈值 -1（非法）：同样按立即处理 ⇒ warn"
 git -C "$GITROOT" stash pop -q 2>/dev/null || true
 
+# ============================================================ H2 前导零阈值（#130 返修 P2-1：不得让体检崩）
+#   病根：`$(( hours * 3600 ))` 会把 `08` 当八进制 ⇒ bash 算术报「值对于底数而言过大」⇒ check rc=1、
+#   无汇总行（门禁自己硬红）；`010` 反而静默按 8 生效、文案却写 010。修法 = 算术前 `10#`。
+#   判据：08 / 010 / 0008 分别按**十进制** 8 / 10 / 8 生效，且 rc 恒 0（9h 时的 stash 可区分 8 与 10）。
+t4_assert_eq "0" "$(stash_count "$GITROOT")" "H8 夹具自证：先清空（前导零组用 9h stash）"
+make_stash "$GITROOT" "$SENTINEL-9h" 9
+C35_HOURS=08 run_check inject -v
+t4_assert_eq "0" "$C35_RC" "H8 阈值 08（前导零）：check rc=0（不得因八进制解析硬崩）"
+t4_assert_eq "1" "$(stash_warns)" "H8 阈值 08 ⇒ 按十进制 8 生效（9h stash > 8h ⇒ warn）"
+t4_assert_contains "$C35_OUT" "> 阈值 8 小时" "H8 文案回显解析后的十进制 8（非 08）"
+C35_HOURS=010 run_check inject -v
+t4_assert_eq "0" "$C35_RC" "H9 阈值 010（前导零）：check rc=0"
+t4_assert_eq "0" "$(stash_warns)" "H9 阈值 010 ⇒ 按十进制 10 生效（9h stash < 10h ⇒ 静默，不是八进制 8）"
+C35_HOURS=0008 run_check inject -v
+t4_assert_eq "0" "$C35_RC" "H9 阈值 0008：check rc=0"
+t4_assert_eq "1" "$(stash_warns)" "H9 阈值 0008 ⇒ 按十进制 8 生效（warn）"
+t4_assert_contains "$C35_OUT" "> 阈值 8 小时" "H9 文案回显十进制 8（非 0008）"
+git -C "$GITROOT" stash pop -q 2>/dev/null || true
+
+# ============================================================ H3 `%ct` 不可解析 ⇒ 降级注记（#130 返修 P2-2）
+#   病根：取不到 %ct 时旧实现 `return 0` 零输出 ⇒ 与「无 stash」**输出上不可区分**，闸门可被永久且无痕静默。
+#   判据：仍**不 warn**（方向对：不误报）、rc=0，但 `-v` 必须有一条 `  ·` 降级注记（不进 warn 计数）。
+C35_FAKEBIN="$T4_CACHE_DIR/c35/fakebin"
+mkdir -p "$C35_FAKEBIN"
+{ printf '#!/usr/bin/env bash\nfor a in "$@"; do case "$a" in *--format=%%ct*) printf "n/a\\n"; exit 0 ;; esac; done\nexec %q "$@"\n' "$(command -v git)"; } \
+  > "$C35_FAKEBIN/git"
+chmod +x "$C35_FAKEBIN/git"
+run_check_fakegit() { # 同 run_check inject，但 PATH 前置「把 %ct 打成 n/a」的 git 包装器
+  local of ef
+  of="$(mktemp)"; ef="$(mktemp)"
+  ( cd "$FX" && "${C35_CLEAN[@]}" PATH="$C35_FAKEBIN:$BIN:$PATH" NAO_SKILLS="$FX" \
+      PI_CODING_AGENT_DIR="$AGENT_EMPTY" NAO_STASH_ROOT="$GITROOT" \
+      bash .agents/scripts/nao-fleet.sh check "$@" ) >"$of" 2>"$ef"
+  C35_RC=$?
+  C35_OUT="$(cat "$of"; cat "$ef")"
+  rm -f "$of" "$ef"
+}
+make_stash "$GITROOT" "$SENTINEL-noct" 9
+run_check inject -v
+t4_assert_eq "1" "$(stash_warns)" "H10 夹具自证：真 git 下同一条 9h stash ⇒ 1 条 warn（对照）"
+run_check_fakegit -v
+t4_assert_eq "0" "$C35_RC" "H10 %ct 不可解析：rc=0（不炸）"
+t4_assert_eq "0" "$(stash_warns)" "H10 %ct 不可解析：仍不 warn（避免误报 —— 方向不变）"
+t4_assert_contains "$C35_OUT" "暂存滞留检查跳过" "H10 %ct 不可解析：`-v` 留下降级注记（与「无 stash」可区分）"
+t4_assert_contains "$C35_OUT" "不可解析" "H10 注记点名能力缺失（可诊断）"
+run_check_fakegit
+t4_assert_eq "" "$(warn_field)" "H10 摘要模式：降级注记不计入 warn=（不进摘要、不污染噪声）"
+git -C "$GITROOT" stash pop -q 2>/dev/null || true
+
 # ============================================================ I 零副作用自证（真实仓库）
 REAL_AFTER="$(stash_count "$T4_ROOT")"
 t4_assert_eq "$REAL_BEFORE" "$REAL_AFTER" "I1 真实仓库 stash 存量前后一致（前=${REAL_BEFORE} 后=${REAL_AFTER}；用例零副作用）"
@@ -262,5 +312,9 @@ t4_assert_eq "1" "$(grep -c -- "--format='%ct' 2>/dev/null" "$FLEET" || true)" \
   "J5 年龄取自 \`stash list --format='%ct'\` 的最小值（单点，非 reflog）"
 t4_assert_eq "0" "$(grep -cE 'git .*stash (push|pop|apply|drop|save|clear)' "$FLEET" || true)" \
   "J6 机制脚本只读 stash（无 push/pop/apply/drop/save/clear ⇒ 闸门绝不自行改写滞留事实）"
+t4_assert_eq "1" "$(grep -c '10#$hours' "$FLEET" || true)" \
+  "J7 前导零按十进制解析（算术前 10#；否则 08 会让 check 硬红）（#130 返修 P2-1）"
+t4_assert_eq "1" "$(grep -c '暂存滞留检查跳过' "$FLEET" || true)" \
+  "J8 取不到 %ct 时留降级注记（单点，与「无 stash」可区分）（#130 返修 P2-2）"
 
 t4_exit

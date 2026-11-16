@@ -1562,13 +1562,23 @@ check_stash_residue() {
   (( n > 0 )) || return 0
   hours="${NAO_STASH_WARN_HOURS:-6}"
   hint=""
-  if [[ ! "$hours" =~ ^[0-9]+$ ]]; then
+  if [[ "$hours" =~ ^[0-9]+$ ]]; then
+    # 前导零必须按**十进制**解释（#130 返修 P2-1）：`08`/`0008` 在算术里会被当八进制 ⇒
+    #   `$(( hours * 3600 ))` 直接报「值对于底数而言过大」⇒ check rc=1 且无汇总行（门禁自己崩）；
+    #   `010` 则会静默按 8 生效、文案却写 010。凡放行前导零，必须先 `10#`。
+    hours=$((10#$hours))
+  else
     hint="（NAO_STASH_WARN_HOURS 取值无效 ⇒ 按立即处理）"; hours=0
   fi
   threshold=$(( hours * 3600 ))
-  # 最老一条 = 最小 `%ct`；取不到（非数字）⇒ 时间不可判定 ⇒ 零输出（不误报）
+  # 最老一条 = 最小 `%ct`；取不到（非数字）⇒ 时间不可判定 ⇒ 不 warn，但必须留**降级注记**
+  #   （#130 返修 P2-2）：否则「能力缺失」与「无 stash」在输出上不可区分 ⇒ 闸门可被永久且无痕静默。
+  #   注记只走 `  ·`（只在 -v 报告里出现），不计 warn、不改 rc。
   oldest="$(git -C "$root" stash list --format='%ct' 2>/dev/null | grep -E '^[0-9]+$' | sort -n | head -1 || true)"
-  [[ "$oldest" =~ ^[0-9]+$ ]] || return 0
+  if [[ ! "$oldest" =~ ^[0-9]+$ ]]; then
+    printf '  · 暂存滞留检查跳过：`stash list --format=%%ct` 不可解析（%s 条 stash 仍在）⇒ 无法做年龄判定（未 warn，也未据此判「无滞留」）\n' "$n"
+    return 0
+  fi
   now="$(date +%s 2>/dev/null || true)"
   [[ "$now" =~ ^[0-9]+$ ]] || return 0
   age=$(( now - oldest ))

@@ -706,15 +706,18 @@ be_fleet_handles() { # 打印运行生产脚本所需的后端句柄（每行 VA
 #   「目标 pane 真被回收」的假红。豁免必须**显式**（默认安全侧 = 全清），写法：
 #     `BE_HERDR_KEEP="HERDR_PANE_ID" HERDR_PANE_ID=<值> fx_fleet …`（空格/逗号分隔均可）
 #   注：不用数组 —— bash 的「函数前缀赋值」对数组会退化成字符串 `(A B)`，匹配不上变量名。
+#   分隔符：空格或逗号均可（#130 返修 P3③：注释与实现必须一致 —— 原先注释写「逗号」但只按空格匹配）。
 #   输出：每行一个 argv（`-u` / 变量名 交替），供 `$(…)` 词分展开。
 be_herdr_unset_args() {
   [ "${#T4_HERDR_ENV_VARS[@]}" -gt 0 ] \
     || { be_guard_fail "HERDR_* 清理参数派生：需要 lib.sh（T4_HERDR_ENV_VARS 单源未定义 ⇒ 宁可 fail loud 也不带生产句柄跑）"; return 1; }
   local -a hu=()
-  local _k keep
+  local _k keep keep_list
+  keep_list=" ${BE_HERDR_KEEP:-} "          # `set -u` 下必须 `:-`（未设时不能直接做模式替换）
+  keep_list="${keep_list//,/ }"             # 逗号归一为空格
   for _k in "${T4_HERDR_ENV_VARS[@]}"; do
     keep=0
-    case " ${BE_HERDR_KEEP:-} " in *" $_k "*) keep=1 ;; esac
+    case "$keep_list" in *" $_k "*) keep=1 ;; esac
     (( keep )) || hu+=(-u "$_k")
   done
   printf '%s\n' "${hu[@]}"

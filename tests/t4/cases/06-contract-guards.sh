@@ -1113,7 +1113,31 @@ t4_assert_eq "0" "$(printf '%s\n' "$D2_KEEP_OUT" | grep -c '^HERDR_PANE_ID$' || 
   "D2⑧ 被豁免的 HERDR_PANE_ID 不再出现在清理参数里（故意注入能活到子进程）"
 t4_assert_eq "2" "$(grep -c 'be_herdr_unset_args' "$T4_ROOT/tests/t4/lib-backend.sh" || true)" \
   "D2⑧ 豁免逻辑单点派生（定义 1 + be_run_fleet 调用 1；不复制到各用例）"
+# D2⑧b（#130 返修 P3③）：分隔符口径 —— 空格与逗号都必须生效（注释与实现一致）
+D2_COMMA_OUT="$( BE_HERDR_KEEP="HERDR_PANE_ID,HERDR_ENV" d2_fixture_args )"
+t4_assert_eq "12" "$(printf '%s\n' "$D2_COMMA_OUT" | grep -c .)" "D2⑧b 逗号分隔也生效（8−2=6 对 = 12 行）"
+t4_assert_eq "0" "$(printf '%s\n' "$D2_COMMA_OUT" | grep -cE '^HERDR_(PANE_ID|ENV)$' || true)" \
+  "D2⑧b 逗号分隔时两个变量都真被豁免（不是只认首个）"
+# D2⑨ 行为反渗漏（#130 返修 P3②）：只验 argv 文本不够 —— 必须在**真实子进程 env** 里看不见它。
+#   否则「删掉 HERDR_ENV」只会在静态 golden 上红，行为面依旧 0 红（be_fleet_handles 在清理之后又注入
+#   本实验场句柄，渗漏对外不可观测）。夹具：把 be_run_fleet 的被测脚本换成「打印自身 env 里的 HERDR_*」
+#   的桩（BE_FLEET_NO_HANDLES=1 ⇒ 不再注入句柄，专测清理本身），父进程注入全部 8 个宿主值。
+D2B_DIR="$T4_CACHE_DIR/d2b-$$"; mkdir -p "$D2B_DIR"
+D2B_STUB="$D2B_DIR/dump-herdr-env.sh"
+{ printf '#!/usr/bin/env bash\n'; printf 'env | grep -E "^HERDR_[A-Z_]+=" || true\n'; } > "$D2B_STUB"
+chmod +x "$D2B_STUB"
+t4_assert_contains "$(env HERDR_ENV=1 bash "$D2B_STUB" 2>/dev/null)" "HERDR_ENV=1" \
+  "D2⑨ 探针自证：直接跑桩时能看见 HERDR_ENV（判据非空转）"
+D2B_OUT="$( T4_CACHE_DIR="$T4_CACHE_DIR" BE_FLEET_NO_HANDLES=1 BE_FLEET_SCRIPT="$D2B_STUB" \
+  HERDR_ENV=1 HERDR_SESSION=host-prod HERDR_SOCKET_PATH=/host/prod.sock HERDR_SOCKET_FILE=/host/f \
+  HERDR_PANE_ID=host-pane HERDR_WORKSPACE_ID=host-ws HERDR_TAB_ID=host-tab HERDR_BIN_PATH=/host/bin \
+  bash -c 'source "$1/tests/t4/lib.sh"; source "$1/tests/t4/lib-backend.sh"; be_run_fleet "$2" run; printf "BE_RC=%s\n" "$BE_RC"; printf "%s\n" "$BE_OUT"' \
+  _ "$T4_ROOT" "$D2B_DIR" 2>&1 )"
+t4_assert_contains "$D2B_OUT" "BE_RC=0" "D2⑨ 夹具自证：被测桩确实执行（rc=0，非空转）"
+t4_assert_eq "0" "$(printf '%s\n' "$D2B_OUT" | grep -cE '^HERDR_[A-Z_]+=' || true)" \
+  "D2⑨ 行为反渗漏：父进程注入 8 个 HERDR_* ⇒ 被测子进程 env 里 0 条（验进程真实 env，不是 argv 文本）"
 rm -f "$D2_MUT" "$D2_ADD"
+rm -rf "$D2B_DIR"
 
 rm -rf "$B1BIN" "$B1_LOG" "$NEG_B1A" "$NEG_B1B" "$NEG_B1C" "$NEG_B1D" "$NEG_LED"
 
