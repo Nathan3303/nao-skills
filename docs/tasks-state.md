@@ -391,7 +391,7 @@
 | T534-O2 | 观察 · 2026-12-31 | **`case 16` 一次性 flake 观察**：`tests/t4` 3 次 full 中出现 1 次 `E 协议小节标题存在` FAIL（同 run 相邻 awk 断言 PASS；连跑 15 次全 PASS；本批对其输入零 diff ⇒ 非本批引入）；复现即抓具体断言 | QA 转办 |
 | M20261109-install-scripts | 已接受 · 2027-05-09 | **`pi update --extensions` 报 3 条 install-scripts 未授权**（`protobufjs@1.6.6`/`1.6.5` postinstall 生成代码、`@google/genai@1.52.0` preinstall 为 no-op）：均为上游依赖脚本，`pi-subagents` 功能实测正常 ⇒ **不 approve**（维持默认安全姿态），到期动作 = 若 pi-subagents 出异常再回看 | PM 裁决（2026-11-09，用户报障输出） |
 | M20261114-stash-exit | **已关闭（2026-11-16）** | BR5 出口机械闸：`check_stash_residue` 已存在（批次 B）且 D1 加龄调优（`28b5d44`）；判定命令 `git stash list \| wc -l` + `bash .agents/scripts/nao-fleet.sh check`（>6h 才 warn）| 批次 B（#126）|
-| M20261114-helper-u-guard | 观察 · 2027-02-28 | **`NAO_STASH_ROOT` 的 `-u` 硬化无断言守卫**：全仓仅 `cases/06`/`34`/`35` 文本提 stash ⇒ helper 两个单点（`t4_run_shim` / `be_run_fleet`）被删不会被抓。判定要点：到期时看 `cases/34` 是否已加「export 注入根 ⇒ `t4_run_shim` 输出无 `warn=`」的断言（有 ⇒ 关闭）| QA 三轮点检 P3 |
+| M20261114-helper-u-guard | **已关闭（2026-11-16）** | `NAO_STASH_ROOT` 的 `-u` 硬化此前**无断言守卫**（删掉不会被抓）；**#132 E2-2 已补**（`cases/06`，16 条）：直连旁证有 `warn=` → 经 `t4_run_shim` / `be_run_fleet` 无 `warn=` → 副本删各自 `-u` ⇒ warn 回来（必红）+ 两 helper 各恰 1 处静态定位。判定命令：`grep -c "E2-2" tests/t4/cases/06-contract-guards.sh`（现 18）| 批次 E（#132）|
 | M20261115-br5-stash-warn-tension | **已关闭（2026-11-16）** | BR5（stash 承载合并后事实）与新 stash 闸的张力：**D1 已交付 `28b5d44`**（阈值 >6h 才 warn）；**当场自证**：本批收尾存 BR5 stash（`git stash list` = 1）后 `check` = `check: OK … `（**无 `warn=`**），而上一批同样动作会 `warn=1` | 批次 D（#130）|
 | T545-O1 | 接受 · 2027-01-31 | **卡会话跨仓同 core 不判重**（旧行为延续、非回归）；到期重评是否加 `@scope` 强制。判定命令：`grep -n "fleet_scope_slug" .agents/scripts/nao-fleet.sh` —— 若结果只出现在放置键/显示名、未参与**判重**，则本条仍成立 | #96 全链路终态行 |
 | 96-未验三项 | 观察 · 2027-06-30 | **真机 attach 重排 / pi TUI 最小行列 / `pane move` 后长稳** —— PRD 标注「未验」。**人工判定型**（无机械命令：真机行为类；`grep` 只能命中设计/实现报告里的**提及**，不能当已验证据 —— 实测 8 处命中全为提及）。判定要点：到期时在 `docs/reports/` 找**真机实测结论**（有 ⇒ 关闭并回填该报告指针；无 ⇒ 续期）| #96 全链路终态行 |
@@ -404,6 +404,7 @@
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| M20261116-backlog-sweep | PM（E1 台账）+ `rd-infra-M20261116-backlog-sweep`（E2 断言） | Issue [#132](https://github.com/Nathan3303/nao-skills/issues/132) · **队列清零批**：E1 三档表 21→17（关 4 / 移出 3 / 续期 1）+ 队列数据行清零 · E2 `cases/06` +37 断言（pi 阈值文档面一致性 + 完备性；helper `NAO_STASH_ROOT` 守卫）| 2026-11-16 | E1–E2 | `ff630c7` · `b856547` |
 
 （#121 已闭环，终态见「已验收 / 已归档」）
 
