@@ -212,6 +212,14 @@ npx @nathan33/nao-skill migrate   # 旧文件备份到 .agents/.nao-obsolete/，
 - **版本权威口径**：`.pi/settings.json` 的 pin 是**唯一权威**；`.agents/.nao-version` 的语义是「本机已安装机制包版本」，**不作为版本依据**；两者不一致时以 pin 为准。
 - **fmt 边界**：包内 `.agents/**` 按原始存储形态发布（部分 YAML / Markdown / MTS 未按 oxfmt / prettier 归一）。仍持有旧版全套 `.agents/**` 的仓库，继续把 `.agents/**` 排除出 fmt 校验即可，⛔ **不要为过 fmt 就地格式化**；新形态项目内只有转发入口，无需处理。
 
+## 文档站（`apps/document`）
+
+- **形态**：独立私有包（不进发布包——`npm pack` 白名单不含 `apps/`），VitePress 1.6 + Vue 3 + TS；CI 与 `.nvmrc` 锁 Node 22（根 `engines>=18` 不变）。
+- **本地**：`npm install --prefix apps/document` → `npm run docs:dev`（预览）/ `npm run docs:build`（产物 `apps/document/.vitepress/dist/`）。
+- **顺序（易错）**：`check:types → build → check:cards → check:links`；后两者读 `dist`，**先跑必红**。
+- **内容单一源**：角色卡正文由构建期从 `.agents/prompts/*.md` 注入（禁手抄）；其余文案在 `apps/document/content/**`；缺 `.agents/prompts` 时降级为一条告警，`--strict` 则失败。
+- **部署**：`.github/workflows/pages.yml` 构建后上传 dist（`--base /nao-skills/`），失败必红、不回传旧产物；`paths` 含 `.agents/prompts/**` 与 `roles.yaml`（改卡即重建，否则线上静默过期）。
+
 ## 物化与离线（CI / 无 pi 环境必读）
 
 - `.pi/npm/` 由 pi 管理并 **gitignore**。因此 **fresh clone 上没有 `.pi/npm/package.json` 与 lockfile**，`npm ci --prefix .pi/npm` 当前**不可用**。
