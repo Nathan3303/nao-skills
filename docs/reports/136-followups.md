@@ -30,3 +30,9 @@
 出口：**接受** · 到期 **2027-01-31** · owner `rd-infra` · 动作 = 构建出现版本相关诊断时回看；CI 与开发态分叉不变更 NFR。
 
 - 修订：2026-11-16 首版（T546 交付随附；PM 授权建本文件）
+
+## 四、pages actions 版本未 bump（`136-F4`）⇒ 接受（到期 2027-02-28）
+
+证据：`configure-pages` 当前 latest = **v6**（workflow 用 v5）· `upload-pages-artifact` 当前 latest = **v5**（workflow 用 v4，`path` 输入口径已核 `action.yml`）；`checkout@v5` / `deploy-pages@v5` 已是 latest major。本批 workflow 已在改部署链（新增 PR 触发 + 主干 gate），同批再叠版本变量会让首跑归因变难 ⇒ PM 2026-11-16 裁定不夹带。
+
+出口：**接受** · 到期 **2027-02-28** · owner `rd-infra` · 动作 = 下次动该 workflow 时一并升，同一 PR 内复跑结构断言与首跑观察。

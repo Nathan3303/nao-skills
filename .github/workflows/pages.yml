@@ -7,17 +7,23 @@ name: Deploy docs site to GitHub Pages
 #
 # 失败必须红：无 continue-on-error；build job 内任一 step 失败即不产出产物，
 # deploy job needs: build ⇒ 失败的提交永远不会把旧产物重新发上线。
+#
+# 触发两面：`pull_request` 只跑 build job 的三道站点检查（合并前就能红），
+# Pages 相关步骤（configure-pages / upload / deploy）gate 到主干 push，PR 一律不部署。
 
 on:
   push:
     branches: [main]
-    paths:
+    paths: &site-paths
       # 站点本身（内容 / 组件 / 配置 / 脚本 / 依赖锁定）
       - 'apps/document/**'
       # 角色卡原文与角色清单：构建期注入的来源（不覆盖 = 改卡后线上静默过期）
       - '.agents/prompts/**'
       - '.agents/roles.yaml'
       - '.github/workflows/pages.yml'
+  pull_request:
+    # 与 push 同一份过滤：PR 只在涉及站点 / 卡源时跑，避免无关 PR 白等
+    paths: *site-paths
   workflow_dispatch:
 
 # 最小权限：读仓库内容（checkout）+ 发布 Pages（OIDC 部署令牌）
@@ -40,6 +46,8 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Setup Pages
+        # Pages API 只在要部署的触发上碰（PR 来自 fork 时 pages 权限会被降级，跑它只会制造无关红）
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         uses: actions/configure-pages@v5
 
       # 版本单一事实 = apps/document/.nvmrc（与本地 nvm 同源）
@@ -70,12 +78,16 @@ jobs:
         run: npm --prefix apps/document run check:links
 
       - name: Upload Pages artifact
+        # 只在主干 push / 手动 dispatch 上传；PR 事件永不产出 Pages 产物
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         uses: actions/upload-pages-artifact@v4
         with:
           path: apps/document/.vitepress/dist
 
   deploy:
     needs: build
+    # 同一道主干闸：PR 只跑检查，不部署（旧产物也永不回传）
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     environment:
       name: github-pages
