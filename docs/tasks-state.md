@@ -190,7 +190,14 @@
 - **术语改已回（`20ad2f8`）**：`nao-fleet.sh` 两处展示字面 `·scope=` → `·fleet=`（在线行 + 派生/卡行尾）+ `cases/28` 断言同步；`check` rc=0 · `npm test` rc=0（34 例 · 断言 2124 · NOTE=10）
 - ⚠️ **环境事故（2026-11-17）**：PM 跑全量门禁期间 **herdr server 死亡**（session `nao-skills` socket 消失，`pane list` 报 `server_not_running`，`herdr session list` 只剩 `default(stopped)`）⇒ **7 个常驻角色 pane 全部丢失**（PM 所在 pi 进程仍在，但已成「脱离 pane」）。已用 `nao-fleet.sh session-start --session nao-skills` 重启（rc=0，新面板）；重启后 `ensure` 必须先恢复 `HERDR_*`（PM 的 bash 工具链 env 里没有，从自身 pi 进程 `/proc/<pid>/environ` 取回，**非猜测会话名**）。**后果**：`qa-138` 会话名带上了 `@nao-skills`（新 fleet 语义的首次实战）· 用户如需常驻会话要重新 `ensure`
 - ⚠️ **门禁 flake（未定性）**：那次全量 `npm test` **rc=1**，唯一 FAIL = `cases/06`「**E2-1 夹具自证：未变异副本同样全绿**」（报 `AGENTS.md:18 未归类：既非下限声明（≥/低于），也无「截至」历史时点标注`）；但**单跑 case 06 连跑 3 次全 PASS**。证据：`/tmp/t547-evidence/pm-full-run-fail.log:273` + 失败缓存 `/tmp/nao-t4.RqhAxa`（48M 保留）。**初判疑似 flake 或与 server 死亡/并发有关，未定性** —— 已交 QA 独立判（复现则抓「server 是否掉线」「`E2_LAB` 夹具里 `MIN_PI_VERSION` 是否残留前一条变异的 9.9.9」；不复现则按观察项 + 到期日归口）
-- **当前状态**：`qa-138@nao-skills` 已派发（全量 + AC1–AC12 独立验 + E2-1 flake 定性 + 用户 CLI 验收清单）→ PM 核 AC → 用户验收 → 合并 → 发 MINOR 0.25.0（连带同步清单：`intercom-protocol.md:11` + `nao-fleet.sh` usage 归 rd-infra；`INSTALL.md:121/123/124` + README 多仓段归 PM；旧 ADR 由本 ADR 演进 · 不废原文）
+- **闸门 ⑥ QA 终判（`7582305` · 报告 52 行 + 用户清单 40 行 · **未 push**）**：AC1–AC12 全 ✓（AC7 口径订正见 D-4）· 术语 ✓（`·fleet=` 1 处 / `scope=` 0 处）· 真 herdr 独立 session 验 · **942 万字节级** 变异/差分负控 8 组。**关键发现（把我那次 rc=1 定性了）**：**D-2** = `cases/06` `E2-1 夹具自证` 用 `printf | grep -Fxq` + `pipefail` ⇒ `grep -q` 早退致 `SIGPIPE`(rc=141) ⇒ 真命中被判「未归类」；**不是** server 死亡/并发。QA 8 路并发 320 轮复现 3 次，机制确定性演示成立
+- **QA 挖出 3 个真缺陷（只报不修）**：
+  - **D-1（P1 · 测试夹具）** `cases/28:1097` `B2_ENV` 未隔离宿主 `HERDR_PANE_ID`，而 B2 夹具钉 `w1:p1`、herdr 首 pane 恰是 `w1:p1` ⇒ 自面板守卫判「调用者自身」⇒ `close rc=1` ⇒ **默认后端下门禁必红**（tmux 看不见）。修 = 加 `HERDR_PANE_ID="w9:p9"`（`B3_ENV` 已这么钉）
+  - **O-1（P1 · 既有缺陷，本批暴露）** `repo` 保留 `roles.yaml` 的 `workspace: .` 相对值 ⇒ cwd 由 herdr **server** 解析 ⇒ pane 落 server 目录（实测：我起的 `rd-infra-138` 会话 cwd = `/home/nathan`）⇒ ①两仓 pane 同落 server 目录 ②同仓重复 `ensure` 误报「同 core 但 fleet/仓不同」 ③归属/legacy 判据拿不到 cwd
+  - **D-3（P3 · 文案）** `INSTALL:123` 缺「卡会话」限定（**PM 已改** `ef4a44b`）· `intercom-protocol.md:11` 指针章节名过期（归 rd-infra）
+- **PM 裁定（范围追加）**：**O-1 本批修**（不等下批）——本批交付的就是「1 workspace = 1 仓 = 1 支舰队」，pane cwd 不是那个仓则 PM 读错 `AGENTS.md`、跑错构建，标题特性是坏的；已补 **AC13**（正/负控）
+- **当前状态**：`rd-infra-138` 二轮已派（D-1 + D-2 + O-1 + D-3②；要求**在 herdr pane 内**跑门禁自证）→ QA 复跑 → 用户验收 → 合并 → 发 MINOR 0.25.0
+- **附**：机器 2026-11-17 ~15:54 重启过一次 ⇒ 我先前的 `/tmp` 证据（失败日志/48M 缓存）已随重启清空（非 QA 删除）；因 D-2 已定性，证据不再需要（连带同步清单：`intercom-protocol.md:11` + `nao-fleet.sh` usage 归 rd-infra；`INSTALL.md:121/123/124` + README 多仓段归 PM；旧 ADR 由本 ADR 演进 · 不废原文）
 
 ### 本批 T546（门户迁移 Vue 3 + TS，并建文档站 · Issue [#136](https://github.com/Nathan3303/nao-skills/issues/136) · 开工中 · 分支 `feat/136-docs-site`）
 
