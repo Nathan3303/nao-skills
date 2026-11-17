@@ -47,7 +47,10 @@
 - **`--scope` 弃用**：等价 `--fleet`，打一条 deprecated warn（含替代写法），不报错；与 `--fleet` 同时给 ⇒ 拒绝（歧义）。
 - **裸名解析**：`status`/`close` 收到裸 core 时，用「调用方所在仓推导的 fleet」匹配；无匹配再回退到「全 session 唯一同 core」；仍不唯一 ⇒ 拒绝并列出候选（不猜）。
 - **并存期**：不追溯改名已存在的裸名会话；不因旧会话存在而放宽新规则。
-- **`.agents/fleet-scope`**：本批保留，语义 = 「覆盖默认 fleet 名」；校验口径不变（空/多行/非法/symlink 逃仓 ⇒ fail loud）。
+- **`.agents/fleet-scope`**：本批保留，语义 = 「覆盖默认 fleet 名」；校验口径不变（空/多行/非法/symlink 逃仓 ⇒ fail loud）。该文件存在时在体检面给一条 `·` 信息行（生效值 + 来源 tier），**不计 warn、不改 rc**。
+- **保留前缀（D-1 · 用户 2026-11-17 拍板 A）**：`subagent-` / `nao-` 前缀限制**只作用于 core（角色名）**，不再作用于 fleet 值 ⇒ `nao-skills`、`nao-todo` 这类目录名默认可作 fleet，本仓零配置可用。core 的守卫不变。
+- **legacy 等价（D-3 · 拍板 A）**：默认 tier 下，**同仓**的裸名 core 与 `core@<该仓 slug>` 视为同一会话（等价判定复用 `pane cwd` 快照，不新增 herdr 调用）⇒ 旧会话在场时重复 `ensure` 不得起出第二个 PM。
+- **名长（D-4 · 拍板 A）**：`48` 上限与 `core ≤32` / `fleet ≤16` 两条冻结值**都不动**。默认 tier（仓 slug 派生）在超长时**自动截短**到 `48 - len(core) - 1`（≥1、去尾 `-`）并打**一行**提示（非 `-v`）；显式 tier（`--fleet` / 文件）超长仍 fail loud 并点明该缩哪一段。
 
 ## 六、NFRs
 
@@ -63,13 +66,15 @@
 - AC1（主路径）：Given 仓 A 与仓 B 均无任何 scope 文件，When 各自跑 `ensure pm rd-fe qa`，Then 两套会话并存，名字分别为 `*@<A slug>` 与 `*@<B slug>`，且各自落在 label 等于 slug 的 workspace。
 - AC2（主路径 · 显式覆盖）：Given 仓 A 的目录名与仓 B 相同，When A 跑 `ensure --fleet alpha pm`、B 跑 `ensure --fleet beta pm`，Then 两者并存且不共用 workspace。
 - AC3（优先级）：Given 同时存在 `--fleet x` 与 `.agents/fleet-scope` = `y`，When `ensure pm`，Then 用 `x`；只给文件时用 `y`；都没有时用仓 slug（三条各一断言）。
-- AC4（异常）：Given fleet 值非法（空 / 含 `@` / 超 16 / 尾 `-` / `子代理 保留前缀），When `ensure`，Then fail loud 且**不建任何 pane**（BR6 零副作用）。
+- AC4（异常）：Given fleet 值非法（空 / 含 `@` / 超 16 / 尾 `-` / 非常规字符），When `ensure`，Then fail loud 且**不建任何 pane**（BR6 零副作用）。**正向对照**：Given 目标仓目录名为 `nao-skills`（保留前缀），When 不写任何配置 `ensure pm`，Then 成功且名字为 `pm@nao-skills`（D-1 拍板 A：前缀只限 core）。
 - AC5（异常 · 歧义）：Given `--fleet x` 与 `--scope y` 同时给，When `ensure`，Then 拒绝并说明二者等价、只给一个。
-- AC6（兼容）：Given 升级前存在裸名会话 `pm`，When 跑 `status` 与在对应仓 `close pm`，Then `status` 列出并标注「无 fleet」，`close` 命中该会话并返回可复现证据（不误伤 `pm@<fleet>`）。
+- AC6（兼容 · R2）：Given 同仓存在升级前的裸名会话 `pm` 且**不存在** `pm@<该仓 slug>`，When 在对应仓跑 `close pm`，Then 命中该裸名会话并给出可复现证据；**不得**打印「未运行（无需回收）」这类 rc=0 假成功（D-2 拍板 A：不做「无 fleet」渲染标注，靠名字本身区分）。
 - AC7（负向闭环）：Given 同仓同 fleet 已有 `pm`，When 重复 `ensure pm`，Then 仍 fail loud（不因新参数放宽单例），提示含可执行命令。
 - AC8（负向闭环 · 零回归）：Given 单仓单舰队（配置文件与现状相同）跑门禁，When `npm test`，Then 全量 rc=0；`cases/28` 命名契约与 `cases/33` 放置键断言按新口径更新后有对应的「改回旧实现必红」负控。
 - AC9（弃用路径）：Given 使用 `--scope x`，When `ensure`，Then 行为等价 `--fleet x` 且 stdout/stderr 出现**恰一条** deprecated 提示；`--help` 里 `--fleet` 为主、`--scope` 标注弃用。
 - AC10（文档一致）：Given 本次改动，When 读 `docs/INSTALL.md`「会话命名与多仓 scope」与 README 多仓段，Then 示例命令与新语义逐字一致（含 `--fleet` 示例与「名字恒带 scope」说明），且不存在「无 scope 时名字与旧版逐字相同」这类已失效表述。
+- AC11（负向闭环 · R3 破坏性路径）：Given 同仓已有裸名 `pm` 在场（升级前起的），When 在同一仓 `ensure pm`，Then **不产生第二个 PM**——按 legacy 等价判定为同一会话（复用或 fail loud 皆可，但必须点名既有会话），且现场 pane 数与操作前一致。
+- AC12（边界 · 名长）：Given core 长度 32 与目录名长到使 `core + 1 + slug > 48`，When 默认 tier `ensure`，Then 名字被自动截短到合法长度、**恰一行**提示、会话可正常拉起；Given 同条件但用显式 `--fleet`（16 位），Then fail loud 并点明缩哪一段（两条各一断言，且断言「48 上限与 core≤32 / fleet≤16 两个常量未改」）。
 
 ## 八、上线闭环
 

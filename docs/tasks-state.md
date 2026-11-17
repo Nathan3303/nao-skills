@@ -175,7 +175,11 @@
 - **机制断点（已核代码，非猜测）**：放置键 =「已声明 scope 否则仓 slug」（`:1114`）与身份键 = `core[@scope]`（`:1796`，scope 只来自 `--scope` / `.agents/fleet-scope`）**来源不一致** ⇒ 两个仓放置分开但名字都叫 `pm` ⇒ fail loud。制度上「只允许替换 scope 的来源」（`docs/INSTALL.md:124`）⇒ 本批**不改名字语法**，只换来源
 - **门禁顺序**：立项（✅ #138）→ **arch 评审必过**（会话名契约换来源 · 放置/身份同源 · 迁移路径 → ADR `docs/adr/<日期>-fleet-identity-source.md`）→ `rd-infra` 实现 + `tests/t4` → `qa` 全量 + 自建夹具 → 用户 CLI 验收 → 合并 → 发 MINOR
 - **已知代价（写进 PRD 与 release notes）**：推翻「无 scope 时名字与旧版逐字相同」· `--scope` 弃用期 · 并存期须认旧裸名会话（AC6 专钉「close 裸名不误伤 `pm@<fleet>`」）· `tests/t4` 大量断言假设「名字无 scope」（AC8 负控）
-- **当前状态**：等 arch 回执
+- **闸门 ② arch 已闭环**（`f43e5e8`）：评审 57 行 + **ADR 56 行**（`docs/adr/2026-11-17-fleet-identity-source.md`，索引已加）· 结论「有条件可行」。**D1** 删回退、label 改入参（静态判据由「恰 1 次 slug」收紧为 0 次）· **D2** 点名回归面（`cases/28 C2②` 冻结 fixture md5、`GOLD_ENSURE_TMUX`、`cases/33 U1–U5`、`cases/22` `已拉起` 字面、`cases/32:154`）· **D3** 名长新可达路径（32+1+16=49>48）· **D4** `fleet-scope` 提示走 `·` 信息行（不进 warn/rc）· **D5** 弃用 warn 一次性、**不留开关**· **D6** 批次二演进接口三条写死（放置键禁由名字派生 · 收敛到单点 `placement_key(fleet,repo)` · fleet/label 两变量不合并）
+- **arch 新发现两条（我 PRD 的漏洞，已修）**：**R2** `close pm` 假成功（解析成不存在的 `pm@slug` ⇒ rc=0「未运行」而旧会话仍在跑）· **R3 更坏**：冲突判据含「同 scope」而 legacy 是空 scope ⇒ 判 absent ⇒ **同仓可起第二个 PM**
+- **四条拍板（2026-11-17）**：**D-1 A**（用户拍板）保留前缀 `nao-`/`subagent-` **只限 core**，不再管 fleet ⇒ 本仓 `nao-skills` 零配置可用 · **D-2 A**（PM 判）不做 `status`「无 fleet」渲染标注（裸名与 `@slug` 本身就区分得开，省三处全文 golden）· **D-3 A**（PM 判，安全优先）默认 tier 下同仓裸名 ≡ `core@<slug>` ⇒ 升级零操作且堵住 R3 · **D-4 A**（用户拍板）48 与 core≤32/fleet≤16 三个冻结值都不动，默认 tier 超长**自动截短 + 恰一行提示**，显式 tier 仍 fail loud
+- **PRD 已按拍板更新**（97 行）：新增 AC11（R3 不产生第二个 PM）· AC12（名长双态）· AC4 加「`nao-skills` 零配置正向」· AC6 改为「不得假成功」
+- **当前状态**：等 `rd-infra` 实现回执（连带同步清单：`intercom-protocol.md:11` + `nao-fleet.sh` usage 归 rd-infra；`INSTALL.md:121/123/124` + README 多仓段归 PM；旧 ADR 由本 ADR 演进 · 不废原文）
 
 ### 本批 T546（门户迁移 Vue 3 + TS，并建文档站 · Issue [#136](https://github.com/Nathan3303/nao-skills/issues/136) · 开工中 · 分支 `feat/136-docs-site`）
 
