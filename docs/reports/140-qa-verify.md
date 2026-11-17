@@ -63,3 +63,17 @@
   - **仍缺的反例覆盖**：目前没有用例**主动注入**撞号 id 来证明夹具 hermetic。建议加一条：B2 内以 `HERDR_PANE_ID=w1:p1` 显式注入并期望 PASS；或把 `B2_ENV` 改成 `env -u HERDR_*`（与 `_be_herdr_exec` 同口径，比钉单值更彻底）。
 - **门禁（在 `w2:p1` 跑，避开撞号）**：herdr **rc=0**（658s · **2132 PASS / 0 FAIL / NOTE 10** 全白名单）；tmux 腿 **rc=0**（332s · **1960 PASS / 0 FAIL / NOTE 11** 全白名单）；两腿 `case 23` PASS、`case 29/30` 零改动 PASS。与 RD 报的 2134/9、1962/10 各差「−2 PASS / +1 NOTE」且**两腿同向** ⇒ 环境条件块（非代码差异），不改 rc。
 - **结论：可交用户复验、可合并**（用户场景 rc=0 达成；三条 P2 已闭合，其中两条经我手工变异验证）。合并前只需定合并顺序，或接受 w1:p1 跑者的 3 条已知红。
+
+## 八、终验轮（`561a580` · rebase 后）
+
+- 环境：HEAD `561a580`（含 T547 squash `380b9f7`）· 工作树空 · 我在宿主 pane **`w1:p1`** 内跑（正是会触发 D-1 撞号的那个 id）。
+- **① 替身默认 `turn=0` 是否让别的用例失去 working 覆盖？→ 覆盖没丢，但掩盖了一处「真机时序不成立」（P3）**。
+  - 判据（我做的实验）：把替身 turn 拉到 600000ms（≈旧「永久 working」）跑 `--case 33` ⇒ **5 FAIL**，全是 `close pm`（AC11 三条夹具 close + AC6 两条断言）⇒ **只有 case 33 依赖「投递后立即 idle」**；RD 改默认值确实是为了它不再被忙闲闸门误拒。
+  - **覆盖没丢**：close 忙闲闸门（working/blocked ⇒ 拒）由 `case 28` B3② 用**直接注入 `agent_status`**覆盖（`b3_agents "w1:p1|working…"`，与投递无关）；`agent_not_idle` / working 期可读语义由 `case 23` 用 60s 显式覆盖 ⇒ 不是「拿默认值换绿」的覆盖率损失。
+  - **遗留（P3）**：真 herdr 上 `ensure pm` 投递后 pm 是 `working`（秒级），紧跟的 `close pm` 会被拒；替身默认 0 让 case 33 的这些 close 成立 ⇒ case 33 的夹具假设「投递后立即 idle」在真机不成立。建议下批：case 33 的 close 加 `--force` 或等 idle，并在注释写清这是替身假设。
+- **② `case 23` 的 60000ms：无挂起风险**。herdr 腿 107 断言 **45s** 走完（无任何路径等 turn 结束）；把 turn 调到 **3000ms** 用例仍 PASS（断言块在投递后 <3s 执行）⇒ 余量 ≥20×。`T4_HERDR_PROMPT_TURN_MS` 是**进程级** env，用例结束即失效，无跨用例残留；不必显式复位（尾部 `unset` 可选）。
+- **③ rebase 冲突解法没有放宽 case 23**：`pm@$BASE` / `rd-be@$BASE` / `pm-off@$BASE` 与生产一致（`expected_wrapped` 逐字重建 + `pane_of` 按 `--name` 定位，两腿绿）；`pm-off@$BASE` 仍是「`--task off` + 开关关」的唯一变量对照，AC3④ 仍归一名/提示文件后比 md5（相等）；「开关关 2s 无锚」负控仍在。⇒ 只是让名字随 T547 契约恒带 `@<fleet>`，判据未放宽。
+- **④ 撞号守卫是真 hermetic（两条都做了）**：宿主 `HERDR_PANE_ID=w1:p1` 下 `--case 28` ⇒ **PASS 435/0**，新增两条注入自证绿（注入 w1:p1 被 B2_ENV 摘掉）；副本把 `T4_HERDR_UNSET_ARGS` 从 `B2_ENV` 摘掉、同场景 ⇒ **10 FAIL**，其中 **D-1 组 6 条**（4 条 `-u` 静态 + 2 条注入自证）+ 4 条 P2-1② 下游症状 ⇒ 不再依赖宿主 pane id 是什么。
+- **数字（我在 w1:p1 跑）**：`check` rc=0 · herdr `npm test` **rc=0**（788s · 34 例 · **2200 PASS / 0 FAIL / NOTE 10** 全白名单）· tmux **rc=0**（483s · **1973 PASS / 0 FAIL / NOTE 11** 全白名单）· `case 23` herdr **107/0**（45s）、tmux **81/0** · `case 28` 撞号注入 **435/0** · `case 29/30` 零改动绿（18/19）。
+  - 与 RD 报的 2202/9、1975/10 差「−2 PASS / +1 NOTE」（两腿同向，前两轮同型）⇒ 环境条件块，不影响 rc。
+- **结论：可合并**。四件终判全过；替身默认值虽属「为过门而改」，但覆盖率未丢（忙闲闸门另有注入覆盖），唯一遗留是 case 33 夹具的真机时序假设（P3，建议下批小修，不阻塞）。
