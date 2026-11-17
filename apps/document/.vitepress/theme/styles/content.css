@@ -1,0 +1,634 @@
+/**
+ * 内容页（VitePress 默认主题的 token 覆盖 + 断点覆盖）。
+ * 依据：docs/designs/2026-11-16-docs-site.md §三 / §四 / §六 / §八。
+ * 选择器统一带 `:root .Layout ...` 前缀：默认主题组件样式是 scoped（class + data-v 属性），
+ * 需要更高特异性才能稳定覆盖，同时避免 `!important`。
+ */
+
+/* ── 阅读栏与版心维度 ───────────────────────────────────── */
+
+:root .VPDoc .content-container {
+  margin: 0 auto;
+}
+
+:root .VPDoc.has-aside .content-container {
+  max-width: 720px; /* 设计：阅读栏 720 ≈ 16px 下 44 汉字/行 */
+}
+
+:root .VPDoc .aside {
+  max-width: 264px;
+  padding-left: 24px;
+}
+
+:root .VPDoc .aside-container,
+:root .VPDoc .aside-curtain {
+  width: 200px; /* 设计：右 TOC 200 */
+}
+
+/* 默认 aside-curtain 是渐变，违反「无渐变」形态红线 */
+:root .VPDoc .aside-curtain {
+  display: none;
+}
+
+/* 宽屏：内容页不套 1128 版心（那会压窄阅读栏），侧栏贴 24 边距 */
+@media (min-width: 1440px) {
+  :root .Layout .VPContent.has-sidebar {
+    padding-right: 24px;
+    padding-left: calc(24px + var(--vp-sidebar-width));
+  }
+
+  :root .Layout .VPSidebar {
+    padding-left: 24px;
+    width: calc(24px + var(--vp-sidebar-width));
+  }
+
+  :root .Layout .VPLocalNav.has-sidebar {
+    padding-left: calc(24px + var(--vp-sidebar-width));
+  }
+
+  :root .Layout .VPNavBar .container {
+    max-width: 1128px;
+  }
+}
+
+/* ── 字阶（内容页 h1 31 / 25，不取营销大标题 39） ───────── */
+
+:root .vp-doc {
+  font-size: var(--nh-fs-16);
+  line-height: 1.7;
+  color: var(--nh-text);
+}
+
+:root .vp-doc h1 {
+  margin: 0 0 16px;
+  font-size: var(--nh-fs-31);
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+:root .vp-doc h2 {
+  margin: 56px 0 16px;
+  padding-top: 24px;
+  border-top: 1px solid var(--nh-border);
+  font-size: var(--nh-fs-25);
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.006em;
+}
+
+:root .vp-doc h3 {
+  margin: 32px 0 12px;
+  font-size: var(--nh-fs-20);
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+:root .vp-doc h4 {
+  margin: 24px 0 8px;
+  font-size: var(--nh-fs-16);
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+:root .vp-doc p,
+:root .vp-doc li {
+  font-size: var(--nh-fs-16);
+  line-height: 1.7;
+}
+
+:root .vp-doc a {
+  font-weight: 500;
+  color: var(--nh-accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+:root .vp-doc a:hover {
+  color: var(--nh-accent);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+}
+
+:root .vp-doc :not(pre) > code {
+  border: 1px solid var(--nh-border);
+  border-radius: var(--nh-r-8);
+  padding: 1px 5px;
+  background-color: var(--nh-sunken);
+  font-family: var(--nh-mono);
+  font-size: var(--nh-fs-13);
+  color: var(--nh-text);
+}
+
+:root .vp-doc blockquote {
+  border-left: 2px solid var(--nh-border);
+  padding-left: 16px;
+  color: var(--nh-text-2);
+}
+
+:root .vp-doc hr {
+  border-top: 1px solid var(--nh-border);
+}
+
+/* ── 代码块（横向滚动容器 + 复制按钮同文案） ───────────── */
+
+:root .vp-doc div[class*='language-'] {
+  margin: 16px 0;
+  border: 1px solid var(--nh-border);
+  border-radius: var(--nh-r-12);
+  background-color: var(--nh-sunken);
+}
+
+:root .vp-doc div[class*='language-'] pre {
+  padding: 20px 0;
+  overflow-x: auto;
+}
+
+:root .vp-doc div[class*='language-'] code {
+  font-size: var(--nh-fs-13);
+  line-height: 1.75;
+}
+
+:root .vp-doc div[class*='language-'] > span.lang {
+  display: none;
+}
+
+:root .vp-doc [class*='language-'] > button.copy {
+  top: 8px;
+  right: 8px;
+  width: auto;
+  min-width: 44px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--nh-border);
+  border-radius: var(--nh-r-8);
+  background-image: none;
+  background-color: var(--nh-page);
+  font-family: var(--nh-sans);
+  font-size: var(--nh-fs-13);
+  font-weight: 600;
+  color: var(--nh-text-2);
+  opacity: 1;
+}
+
+:root .vp-doc [class*='language-'] > button.copy::before {
+  /* 默认的「已复制」气泡与新文案重复（隐藏），改作命中区扩展（视觉 32 → 命中 44） */
+  display: block;
+  content: '';
+  position: absolute;
+  inset: -6px;
+  width: auto;
+  height: auto;
+  border: 0;
+  padding: 0;
+  background: none;
+}
+
+:root .vp-doc [class*='language-'] > button.copy::after {
+  display: block;
+  content: '复制';
+  line-height: 30px;
+}
+
+:root .vp-doc [class*='language-'] > button.copy.copied,
+:root .vp-doc [class*='language-'] > button.copy:hover.copied {
+  border-radius: var(--nh-r-8);
+  background-image: none;
+  color: var(--nh-text);
+}
+
+:root .vp-doc [class*='language-'] > button.copy.copied::after {
+  content: '已复制 ✓';
+}
+
+/* ── 表格 / 提示块 ─────────────────────────────────────── */
+
+:root .vp-doc table {
+  display: block;
+  overflow-x: auto;
+  font-size: var(--nh-fs-13);
+}
+
+:root .vp-doc th,
+:root .vp-doc td {
+  border-color: var(--nh-border);
+  font-size: var(--nh-fs-13);
+}
+
+:root .vp-doc tr {
+  background-color: transparent;
+  border-top: 1px solid var(--nh-border);
+}
+
+:root .vp-doc .custom-block {
+  border: 1px solid var(--nh-border);
+  border-radius: var(--nh-r-12);
+  padding: 16px 20px;
+  background-color: var(--nh-sunken);
+  color: var(--nh-text-2);
+}
+
+:root .vp-doc .custom-block .custom-block-title {
+  font-size: var(--nh-fs-14);
+  font-weight: 600;
+  color: var(--nh-text);
+}
+
+:root .vp-doc .custom-block a {
+  color: var(--nh-accent);
+}
+
+:root .vp-doc .custom-block p {
+  font-size: var(--nh-fs-14);
+  line-height: 1.7;
+}
+
+/* ── 顶栏（第 9 处清零点：去掉默认玻璃感模糊，改实色） ──── */
+
+:root .Layout .VPNavBar {
+  background-color: var(--nh-page);
+  backdrop-filter: none;
+  border-bottom: 1px solid var(--nh-border);
+}
+
+:root .Layout .VPNavBarTitle .title {
+  font-size: var(--nh-fs-17);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--nh-text);
+}
+
+:root .Layout .VPNavBarMenuLink {
+  min-height: 44px;
+  font-size: var(--nh-fs-14);
+  color: var(--nh-text-2);
+}
+
+:root .Layout .VPNavBarMenuLink:hover,
+:root .Layout .VPNavBarMenuLink.active {
+  color: var(--nh-accent);
+}
+
+/* 深色不设手动开关（跟随系统）；force-auto 下本就不渲染，双保险 */
+:root .Layout .VPSwitchAppearance {
+  display: none;
+}
+
+/* ── 侧栏（264 / 项间 8 / 组间 24 / 命中区 ≥44） ───────── */
+
+:root .Layout .VPSidebar {
+  width: var(--vp-sidebar-width);
+  background-color: var(--nh-page);
+  border-right: 1px solid var(--nh-border);
+  box-shadow: none;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+:root .Layout .VPSidebarItem.level-0 {
+  padding-bottom: 24px;
+}
+
+:root .Layout .VPSidebarItem.level-0 > .item .text {
+  font-size: var(--nh-fs-13);
+  font-weight: 600;
+  color: var(--nh-text-3);
+  letter-spacing: 0.01em;
+}
+
+:root .Layout .VPSidebarItem .link {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 4px 0;
+  border-radius: var(--nh-r-8);
+}
+
+:root .Layout .VPSidebarItem .link .text {
+  font-size: var(--nh-fs-14);
+  line-height: 1.5;
+  color: var(--nh-text-2);
+}
+
+:root .Layout .VPSidebarItem.level-0.is-link > .item .link .text {
+  font-size: var(--nh-fs-14);
+  font-weight: 600;
+  color: var(--nh-text);
+}
+
+:root .Layout .VPSidebarItem .link:hover .text {
+  color: var(--nh-accent);
+}
+
+:root .Layout .VPSidebarItem.is-active > .item .link .text {
+  color: var(--nh-accent);
+  font-weight: 600;
+}
+
+/* 抽屉遮罩：surface-sunken + 描边，不引入透明度新值 */
+:root {
+  --vp-backdrop-bg-color: var(--nh-sunken);
+}
+
+/* ── 右栏 TOC ──────────────────────────────────────────── */
+
+:root .Layout .VPDocAsideOutline .outline-title {
+  font-size: var(--nh-fs-13);
+  font-weight: 600;
+  color: var(--nh-text-3);
+}
+
+:root .Layout .VPDocAsideOutline .outline-link {
+  font-size: var(--nh-fs-13);
+  line-height: 1.6;
+  color: var(--nh-text-3);
+}
+
+:root .Layout .VPDocAsideOutline .outline-link:hover,
+:root .Layout .VPDocAsideOutline .outline-link.active {
+  color: var(--nh-accent);
+}
+
+:root .Layout .VPDocAsideOutline .outline-marker {
+  background-color: var(--nh-accent);
+  width: 2px;
+}
+
+/* ── 按钮 / 外链图标 / 页脚翻页（默认蓝清零点） ─────────── */
+
+:root .Layout .VPButton {
+  border-radius: var(--nh-r-pill);
+  font-family: var(--nh-sans);
+  font-weight: 600;
+}
+
+:root .Layout .VPButton.medium {
+  border-radius: var(--nh-r-pill);
+}
+
+:root .Layout .VPButton.brand {
+  border-color: transparent;
+  background-color: var(--nh-accent-solid);
+  color: var(--nh-on-accent);
+}
+
+:root .Layout .VPButton.brand:hover {
+  background-color: var(--nh-accent-solid-hover);
+}
+
+:root .Layout .VPButton.alt {
+  border-color: var(--nh-border);
+  background-color: var(--nh-page);
+  color: var(--nh-text);
+}
+
+:root .Layout .vp-external-link-icon {
+  color: var(--nh-accent);
+}
+
+:root .Layout .VPDocFooter {
+  margin-top: 48px;
+  border-top: 1px solid var(--nh-border);
+  padding-top: 24px;
+}
+
+:root .Layout .VPDocFooter .pager-link {
+  border: 1px solid var(--nh-border);
+  border-radius: var(--nh-r-12);
+}
+
+:root .Layout .VPDocFooter .pager-link:hover {
+  border-color: var(--nh-accent);
+}
+
+:root .Layout .VPDocFooter .pager-link .title {
+  color: var(--nh-accent);
+  font-size: var(--nh-fs-13);
+}
+
+/* ── 404（不引入基准外字号：64px → 39） ───────────────── */
+
+:root .Layout .NotFound .code {
+  font-size: var(--nh-fs-39);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+:root .Layout .NotFound .title {
+  font-size: var(--nh-fs-25);
+  line-height: 1.3;
+}
+
+:root .Layout .NotFound .quote {
+  border-left: 0;
+  font-size: var(--nh-fs-16);
+  line-height: 1.7;
+  color: var(--nh-text-2);
+}
+
+:root .Layout .NotFound .link {
+  min-height: 44px;
+  padding: 8px 24px;
+  border: 1px solid var(--nh-border);
+  border-radius: var(--nh-r-pill);
+  font-size: var(--nh-fs-15);
+  font-weight: 600;
+  color: var(--nh-accent);
+}
+
+/* ── 角色卡原文区（AC3 呈现壳） ─────────────────────────── */
+
+:root .vp-doc .card-raw-region {
+  margin-top: 48px;
+}
+
+:root .vp-doc .card-raw-sep {
+  margin: 0 0 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--nh-border);
+  font-size: var(--nh-fs-13);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--nh-text-3);
+}
+
+:root .vp-doc .card-raw-badge {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: var(--nh-fs-13);
+  line-height: 1.6;
+  color: var(--nh-text-2);
+}
+
+:root .vp-doc .card-raw-badge code {
+  font-size: var(--nh-fs-12);
+}
+
+:root .vp-doc .card-raw-badge > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+:root .vp-doc .card-raw-icon {
+  flex: 0 0 auto;
+  color: var(--nh-text-3);
+}
+
+:root .vp-doc .card-raw-label {
+  margin: 0 0 16px;
+  font-size: var(--nh-fs-25);
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.006em;
+  color: var(--nh-text);
+}
+
+:root .vp-doc .card-raw-hint {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 16px 20px;
+  border: 1px solid var(--nh-border);
+  border-radius: var(--nh-r-12);
+  background-color: var(--nh-sunken);
+  font-size: var(--nh-fs-14);
+  line-height: 1.7;
+  color: var(--nh-text-2);
+}
+
+:root .vp-doc .card-raw-body > h2:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* ── 断点：≥1280 三栏 / 1040–1279 两栏 / 720–1039 抽屉 / <720 单列 ── */
+
+/* ③ 右栏 TOC 在 1280 以下隐藏（并显式声明，便于自查） */
+@media (max-width: 1279px) {
+  :root .Layout .VPDoc .aside {
+    display: none;
+  }
+}
+
+/* 1040–1279：两栏（侧栏 264 + 阅读），阅读栏靠 24 边距 */
+@media (min-width: 1040px) and (max-width: 1279px) {
+  :root .Layout .VPDoc .content {
+    padding: 0 24px 128px;
+  }
+}
+
+/* 720–1039：侧栏收为抽屉（覆盖默认主题 960 起的静态侧栏） */
+@media (min-width: 960px) and (max-width: 1039px) {
+  :root .Layout .VPSidebar {
+    position: fixed;
+    top: var(--vp-layout-top-height, 0px);
+    bottom: 0;
+    left: 0;
+    z-index: 60;
+    padding: 32px 24px 96px;
+    width: calc(100% - 64px);
+    max-width: 320px;
+    box-shadow: none;
+    border-right: 1px solid var(--nh-border);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-100%);
+    transition:
+      opacity 0.25s,
+      transform 0.25s ease;
+  }
+
+  :root .Layout .VPSidebar.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(0);
+  }
+
+  :root .Layout .VPSidebar .curtain {
+    display: none;
+  }
+
+  :root .Layout .VPContent.has-sidebar {
+    padding-left: 0;
+  }
+
+  :root .Layout .VPLocalNav {
+    top: var(--vp-nav-height);
+  }
+
+  :root .Layout .VPLocalNav.has-sidebar {
+    padding-left: 0;
+  }
+
+  :root .Layout .VPLocalNav.empty {
+    display: block;
+  }
+
+  :root .Layout .VPLocalNav .menu {
+    display: flex;
+  }
+
+  :root .Layout .VPDoc {
+    padding: 48px 24px 0;
+  }
+}
+
+/* ② 移动端顶部 LocalNav：高度与命中区 ≥44 */
+@media (max-width: 1279px) {
+  :root .Layout .VPLocalNav {
+    min-height: 44px;
+    background-color: var(--nh-page);
+    border-bottom: 1px solid var(--nh-border);
+  }
+
+  :root .Layout .VPLocalNav .menu,
+  :root .Layout .VPLocalNav .VPOutlineDropdown {
+    min-height: 44px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    font-size: var(--nh-fs-13);
+    color: var(--nh-text-2);
+  }
+}
+
+/* ④ <720：正文 padding 24、H1 25、代码与表格横滚 */
+@media (max-width: 719px) {
+  :root .Layout .VPDoc {
+    padding: 24px 24px 96px;
+  }
+
+  :root .vp-doc h1 {
+    font-size: var(--nh-fs-25);
+    line-height: 1.3;
+  }
+
+  :root .vp-doc h2 {
+    margin: 40px 0 12px;
+    padding-top: 20px;
+    font-size: var(--nh-fs-22);
+  }
+
+  :root .vp-doc h3 {
+    font-size: var(--nh-fs-18);
+  }
+
+  :root .vp-doc p,
+  :root .vp-doc li {
+    font-size: var(--nh-fs-16);
+  }
+
+  :root .vp-doc .card-raw-label {
+    font-size: var(--nh-fs-22);
+  }
+}
+
+/* ⑥ 代码块 / 表格 / 提示块的横向滚动容器：显式声明，禁止全站 overflow-x:hidden */
+:root .vp-doc .custom-block pre,
+:root .vp-doc .custom-block table {
+  overflow-x: auto;
+}

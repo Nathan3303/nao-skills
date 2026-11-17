@@ -36,3 +36,7 @@ pnpm-debug.log*
 .omo
 # npm pack 产物
 *.tgz
+
+# 文档站产物（apps/document 是独立私有包，产物不入版本库）
+apps/document/.vitepress/dist/
+apps/document/.vitepress/cache/
