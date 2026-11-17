@@ -202,7 +202,11 @@
 - **连带两处 QA 判定（我采纳）**：① `cases/24` 改期望 = **必要连带不是放宽**（生产串已变、断言仍整串 diff、`cd` 从 `.` 收紧为精确绝对路径；删归一副本跑该例恰 1 条红、diff 明示新旧值）② `HERDR_DOUBLE_SERVER_CWD` = **不比真 herdr 宽松反而更贴近**（真机实测：server cwd≠仓时 `--cwd .` ⇒ pane 落 server 目录，`--cwd /abs` ⇒ 原样；旧替身把相对值当字面，恰好掩盖 O-1）
 - **计数口径**：跨后端 PASS/NOTE 总数**不可比**（实测 `--case 09` herdr 35+1 / tmux 47+0；`--case 34` 57+1 / 58+0）⇒ 判据取 rc；本次记 **herdr · rc=0 · 2133 PASS/0 FAIL/NOTE 11**
 - **PM 抽验**：`HERDR_PANE_ID=w1:p1 --case 28` PASS · `--case 06` PASS · `check` rc=0 · 工作树空 · 分支已 push（`212602a`）
-- **当前状态**：**AC1–AC13 全 PASS** → 等用户按 `docs/reports/138-user-acceptance.md` 8 步走查回填 → 授权合并（RD squash）→ 发 **MINOR 0.25.0** → 立刻开 Q6 门禁分层
+- **用户走查：功能通过（2026-11-17）**，但附带一条新缺陷（不属本批，见下）
+- ✅ **AC1–AC13 全 PASS**（QA 复核终判 + PM 抽验 + 用户走查）→ 授权合并（用户此前已授权「走查通过即由 PM 交 RD squash」）→ 发 **MINOR 0.25.0** → 之后 Q6 门禁分层
+- 🐞 **新缺陷已立项 [T548 / Issue #140](https://github.com/Nathan3303/nao-skills/issues/140)（用户走查时报，PM 已 A/B 复现）**：`ensure pm` 在默认配置下**恒报就绪门超时**（rc=1「成功 0 / 失败 1」，pane 实际已建）。**根因**：`nao-fleet.sh:3005` 把版本自检文案作为 pi **首条消息**拼进 argv ⇒ 启动即 `working`（跑 `npm view`/`gh release view`）⇒ 就绪门（`:1292` 起七条件与，含 `agent_status == idle`）5s 内等不到 idle。「等 pi 空闲」的闸门与「让 pi 干活」的注入直接冲突。**A/B 实测**：默认 5.1s 超时失败 / `NAO_UPDATE_ON_ENSURE=0` 3s rc=0 成功，唯一变量即开关 ⇒ 定性完成。**属 M20261103 既有设计后果，与 T547 无关**（该路径平时由人工起 pm，很少走到）。候选修法 A 延迟投递（推荐）/ B 放宽门（拒）/ C 默认关（拒）已写进 Issue，替代方案由 arch/实现定，禁止实现里顺手选
+- **当前状态**：T547 待合并（分支 `feat/138-fleet-param` @ `6d54615`）· T548 待立项开工（fix 通道，`fix/140-update-check-ready`）
+
 - **附**：机器 2026-11-17 ~15:54 重启过一次 ⇒ 我先前的 `/tmp` 证据（失败日志/48M 缓存）已随重启清空（非 QA 删除）；因 D-2 已定性，证据不再需要（连带同步清单：`intercom-protocol.md:11` + `nao-fleet.sh` usage 归 rd-infra；`INSTALL.md:121/123/124` + README 多仓段归 PM；旧 ADR 由本 ADR 演进 · 不废原文）
 
 ### 本批 T546（门户迁移 Vue 3 + TS，并建文档站 · Issue [#136](https://github.com/Nathan3303/nao-skills/issues/136) · 开工中 · 分支 `feat/136-docs-site`）
