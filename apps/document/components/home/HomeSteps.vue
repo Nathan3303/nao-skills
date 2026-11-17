@@ -1,5 +1,6 @@
 <!-- 段四：三步装好（命令块与快速开始页同源，不在页面里重写命令）。 -->
 <script setup lang="ts">
+import { inlineHtml } from './inline'
 import type { HomeData } from './types'
 
 defineProps<{ home: HomeData }>()
@@ -15,7 +16,7 @@ defineProps<{ home: HomeData }>()
           <p class="step-num" aria-hidden="true">{{ step.num }}</p>
           <div class="step-body">
             <h3>{{ step.title }}</h3>
-            <p>{{ step.body }}</p>
+            <p v-html="inlineHtml(step.body)"></p>
             <div class="code"><code>{{ step.code.join('\n') }}</code></div>
           </div>
         </li>

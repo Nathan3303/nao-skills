@@ -60,6 +60,27 @@ const sidebar = [
   { text: '术语表', link: '/glossary' },
 ]
 
+// 首页 og 文案与旧门户逐字一致（基线 §八 SEO 条目）；纯静态、无统计
+const HOME_OG = {
+  title: 'nao-skills · 给你的 pi 配一支开发小队',
+  description: '7 个 AI 角色分工干活，各管一段。你只做两件事：回答问题、点确认。纯静态、零外部依赖。',
+}
+
+// 角色页「解说区」包裹：设计 §八 要求两区各自用 <section aria-labelledby> 命名。
+// 解说正文归 PM，这里只在渲染产物外面加壳（隐藏标签不进视觉，不新增文案）。
+function wrapRoleGuide(html: string): string {
+  if (!html.includes('card-raw-region') || html.includes('role-guide-label')) return html
+  const pattern = /(<h1\b[^>]*>[\s\S]*?<\/h1>)([\s\S]*?)(<section class="card-raw-region")/
+  if (!pattern.test(html)) return html
+  return html.replace(
+    pattern,
+    (_match, h1: string, middle: string, region: string) =>
+      `${h1}<section class="role-guide" aria-labelledby="role-guide-label">` +
+      `<p class="visually-hidden" id="role-guide-label">人话解说</p>` +
+      `${middle}</section>${region}`,
+  )
+}
+
 export default defineConfig({
   lang: 'zh-CN',
   title: 'nao-skills',
@@ -74,9 +95,21 @@ export default defineConfig({
     ['meta', { name: 'theme-color', content: '#0B0F14', media: '(prefers-color-scheme: dark)' }],
   ],
   // favicon 走 transformHead：`--base /nao-skills/` 时静态 head 不会被改前缀
-  transformHead({ siteData }) {
+  transformHead({ pageData, title, description, siteData }) {
     const base = siteData.base || '/'
-    return [['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}favicon.svg` }]]
+    const isHome = pageData.relativePath === 'index.md'
+    return [
+      ['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}favicon.svg` }],
+      ['meta', { property: 'og:type', content: 'website' }],
+      ['meta', { property: 'og:locale', content: 'zh_CN' }],
+      ['meta', { property: 'og:title', content: isHome ? HOME_OG.title : title }],
+      ['meta', { property: 'og:description', content: isHome ? HOME_OG.description : description }],
+    ]
+  },
+  // 角色页解说区包裹（两区各自命名，设计 §八）
+  transformHtml(html, _id, ctx) {
+    if (!ctx.pageData.relativePath?.startsWith('roles/')) return html
+    return wrapRoleGuide(html)
   },
   markdown: {
     // 代码块复制按钮与首页同文案（视觉统一在 theme/styles/content.css）

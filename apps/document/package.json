@@ -13,7 +13,8 @@
     "preview": "vitepress preview",
     "check:links": "node scripts/check-links.mjs",
     "check:types": "tsc -p tsconfig.json",
-    "check:cards": "node scripts/check-cards.mjs"
+    "check:cards": "node scripts/check-cards.mjs",
+    "check:plugins": "node scripts/check-plugins.mjs"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.1.2",

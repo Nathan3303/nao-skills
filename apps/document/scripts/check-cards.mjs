@@ -87,8 +87,9 @@ for (const role of roles) {
   const cardPath = path.join(PROMPTS_DIR, role.card)
   const pagePath = path.join(DIST, 'roles', `${role.id}.html`)
 
+  checked += 1
   if (!fs.existsSync(cardPath) || !fs.existsSync(pagePath)) {
-    console.error(`✗ 缺文件：${role.id}（卡 ${cardPath} / 页 ${pagePath}）`)
+    console.error(`✗ 缺文件：${role.id}（卡 ${cardPath} / 页 ${pagePath}；dist 缺失先 npm run docs:build）`)
     failed += 1
     continue
   }
@@ -128,7 +129,6 @@ for (const role of roles) {
     .filter((block) => block.length > 24)
     .filter((block) => !page.includes(block))
 
-  checked += 1
   if (missing.length) {
     failed += 1
     console.error(`✗ ${role.id} 有 ${missing.length} 段与卡原文不一致`)

@@ -16,6 +16,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const DOCS_ROOT = path.resolve(HERE, '..')
 const REPO_ROOT = path.resolve(DOCS_ROOT, '..', '..')
 const PROMPTS_DIR = path.join(REPO_ROOT, '.agents', 'prompts')
+const DIST_DIR = path.join(DOCS_ROOT, '.vitepress', 'dist')
 
 const argv = process.argv.slice(2)
 const strict = argv.includes('--strict')
@@ -28,6 +29,11 @@ if (!fs.existsSync(vitepressBin)) {
   )
   process.exit(1)
 }
+
+// QA D8：任何失败路径都不得留下上一轮的 dist —— 否则随后的 check:cards / check:links
+// 会对着旧产物误判为绿。构建前先清空，构建失败再清一次。
+fs.rmSync(DIST_DIR, { recursive: true, force: true })
+console.log('· 已清理旧产物 .vitepress/dist（失败路径不残留）')
 
 if (!fs.existsSync(PROMPTS_DIR)) {
   if (strict) {
@@ -50,8 +56,14 @@ const result = spawnSync(process.execPath, [vitepressBin, 'build', ...passthroug
 })
 
 if (result.error) {
+  fs.rmSync(DIST_DIR, { recursive: true, force: true })
   console.error(`✗ 拉起 vitepress build 失败：${result.error.message}`)
   process.exit(1)
+}
+
+if (result.status !== 0) {
+  // 构建中途失败可能已写下部分产物，一律清掉：只有成功构建才留 dist
+  fs.rmSync(DIST_DIR, { recursive: true, force: true })
 }
 
 process.exit(result.status ?? 1)
