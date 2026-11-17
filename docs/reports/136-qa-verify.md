@@ -64,3 +64,17 @@
 - 结论：**有条件通过** —— P2 三条修完并复跑 `docs:build` + `check:cards` + `check:links` 后，我方可出 `done` 复核。
 
 - 修订：2026-11-16 首版（T546 全量验收；干净 worktree 实测 + 5 类变异负控）
+
+## 六、复核（2026-11-17 二轮 · 干净 worktree `/tmp/t546-qa2` @ `f7676e2`）
+- 判据同首轮；被测 = PM 给的 `cb1d5a6` + 1 条台账字符修复（仅 `docs/`）。**六条门禁全绿**：`npm ci --prefix apps/document` rc=0 · `check:types` rc=0 · `build -- --base /nao-skills/` rc=0（3.73s，22 html）· `check:cards` rc=0（7 页）· `check:links` rc=0（70 文件 / html 22 / 151 属性 / 外链 0）· **`check:plugins` rc=0**（5 插件逐字一致 · 清单外 0 · 每条含「缺了失去什么」）；根 `check` rc=0 · `npm test` rc=0（34 用例 · SKIP 0 · DEGRADE 0 · NOTE 11 全白名单）· `pack` 59 files / `apps/` 0 · `site/` 残留 0 · 跑前跑后 `git status` 0 行。
+- **D1 / D2 / D3 已修**：`dist/index.html` 反引号 **0 个**、该处为 `<code>.pi/settings.json</code>`；4 条 og（type/locale/title/description）与 `2b9f9fb:site/index.html` **逐字相等**；`check-plugins` 三向变异全红 —— 包名改 `pi-ask-me-x` ⇒ rc=1 且**同时**报「没有包名 pi-ask-me」+「清单外包名」（未因子串假绿）· 注入 `pi-newplugin` ⇒ rc=1 · 删一条「缺了失去什么」⇒ rc=1（点名 pi-intercom），还原 rc=0。
+- **D5 已修**：7 张角色页均含 `aria-labelledby="role-guide-label"` + `"card-raw-label"`（另 4 个为主题自带）；插入物只有 `<section>` + `.visually-hidden` 的 `<p>`、**0 个标题** ⇒ TOC 结构不变；`.visually-hidden` 已在产物 CSS 定义（absolute+clip）、`.role-guide` 无样式且无 `:first-child` 依赖规则 ⇒ 无布局位移；角色页 content 本轮未改 ⇒ 文字零变化。
+- **D8 已修**：`mv .agents/prompts` → `build --strict` rc=1 **且 dist 不存在** → `check:cards` rc=1（7/7 缺文件并提示先 build）/ `check:links` rc=1 / `check:plugins` rc=1；还原后 build + 三查全 rc=0，`git status` 0 行。AC5 默认腿同步复验：rc=0、`⚠` 恰 1 条、页面出现「卡原文见仓库」。
+- **D4 已修 ⇒ AC11 重判 PASS**：按阅读序首现均有半句解释 —— PRD（首页 02「把需求写成能验收的文档」）· 回执（首页 03「干完交的结论单」）· 门禁（`quickstart/prereq`「能自动跑的检查，rc=0 才算过」）· 闸门（`quickstart/fleet` 同段）· AC（`how/task-journey`）· RICE（术语表）；术语表 6 词齐、门禁/闸门仍分列。
+- **AC2 重判 PASS**：旧站逐行 diff 余 8 处 = 3 处设计 §一 允许 + **3 处 AC11 有意改文案**（PRD/回执半句、qa 职责「跑全量检查」）+ title 顺序（136-F6 接受）+ 页脚 ↗ 标签切分（非文案变化）；首轮 D1/D3 两处问题已消失。
+- **workflow**：步骤序 install → types → build → cards → links → plugins → upload ✓；六个检查步骤**无 `if:`** ⇒ PR 事件必跑（Pages 步骤 gate 到主干/dispatch）✓；`paths` 两列表逐项相同且含 `bin/nao-skill.js` ✓。
+- **AC 终判**：AC1/2/3/4/5/7/8/9/11 **PASS**；AC6/AC10 视觉侧**待用户回填**，静态侧仍 PASS（CSS 无 `3451b2`/`a8b1ff`/`Inter`；token 与基线同值；9 处清零点 8 处落地 + 搜索框 N/A）。**结论：可交付用户走查**（清单已按 D1/D5 更新），缺陷侧无阻塞项。
+- **残留缺陷**：P0/P1/P2 **0**；P3 两条新发现 —— ① D3/D5 修复**无自动断言护栏**（og 4 条与 `role-guide-label` 可被后续改动静默弄丢，建议并入 `check-cards` 或新增 `check-a11y`，否则请登遗留）；② `136-followups` 前三条缺 `136-F1/F2/F3` 编号（四~六为 F4–F6），建议补号便于回执引用。台账 6 条逐条成立；首轮漏登候选 3 条已全部归口（D2 本批修、D6→F5、D8 本批修）⇒ **无该登未登**。
+
+
+- 修订：2026-11-17 二轮复核（D1–D5/D8 复验 + AC2/AC11 重判；只报不修）
