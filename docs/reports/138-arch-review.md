@@ -1,6 +1,7 @@
 # T547 · Issue #138 架构评审：`ensure` 舰队身份单一来源（批次一）
 
 - 可行性：**有条件可行**（条件 = 下方 D-1..D-4 拍板；PRD §6 NFR 可满足，AC1–AC10 可实现）。输入 = PRD `2026-11-17-fleet-param.md` · `docs/adr/2026-11-13-herdr-workspace-scope-key.md` · `docs/INSTALL.md:121-124` · `nao-fleet.sh:1114/1796/1816/1886/2468` · Issue #139。ADR = `docs/adr/2026-11-17-fleet-identity-source.md`。检查清单未过项：**无**。
+- **拍板结论（2026-11-17，权威见 ADR「拍板记录」）**：D-1..D-4 **全取 A 案**（D-1/D-4 用户 · D-2/D-3 PM）；下文各「待拍板」小段即评审期建议之存档，勿当未决项引用。
 
 ## D1 · 同源后的一致性：删回退，改传参
 

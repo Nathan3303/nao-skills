@@ -15,6 +15,9 @@
 
 `fleet` 成为唯一输入并按 `--fleet` > `<目标仓>/.agents/fleet-scope` > 仓 slug（`fleet_scope_slug`）解析，**恒非空、失败即 die**；该值同时构成会话名 scope 与 herdr workspace 放置键，且**以参数传入 spawn**（不再由名字反解）。`--scope` 降为弃用别名（warn 一条，下一 MINOR 删除）。语法、三个长度上限、`status`/`close` 的归属判据（pane label + pane cwd）均不变。
 
+- **拍板记录（2026-11-17 · 评审 D-1..D-4 全取 A 案，口径见 `docs/reports/138-arch-review.md`）**：D-1「保留前缀只限 core、fleet 值放开」与 D-4「48 / core≤32 / fleet≤16 三值不动 + 默认 tier 超长自动截短并打一行提示」= **用户**拍板。
+- D-2「`status` 不加『无 fleet』渲染标注，改为禁 rc=0 假成功」与 D-3「默认 tier 下同仓裸名 ≡ `core@<slug>`，等价判定复用 pane cwd 快照、不新增 herdr 调用」= **PM** 拍板。
+
 ## 理由
 
 1. 业务：既有的三件事（放置 / 身份 / 单例边界）由一个值决定 ⇒ 「N 仓并行」从「要写配置」变成默认成立（用户拍板 ①–③）。
@@ -33,7 +36,7 @@
 
 - 正面：AC1 零配置并存成立；spawn 的第二数据源消失（静态判据从「恰 1 次 slug 调用」收紧为「0 次」）；`fleet-scope` 从「必需声明」降级为「覆盖值」。
 - 负面：会话名恒带后缀 ⇒ 升级期新旧名并存；`status`/`close` 需一条「同仓 legacy 裸名」等价/回退规则，否则旧会话既会被重复拉起、`close` 又会假成功（评审 R2/R3）。
-- 风险（待拍板）：默认 slug 撞保留前缀使**本仓**默认不可用（D-1）；32+1+16=49 的组合在默认 tier 下新可达（D-4）；`status` 若加「无 fleet」标注会破三处全文 golden（D-2）。
+- 风险（**已拍板处置 2026-11-17**：D-1/D-4 用户 · D-2/D-3 PM）：默认 slug 撞保留前缀的默认不可用已解（保留前缀只限 core）；32+1+16=49 在默认 tier 由自动截短消化、显式 tier fail loud；`status` 不做「无 fleet」标注，改以「禁 rc=0 假成功」钉住裸名回收。
 - 迁移：不追溯改名；`close <全名>` 恒可达；下游三仓一行提示 = 「首轮 `ensure` 将新建 `@<仓 slug>` 名；旧裸名会话 `close <名>` 后重开」。
 
 ## 限制与已知边界
