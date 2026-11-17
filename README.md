@@ -83,7 +83,7 @@ cd 你的项目
 
 角色名可以写**别名**或**规范名**（两者等价）：`arch` = `arch-designer`、`infra` = `rd-infra`；上例混用也照常拉起。完整别名见 `.agents/roles.yaml` 或 `nao-fleet.sh --help`。
 
-会话名形如 **`<role>[-<task>][@<scope>]`**：`rd-be`、`rd-be-T1`，需要区分仓库时加仓级后缀 `rd-be-T1@todo`（scope 末位、`@` 分隔、不设就不出现，名字与旧版逐字相同）。**两个仓同时跑同一套角色必须各写一个 scope**——在仓里放一行 `.agents/fleet-scope`（或 `ensure --scope todo`），否则第二仓起来时会**直接报错**并列出冲突的会话，而不是悄悄顶掉第一个。细节见 [docs/INSTALL.md](docs/INSTALL.md)「会话命名与多仓 scope」。
+会话名形如 **`<role>[-<task>]@<fleet>`**：`rd-be@api`、`rd-be-T1@api`。fleet 是舰队身份（默认取仓目录 slug，可用 `ensure --fleet <名>` 或 `.agents/fleet-scope` 覆盖），它同时决定会话名、herdr workspace 放置与单例边界。**两个仓同时跑同一套角色不需要任何配置**（各自默认取仓 slug）；只有算出同一个 fleet 值时才撞车，此时第二仓会**直接报错**并列出冲突会话，而不是悄悄顶掉第一个——要分开就 `--fleet <不同值>`。细节见 [docs/INSTALL.md](docs/INSTALL.md)「会话命名与多仓舰队」。
 
 然后**在 PM 会话里说需求**就行，剩下的它自己流转。大概长这样：
 
