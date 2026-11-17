@@ -74,6 +74,7 @@
 - AC9（弃用路径）：Given 使用 `--scope x`，When `ensure`，Then 行为等价 `--fleet x` 且 stdout/stderr 出现**恰一条** deprecated 提示；`--help` 里 `--fleet` 为主、`--scope` 标注弃用。
 - AC10（文档一致）：Given 本次改动，When 读 `docs/INSTALL.md`「会话命名与多仓 scope」与 README 多仓段，Then 示例命令与新语义逐字一致（含 `--fleet` 示例与「名字恒带 scope」说明），且不存在「无 scope 时名字与旧版逐字相同」这类已失效表述。
 - AC11（负向闭环 · R3 破坏性路径）：Given 同仓已有裸名 `pm` 在场（升级前起的），When 在同一仓 `ensure pm`，Then **不产生第二个 PM**——按 legacy 等价判定为同一会话（复用或 fail loud 皆可，但必须点名既有会话），且现场 pane 数与操作前一致。
+- AC13（边界 · 工作目录真实性 · 范围经 PM 追加）：Given 目标仓以相对路径给出（`roles.yaml` 的 `workspace: .` 或未写 `@<仓>`），When `ensure`，Then 会话 pane 的 cwd = 目标仓**物理绝对路径**（不是 herdr server 的工作目录），且同仓重复 `ensure` 不得误报「同 core 但 fleet/仓不同」；两仓并行时各自 pane cwd 指向各自仓。负控 = 去掉路径归一 ⇒ 断言必红。
 - AC12（边界 · 名长）：Given core 长度 32 与目录名长到使 `core + 1 + slug > 48`，When 默认 tier `ensure`，Then 名字被自动截短到合法长度、**恰一行**提示、会话可正常拉起；Given 同条件但用显式 `--fleet`（16 位），Then fail loud 并点明缩哪一段（两条各一断言，且断言「48 上限与 core≤32 / fleet≤16 两个常量未改」）。
 
 ## 八、上线闭环
