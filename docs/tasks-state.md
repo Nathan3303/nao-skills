@@ -190,7 +190,8 @@
 - **PM 抽验（`215bf8e` + `0bcd9af`）**：`check:plugins` rc=0（5 包逐字一致 / 清单外 0）· dist 首页 og 4 条齐（type / locale / title / description）· 首页字面反引号 **0** · 工作树空
 - **闸门 ⑥ 复核已闭环（QA 终判：可交付用户走查）**（`a1875d9` · 报告 §六 复核段 80 行 · 清单 36 行 16 条）：干净 worktree `/tmp/t546-qa2` @ `f7676e2`，六条门禁全 rc=0（含新增 `check:plugins`）· 根 `check` rc=0 · `npm test` rc=0（NOTE=11）· `pack` 59 files · 跑前跑后 `git status` 0 行。**修复复验全过**：D1 反引号 0 · D2 三向变异必红（含子串假绿防护）· D3 og 4 条与旧站逐字相等 · D5 7 页双 `aria-labelledby` + 0 新增标题（TOC 不变）· D8 strict 失败后 dist 不存在且三查必红 · **D4 → AC11 重判 PASS**（六词首现均有解释）· **AC2 重判 PASS**（余 8 处差异 = 3 允许 + 3 有意改文案 + F6 + 标点切分）。逐 AC：AC1–AC5/AC7–AC9/AC11 **PASS**，AC6/AC10 视觉侧待用户回填
 - **QA 残留 2 条 P3 的处置**：N1「og 与角色页分区无自动断言护栏」→ 登 `136-F7`（接受，到期 2027-02-28）+ 进待派发队列为小批次候选（本批不加：临合并前加新检查会引发「新检查自身是否可靠」的又一轮复核）· N2「followups 前三条缺编号」→ **本批已补** `136-F1`–`F3`（共 7 条成立）
-- **当前状态**：**等用户按 `docs/reports/136-user-acceptance.md` 16 条走查回填**（AC6/AC10 的视觉部分只能用户判）→ 回填通过即 PM 授权合并（RD `--squash --subject/--body-file`）→ 合并后盯 Pages 首跑三件事（`.nvmrc` 22 拉取 / 五步绿 / artifact 路径 = `apps/document/.vitepress/dist`）
+- **用户走查安排（2026-11-17 ask-me）**：① 用户**先在本地 `preview` 走查 16 条再合并**（不在合并后才发现视觉问题）② **合并授权 = 走查通过即由 PM 直接交 RD squash，不再逐次请示**（授权边界：仅当回填无 ❌ 或仅 P3 且我已逐条核；出现 P1/P2 或验收标准争议仍回来问）
+- **当前状态**：**等用户回填 16 条**（本地 `npm --prefix apps/document run preview` → `http://localhost:4173/`）→ 无 ❌ 则 PM 授权 RD `--squash --subject/--body-file` 合并 → 合并后盯 Pages 首跑三件事（`.nvmrc` 22 拉取 / 五步绿 / artifact 路径 = `apps/document/.vitepress/dist`）→ 回收派生会话（rd-fe / rd-infra / qa / arch）
 
 
 ### 本批 T544（生产侧旗标泄漏 · Issue #116 · 已合并 `6486221` · 发布 v0.23.3）
