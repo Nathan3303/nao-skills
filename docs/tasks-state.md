@@ -183,7 +183,11 @@
 - **PM 自补**：`docs/INSTALL.md` 增「## 文档站（`apps/document`）」5 条（形态 / 本地命令 / **顺序易错点** / 内容单一源与 `--strict` / 部署与 `paths`）—— `rd-infra` 核命令顺序与 workflow **逐字一致**（4/4）
 - **PM 门禁自证（干净工作树 · `2542d18`）**：`check` rc=0（roles=7 · files=54）· `npm test` **rc=0** · 34 例 = **32 PASS + 2 TMUX-ONLY** · SKIP=0/DEGRADE=0/**NOTE=10 全白名单** · `RESULT: PASS` · `npm pack` 59 files 且 `apps/` 0 命中
 - ⚠️ **PM 认账（本批第 1 次）**：首轮 `npm test` 我在套件运行中编辑了 `docs/INSTALL.md` ⇒ `用例 21` 的「M 真仓库 git status 前后一致」必红（rc=1）。这正是「门禁须在静默工作区跑」红线，责任在我；已改为「先提交再跑」，复跑 rc=0。**后续派发/验收一律先确认 `git status` 空**
-- **当前状态**：`qa-136` 已派发（全量独立验收 AC1–AC11 + 自建变异负控 + 产用户验收清单 `docs/reports/136-user-acceptance.md`）· 之后 PM 核 AC → 用户走查 → 授权合并（RD squash）→ 合并后盯 Pages 首跑
+- **闸门 ⑥ qa 首轮已回（CONDITIONAL · 无 P0/P1）**：报告 `docs/reports/136-qa-verify.md`（66 行）+ 用户清单 `docs/reports/136-user-acceptance.md`（36 行 · 16 条）。独立 worktree `/tmp/t546-qa` 自跑全量（`npm test` rc=0 · 10m26s · NOTE=11）· 自建脚本抽 `pm`(28/28) 与 `rd-infra`(13/13) 逐段比 · 三类假外链 + 卡原文破坏各自必红 · 对比度实算全 ≥AAA。**AC2/AC4/AC11 FAIL**（D1 字面反引号 · D2 无脚本断言 · D3 丢 og）· P3×5
+- **缺陷处置（PM 裁定）**：**本批修** D1/D2/D3（P2）+ D5（解说区 `aria-labelledby`）+ D8（`--strict` 失败留旧 dist ⇒ 本地假绿）· **我自己修** D4（`74b1314`：PRD / 回执补半句解释；qa 卡「跑门禁」→「跑全量检查」以守 24 字职责上限）· **接受** D6（主题英文 aria 残留，上游不可配）/ D7（`<title>` 顺序）→ 登 `136-F5` / `136-F6`，到期 2027-02-28
+- **闸门 ⑦ 修复与接线已闭环**：`rd-fe` 五条全修（`215bf8e`：D1 `v-html=inlineHtml(...)` · D2 新增 `check-plugins.mjs`（包名 token 级比对 + 清单外必红 + 负控 `pi-ask-me-x` 实测）· D3 `transformHead` 4 条 og 与旧站逐字一致 · D5 `transformHtml` 包 `<section aria-labelledby>` · D8 build 前清 dist + 失败再清，演练 `--strict` 失败后 `check:cards`/`check:links` 必红）· `rd-infra` 加 workflow 步骤（`0bcd9af`：`Check plugins vs PI_PLUGINS (AC4)` 位于 links 之后 upload 之前 · 结构断言 **27/27** · 变异负控 6/6 · **paths 两侧加 `bin/nao-skill.js`**，理由 = 不改它则 PI_PLUGINS 漂移要等下次站点改动才暴露，成本仅多一次 ≈20s 构建）
+- **PM 抽验（`215bf8e` + `0bcd9af`）**：`check:plugins` rc=0（5 包逐字一致 / 清单外 0）· dist 首页 og 4 条齐（type / locale / title / description）· 首页字面反引号 **0** · 工作树空
+- **当前状态**：等 QA 复核（D1–D5 复验 + 三条命令重跑）→ PM 逐条核 AC → 用户按 16 条清单走查 → 授权合并（RD squash）→ 合并后盯 Pages 首跑三件事（`.nvmrc` 22 拉取 / 五步绿 / artifact 路径）
 
 
 ### 本批 T544（生产侧旗标泄漏 · Issue #116 · 已合并 `6486221` · 发布 v0.23.3）

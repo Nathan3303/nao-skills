@@ -36,3 +36,21 @@
 证据：`configure-pages` 当前 latest = **v6**（workflow 用 v5）· `upload-pages-artifact` 当前 latest = **v5**（workflow 用 v4，`path` 输入口径已核 `action.yml`）；`checkout@v5` / `deploy-pages@v5` 已是 latest major。本批 workflow 已在改部署链（新增 PR 触发 + 主干 gate），同批再叠版本变量会让首跑归因变难 ⇒ PM 2026-11-16 裁定不夹带。
 
 出口：**接受** · 到期 **2027-02-28** · owner `rd-infra` · 动作 = 下次动该 workflow 时一并升，同一 PR 内复跑结构断言与首跑观察。
+
+## 五、主题英文无障磍文案残留（`136-F5`）⇒ 接受（到期 2027-02-28）
+
+证据（QA `docs/reports/136-qa-verify.md` §四 D6）：产物 HTML 残留默认主题的英文 `aria-label`（`extra navigation` / `mobile navigation` · `Permalink to …`）；VitePress 1.6.4 多数不可配（无暴露 i18n 入口），属上流。
+
+判定：不影响可用性与对比度（屏幕阅读器仍能正确朗读，只是语言混用）；自建替换需 patch 主题内部模板，成本 > 收益。
+
+出口：**接受** · 到期 **2027-02-28** · owner `rd-fe` · 动作 = 随下次 vitepress 升级回看是否已可配；否则若用户反馈，再评估 patch。
+
+## 六、`<title>` 顺序与现代约定不同（`136-F6`）⇒ 接受（到期 2027-02-28）
+
+证据（QA §四 D7）：旧站标题为 `nao-skills · <副标>`（站名在前），现站为 `<页标题> · nao-skills`（`titleTemplate` 造成）。内容不变，仅顺序。
+
+判定：页面标题在前是现代搜索引擎/标签页习惯（且���层页需要页名区分），改回旧序需刻意反转 `titleTemplate`，会让全部 21 页标题都变成「站名打头」，反而降低多标签场景的区分度。
+
+出口：**接受** · 到期 **2027-02-28** · owner `rd-fe` · 动作 = 如果用户走查时明确要求旧序，用一行 `titleTemplate` 切回并重跑门禁。
+
+- 修订：2026-11-17 补登 136-F5 / 136-F6（QA D6 / D7 接受项；D1–D5 已在批内修复，不入遗留）
