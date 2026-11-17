@@ -139,7 +139,7 @@ function deriveProcess(cmd) {
 }
 
 function paneObj(p, st) {
-  const ag = st.panes[p] && st.panes[p].fg === 'pi' ? (readKnobs(st).pi_status || 'idle') : 'unknown';
+  const ag = paneStatus(st, p);
   return {
     agent_status: ag,
     cwd: st.panes[p].cwd,
@@ -154,6 +154,16 @@ function paneObj(p, st) {
   };
 }
 function readKnobs(st) { return Object.assign({}, DEFAULT_KNOBS, st.knobs || {}); }
+
+// 首条用户消息（argv 里的 `--`）⇒ 真 pi 启动即开跑该 turn ⇒ readiness 门等不到 idle。
+//   T548/Issue #140 的缺陷类就是它：把「要 pi 干活」放进「等 pi 空闲」的闸门之前。
+//   替身必须如实建模，否则「自检拼回 argv」的回归无法在 AC1 上翻红（变异自证会空转）。
+function paneStatus(st, p) {
+  const pane = st.panes[p];
+  if (!pane || pane.fg !== 'pi') return 'unknown';
+  if ((pane.argv || []).indexOf('--') >= 0) return 'working';
+  return readKnobs(st).pi_status || 'idle';
+}
 
 // ---- 布局 A（三期 P1）夹具支持：tab 视图 / 迁移 / 尺寸（pane layout）----
 //   反向兼容：旧状态文件（无 tabs）按“每个 pane 的 tab_id 自动补登记”读，不报错。
@@ -194,7 +204,7 @@ function nextTabId(st, wid) {
 function tabObj(st, tid) {
   const t = st.tabs[tid];
   const ps = tabPanes(st, tid);
-  const ag = ps.length && st.panes[ps[0]].fg === 'pi' ? (readKnobs(st).pi_status || 'idle') : 'unknown';
+  const ag = ps.length ? paneStatus(st, ps[0]) : 'unknown';
   return {
     agent_status: ag, focused: false, label: (t && t.label) || '',
     number: (t && t.order) || 1, pane_count: ps.length, tab_id: tid,
@@ -215,7 +225,7 @@ function agentObj(p, st) {
   if (!pane || pane.fg !== 'pi') return null;
   const o = {
     agent: 'pi',
-    agent_status: k.pi_status,
+    agent_status: paneStatus(st, p),
     cwd: pane.cwd,
     foreground_cwd: pane.cwd,
     pane_id: p,
@@ -534,6 +544,41 @@ if (sub === 'agent' && a1 === 'list') {
 
 if (sub === 'agent' && a1 === 'explain') {
   process.stdout.write('test double: agent explain\n');
+  process.exit(0);
+}
+
+// ---- T548/Issue #140：就绪后投递与回读（真 herdr 对应 `agent prompt` / `agent read`）----
+//   `agent prompt`：成功 = stdout `{"id":…,"result":…}` rc=0；失败 = **stdout** `{"error":{"code":…}}` rc=1
+//     （arch 实测：错误在 stdout，不在 stderr；fleet 的成功判据正是 rc + stdout 里的 `"error":{"code"`）。
+//   语义：成功 = 真起一轮 turn ⇒ `pi_seq` +1；回读面 `agent read` 返回 pane 屏幕文本（含已投递文案）。
+//   失败注入：`T4_HERDR_FAIL_PROMPT="<pane_id 或 label>…"` ⇒ 该目标返回 `agent_blocked`。
+if (sub === 'agent' && a1 === 'prompt') {
+  const st = needState();
+  const pid = rest[2] || '';
+  const text = rest.slice(3).join(' ');
+  if (!pid || !st.panes[pid]) {
+    process.stdout.write(JSON.stringify({ error: { code: 'agent_not_found', message: 'no agent at ' + (pid || '<empty>') } }) + '\n');
+    process.exit(1);
+  }
+  const failTargets = (process.env.T4_HERDR_FAIL_PROMPT || '').split(/\s+/).filter(Boolean);
+  if (failTargets.indexOf(pid) >= 0 || failTargets.indexOf(st.panes[pid].label || '') >= 0) {
+    process.stdout.write(JSON.stringify({ error: { code: 'agent_blocked', message: 'injected deliver failure for ' + pid } }) + '\n');
+    process.exit(1);
+  }
+  st.panes[pid].delivered = st.panes[pid].delivered || [];
+  st.panes[pid].delivered.push(text);
+  st.panes[pid].screen = ((st.panes[pid].screen || '') + text + '\n').slice(-20000);
+  st.knobs = Object.assign({}, DEFAULT_KNOBS, st.knobs || {});
+  st.knobs.pi_seq = (Number(st.knobs.pi_seq) || 0) + 1;   // 真起一轮 turn（不是屏幕回显）
+  writeState(st);
+  out({ id: 'cli:agent:prompt', result: { pane_id: pid, type: 'agent_prompt' } });
+}
+
+if (sub === 'agent' && a1 === 'read') {
+  const st = needState();
+  const pid = rest[2] || '';
+  if (!pid || !st.panes[pid]) die({ error: { code: 'agent_not_found', message: 'no agent at ' + (pid || '<empty>') } });
+  process.stdout.write(st.panes[pid].screen || '');
   process.exit(0);
 }
 
