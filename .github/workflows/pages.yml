@@ -20,6 +20,8 @@ on:
       # 角色卡原文与角色清单：构建期注入的来源（不覆盖 = 改卡后线上静默过期）
       - '.agents/prompts/**'
       - '.agents/roles.yaml'
+      # 插件页的比对源：产物不随它变，但「页面 ↔ PI_PLUGINS 漂移」的源头就是它
+      - 'bin/nao-skill.js'
       - '.github/workflows/pages.yml'
   pull_request:
     # 与 push 逐项一致（不用 YAML 锚点，避免对解析器特性的依赖；一致性由结构断言守）
@@ -27,6 +29,8 @@ on:
       - 'apps/document/**'
       - '.agents/prompts/**'
       - '.agents/roles.yaml'
+      # 插件页的比对源：产物不随它变，但「页面 ↔ PI_PLUGINS 漂移」的源头就是它
+      - 'bin/nao-skill.js'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -80,6 +84,10 @@ jobs:
 
       - name: Check external links (AC7)
         run: npm --prefix apps/document run check:links
+
+      # 读 dist/plugins.html + bin/nao-skill.js：同样必须在 Build 之后
+      - name: Check plugins vs PI_PLUGINS (AC4)
+        run: npm --prefix apps/document run check:plugins
 
       - name: Upload Pages artifact
         # 只在主干 push / 手动 dispatch 上传；PR 事件永不产出 Pages 产物
