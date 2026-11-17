@@ -50,3 +50,16 @@
 - `npm test`（在 herdr pane 内；预期唯一红 = case 28 `P2-1②`）
 - `env -u HERDR_PANE_ID -u HERDR_WORKSPACE_ID -u HERDR_TAB_ID npm test`（预期红 = case 27）
 - `bash tests/t4/run.sh --case 28`（自然 FAIL / 摘三件 PASS）
+
+## 六、复核轮（`015777c` · 四项已修）
+
+- 采信 PM 抽验（未重复）：`--case 28` PASS、`--case 06` PASS、`check` rc=0、工作树空。
+- 门禁（herdr pane `w1:p1`，默认后端）：`check` **rc=0**（主仓无 `!`；worktree 唯一 `!` = 无 `.codegraph` 的环境产物）；`npm test` **rc=0**，727s，34 例，**2133 PASS / 0 FAIL / NOTE 11**（全白名单）/ SKIP=0 / DEGRADE=0。与 RD 报的 2135/10 差 2 PASS+1 NOTE = **断言与 NOTE 计数随后端变化**（实测 `--case 09` herdr 35+1 / tmux 47+0；`--case 34` herdr 57+1 / tmux 58+0）⇒ 跨后端总数不可直接比，判据取 rc。
+- **D-1 ✓**：同一命令 `HERDR_PANE_ID=w1:p1 --case 28` 首轮 FAIL(3) → 本轮 **PASS**；修复 = `B2_ENV` 加 `HERDR_PANE_ID="w9:p9"`（与 `B3_ENV` 同款）。自判据未被掩盖：`B3⑤`「祖先链命中」与「不可判定+全等」两组仍绿，且 B3 自己显式注入 `w1:p1` 撞号场景。
+- **D-2 ✓**（自造 SIGPIPE，非采信）：① 老写法 + pipefail，11MB `decl`（命中在首行）⇒ **rc=141 5/5**，here-string ⇒ **rc=0 3/3**；② 复刻首轮压力形态（每轮新建 lab + 全 `e2_gate`，8 lane）⇒ 老写法 **1/240 假红**（点名 `.agents/common/intercom-protocol.md:36`），here-string **0/240**；③ `--case 06` 在 ≥8 路并发（`--case 19`×8）下连跑 **3/3 PASS**；④ 真规模（≈500B decl）串行 2000 轮老写法 0 次 ⇒ 竞态窗口在「大输出/高 I/O」，与 server 死亡无关。
+- **O-1 / AC13 ✓**（真 herdr，server cwd 故意设为 `/tmp/t547-evidence/serverdir` ≠ 任何仓）：正控 `ensure pm` in api/web ⇒ `pm@api` cwd=`/tmp/t547-qa/r2/api`、`pm@web` cwd=`/tmp/t547-qa/r2/web`，workspace `api`/`web`；症状②消失（同仓重复 ensure ⇒「已在运行」rc=0、panes 2→2）。负控（副本删掉 `repo="$(_fleet_phys "$repo")"`）⇒ pane cwd=`…/serverdir`、重复 ensure **rc=1**「与在场会话同 core」。`--card` 分支无缺口（`CARD_REPO` 已是 `nao_phys_path` 结果）。
+- **D-3 ✓**：指针改「会话命名与多仓舰队」；INSTALL 改「**卡会话** `core` ≤32（普通角色 id 更短）」——与本轮 diff 逐字一致。
+- **连带 1（`cases/24` AC2①：`cd .` → `cd <仓物理路径>`）= 必要连带，不是放宽**：生产串已变（不归一即 AC13 红）；断言仍**整串 diff**（零新增参数 + name/card/`cd` 全钉），`cd` 从 `.` 升级为精确绝对路径 ⇒ 更严。实证：删掉归一的副本跑 `--case 24` ⇒ **恰 1 条红**，diff 明示 `< cd /tmp/nao-t4…/lab24-…` vs `> cd .`；tmux 后端同用例 PASS(78)。
+- **连带 2（`herdr-double` 的 `HERDR_DOUBLE_SERVER_CWD` + `path.resolve`）= 不比真 herdr 宽松，反而更接近真机**：真机实测（本轮）server cwd=`…/serverdir` 时 `workspace create --cwd .`（客户端在 web 仓）⇒ pane cwd = **server 目录**，`--cwd /abs` ⇒ 绝对路径原样；替身默认（无旋钮）行为不变（`path.resolve(".")` = 调用方 cwd = 仓，与旧版「`.` 事后按调用方解析」等价），设旋钮才复现失败面；旧替身把相对 `--cwd` 当字面值，恰好**掩盖** O-1。
+- **O-2**：本轮未复现（gate 内 case 33 全绿 + 单跑全绿）⇒ 观察项维持（到期 2026-12-05）。
+- 结论：**可交用户走查**（用户验收单已按 O-1 修复更新：删掉「pane cwd 落 server 目录」的规避项）。
