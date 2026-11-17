@@ -181,7 +181,11 @@
 - **PRD 已按拍板更新**（97 行）：新增 AC11（R3 不产生第二个 PM）· AC12（名长双态）· AC4 加「`nao-skills` 零配置正向」· AC6 改为「不得假成功」
 - **arch 收尾已闭环**（`ac0da36`）：ADR **59 行**补「拍板记录」（D-1/D-4 = 用户 · D-2/D-3 = PM · 全 A 案），放在 `## 决策` 节内（符合 `deliverable-docs §四`「参考来源恒末节、可选节仅 3 个」的结构契约，**PM 已核**）· 旧 ADR 2026-11-13 加「后续演进 → 新 ADR」指针与一条决策补充（**双键分离原则 / 删 `HERDR_SESSION` 回退 / slug 恒非空 / worktree 同键：四条结论不变**），状态仍「已接受（已落地 v0.23.1）」不改为「已废弃」（避免误读成原则作废）· 评审报告 58 行加「拍板结论 → 权威见 ADR」
 - **arch 给 RD 的两条实现级提示（已转派补充单）**：① D-1 落地会动 `fleet_scope_problem` 的保留前缀分支（该函数在 `fleet-name-contract` 抽取块内、core 侧共用）⇒ `cases/28` C1⑤ badf 列表 `subagent-x`/`nao-x` 要改成「scope 位必须过」，**同时 core 侧仍必须拒**（两处判据分叉），附双向正断言 + 负控；② D-3 等价判定必须复用 `running_verdict` 的 `pane_cwd_snapshot`（≤1 次 `pane list`），并自证没多调用
-- **当前状态**：等 `rd-infra` 实现回执（连带同步清单：`intercom-protocol.md:11` + `nao-fleet.sh` usage 归 rd-infra；`INSTALL.md:121/123/124` + README 多仓段归 PM；旧 ADR 由本 ADR 演进 · 不废原文）
+- **闸门 ③ 实现已回（`a8722a9` · 12 文件路径级）**：`check` rc=0 ×2 逐字一致（md5 `1bcb3767…`）· `npm test` rc=0（34 例 = 32 跑 + 2 TMUX-ONLY · PASS=**2124** · SKIP=0/DEGRADE=0/NOTE=10）· 回退通道 `NAO_TEST_TERMINAL=tmux npm test` rc=0（34/34 · PASS=1938 · NOTE=9）· AC1–AC12 逐条落点自证 · 负控 6 组（含 arch 点名的 N1/N2、`cases/28` C2② 新期望表、`cases/24` 全局 PROMPT 变异、`cases/28` P2-1 预算）· 连带清单已落（usage 段 + `intercom-protocol.md:11/:31/:36/:85`）· legacy 等价复用 `term_snapshot` 缓存、**未新增 `pane list`**（R6 守住）
+- **PM 侧 AC10 文档已完成**（`4990cb3`）：`docs/INSTALL.md` 该节整段重写为「会话命名与多仓舰队（`--fleet`）」——fleet 恒非空 · 保留前缀只限 core · 三档解析（`--fleet` > 文件「覆盖默认值」 > 仓 slug）· 零配置多仓示例 · 撞车条件改「算出同一 fleet 值」· 名长两态（默认自动截短 + 恰一行提示 / 显式 fail loud）· `--scope` 弃用 · 并存期（legacy 裸名不顶不掉、`close` 按同仓等价命中）· README 多仓段同步。**失效表述复核**：「名字与旧版逐字相同」「非空才出现」「两仓并发必须设 scope」「`ensure --scope todo`」全仓 grep = 0
+- **PM 追加小单（术语一致性）**：`status` 常驻行仍打印 `·scope=<值>`（`:3745`），而 CLI 已全叫 fleet ⇒ 已派 `rd-infra` 改展示字面为 `·fleet=`（不动内部变量/解析逻辑，连带更新断言字面匹配）
+- ⚠️ **PM 操作记录（本批第 1 次自伤，未造成假结论）**：我在 `rd-infra` 正改树时启动全量 `npm test`，发现工作区已脏（`M nao-fleet.sh` + `M cases/28`）⇒ **主动杀掉自己那次跑**（避免重演 T546 那次「跑到一半改文件」假红），并清掉被中断的缓存目录；另顺手清 `/tmp/nao-t4.*` 陈旧残留 **14 个**（保留 30 分钟内 6 个，因 `rd-infra` 可能正在跑）。**教训固化**：派单后到回执前，PM 不启门禁；门禁只在「已确认工作区静默」时跑
+- **当前状态**：等 `rd-infra` 术语改的 `done(lite)` → 我跑全量门禁（干净树）→ 派 `qa` 全量 + 自建夹具 → 用户 CLI 验收 → 合并 → 发 MINOR 0.25.0（连带同步清单：`intercom-protocol.md:11` + `nao-fleet.sh` usage 归 rd-infra；`INSTALL.md:121/123/124` + README 多仓段归 PM；旧 ADR 由本 ADR 演进 · 不废原文）
 
 ### 本批 T546（门户迁移 Vue 3 + TS，并建文档站 · Issue [#136](https://github.com/Nathan3303/nao-skills/issues/136) · 开工中 · 分支 `feat/136-docs-site`）
 
