@@ -192,7 +192,7 @@ CMD_PM="$(new_split "$BEFORE" | head -1)"
 t4_assert_ne "" "$CMD_PM" "AC1① 捕获到 fleet 交给 tmux 的 split-window 命令串"
 PF_PM="$(prompt_file_of "$CMD_PM")"
 t4_assert_ne "" "$PF_PM" "AC1① 命令串含 --append-system-prompt 文件（$PF_PM）"
-diff_assert "$(expected_wrapped_pm pm "$PF_PM")" "$CMD_PM" \
+diff_assert "$(expected_wrapped_pm "pm@$BASE" "$PF_PM")" "$CMD_PM" \
   "AC3① pm 命令行 = 「bash -lc %q(基线 + ' -- ' + %q(常量))」（逐字）"
 FLAT_PM="$(printf '%s' "$CMD_PM" | tr -d '\\')"
 t4_assert_eq "1" "$(grep -oF -- '【nao 机制包版本自检' <<< "$FLAT_PM" | wc -l)" \
@@ -232,7 +232,7 @@ wait_argv() { # <name> [秒] → argv；未记录到则空
   printf ''
 }
 if [ "$BE_NAME" = "tmux" ]; then
-ARGS_PM="$(wait_argv pm)"
+ARGS_PM="$(wait_argv "pm@$BASE")"
 t4_assert_contains "$ARGS_PM" "--append-system-prompt" "AC3① 桩 pi 记录了 pm 的 argv（真启动路径已走到）"
 t4_assert_eq "1" "$(grep -cxF -e '--' <<< "$ARGS_PM")" "AC3① argv 中「--」恰 1 次"
 N_APPEND="$(grep -nxF -e '--append-system-prompt' <<< "$ARGS_PM" | cut -d: -f1)"
@@ -263,9 +263,9 @@ PF_RD="$(prompt_file_of "$CMD_RD")"
 t4_assert_ne "" "$PF_RD" "AC1② rd-be 命令串正常（$PF_RD）"
 t4_assert_eq "0" "$(printf '%s' "$CMD_RD" | grep -cF -- ' -- ' || true)" \
   "AC1② rd-be 命令行无「 -- 」注入段"
-diff_assert "$(expected_wrapped rd-be "$PF_RD")" "$CMD_RD" "AC4② rd-be 命令行与本批前逐字一致"
+diff_assert "$(expected_wrapped "rd-be@$BASE" "$PF_RD")" "$CMD_RD" "AC4② rd-be 命令行与本批前逐字一致"
 if [ "$BE_NAME" = "tmux" ]; then
-  ARGS_RD="$(wait_argv rd-be)"
+  ARGS_RD="$(wait_argv "rd-be@$BASE")"
   t4_assert_eq "" "$(awk 'f{print; exit} $0=="--"{f=1}' <<< "$ARGS_RD")" \
     "AC1② rd-be argv 无「--」后的注入消息"
   t4_assert_eq "0" "$(grep -cF -- '按 ①–⑤ 顺序命中即止' <<< "$ARGS_RD" || true)" \
@@ -286,10 +286,10 @@ PF_PMOFF="$(prompt_file_of "$CMD_PMOFF")"
 t4_assert_ne "" "$PF_PMOFF" "AC1③ pm-off 命令串正常（$PF_PMOFF）"
 t4_assert_eq "0" "$(printf '%s' "$CMD_PMOFF" | grep -cF -- ' -- ' || true)" \
   "AC1③ 开关关闭时 pm 命令行无「 -- 」注入段"
-diff_assert "$(expected_wrapped pm-off "$PF_PMOFF")" "$CMD_PMOFF" \
+diff_assert "$(expected_wrapped "pm-off@$BASE" "$PF_PMOFF")" "$CMD_PMOFF" \
   "AC4③ NAO_UPDATE_ON_ENSURE=0 下 pm 命令行与本批前逐字一致"
 if [ "$BE_NAME" = "tmux" ]; then
-  ARGS_PMOFF="$(wait_argv pm-off)"
+  ARGS_PMOFF="$(wait_argv "pm-off@$BASE")"
   t4_assert_eq "" "$(awk 'f{print; exit} $0=="--"{f=1}' <<< "$ARGS_PMOFF")" \
     "AC1③ 开关关闭时 pm argv 无「--」后的注入消息"
   t4_assert_eq "$(printf '%s\n' "$ARGS_PMOFF" | grep -c . || true)" "4" \
@@ -307,9 +307,9 @@ if [ "$BE_NAME" = "tmux" ]; then
     "AC4④ 注入路径 argv 恰比基线多 2 个元素（-- + 消息），无其它增量（基线 $N_BASE → 注入 $N_PM）"
 else
   # 等价判据：注入路径命令串 = 基线命令串 + 「 -- 」+ %q(消息) 恰一段（前后缀逐字对照）
-  t4_assert_eq "1" "$(grep -cF -- "$(expected_wrapped pm-off "$PF_PMOFF")" <<< "$CMD_PMOFF" || true)" \
+  t4_assert_eq "1" "$(grep -cF -- "$(expected_wrapped "pm-off@$BASE" "$PF_PMOFF")" <<< "$CMD_PMOFF" || true)" \
     "AC4④ herdr：pm-off 命令串逐字等于无注入基线（反向对照）"
-  t4_assert_eq "1" "$(grep -cF -- "$(expected_wrapped_pm pm "$PF_PM")" <<< "$CMD_PM" || true)" \
+  t4_assert_eq "1" "$(grep -cF -- "$(expected_wrapped_pm "pm@$BASE" "$PF_PM")" <<< "$CMD_PM" || true)" \
     "AC4④ herdr：pm 注入命令串逐字等于「基线 + ' -- ' + %q(消息)」"
 fi
 

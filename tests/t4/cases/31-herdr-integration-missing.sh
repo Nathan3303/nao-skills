@@ -24,6 +24,7 @@ fi
 LAB="$T4_CACHE_DIR/lab31-$$"; mkdir -p "$LAB"
 cp -r "$T4_ROOT/.agents" "$LAB/.agents" || { t4_bad "夹具复制 .agents 失败"; t4_exit; }
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+NAME="rd-fe@$(basename "$LAB")"
 
 BE_CACHE_ROOT="$T4_CACHE_DIR"
 be_init "$LAB" "lab" || { t4_bad "be_init 失败"; t4_exit; }
@@ -39,7 +40,7 @@ fs.writeFileSync(p,JSON.stringify(st));' "$STATE" "$1" "$2" || t4_bad "夹具：
 
 # ---- 夹具：在线 pi pane（label + argv 正确），但**集成缺失**（agent_session=null ∧ 钩子权威缺）----
 P="$(be_new_pane "$LAB")"
-be_fixture_session "$P" "rd-fe" "$(basename "$LAB")" || t4_bad "夹具：身份写入失败"
+be_fixture_session "$P" "$NAME" "$(basename "$LAB")" || t4_bad "夹具：身份写入失败"
 set_knob pi_session false
 set_knob pi_skip false
 
@@ -63,7 +64,7 @@ t4_assert_contains "$BE_OUT" "（成功 0 / 跳过 0 / 失败 1）" "② 摘要�
 set_knob pi_session true
 set_knob pi_skip true
 be_run_fleet "$LAB" status
-t4_assert_contains "$BE_OUT" "✓ rd-fe" "③ 证据补全后判「✓ rd-fe 在线」（对照成立）"
+t4_assert_contains "$BE_OUT" "--name $NAME" "③ 证据补全后判「--name $NAME 在线」（对照成立）"
 t4_assert_not_contains "$BE_OUT" "集成缺失" "③ 证据补全后不再报集成缺失"
 be_run_fleet "$LAB" ensure "rd-fe@$LAB"
 t4_assert_contains "$BE_ERR_ANSI" "已在运行" "③ ensure 判「已在运行」（与②形成反向对照）"

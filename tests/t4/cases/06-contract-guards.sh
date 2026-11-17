@@ -631,7 +631,9 @@ e2_gate() { # <根> → 漂移/未归类报告（空 = 全绿；基准 = 该根�
   printf '%s\n' "$hits" | awk -F'\t' -v want="$min" '$1 != "" && $2 != want { printf "%s 声明 %s ≠ 单源 %s\n", $1, $2, want }'
   e2_scan "$root" loose | while IFS=$'\t' read -r loc text; do
     [ -n "$loc" ] || continue
-    printf '%s\n' "$decl" | grep -Fxq "$loc" && continue
+    # T547-D2（QA 定性）：`printf | grep -q` + pipefail ⇒ grep 早退时上游 SIGPIPE(141) ⇒ 真命中被判「未归类」。
+    #   同 lib.sh:281-283（T534-O2）的 here-string 修法；本处是 e2_gate 里漏改的那一处。
+    grep -Fxq -- "$loc" <<< "$decl" && continue
     case "$text" in *截至*) continue ;; esac
     printf '%s 未归类：既非下限声明（≥/低于），也无「截至」历史时点标注 —— %s\n' "$loc" "$text"
   done

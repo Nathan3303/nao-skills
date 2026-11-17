@@ -63,6 +63,8 @@ SH
 chmod +x "$LAB/bin/tmux"
 
 BASE="$(basename "$LAB")"
+# 会话名恒带 @<fleet>（默认 tier = 仓 slug；本夹具 = LAB 目录名）
+FLEET="$BASE"
 BE_CACHE_ROOT="$T4_CACHE_DIR"
 export PATH="$LAB/bin:$PATH"   # 桩 pi 让 tmux pane 继承（herdr 侧不执行 pi，由替身从命令行推导）
 be_init "$LAB" "lab" || { t4_bad "be_init 失败（后端=$BE_NAME）"; t4_exit; }
@@ -113,12 +115,12 @@ t4_assert_eq "0" "$T4_RC" "AC1 成功路径 rc=0（T4_ERR=$(printf '%s' "$T4_ERR
 t4_assert_eq "1" "$(launch_lines)" "AC1 成功 ⇒ 恰 1 行 [$BE_NAME] 已拉起"
 if [ "$BE_NAME" = "tmux" ]; then
   t4_assert_contains "$T4_OUT_ANSI" \
-    "[tmux] 已拉起 arch-designer @ $LAB（layout=main-row2）" \
-    "AC1 成功行内容逐字不变（BR1：name @ repo（layout=…））"
+    "[tmux] 已拉起 arch-designer@$FLEET @ $LAB（layout=main-row2）" \
+    "AC1 成功行：name（core@fleet）@ repo（layout=…）"
 else
   # herdr 结果行形态（BR1 只钉 tmux 逐字）：name @ repo（+ pane=…），**没有** layout 段
-  t4_assert_contains "$T4_OUT_ANSI" "[herdr] 已拉起 arch-designer @ $LAB" \
-    "AC1 herdr 成功行形态：name @ repo（无 layout 段）"
+  t4_assert_contains "$T4_OUT_ANSI" "[herdr] 已拉起 arch-designer@$FLEET @ $LAB" \
+    "AC1 herdr 成功行形态：name（core@fleet）@ repo（无 layout 段）"
   t4_assert_not_contains "$T4_OUT_ANSI" "layout=" "AC1 herdr 成功行不含 tmux layout 字段"
 fi
 t4_assert_eq "1" "$(summary_lines)" "AC1 摘要恰一行（BR5）"
@@ -130,7 +132,7 @@ P_ARCH="$(printf '%s\n' "$NEWS" | head -1)"
 
 # ============================================================ AC2 跳过：零假行
 # 两后端都有「已在运行 ⇒ 跳过」出口：tmux = 标题命中；herdr = pane label + 结构化事实命中。
-[ "$BE_NAME" = "tmux" ] && set_title "$P_ARCH" "arch-designer"
+[ "$BE_NAME" = "tmux" ] && set_title "$P_ARCH" "arch-designer@$FLEET"
 BEFORE="$(pane_ids)"
 run_fleet ensure "arch@$LAB"
 t4_assert_eq "0" "$T4_RC" "AC2 跳过路径 rc=0"
@@ -143,7 +145,7 @@ t4_assert_contains "$(summary_text)" "（成功 0 / 跳过 1 / 失败 0）" \
 t4_assert_eq "$BEFORE" "$(pane_ids)" "AC2 跳过不新增 pane（零副作用）"
 
 # ============================================================ AC3 失败：零假行 + 桩 + rc 仍 0
-T539_FAIL_NAME="qa"
+T539_FAIL_NAME="qa@$FLEET"
 BEFORE="$(pane_ids)"
 run_fleet ensure "qa@$LAB"
 T539_FAIL_NAME=""
@@ -172,28 +174,28 @@ fi
 
 # ============================================================ AC4 混合：1 成功 + 1 跳过 + 1 失败
 # 跳过来源分后端：tmux 靠标题预置（把 arch pane 改名为 rd-fe）；herdr 靠 label 命中（arch 仍在场）。
-if [ "$BE_NAME" = "tmux" ]; then set_title "$P_ARCH" "rd-fe"; fi
-T539_FAIL_NAME="rd-be"
+if [ "$BE_NAME" = "tmux" ]; then set_title "$P_ARCH" "rd-fe@$FLEET"; fi
+T539_FAIL_NAME="rd-be@$FLEET"
 BEFORE="$(pane_ids)"
 run_fleet ensure "arch@$LAB" "rd-fe@$LAB" "rd-be@$LAB"
 T539_FAIL_NAME=""
 t4_assert_eq "0" "$T4_RC" "AC4 混合批次 rc=0（含失败目标，BR4）"
 t4_assert_eq "1" "$(launch_lines)" "AC4 混合 ⇒ 结果行恰 1 条（仅成功目标）"
 if [ "$BE_NAME" = "tmux" ]; then
-  t4_assert_contains "$T4_OUT_ANSI" "[tmux] 已拉起 arch-designer @ $LAB" "AC4 成功行归 arch-designer"
+  t4_assert_contains "$T4_OUT_ANSI" "[tmux] 已拉起 arch-designer@$FLEET @ $LAB" "AC4 成功行归 arch-designer"
   t4_assert_not_contains "$T4_OUT_ANSI" "[tmux] 已拉起 rd-be" "AC4 失败目标 rd-be 无假成功行"
   t4_assert_not_contains "$T4_OUT_ANSI" "[tmux] 已拉起 rd-fe" "AC4 跳过目标 rd-fe 无假成功行"
   t4_assert_contains "$T4_ERR_ANSI" "pane 创建失败" "AC4 失败目标走既有诊断 warn（tmux）"
 else
-  t4_assert_contains "$T4_OUT_ANSI" "[herdr] 已拉起 rd-fe @ $LAB" "AC4 成功行归 rd-fe（arch 已在场 ⇒ 跳过）"
+  t4_assert_contains "$T4_OUT_ANSI" "[herdr] 已拉起 rd-fe@$FLEET @ $LAB" "AC4 成功行归 rd-fe（arch 已在场 ⇒ 跳过）"
   t4_assert_not_contains "$T4_OUT_ANSI" "已拉起 rd-be" "AC4 失败目标 rd-be 无假成功行"
   t4_assert_not_contains "$T4_OUT_ANSI" "已拉起 arch-designer" "AC4 跳过目标 arch 无假成功行"
   t4_assert_contains "$T4_ERR_ANSI" "pane run 失败" "AC4 失败目标走既有诊断 warn（herdr）"
 fi
 if [ "$BE_NAME" = "tmux" ]; then
-  t4_assert_contains "$T4_ERR_ANSI" "rd-fe 已在运行" "AC4 跳过目标走既有跳过 warn（tmux：rd-fe 标题命中）"
+  t4_assert_contains "$T4_ERR_ANSI" "rd-fe@$FLEET 已在运行" "AC4 跳过目标走既有跳过 warn（tmux：rd-fe 标题命中）"
 else
-  t4_assert_contains "$T4_ERR_ANSI" "arch-designer 已在运行" "AC4 跳过目标走既有跳过 warn（herdr：arch 在场）"
+  t4_assert_contains "$T4_ERR_ANSI" "arch-designer@$FLEET 已在运行" "AC4 跳过目标走既有跳过 warn（herdr：arch 在场）"
 fi
 t4_assert_eq "1" "$(summary_lines)" "AC4 摘要恰一行（BR5）"
 SUM="$(summary_text)"

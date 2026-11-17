@@ -8,7 +8,7 @@ description: pi-intercom 多会话协作协议（常驻引用）
 
 - **上下文分层与优先级**：`AGENTS.md`（项目级，PM 维护）**优先** → 本文件/roles.yaml（团队级）→ 角色卡（角色级）→ 技能（按需）。AGENTS.md 已由 pi 自动注入上下文，**所有角色必须遵循其中项目约束**（命令纪律/领域红线/机制衔接）；各层只写自己的内容，不互相复制。
 - 会话由 `nao-fleet.sh` 以 `--name <别名>` 拉起，角色卡经 `--append-system-prompt` 启动期注入。
-- **会话名 = `<role>[-<task>][@<scope>]`**（如 `rd-be` / `rd-be-T1` / `rd-be-T1@todo`）：scope 末位、`@` 分隔、**非空才出现**；名字是**路由标签，不是身份证明**。两仓并发**必须**各设 `<仓>/.agents/fleet-scope`（或 `ensure --scope <slug>`），scope 相同/未设时第二仓 `ensure` 会 fail loud 并列候选。`status` 从名字 parse scope（不读文件），带 scope 的行尾有 `·scope=<x>`；`close` 裸名用调用者所在仓的 scope、全名 `…@<scope>` 忽略文件。口头寻址优先用全名，跨仓时尤其如此。细节见 `docs/INSTALL.md`「会话命名与多仓 scope」。
+- **会话名 = `<role>[-<task>]@<fleet>`**（如 `rd-be@api` / `rd-be-T1@api`）：fleet 末位、`@` 分隔、**恒非空**（默认 = 目标仓 slug；`--fleet` 或 `<仓>/.agents/fleet-scope` 覆盖）；名字是**路由标签，不是身份证明**。同一 herdr session 内多仓并行**无需任何配置**：每仓 `ensure` 自动带各自 slug，放置键与名字 scope 同源（1 仓 1 workspace）。只有两仓**同 `--fleet`** 时同 core 才会 fail loud 并列候选。`status` 从名字 parse fleet（不读文件）；`close` 裸名按「带 fleet 候选 → 同仓 legacy 裸名 → 全 session 唯一同 core → 否则拒绝列候选」解析，全名 `…@<fleet>` 忽略文件。口头寻址优先用全名，跨仓时尤其如此。细节见 `docs/INSTALL.md`「会话命名与多仓舰队」。
 - **角色 id / 别名 / 卡片映射以 `.agents/roles.yaml` 为唯一事实来源**（下表为当前快照，改动先改 roles.yaml）。
 - 被点名先回执：`已按 <role> 角色执行`。
 - 仅当消息明确要求、且确认未注入时，才自行读取 `@.agents/prompts/<role>.md`（跨仓库会话用启动期注入的环境锚点绝对路径）。
@@ -28,12 +28,12 @@ description: pi-intercom 多会话协作协议（常驻引用）
 拉起：`bash .agents/scripts/nao-fleet.sh ensure <别名>[@<repo>]`
 
 - **任务派生**：`ensure --task <编号> <别名>[@<repo>]` 创建 `<角色>-<编号>` 独立会话（如 `rd-be-T1`），并行隔离、互不排队/打断，避免多任务同名冲突；任务闭环即**回收**：`nao-fleet.sh close --task <编号> <别名>`（内置在跑 turn / tasks-state 闸门）。
-- **按需角色会话（`ensure --card`，T537）不入上表**：卡来自**下游项目仓** `.agents/prompts/<role>.md`，会话名 `<role>` / `<role>-<编号>`，属**派生/一次性**语义 —— `status` 在派生节标注「一次性会话 · 下游卡」，`close` 回收时**不弹常驻警告**、且跳过 `tasks-state` active 闸门（在跑 turn 闸门不放宽）。它们不登记 `roles.yaml`，故**不在本表内**；卡即系统提示（完全可信输入），命名与目录约束见 `nao-fleet.sh --help` 与 `README.md`「按需角色会话」一节。
+- **按需角色会话（`ensure --card`，T537）不入上表**：卡来自**下游项目仓** `.agents/prompts/<role>.md`，会话名 `<role>@<fleet>` / `<role>-<编号>@<fleet>`，属**派生/一次性**语义 —— `status` 在派生节标注「一次性会话 · 下游卡」，`close` 回收时**不弹常驻警告**、且跳过 `tasks-state` active 闸门（在跑 turn 闸门不放宽）。它们不登记 `roles.yaml`，故**不在本表内**；卡即系统提示（完全可信输入），命名与目录约束见 `nao-fleet.sh --help` 与 `README.md`「按需角色会话」一节。
 - **子代理会话不属舰队会话身份模型**：由 pi-subagents 拉起的子代理会话以 `subagent-<agent>-<id>`（无名时 `subagent-chat-<id>`）进入 intercom 名册，但**不属**舰队会话 —— `status` 只对其汇总计数（不列名、不参与在线/turn 判重），`close subagent-*` 显式拒绝（生命周期归 pi-subagents 的 stop/retention，nao 不接管）。
 
 - **判重 / 在线判定**：脚本按 pi 自设的**终端标题**（`π - <会话名> - <仓库名>`）+ `pi-intercom` 名册判在线（**不用 `pgrep --name`**：pi 启动后 argv 被改写为 `pi`，会恒失配）；已运行则跳过并 warn。确需重开加 `--force`。
 - **标题被改写时的 pane 定位**（v0.9.4）：终端标题可被外部改写（实测变为 `pi:c`），此时 `status`/`close`/`ensure` 按三层后备定位 pane：① 标题契约 → ② pi-intercom 名册 `tmuxPane`（注册时读 `$TMUX_PANE`，与标题改名无关，权威）→ ③ 本仓「未被认领 pi pane」唯一兜底。三层均未命中 ⇒ 视为无句柄：`close` 走「未运行（无需回收）」或（名册报在线但无句柄）exit 非 0。`close` 的在跑 turn 判定叠加名册活动状态（thinking / tool:* 等）与 pane 末 12 行状态行双重信号。
-- **运行前提（默认后端 herdr · 回退 tmux；ADR `2026-10-27-strict-tmux-pi` 的「tmux 唯一」部分已被 herdr 默认取代，pi ≥ 1.4.0 与 `exit 3` 语义不变）**：`NAO_TERMINAL` 未设/空串 ⇒ **默认 herdr**（须在 herdr pane 内、`HERDR_SESSION` 有效且 ≠ `default`、protocol 22）；回退 = `export NAO_TERMINAL=tmux`（须在 tmux 会话内：`$TMUX` 非空且 `tmux` 命令可用）。任一端都要求 `pi ≥ 1.4.0`。前提不满足 ⇒ `exit 3`（命令未执行）+ 单行提示（含回退指路，**不自动回落**），**不建 session/pane/lock、不写状态**。`cleanup` 豁免（其正常场景就是非 pane 的隔离实验场）。拉起落点按后端：herdr = 1 workspace/仓 + 1 tab/角色（放置键与 scope 规则见 ADR `2026-11-13-herdr-workspace-scope-key`）；tmux = 派生宿主窗口（调用者 pane 所在 window）分屏、显式 `-t @<window_id>`，**失败不假成功**（打印「已拉起」前必先校验 pane 句柄）。两端的完整前提链 / 安装 / 空间判据 / 回退细节见 `README.md`「前置环境」与 `docs/INSTALL.md`「herdr 后端」「tmux 布局」，**此处不复制**。
+- **运行前提（默认后端 herdr · 回退 tmux；ADR `2026-10-27-strict-tmux-pi` 的「tmux 唯一」部分已被 herdr 默认取代，pi ≥ 1.4.0 与 `exit 3` 语义不变）**：`NAO_TERMINAL` 未设/空串 ⇒ **默认 herdr**（须在 herdr pane 内、`HERDR_SESSION` 有效且 ≠ `default`、protocol 22）；回退 = `export NAO_TERMINAL=tmux`（须在 tmux 会话内：`$TMUX` 非空且 `tmux` 命令可用）。任一端都要求 `pi ≥ 1.4.0`。前提不满足 ⇒ `exit 3`（命令未执行）+ 单行提示（含回退指路，**不自动回落**），**不建 session/pane/lock、不写状态**。`cleanup` 豁免（其正常场景就是非 pane 的隔离实验场）。拉起落点按后端：herdr = 1 workspace/仓 + 1 tab/角色（放置键与 fleet 规则见 ADR `2026-11-17-fleet-identity-source`（前序 `2026-11-13-herdr-workspace-scope-key` 的双键分离原则不变））；tmux = 派生宿主窗口（调用者 pane 所在 window）分屏、显式 `-t @<window_id>`，**失败不假成功**（打印「已拉起」前必先校验 pane 句柄）。两端的完整前提链 / 安装 / 空间判据 / 回退细节见 `README.md`「前置环境」与 `docs/INSTALL.md`「herdr 后端」「tmux 布局」，**此处不复制**。
 - **tmux 布局**：宿主三选一（`NAO_TMUX_LAYOUT`）：默认 `main-row2`（首 pane 全高占左，后续每角色往右开列、每列上下 2 个）；`main-col`（其余在右列竖排）；`grid`（等大网格）。**窄列守卫**：`main-row2` 最窄非主 pane < `NAO_TMUX_MIN_PANE_WIDTH`（默认 30）时自动回退 `main-col`，仍不足再退 `grid`（打印带数字的 warn，**不中断拉起**）。
 - **模型规则**：用户未指定则**禁止传 `--model`**，也禁止继承 PM 自身模型。
   显式指定时由 `NAO_MODEL_WHITELIST` 在**命令行入口解析阶段**即校验，
@@ -82,7 +82,7 @@ bash .agents/scripts/nao-fleet.sh check
 - **离线检测与恢复**：`list` 发现已派发目标从在线变离线（会话死亡/关闭）→ 任务标记「挂起（离线）」入 tasks-state → `ensure --force` 重拉该角色 → `send` 询问进度或按挂起快照重派。
 - **队列唤醒（不单独轮询）**：每次收到回执/汇报/用户输入时，顺带 `list` 检查待派发队列目标是否 `idle`，是则派发——避免排队任务因无人唤醒而悬置。
 - **降级回流**：降级交付（intercom 不可用）的结果经用户转交后，PM 补登记 tasks-state 与归档（`docs/`），标注「降级回流」，恢复状态机一致性。
-- **单 PM 纪律**：同一项目同一时刻**仅一个 PM 调度会话**（fleet 按会话名 `pm` 判重；手动会话请用别名 `pm`），避免双头调度互相覆盖 tasks-state。
+- **单 PM 纪律**：同一项目同一时刻**仅一个 PM 调度会话**（fleet 按会话名 `pm@<fleet>` 判重；默认 tier 下同仓 legacy 裸名 `pm` 视为同一会话；手动会话请用别名 `pm`），避免双头调度互相覆盖 tasks-state。
 
 ## 终态回执（硬性闸门，所有角色适用）
 

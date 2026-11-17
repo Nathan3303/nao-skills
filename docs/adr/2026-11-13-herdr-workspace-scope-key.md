@@ -1,9 +1,9 @@
 # ADR：herdr workspace 放置键与 scope 分离（label = 声明 scope 否则仓 slug）
 
 - 状态：已接受（已落地 v0.23.1）
-- 更新：2026-11-13
+- 更新：2026-11-17
 - Owner：arch-designer
-- 指针：Issue [#112](https://github.com/Nathan3303/nao-skills/issues/112) · 评审 `docs/reports/T545-scope-isolation-arch.md` · 上游 `docs/prds/2026-11-10-herdr-base.md`（AC3.1）· 既有放置口径 `docs/reports/96p3-layout-p1.md:22`
+- 指针：Issue [#112](https://github.com/Nathan3303/nao-skills/issues/112) · 评审 `docs/reports/T545-scope-isolation-arch.md` · 上游 `docs/prds/2026-11-10-herdr-base.md`（AC3.1）· 既有放置口径 `docs/reports/96p3-layout-p1.md:22` · **后续演进** `docs/adr/2026-11-17-fleet-identity-source.md`（Issue #138）
 
 ## 背景
 
@@ -18,6 +18,7 @@
 放置键改为**目标仓 slug**（`fleet_scope_slug`：git common-dir 父目录名 ⇒ worktree 同键；恒非空；≤16 字符），删除 `HERDR_SESSION` 回退；scope 只承担**会话名身份**（`<core>[@<scope>]`）与同名隔离。相对 `96p3-layout-p1.md:22` 的偏差：`label = scope（空 ⇒ HERDR_SESSION）` → `label = scope（已声明）否则仓 slug`。
 
 - **拍板记录（用户 ask-me · 2026-11-13）**：**D1** 采本方案（A · 双键分离）· **D2** **接受废止** `96p3-layout-p1.md:22` 的 `HERDR_SESSION` 回退 · **D3** label = 已声明 scope 优先、未声明用仓 slug · **D4** 增静态 lint（spawn 内禁会话名作放置键）并关闭遗留 `O2` · **D5** 发布形态 `PATCH`（行为修复，无新能力）。
+- **后续演进（2026-11-17 · Issue #138）**：放置键的**来源**改由 fleet 值承担（`label = fleet`，fleet 默认取仓 slug、可用 `--fleet`/`fleet-scope` 覆盖），且 spawn 不再由名字反解放置键。**「放置键与身份键分离」原则不变**，本节其余结论（删 `HERDR_SESSION` 回退 · slug 恒非空 · worktree 同键）不变 —— 见 `docs/adr/2026-11-17-fleet-identity-source.md`。
 
 ## 理由
 
