@@ -179,6 +179,8 @@
 - **arch 新发现两条（我 PRD 的漏洞，已修）**：**R2** `close pm` 假成功（解析成不存在的 `pm@slug` ⇒ rc=0「未运行」而旧会话仍在跑）· **R3 更坏**：冲突判据含「同 scope」而 legacy 是空 scope ⇒ 判 absent ⇒ **同仓可起第二个 PM**
 - **四条拍板（2026-11-17）**：**D-1 A**（用户拍板）保留前缀 `nao-`/`subagent-` **只限 core**，不再管 fleet ⇒ 本仓 `nao-skills` 零配置可用 · **D-2 A**（PM 判）不做 `status`「无 fleet」渲染标注（裸名与 `@slug` 本身就区分得开，省三处全文 golden）· **D-3 A**（PM 判，安全优先）默认 tier 下同仓裸名 ≡ `core@<slug>` ⇒ 升级零操作且堵住 R3 · **D-4 A**（用户拍板）48 与 core≤32/fleet≤16 三个冻结值都不动，默认 tier 超长**自动截短 + 恰一行提示**，显式 tier 仍 fail loud
 - **PRD 已按拍板更新**（97 行）：新增 AC11（R3 不产生第二个 PM）· AC12（名长双态）· AC4 加「`nao-skills` 零配置正向」· AC6 改为「不得假成功」
+- **arch 收尾已闭环**（`ac0da36`）：ADR **59 行**补「拍板记录」（D-1/D-4 = 用户 · D-2/D-3 = PM · 全 A 案），放在 `## 决策` 节内（符合 `deliverable-docs §四`「参考来源恒末节、可选节仅 3 个」的结构契约，**PM 已核**）· 旧 ADR 2026-11-13 加「后续演进 → 新 ADR」指针与一条决策补充（**双键分离原则 / 删 `HERDR_SESSION` 回退 / slug 恒非空 / worktree 同键：四条结论不变**），状态仍「已接受（已落地 v0.23.1）」不改为「已废弃」（避免误读成原则作废）· 评审报告 58 行加「拍板结论 → 权威见 ADR」
+- **arch 给 RD 的两条实现级提示（已转派补充单）**：① D-1 落地会动 `fleet_scope_problem` 的保留前缀分支（该函数在 `fleet-name-contract` 抽取块内、core 侧共用）⇒ `cases/28` C1⑤ badf 列表 `subagent-x`/`nao-x` 要改成「scope 位必须过」，**同时 core 侧仍必须拒**（两处判据分叉），附双向正断言 + 负控；② D-3 等价判定必须复用 `running_verdict` 的 `pane_cwd_snapshot`（≤1 次 `pane list`），并自证没多调用
 - **当前状态**：等 `rd-infra` 实现回执（连带同步清单：`intercom-protocol.md:11` + `nao-fleet.sh` usage 归 rd-infra；`INSTALL.md:121/123/124` + README 多仓段归 PM；旧 ADR 由本 ADR 演进 · 不废原文）
 
 ### 本批 T546（门户迁移 Vue 3 + TS，并建文档站 · Issue [#136](https://github.com/Nathan3303/nao-skills/issues/136) · 开工中 · 分支 `feat/136-docs-site`）
