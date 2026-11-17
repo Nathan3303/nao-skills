@@ -188,6 +188,15 @@
 - ⚠️ **PM 失误（本批第 2 次·已控制）**：T548 三条 P2 的派单**误发给 `rd-infra-138`**（未先 `intercom list` 核实 short id）。已即时纠错：要求它停手、不改文件不提交不切分支、只回 `git status`；它回「工作树干净、未执行」并**正确拒绝 checkout**（与 `rd-infra-548` 共用同一 worktree，切分支会打断对方）。正确派单已发 `rd-infra-548`。**规矩固化：派单前先 `intercom list` 取 short id，禁止凭记忆发**
 - **当前状态**：等 `rd-infra-548` 修三条 P2 → QA 复验 → **先合 T547（`gh pr merge` 远端，免切分支）** → T548 rebase → 双后端跑绿 → 合 T548 → 发 0.25.0
 
+### 本批 T549（门禁分层提速 · Issue [#143](https://github.com/Nathan3303/nao-skills/issues/143) · 开工中 · 分支 `nao/T549-test-tiering` · 不单独发版）
+
+- **PRD**：`docs/prds/2026-11-17-test-tiering.md`（AC1–AC8）· **用户目标**：日常快档 **≤2 分钟**，全量复时长但只在 **PR CI 与发布前**
+- **现状数据（PM 实测）**：`npm test` 单次 645–830s（11–14 分钟，今天 6 轮）· `test:agents` = **2s** · t4 **34 例** · runner **串行单进程、无 per-case 计时**
+- **做法约束**：**先测后改**（先加 `-t` 计时出 profile → `docs/reports/143-profile.md`，白名单以数据为准）· 分档**不得降低发布前判据**（全量仍是硬门禁）· **禁**「按改动面自动选 `--case`」（漏测风险 > 收益）· 快档白名单唯一机械判据 = **用例不启动 pi 进程 / 不起 herdr server**
+- **入口**：新增 `npm run test:fast` → `test:agents` + `tests/t4/run.sh --fast`；**`npm test` 一字不改**
+- **arch**：PM 初判**不需要**（不动机制语义与就绪面）；若 RD 发现需改 `run.sh` 契约则升格
+- **当前状态**：待用户确认开工
+
 ## 需求分支 / PR / 发布（PM 维护）
 
 ### ✅ T547 终态（2026-11-17 · 已合并 `380b9f7` · **已发布 v0.25.0**）
