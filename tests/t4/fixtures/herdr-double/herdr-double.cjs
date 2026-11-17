@@ -161,6 +161,7 @@ function readKnobs(st) { return Object.assign({}, DEFAULT_KNOBS, st.knobs || {})
 function paneStatus(st, p) {
   const pane = st.panes[p];
   if (!pane || pane.fg !== 'pi') return 'unknown';
+  if (pane.working) return 'working';                 // T548 复核：agent prompt 起 turn ⇒ working（真 herdr 同义）
   if ((pane.argv || []).indexOf('--') >= 0) return 'working';
   return readKnobs(st).pi_status || 'idle';
 }
@@ -496,6 +497,7 @@ if (sub === 'pane' && a1 === 'run') {
   st.panes[pid].cmd = cmd;
   st.panes[pid].fg = d.fg;
   st.panes[pid].argv = d.argv;
+  st.panes[pid].working = false;   // 重跑 = 新进程，旧 turn 的 working 不继承
   writeState(st);
   out({ id: 'cli:pane:run', result: { pane_id: pid, type: 'pane_run' } });
 }
@@ -568,16 +570,42 @@ if (sub === 'agent' && a1 === 'prompt') {
   st.panes[pid].delivered = st.panes[pid].delivered || [];
   st.panes[pid].delivered.push(text);
   st.panes[pid].screen = ((st.panes[pid].screen || '') + text + '\n').slice(-20000);
+  st.panes[pid].working = true;   // T548 复核：投递即起 turn ⇒ working（直到用例自行结束，替身不做时序模拟）
   st.knobs = Object.assign({}, DEFAULT_KNOBS, st.knobs || {});
   st.knobs.pi_seq = (Number(st.knobs.pi_seq) || 0) + 1;   // 真起一轮 turn（不是屏幕回显）
   writeState(st);
   out({ id: 'cli:agent:prompt', result: { pane_id: pid, type: 'agent_prompt' } });
 }
 
+// `agent read` 保真（T548 复核 P2-2）：真机 0.9.5 三条硬语义，替身不得宽松到「怎么读都绿」：
+//   ① working 时带 `--lines` ⇒ rc=1 stdout `{"error":{"code":"agent_not_idle"…}}`（历史只能 idle 时滚）
+//   ② `--lines` 超 viewport 行数 ⇒ rc=1（历史窗口不会比屏幕还大）
+//   ③ `--source` 只接受 visible|recent|recent-unwrapped|detection；`full` 等 ⇒ rc=1 `invalid read source`
+//   `--source visible` 不依赖 idle，返回当前屏幕快照（AC2 内容面的唯一合法面）。
 if (sub === 'agent' && a1 === 'read') {
   const st = needState();
   const pid = rest[2] || '';
   if (!pid || !st.panes[pid]) die({ error: { code: 'agent_not_found', message: 'no agent at ' + (pid || '<empty>') } });
+  const sf = rest.indexOf('--source');
+  const src = sf >= 0 ? (rest[sf + 1] || '') : 'recent';
+  const VALID_SOURCES = ['visible', 'recent', 'recent-unwrapped', 'detection'];
+  if (VALID_SOURCES.indexOf(src) < 0) {
+    process.stderr.write('Error: invalid read source: ' + src + '\n');
+    process.exit(1);
+  }
+  const lf = rest.indexOf('--lines');
+  const lines = lf >= 0 ? Number(rest[lf + 1] || 0) : null;
+  if (lines !== null) {
+    if (paneStatus(st, pid) === 'working') {
+      process.stdout.write(JSON.stringify({ error: { code: 'agent_not_idle', message: 'cannot read ' + lines + ' lines while ' + pid + ' is working; use --source visible' } }) + '\n');
+      process.exit(1);
+    }
+    const viewport = Number(readKnobs(st).term_rows) || 40;
+    if (!Number.isFinite(lines) || lines < 1 || lines > viewport) {
+      process.stdout.write(JSON.stringify({ error: { code: 'line_count_exceeded', message: 'cannot read ' + lines + ' lines (viewport=' + viewport + ')' } }) + '\n');
+      process.exit(1);
+    }
+  }
   process.stdout.write(st.panes[pid].screen || '');
   process.exit(0);
 }

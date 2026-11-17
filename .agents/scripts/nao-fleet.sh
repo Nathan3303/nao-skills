@@ -3000,9 +3000,13 @@ spawn_tmux() {
 
 # 投递（T548 · tmux 通道）：复用既有 `_term_tmux_argv` 等 `pane_current_command==pi`（≤50×100ms，**不新增轮询面**）
 #   —— tmux 后端没有 herdr 那种就绪门，投递必须自己等到 pi 真的在前台，否则按键会落到 shell。
-#   bracketed paste 退化（arch 遗留③ / PM 拍）：`paste-buffer -p` **只在 pane 已协商 bracketed paste 时**包
-#   ESC[200~…201~（本机 tmux 3.8 实测；判定面 = `#{bracket_paste_flag}`）。未协商 ⇒ 多行会被逐行当 Enter 提交
-#   ⇒ 投递前做**形态归一**（换行 → 空格）：只改投递形态，文案单一源 `$NAO_UPDATE_MSG` 不动。
+#   bracketed paste（arch 遗留③ / PM 拍 · QA 复核 P3）：`paste-buffer -p` **只在 pane 已协商 bracketed paste
+#   时**包 ESC[200~…201~（本机 tmux 3.8 实测；判定面 = `#{bracket_paste_flag}`）。未协商 ⇒ 多行会被逐行
+#   当 Enter 提交 ⇒ 投递前做**形态归一**（换行 → 空格）：只改投递形态，文案单一源 `$NAO_UPDATE_MSG` 不动。
+#   **真 pi 的多行路径在本机不可达（不是两条活路径）**：QA 实测真 pi 的 flag 在 `pane_current_command==pi`
+#   之后 ~1349ms 才置 1（RD 独立实测 577ms，同向）而本函数在 10–100ms 判定 ⇒ 实际总走归一（文案被压成
+#   一行，送达/执行不受影响）。保留 `flag==1` 分支是为了已协商的 pane（如手工起的 REPL），**不得**据此
+#   声称真 pi 保留多行。
 #   其余要点：独立 buffer 名 + `-d`（**别动用户粘贴板**）；末尾一次键名 `Enter`；禁 `send-keys -l` 逐行 + sleep。
 _term_tmux_deliver() {  # <pane_id> <message> → 0 已投递 / 1 失败（stdout: 失败阶段）
   local pane="${1-}" msg="${2-}" i name flag buf
@@ -3017,7 +3021,8 @@ _term_tmux_deliver() {  # <pane_id> <message> → 0 已投递 / 1 失败（stdou
     printf '等 pi 前台超时（pane_current_command=%s）\n' "${name:-<空>}"
     return 1
   fi
-  # 退化归一：bracket_paste_flag == 1 ⇒ 保留多行（pi 会把整块当一次粘贴）；否则单行化。
+  # 退化归一：bracket_paste_flag == 1 ⇒ 保留多行（已协商的 pane）；否则单行化。
+  #   注：真 pi 本机在判定点（10–100ms）尚未置 1（~1349ms 才置）⇒ 实际总走归一（QA P3）。
   flag="$(tmux display-message -p -t "$pane" '#{bracket_paste_flag}' 2>/dev/null || true)"
   if [[ "$flag" != "1" ]]; then
     msg="${msg//$'\n'/ }"
