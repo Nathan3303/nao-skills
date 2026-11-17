@@ -4199,6 +4199,11 @@ cmd_ensure() {
       [[ -z "$card_as" ]] || die "--as 只能用于同一目标的 --card 之后（如 ensure --card <卡> --as <会话名>）"
       resolve_role "$role"
       [[ -n "$repo" ]] || repo="${ROLE_WS[$NAME]:-$PWD}"
+      # AC13（T547-O-1）：`roles.yaml` 的 `workspace: .` 是**相对值** —— 必须在此归一成物理绝对路径。
+      #   否则 `herdr workspace create --cwd .` 由 **server** 解析 ⇒ pane/`cd .` 落到 server 目录
+      #   （症状：两仓 pane 同目录、同仓重复 ensure 假冲突、归属判据拿不到仓 cwd）。
+      #   归一一次 ⇒ 下游 fleet 解析 / 判重 / codegraph / spawn 全部拿到同一绝对仓路径。
+      repo="$(_fleet_phys "$repo")"
       if ! fleet_of_invocation "$repo" "$CLI_FLEET"; then
         die "ensure 中止：无法确定 <$repo> 的 fleet（${FLEET_RESOLVED_ERR:-见上}；该怎么办：修或删 <目标仓>/.agents/fleet-scope，或用 --fleet <slug> 显式指定）"
       fi

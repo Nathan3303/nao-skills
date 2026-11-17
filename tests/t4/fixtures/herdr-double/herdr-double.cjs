@@ -44,6 +44,13 @@ const cfg = process.env.XDG_CONFIG_HOME || path.join(process.env.HOME || '/tmp',
 const sdir = path.join(cfg, 'herdr', 'sessions', session);
 const sfile = path.join(sdir, 'double-state.json');
 
+// 可编排旋钮：模拟 herdr **server 的工作目录**（≠ 目标仓）。现场 T547-O-1：
+//   `workspace create --cwd .` 是**相对值**，真 server 按自己的 cwd 解析 ⇒ pane 落到 server 目录。
+//   替身默认取调用方 cwd（无旋钮时行为不变）；设了就把替身的 cwd 切过去，让相对 --cwd 按 server 解析。
+if (process.env.HERDR_DOUBLE_SERVER_CWD) {
+  try { process.chdir(process.env.HERDR_DOUBLE_SERVER_CWD); } catch (e) { /* 目录不可用 ⇒ 保持调用方 cwd */ }
+}
+
 const DEFAULT_KNOBS = { pi_seq: 1, pi_skip: true, pi_session: true, pi_status: 'idle', term_cols: 120, term_rows: 40 };
 const emptyState = () => ({
   panes: {},          // pane_id -> {pane_id, terminal_id, workspace_id, tab_id, label, cwd, fg, argv, cmd, shell_pid}
@@ -280,7 +287,8 @@ if (sub === 'workspace' && a1 === 'list') {
 
 if (sub === 'workspace' && a1 === 'create') {
   const st = ensureMaps(needState());
-  const cwd = flagValue(rest.join(' '), '--cwd') || process.cwd();
+  // 相对 --cwd 按 **server cwd** 解析（真 herdr 语义）；绝对路径原样保留
+  const cwd = path.resolve(flagValue(rest.join(' '), '--cwd') || process.cwd());
   const label = flagValue(rest.join(' '), '--label');
   st.seq.ws += 1;
   const wid = 'w' + st.seq.ws;
@@ -331,7 +339,7 @@ if (sub === 'tab' && a1 === 'list') {
 if (sub === 'tab' && a1 === 'create') {
   const st = ensureMaps(needState());
   const wid = flagValue(rest.join(' '), '--workspace');
-  const cwd = flagValue(rest.join(' '), '--cwd') || process.cwd();
+  const cwd = path.resolve(flagValue(rest.join(' '), '--cwd') || process.cwd());
   const label = flagValue(rest.join(' '), '--label');
   if (!wid || !st.workspaces[wid]) die({ error: { code: 'workspace_not_found', message: 'no workspace ' + (wid || '<empty>') } });
   const tid = nextTabId(st, wid);
@@ -408,7 +416,7 @@ if (sub === 'pane' && a1 === 'split') {
   const st = ensureMaps(needState());
   const base = rest[2] || '';
   if (!st.panes[base]) die({ error: { code: 'pane_not_found', message: 'no pane ' + base } });
-  const cwd = flagValue(rest.join(' '), '--cwd') || st.panes[base].cwd;
+  const cwd = path.resolve(flagValue(rest.join(' '), '--cwd') || st.panes[base].cwd);
   const wid = st.panes[base].workspace_id;
   const pid = nextPaneId(st, wid);
   st.panes[pid] = { pane_id: pid, terminal_id: 'term_' + wid + '_' + pid.split(':')[1], workspace_id: wid, tab_id: st.panes[base].tab_id, label: '', cwd: cwd, fg: 'bash', argv: ['bash'], cmd: '', shell_pid: 900000 + Number(pid.split(':p')[1]) * 10 };

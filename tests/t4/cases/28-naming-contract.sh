@@ -1094,7 +1094,7 @@ exit 0
 SH
 chmod +x "$B2ST_BIN/herdr"
 mkdir -p "$LAB/tmp"
-B2_ENV=(env HERDR_ENV=1 HERDR_SESSION=nao-b2-stub XDG_CONFIG_HOME="$LAB/cfg" \
+B2_ENV=(env HERDR_ENV=1 HERDR_SESSION=nao-b2-stub HERDR_PANE_ID="w9:p9" XDG_CONFIG_HOME="$LAB/cfg" \
   HERDR_SOCKET_PATH="$LAB/cfg/herdr/sessions/nao-b2-stub/herdr.sock" \
   HERDR_STUB_CWD="$LAB" \
   NAO_SKILLS="$LAB" TMPDIR="$LAB/tmp" PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" \

@@ -8,7 +8,7 @@ description: pi-intercom 多会话协作协议（常驻引用）
 
 - **上下文分层与优先级**：`AGENTS.md`（项目级，PM 维护）**优先** → 本文件/roles.yaml（团队级）→ 角色卡（角色级）→ 技能（按需）。AGENTS.md 已由 pi 自动注入上下文，**所有角色必须遵循其中项目约束**（命令纪律/领域红线/机制衔接）；各层只写自己的内容，不互相复制。
 - 会话由 `nao-fleet.sh` 以 `--name <别名>` 拉起，角色卡经 `--append-system-prompt` 启动期注入。
-- **会话名 = `<role>[-<task>]@<fleet>`**（如 `rd-be@api` / `rd-be-T1@api`）：fleet 末位、`@` 分隔、**恒非空**（默认 = 目标仓 slug；`--fleet` 或 `<仓>/.agents/fleet-scope` 覆盖）；名字是**路由标签，不是身份证明**。同一 herdr session 内多仓并行**无需任何配置**：每仓 `ensure` 自动带各自 slug，放置键与名字 scope 同源（1 仓 1 workspace）。只有两仓**同 `--fleet`** 时同 core 才会 fail loud 并列候选。`status` 从名字 parse fleet（不读文件）；`close` 裸名按「带 fleet 候选 → 同仓 legacy 裸名 → 全 session 唯一同 core → 否则拒绝列候选」解析，全名 `…@<fleet>` 忽略文件。口头寻址优先用全名，跨仓时尤其如此。细节见 `docs/INSTALL.md`「会话命名与多仓 scope」。
+- **会话名 = `<role>[-<task>]@<fleet>`**（如 `rd-be@api` / `rd-be-T1@api`）：fleet 末位、`@` 分隔、**恒非空**（默认 = 目标仓 slug；`--fleet` 或 `<仓>/.agents/fleet-scope` 覆盖）；名字是**路由标签，不是身份证明**。同一 herdr session 内多仓并行**无需任何配置**：每仓 `ensure` 自动带各自 slug，放置键与名字 scope 同源（1 仓 1 workspace）。只有两仓**同 `--fleet`** 时同 core 才会 fail loud 并列候选。`status` 从名字 parse fleet（不读文件）；`close` 裸名按「带 fleet 候选 → 同仓 legacy 裸名 → 全 session 唯一同 core → 否则拒绝列候选」解析，全名 `…@<fleet>` 忽略文件。口头寻址优先用全名，跨仓时尤其如此。细节见 `docs/INSTALL.md`「会话命名与多仓舰队」。
 - **角色 id / 别名 / 卡片映射以 `.agents/roles.yaml` 为唯一事实来源**（下表为当前快照，改动先改 roles.yaml）。
 - 被点名先回执：`已按 <role> 角色执行`。
 - 仅当消息明确要求、且确认未注入时，才自行读取 `@.agents/prompts/<role>.md`（跨仓库会话用启动期注入的环境锚点绝对路径）。

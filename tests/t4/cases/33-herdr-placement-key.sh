@@ -50,6 +50,7 @@ ws_id_by_label() { fld "$(obj_for "$(ws_json)" label "${1:-}")" workspace_id; }
 ws_label_count() { split_objs <<< "$(ws_json)" | grep -cF "\"label\":\"${1:-}\"" || true; }
 ws_id_of_pane() { fld "$(obj_for "$(pane_json)" pane_id "${1:-}")" workspace_id; }
 pane_ws_by_label() { fld "$(obj_for "$(pane_json)" label "${1:-}")" workspace_id; }
+pane_cwd_by_label() { fld "$(obj_for "$(pane_json)" label "${1:-}")" cwd; }
 # 唯一运行入口 = `be_run_fleet`：它按**单源清单**（`tests/t4/lib.sh::T4_HERDR_ENV_VARS`，8 个）清 `HERDR_*`
 #   再注入**本实验场**的句柄（用例进程自己在真 herdr pane 里跑 ⇒ 直接继承 env 会打到用户真 server，实测该误用会把
 #   「pane list 失败」吃成 rc=0 而掩盖判据）。变异副本经 `BE_FLEET_SCRIPT` 换脚本，句柄仍走同一入口。
@@ -296,6 +297,50 @@ if [ -n "$N2_MD5" ] && [ "$N2_MD5" != "$MAIN_MD5" ]; then
 else
   t4_bad "N2 变异锚点未命中或副本与主脚本同文（用例锚点须跟随实现）"
 fi
+
+# ---------------------------------------------------------------- AC13（PM 追加 · O-1）：pane cwd == 目标仓物理路径
+#   现场形态：`roles.yaml` 的 `workspace: .` 是**相对值**，交给 `herdr workspace create --cwd` 由 **server** 解析
+#   ⇒ pane / `cd .` 落到 server 目录（症状：① 两仓 pane 同目录 ② 同仓重复 ensure 假冲突 ③ 归属判据拿不到仓 cwd）。
+#   夹具：替身以 `HERDR_DOUBLE_SERVER_CWD` 模拟「server cwd ≠ 目标仓」（相对 --cwd 按 server 解析；已归一者不受影响）。
+AC13_SERVER="$LAB/server-dir"; mkdir -p "$AC13_SERVER"
+AC13_REL="$LAB/repo-rel"; mkdir -p "$AC13_REL"; cp -r "$T4_ROOT/.agents" "$AC13_REL/.agents" || t4_bad "AC13 夹具：复制 .agents 失败"
+AC13_PHYS="$(cd "$AC13_REL" && pwd -P)"
+export HERDR_DOUBLE_SERVER_CWD="$AC13_SERVER"
+AC13_BEFORE="$(be_pane_count)"
+be_run_fleet "$AC13_REL" ensure rd-fe
+t4_assert_eq "0" "$BE_RC" "AC13 正向：相对仓（workspace='.'）ensure rc=0（stderr=$(printf '%s' "$BE_ERR_ANSI" | head -1)）"
+t4_assert_eq "$((AC13_BEFORE + 1))" "$(be_pane_count)" "AC13 正向：会话拉起（+1 pane）"
+t4_assert_eq "$AC13_PHYS" "$(pane_cwd_by_label 'rd-fe@repo-rel')" \
+  "AC13 正向：pane cwd = 目标仓**物理绝对路径**（不是 herdr server 目录 $AC13_SERVER）"
+# 症状②：同仓重复 ensure ⇒ 必须走「已在运行」，不得误报「同 core 但 fleet/仓不同」
+AC13_CNT="$(be_pane_count)"
+be_run_fleet "$AC13_REL" ensure rd-fe
+t4_assert_eq "0" "$BE_RC" "AC13 重复 ensure rc=0（pane cwd 已归一 ⇒ 不得假冲突）"
+t4_assert_contains "$BE_ERR_ANSI" "已在运行" "AC13 重复 ensure 走「已在运行」（不是「同 core 但 fleet/仓不同」）"
+t4_assert_eq "$AC13_CNT" "$(be_pane_count)" "AC13 重复 ensure pane 数不变"
+# 负控：去掉路径归一（变异副本）⇒ 上面两条断言必红（pane 落 server 目录 + 重复 ensure 假冲突）
+AC13_NEG="$LAB/neg13"; AC13_REL_NEG="$AC13_NEG/repo-neg13"; mkdir -p "$AC13_REL_NEG"
+AC13_PHYS_NEG="$(cd "$AC13_REL_NEG" && pwd -P)"
+AC13_ANCHOR='      repo="$(_fleet_phys "$repo")"'
+N13_MD5="$(mutate_copy "$AC13_NEG" "$AC13_ANCHOR" '')" || N13_MD5=""
+if [ -n "$N13_MD5" ] && [ "$N13_MD5" != "$MAIN_MD5" ]; then
+  t4_ok "AC13 负控变异：副本去掉路径归一（锚点命中，md5 与主脚本不同）"
+  BE_FLEET_SCRIPT="$AC13_NEG/.agents/scripts/nao-fleet.sh"
+  be_run_fleet "$AC13_REL_NEG" ensure rd-fe
+  N13_RC="$BE_RC"; N13_CWD="$(pane_cwd_by_label 'rd-fe@repo-neg13')"
+  be_run_fleet "$AC13_REL_NEG" ensure rd-fe
+  N13_RC2="$BE_RC"; N13_ERR2="$BE_ERR_ANSI"
+  unset BE_FLEET_SCRIPT
+  t4_assert_eq "0" "$N13_RC" "AC13 负控：变异副本首次 ensure rc=0（基线）"
+  t4_assert_eq "$AC13_SERVER" "$N13_CWD" \
+    "AC13 负控：无归一 ⇒ pane cwd 落到 herdr **server 目录**（实测 $N13_CWD）⇒ 正向断言必红"
+  t4_assert_ne "0" "$N13_RC2" "AC13 负控：无归一 ⇒ 同仓重复 ensure 假冲突 rc≠0（症状②）"
+  t4_assert_contains "$N13_ERR2" "与在场会话同 core" "AC13 负控：假冲突文案点名「与在场会话同 core」"
+  t4_info "AC13 负控实测：pane cwd=$N13_CWD（期望仓 $AC13_PHYS_NEG）· 重复 ensure rc=$N13_RC2 · stderr 首行=$(printf '%s' "$N13_ERR2" | head -1)"
+else
+  t4_bad "AC13 负控变异锚点未命中或副本与主脚本同文（用例锚点须跟随实现）"
+fi
+unset HERDR_DOUBLE_SERVER_CWD
 
 # ---------------------------------------------------------------- 静态面（与用例 28 C3④ 同源，独立复核）
 t4_assert_eq "0" "$(awk '/^_term_herdr_spawn\(\)/,/^}/' "$FLEET_MAIN" | grep -c 'HERDR_SESSION' || true)" \
