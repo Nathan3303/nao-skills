@@ -23,6 +23,7 @@ fi
 LAB="$T4_CACHE_DIR/lab30-$$"; mkdir -p "$LAB"
 cp -r "$T4_ROOT/.agents" "$LAB/.agents" || { t4_bad "夹具复制 .agents 失败"; t4_exit; }
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+NAME="rd-fe@$(basename "$LAB")"
 
 BE_CACHE_ROOT="$T4_CACHE_DIR"
 be_init "$LAB" "lab" || { t4_bad "be_init 失败"; t4_exit; }
@@ -31,8 +32,8 @@ be_ensure_scene || { t4_bad "be_ensure_scene 失败"; t4_exit; }
 # ---- ① 幽灵 pane：label 在、前台是 shell（无 agent 条目）----
 GHOST="$(be_new_pane "$LAB")"
 t4_assert_ne "" "$GHOST" "夹具：幽灵 pane 建立（$GHOST）"
-be_set_name "$GHOST" "rd-fe" "$(basename "$LAB")" || t4_bad "夹具：幽灵 pane label 写入失败"
-t4_assert_eq "rd-fe" "$(be_pane_label "$GHOST")" "夹具：label 命中 rd-fe（幽灵态的前提）"
+be_set_name "$GHOST" "$NAME" "$(basename "$LAB")" || t4_bad "夹具：幽灵 pane label 写入失败"
+t4_assert_eq "$NAME" "$(be_pane_label "$GHOST")" "夹具：label 命中 $NAME（幽灵态的前提）"
 
 be_run_fleet "$LAB" status
 t4_assert_eq "0" "$BE_RC" "① status rc=0"
@@ -50,16 +51,16 @@ t4_assert_not_contains "$BE_OUT" "已在运行（pane label + 结构化事实命
   "② 不得走「已在运行 ⇒ 跳过」分支（那会把没起过的会话当已起）"
 t4_assert_contains "$BE_OUT" "（成功 1 / 跳过 0 / 失败 0）" "② 摘要计成功 1（复用该 pane 重跑，不是跳过）"
 be_run_fleet "$LAB" status
-t4_assert_contains "$BE_OUT" "✓ rd-fe" "② 复用重跑后 status 判在线（幽灵已被修好）"
+t4_assert_contains "$BE_OUT" "--name $NAME" "② 复用重跑后 status 判在线（--name 证据；幽灵已被修好）"
 
 # ---- ③ 反向对照：同一 label 换成 pi（agent 齐备）⇒ 在线 ----
 be_teardown >/dev/null 2>&1 || true
 be_ensure_scene || { t4_bad "③ 重置场失败"; t4_exit; }
 LIVE="$(be_new_pane "$LAB")"
-be_fixture_session "$LIVE" "rd-fe" "$(basename "$LAB")" || t4_bad "③ 夹具：在线 pane 身份写入失败"
+be_fixture_session "$LIVE" "$NAME" "$(basename "$LAB")" || t4_bad "③ 夹具：在线 pane 身份写入失败"
 be_run_fleet "$LAB" status
 t4_assert_eq "0" "$BE_RC" "③ status rc=0"
-t4_assert_contains "$BE_OUT" "✓ rd-fe" "③ 在线 pane 判「✓ rd-fe 在线」（对照成立）"
+t4_assert_contains "$BE_OUT" "--name $NAME" "③ 在线 pane 判「--name $NAME」（对照成立）"
 t4_assert_not_contains "$BE_OUT" "幽灵 pane" "③ 在线 pane 不得被误判幽灵"
 be_run_fleet "$LAB" ensure "rd-fe@$LAB"
 t4_assert_contains "$BE_ERR_ANSI" "已在运行" "③ 在线时 ensure 判「已在运行」（与②形成反向对照）"

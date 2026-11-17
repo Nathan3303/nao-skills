@@ -192,12 +192,12 @@ NEWS="$(new_split "$BEFORE")"
 t4_assert_eq "3" "$(printf '%s\n' "$NEWS" | grep -c .)" "AC1① 捕获 3 条 split-window 命令串"
 _i=1
 for pair in "arch-designer:arch-designer" "rd-fe:rd-fe" "rd-infra:rd-infra"; do
-  _nm="${pair%%:*}"; _rid="${pair#*:}"
+  _nm="${pair%%:*}@$BASE"; _rid="${pair#*:}"
   _cmd="$(printf '%s\n' "$NEWS" | sed -n "${_i}p")"
   _pf="$(prompt_file_of "$_cmd")"
   _card="$(card_path_of "$_rid")"
   t4_assert_contains "$(unwrap "$_cmd")" "--name $_nm" "AC1① 第 ${_i} 个 pane 的会话名 = $_nm"
-  expect_card "$_pf" "$_card" "AC1①[$_nm]"
+  expect_card "$_pf" "$_card" "AC1①[$_rid]"
   _i=$((_i + 1))
 done
 PFS_3="$(printf '%s\n' "$NEWS" | while IFS= read -r l; do printf '%s\n' "$(prompt_file_of "$l")"; done)"
@@ -213,12 +213,12 @@ NEWS="$(new_split "$BEFORE")"
 t4_assert_eq "2" "$(printf '%s\n' "$NEWS" | grep -c .)" "AC1② 捕获 2 条 split-window 命令串"
 _i=1
 for pair in "rd-be:rd-be" "qa:qa"; do
-  _nm="${pair%%:*}"; _rid="${pair#*:}"
+  _nm="${pair%%:*}@$BASE"; _rid="${pair#*:}"
   _cmd="$(printf '%s\n' "$NEWS" | sed -n "${_i}p")"
   _pf="$(prompt_file_of "$_cmd")"
   _card="$(card_path_of "$_rid")"
   t4_assert_contains "$(unwrap "$_cmd")" "--name $_nm" "AC1② 第 ${_i} 个 pane 的会话名 = $_nm"
-  expect_card "$_pf" "$_card" "AC1②[$_nm]"
+  expect_card "$_pf" "$_card" "AC1②[$_rid]"
   _i=$((_i + 1))
 done
 
@@ -233,7 +233,7 @@ if [ "$MUT_CHILD" != "1" ]; then
   PF_S="$(prompt_file_of "$CMD_S")"
   t4_assert_ne "" "$PF_S" "AC2① 命令串含 --append-system-prompt 文件（$PF_S）"
   expect_card "$PF_S" "$(card_path_of arch-designer)" "AC2①[arch]"
-  diff_assert "$(expected_wrapped . arch-designer-T24A "$PF_S")" "$CMD_S" \
+  diff_assert "$(expected_wrapped . "arch-designer-T24A@$BASE" "$PF_S")" "$CMD_S" \
     "AC2① 单目标命令行 = 逐字重建（cd . + name + append-system-prompt，零新增参数）"
 
   # ---- AC2② --card 下游卡（完整路径通道）：override 不得被当相对名 ----
@@ -245,7 +245,7 @@ if [ "$MUT_CHILD" != "1" ]; then
   PF_C="$(prompt_file_of "$CMD_C")"
   t4_assert_ne "" "$PF_C" "AC2② 命令串含 --append-system-prompt 文件（$PF_C）"
   expect_card "$PF_C" "$DOWN_PHYS" "AC2②[code-reviewer]"
-  diff_assert "$(expected_wrapped "$LAB_PHYS" code-reviewer-T24B "$PF_C")" "$CMD_C" \
+  diff_assert "$(expected_wrapped "$LAB_PHYS" "code-reviewer-T24B@$BASE" "$PF_C")" "$CMD_C" \
     "AC2② --card 命令行 = 逐字重建（卡路径仍是**完整路径**，未被当清单相对名拼成 PROMPTS_DIR/<path>）"
 
   # ---- AC2③ 同批混合：--card 目标 + 常驻目标各走各的通道 ----
