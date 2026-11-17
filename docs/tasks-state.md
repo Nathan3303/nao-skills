@@ -169,6 +169,18 @@
 - 需求分支 / PR：见下方「需求分支 / PR / 发布」。本批 = `nao/bookkeeping-20261102`（维护型文档批）；上一批 `nao/status-pane-cwd-key` 已 squash `dfd50dc` 并删净
 - 会话体检：本 PM 会话（`01a1977d` · pane %74）已跨 T537 / M20261101 / M20261102 / T538 / T539 五批，ctx 约 35%；**建议下批开工前重开 PM**；本快照 = 接续唯一事实源（main = `38f678b`）
 
+### 本批 T548（`ensure pm` 自检注入致就绪门恒超时 · Issue [#140](https://github.com/Nathan3303/nao-skills/issues/140) · 开工中 · 分支 `fix/140-update-check-ready` · **fix 轻通道**）
+
+- **来源**：用户 T547 走查时报（「功能通过，但 ensure pm 时的更新自查会导致 fleet 报就绪门超时」）
+- **定性（PM A/B 实测，非转述）**：默认 5.1s ⇒ 就绪门超时，`agent_status == idle：实际 working`，rc=1「成功 0 / 失败 1」（pane 已建）；`NAO_UPDATE_ON_ENSURE=0` 3s ⇒ rc=0「成功 1」。唯一变量 = 开关 ⇒ 因果成立
+- **根因**：`nao-fleet.sh:3005` 把自检文案作为 pi **首条用户消息**拼进 argv ⇒ 启动即 `working`（跑 `npm view` / `gh release view`）⇒ 就绪门（`:1292` 起七条件与，含 `agent_status == idle`）5s 内等不到 idle。**「等 pi 空闲」的闸门与「让 pi 干活」的注入直接冲突**；属 M20261103 既有设计后果，与 T547 无关
+- **用户拍板**：**先修 T548**（T547 分支 `9ce8602` 暂不合并，待 T548 落地后回到它）
+- **修法（PM 拍板 A）**：**延迟投递** —— spawn 不带首条消息，就绪门通过后再投递；**就绪门七条件语义不放宽**（B 案「working 也算就绪」已拒：会削弱 #96 二期守卫；C 案「默认关」已拒：等于退回功能之前）
+- **待定细节（已派 arch lite）**：投递通道（`herdr agent prompt` vs `pane send-text`+`send-keys`）· tmux 对等写法 · 投递与 REPL 就绪的竞态 · 失败语义（我倾向 rc=0 + 一条 warn）· 幂等（已在运行跳过的路径不得二次投递）· **AC2 的机械可判断言**
+- **AC（Issue 内已给）**：AC1 默认 rc=0「成功 1」· AC2 自检**真送达**且机械可判 · AC3 关开关时命令行与本缺陷前逐字等价 · AC4 两后端都过且**七条件不放宽**（负控：已 idle 但 seq 不动仍须超时）· AC5 `npm test` 全量 rc=0
+- **回退**：单条 squash `git revert`（纯投递时机改动，无数据影响）
+- **当前状态**：等 `arch-designer-548` lite 回执 → 派 `rd-infra` 实现 → QA → 用户复核（同一场景：`ensure pm` 应 rc=0）
+
 ## 需求分支 / PR / 发布（PM 维护）
 
 ### 本批 T547（`ensure` 舰队身份显式化 · `--fleet` 单一来源 · Issue [#138](https://github.com/Nathan3303/nao-skills/issues/138) · 开工中 · 分支 `feat/138-fleet-param`）
