@@ -197,7 +197,12 @@
   - **O-1（P1 · 既有缺陷，本批暴露）** `repo` 保留 `roles.yaml` 的 `workspace: .` 相对值 ⇒ cwd 由 herdr **server** 解析 ⇒ pane 落 server 目录（实测：我起的 `rd-infra-138` 会话 cwd = `/home/nathan`）⇒ ①两仓 pane 同落 server 目录 ②同仓重复 `ensure` 误报「同 core 但 fleet/仓不同」 ③归属/legacy 判据拿不到 cwd
   - **D-3（P3 · 文案）** `INSTALL:123` 缺「卡会话」限定（**PM 已改** `ef4a44b`）· `intercom-protocol.md:11` 指针章节名过期（归 rd-infra）
 - **PM 裁定（范围追加）**：**O-1 本批修**（不等下批）——本批交付的就是「1 workspace = 1 仓 = 1 支舰队」，pane cwd 不是那个仓则 PM 读错 `AGENTS.md`、跑错构建，标题特性是坏的；已补 **AC13**（正/负控）
-- **当前状态**：`rd-infra-138` 二轮已派（D-1 + D-2 + O-1 + D-3②；要求**在 herdr pane 内**跑门禁自证）→ QA 复跑 → 用户验收 → 合并 → 发 MINOR 0.25.0
+- **闸门 ⑦ 二轮修复已闭环（`015777c`）**：D-1（`B2_ENV` 加 `HERDR_PANE_ID=w9:p9`，宿主 `w1:p1` 撞号复刻修前 FAIL(3)→修后 PASS）· D-2（`e2_gate` 改 here-string；确定性演示 `decl` 50 万行时旧法 rc=141 / 新法 rc=0）· **O-1/AC13**（`cmd_ensure` 加 `repo=$(_fleet_phys "$repo")"`；新增 `HERDR_DOUBLE_SERVER_CWD` 旋钮让替身按 server 目录解析相对 `--cwd`，还原真 herdr 语义）· D-3②（`intercom-protocol.md:11` 4 字）· 连带 `cases/24` 期望 `cd .` → 仓物理绝对路径。门禁（herdr 默认后端）rc=0 · **2135 PASS / 0 FAIL** · NOTE=10 · **13m17s**
+- **闸门 ⑦ QA 复核终判（`212602a` · 报告追加 §六 65 行 · 清单 40 行改 O-1 已修口径）**：四项全 ✓。**D-2 它自己造了 SIGPIPE 并做压力复刻**：老写法 + 11MB decl ⇒ rc=141 5/5；8 lane × 240 轮 ⇒ 老写法 1 次假红、here-string **0/240**；`--case 06` 在 8 路并发下 3/3 PASS。**O-1 真 herdr 正负控**：server cwd 故意设 `/tmp/t547-evidence/serverdir` ⇒ 正控两仓 pane cwd 各归各仓、症状②（重复 ensure 误报 rc=1）消失；负控删归一 ⇒ cwd 落 serverdir 且 rc=1
+- **连带两处 QA 判定（我采纳）**：① `cases/24` 改期望 = **必要连带不是放宽**（生产串已变、断言仍整串 diff、`cd` 从 `.` 收紧为精确绝对路径；删归一副本跑该例恰 1 条红、diff 明示新旧值）② `HERDR_DOUBLE_SERVER_CWD` = **不比真 herdr 宽松反而更贴近**（真机实测：server cwd≠仓时 `--cwd .` ⇒ pane 落 server 目录，`--cwd /abs` ⇒ 原样；旧替身把相对值当字面，恰好掩盖 O-1）
+- **计数口径**：跨后端 PASS/NOTE 总数**不可比**（实测 `--case 09` herdr 35+1 / tmux 47+0；`--case 34` 57+1 / 58+0）⇒ 判据取 rc；本次记 **herdr · rc=0 · 2133 PASS/0 FAIL/NOTE 11**
+- **PM 抽验**：`HERDR_PANE_ID=w1:p1 --case 28` PASS · `--case 06` PASS · `check` rc=0 · 工作树空 · 分支已 push（`212602a`）
+- **当前状态**：**AC1–AC13 全 PASS** → 等用户按 `docs/reports/138-user-acceptance.md` 8 步走查回填 → 授权合并（RD squash）→ 发 **MINOR 0.25.0** → 立刻开 Q6 门禁分层
 - **附**：机器 2026-11-17 ~15:54 重启过一次 ⇒ 我先前的 `/tmp` 证据（失败日志/48M 缓存）已随重启清空（非 QA 删除）；因 D-2 已定性，证据不再需要（连带同步清单：`intercom-protocol.md:11` + `nao-fleet.sh` usage 归 rd-infra；`INSTALL.md:121/123/124` + README 多仓段归 PM；旧 ADR 由本 ADR 演进 · 不废原文）
 
 ### 本批 T546（门户迁移 Vue 3 + TS，并建文档站 · Issue [#136](https://github.com/Nathan3303/nao-skills/issues/136) · 开工中 · 分支 `feat/136-docs-site`）
