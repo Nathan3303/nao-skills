@@ -1094,11 +1094,23 @@ exit 0
 SH
 chmod +x "$B2ST_BIN/herdr"
 mkdir -p "$LAB/tmp"
-B2_ENV=(env HERDR_ENV=1 HERDR_SESSION=nao-b2-stub HERDR_PANE_ID="w9:p9" XDG_CONFIG_HOME="$LAB/cfg" \
+# ---- D-1（T547 · QA P2-1②）继承面全摘：不能用单值钉 `HERDR_PANE_ID=w9:p9` 冒充隔离 ----
+#   缺陷：钉值是**单一取值**，若宿主 pane 恰好撞上钉值（或守卫被删）就会重新 flaky；
+#   且 HERDR_WORKSPACE_ID / HERDR_TAB_ID 同样会渗进 stub 场景。⇒ 直接引用单源清单
+#   `tests/t4/lib.sh::T4_HERDR_UNSET_ARGS`（与 `_be_herdr_exec` / `be_run_fleet` 同口径），
+#   使 B2 夹具与跑者所在 pane **脱钩**（host-independent；#130 D2 也要求调用点不手写清理变量名）。
+B2_ENV=(env "${T4_HERDR_UNSET_ARGS[@]}" \
+  HERDR_ENV=1 HERDR_SESSION=nao-b2-stub XDG_CONFIG_HOME="$LAB/cfg" \
   HERDR_SOCKET_PATH="$LAB/cfg/herdr/sessions/nao-b2-stub/herdr.sock" \
   HERDR_STUB_CWD="$LAB" \
   NAO_SKILLS="$LAB" TMPDIR="$LAB/tmp" PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" \
   PATH="$B2ST_BIN:$PATH")
+t4_assert_eq "1" "$(grep -F 'B2_ENV=(env "${T4_HERDR_UNSET_ARGS[@]}"' "${BASH_SOURCE[0]}" | grep -c '^B2_ENV=' || true)" \
+  "D-1 静态：B2_ENV 从单源派生（#130 D2：调用点零手写）"
+for v in HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID; do
+  t4_assert_eq "1" "$([[ " ${B2_ENV[*]} " == *" -u $v "* ]] && echo 1 || echo 0)" \
+    "D-1 静态：B2_ENV 继承面全摘含「-u $v」（单值钉不回流）"
+done
 # 放置键（T545 · ADR 2026-11-13）：label = 已声明 scope 否则**目标仓 slug**；本区用例的目标仓 = $LAB
 #   （roles.yaml workspace="." ⇒ repo=$PWD=$LAB，非 git 仓 ⇒ slug = basename）。$LAB 名形如 `lab28-<pid>`
 #   只含 [a-z0-9-]，slug 归一为恒等 ⇒ 可以直接用 basename 当期望值（不复制归一算式）。
@@ -1117,6 +1129,24 @@ b2_run() { # <onrun> <args...> → 清桩后跑 fleet（输出落 T4_OUT/T4_ERR�
   T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
   T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
 }
+
+# ---- D-1 机械自证（QA P2-1②：撞号 pane id 不得让夹具 flaky）----
+#   外部 env **显式注入** HERDR_PANE_ID=w1:p1 / WORKSPACE / TAB；B2_ENV 必须先摘掉它们，
+#   于是 stub 里 w1:p1 的在线 pi 仍可被 close（rc=0）——这正是 QA 在宿主 pane=w1:p1 踩到的红。
+#   负控：把 B2_ENV 的 `-u` 守卫去掉（副本）⇒ 注入值泄进 fleet ⇒ close 判「调用者自身」⇒ 本组必红。
+b2_reset
+printf 'w1|%s\n' "$B2_WS_LABEL" > "$B2ST_ST/ws"
+printf 'w1:t1|w1|%s\n' "$B2_RD_FE" > "$B2ST_ST/tabs"
+printf 'w1:p1|%s|pi|w1|w1:t1\n' "$B2_RD_FE" > "$B2ST_ST/panes"
+printf 'w1:p1|idle|3|1|sess-a\n' > "$B2ST_ST/agents"
+t4_run_in_dir "$LAB" env HERDR_PANE_ID=w1:p1 HERDR_WORKSPACE_ID=w1 HERDR_TAB_ID=w1:t1 \
+  "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=herdr timeout 60 \
+  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" close rd-fe
+B2_D1_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+B2_D1_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "0" "$T4_RC" "D-1 注入撞号 HERDR_PANE_ID=w1:p1 ⇒ B2_ENV 摘除后 close rc=0（hermetic）"
+t4_assert_contains "$B2_D1_OUT" "已回收 rd-fe" "D-1 撞号环境不影响真回收（注入值被摘掉）"
+t4_assert_not_contains "$B2_D1_OUT$B2_D1_ERR" "调用者自身" "D-1 不得把 stub pane 误判为调用者自身"
 
 # ---- B2① 反假阳性：已 idle 但 seq 不前进（ONRUN: idle|seq=0|skip=1|session 有）⇒ 就绪门超时 fail loud ----
 #   同时验 wall-clock 口径（P3-3）：用 NAO_HERDR_READY_TIMEOUT_MS=400 覆盖，避免本用例白等 5s。

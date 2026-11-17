@@ -714,7 +714,7 @@ t4_assert_eq "0" "$(grep -cE '^NAO_TERMINAL="\$\{NAO_TERMINAL:-tmux\}"' "$FLEET_
   "P2① 反向断言：默认不再是 tmux（flip 真生效，不是两处赋值共存）"
 
 # ---- ② 门面四函数 + 纯谓词：各恰 1 处定义（业务区只调它们）----
-for fn in term_require term_snapshot term_liveness term_argv term_deliverable term_spawn term_session_start term_reclaim term_cleanup; do
+for fn in term_require term_snapshot term_liveness term_argv term_deliverable term_spawn term_deliver term_session_start term_reclaim term_cleanup; do
   t4_assert_eq "1" "$(grep -cE "^${fn}\\(\\) \\{" "$FLEET_B1" || true)" "B1② 门面函数 ${fn} 恰 1 处定义"
 done
 

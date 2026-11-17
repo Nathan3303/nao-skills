@@ -169,6 +169,25 @@
 - 需求分支 / PR：见下方「需求分支 / PR / 发布」。本批 = `nao/bookkeeping-20261102`（维护型文档批）；上一批 `nao/status-pane-cwd-key` 已 squash `dfd50dc` 并删净
 - 会话体检：本 PM 会话（`01a1977d` · pane %74）已跨 T537 / M20261101 / M20261102 / T538 / T539 五批，ctx 约 35%；**建议下批开工前重开 PM**；本快照 = 接续唯一事实源（main = `38f678b`）
 
+### 本批 T548（`ensure pm` 自检注入致就绪门恒超时 · Issue [#140](https://github.com/Nathan3303/nao-skills/issues/140) · 开工中 · 分支 `fix/140-update-check-ready` · **fix 轻通道**）
+
+- **来源**：用户 T547 走查时报（「功能通过，但 ensure pm 时的更新自查会导致 fleet 报就绪门超时」）
+- **定性（PM A/B 实测，非转述）**：默认 5.1s ⇒ 就绪门超时，`agent_status == idle：实际 working`，rc=1「成功 0 / 失败 1」（pane 已建）；`NAO_UPDATE_ON_ENSURE=0` 3s ⇒ rc=0「成功 1」。唯一变量 = 开关 ⇒ 因果成立
+- **根因**：`nao-fleet.sh:3005` 把自检文案作为 pi **首条用户消息**拼进 argv ⇒ 启动即 `working`（跑 `npm view` / `gh release view`）⇒ 就绪门（`:1292` 起七条件与，含 `agent_status == idle`）5s 内等不到 idle。**「等 pi 空闲」的闸门与「让 pi 干活」的注入直接冲突**；属 M20261103 既有设计后果，与 T547 无关
+- **用户拍板**：**先修 T548**（T547 分支 `9ce8602` 暂不合并，待 T548 落地后回到它）
+- **修法（PM 拍板 A）**：**延迟投递** —— spawn 不带首条消息，就绪门通过后再投递；**就绪门七条件语义不放宽**（B 案「working 也算就绪」已拒：会削弱 #96 二期守卫；C 案「默认关」已拒：等于退回功能之前）
+- **待定细节（已派 arch lite）**：投递通道（`herdr agent prompt` vs `pane send-text`+`send-keys`）· tmux 对等写法 · 投递与 REPL 就绪的竞态 · 失败语义（我倾向 rc=0 + 一条 warn）· 幂等（已在运行跳过的路径不得二次投递）· **AC2 的机械可判断言**
+- **AC（Issue 内已给）**：AC1 默认 rc=0「成功 1」· AC2 自检**真送达**且机械可判 · AC3 关开关时命令行与本缺陷前逐字等价 · AC4 两后端都过且**七条件不放宽**（负控：已 idle 但 seq 不动仍须超时）· AC5 `npm test` 全量 rc=0
+- **回退**：单条 squash `git revert`（纯投递时机改动，无数据影响）
+- **闸门 ② arch lite 已闭环**（`ff3a50a` · 报告 `docs/reports/140-arch-lite.md` 25 行 · **本批不需要 ADR**）：通道 = **`herdr agent prompt`**（自带提交 + bracketed-paste 包裹；实测 `pane send-text` 是裸字节 ⇒ 14 行文案会变成 14 次独立提交，故否掉）· tmux = `load-buffer -b`+`paste-buffer -p`+一次 `Enter`（独立 buffer + `-d`，不动用户粘贴板）· 不加第二次等待（四条就绪证据由 pi **进程内**扩展上报，无 stdin 窗口）· **投递失败 rc 仍 0** + 默认可见 warn（不计 `SPAWN_FAIL`）· 幂等（`running_verdict=same` 天然不二次投递、禁状态文件）· AC2 要机械可判
+- **闸门 ③ 实现已回（`45ca40e` · 已 push）**：去 argv 注入 + 新门面 `term_deliver` + herdr/tmux 两实现 + `spawn_tmux -P -F`；用例 23 重写为 AC1–AC4；**`cases/29` / `cases/30` 零改动通过**。自证：AC1 3360ms rc=0 成功 1 · AC2 锚 + `seq ≥1→2` · AC3 md5 相等且与缺陷前逐字 diff 空 · 负控 6 组（拼回 argv ⇒ case23 **14 红**、`term_deliver→true` ⇒ **9 红**、失败注入 ⇒ rc 仍 0）· tmux bracketed-paste 实测两态（未协商 ⇒ 走我拍的「换行归一」）
+- **PM 复验（真实 herdr）**：`ensure pm` ⇒ **rc=0 · 2s · 成功 1**（修前 5.1s 超时失败）· `pane read` 见 `npm view @nathan33/nao-skill version` 与结论行 ⇒ **自检真送达并执行**
+- **闸门 ④ QA 复核（`f8ec33d` · 报告 47 行）把我三条判据全纠正了**：① **`agent read --lines N` 在非 idle 时直接报 `agent_not_idle`** ⇒ 我看到的 0 命中不是滚屏；② **`--source full` 是非法枚举**（只有 `visible/recent/recent-unwrapped/detection`）⇒ 我把错误输出当正文；③ `seq` 只能判 `>` 基线（turn 结束还会再 +1）。**新判据 = 投递面 + 执行面 + 内容面（`--source visible` 命中常量首行）三层，禁 `--lines`**
+- **QA 另挖两条 P2（断言空转类）**：`case 23`「真实 herdr」段其实跑**替身**且替身忽略 `--source/--lines` ⇒ 真机 `agent_not_idle` 与 9950B 深度上限零覆盖 · **七条件不放宽只有文本 grep**（删掉 AND 里 `agent_status == idle`，`case 23`+`case 29` 仍全绿）⇒ 要逐条删条件负控
+- **P3 接受**：tmux 侧真 pi 的 bracketed-paste 要 ~1349ms 才置位、fleet 在 10–100ms 判定 ⇒ 实际总走归一（文案压一行）；要求注释写明「多行路径本机不可达」
+- ⚠️ **PM 失误（本批第 2 次·已控制）**：T548 三条 P2 的派单**误发给 `rd-infra-138`**（未先 `intercom list` 核实 short id）。已即时纠错：要求它停手、不改文件不提交不切分支、只回 `git status`；它回「工作树干净、未执行」并**正确拒绝 checkout**（与 `rd-infra-548` 共用同一 worktree，切分支会打断对方）。正确派单已发 `rd-infra-548`。**规矩固化：派单前先 `intercom list` 取 short id，禁止凭记忆发**
+- **当前状态**：等 `rd-infra-548` 修三条 P2 → QA 复验 → **先合 T547（`gh pr merge` 远端，免切分支）** → T548 rebase → 双后端跑绿 → 合 T548 → 发 0.25.0
+
 ## 需求分支 / PR / 发布（PM 维护）
 
 ### 本批 T547（`ensure` 舰队身份显式化 · `--fleet` 单一来源 · Issue [#138](https://github.com/Nathan3303/nao-skills/issues/138) · 开工中 · 分支 `feat/138-fleet-param`）

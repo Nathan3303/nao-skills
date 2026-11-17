@@ -51,7 +51,7 @@
 #                                                 （TMUX/TMUX_PANE/TMUX_TMPDIR）+ **枚举清 HERDR_***（BR6），
 #                                                 50×100ms / 5s 轮询就绪，超时 fail loud。tmux 后端无需此步（rc=0）
 #   nao-fleet.sh ensure --force <别名>...          忽略"已在运行"判重
-#                                                 （目标解析为 pm 时追加一条固定首条用户消息：机制包版本自检，
+#                                                 （目标解析为 pm 时，**就绪后**投递一条固定用户消息：机制包版本自检，
 #                                                  仅提示不自动升级；关闭用 NAO_UPDATE_ON_ENSURE=0）
 #   nao-fleet.sh close <别名|派生会话名|全名> [--task <编号>] [--force]
 #                                                 回收已完成会话（派生名如 rd-be-T1；全名如 rd-be-T1@todo）；
@@ -91,7 +91,7 @@
 #   NAO_TERM_MIN_COLS=<n>                     herdr 放置后空间判据最小列宽（默认 60；不足只 warn 不中断）
 #   NAO_TERM_MIN_ROWS=<n>                     herdr 放置后空间判据最小行数（默认 10；0 尺寸 pane ⇒ 计 SPAWN_FAIL）
 #   NAO_TASKS_STATE=<path>                   任务状态文件（默认 docs/tasks-state.md，供残留检测/回收闸门）
-#   NAO_UPDATE_ON_ENSURE=0|false             ensure pm 的下游版本自检注入开关（默认开；0/false ⇒ 与本批之前逐字等价）
+#   NAO_UPDATE_ON_ENSURE=0|false             ensure pm 就绪后的下游版本自检**投递**开关（默认开；0/false ⇒ 不投递）
 #
 # 在线判定与 pane 定位（status / close / ensure 判重共用）
 #   ⚠️ pane id（%N）是 **server 局部**命名空间（每个 server 首块 pane 都是 %0）⇒ 任何「跨 server 比较
@@ -215,7 +215,7 @@ CODEGRAPH_PKG="@sean_pedersen/pi-codegraph"
 # ---- ensure pm：下游机制包版本自检（M20261103 · PRD 2026-11-03-ensure-pm-update-check R1–R6）----
 # 注入文本是**常量**（R3 六要素齐备，grep 可自证）：fleet 进程内零外部命令、零网络（NFR），
 #   实际检查由 PM 会话自己按文本执行；未获用户同意前不得改文件/升级（R5）。
-# 开关（R6）：NAO_UPDATE_ON_ENSURE=0/false ⇒ 不注入（命令行与本批之前逐字等价）。
+# 开关（R6）：NAO_UPDATE_ON_ENSURE=0/false ⇒ 不投递（命令行与本缺陷前逐字等价；T548 起自检不再进 argv）。
 NAO_UPDATE_MSG='【nao 机制包版本自检 · ensure pm 注入 · 仅提示，不自动升级】
 这条自检是本回合唯一额外动作；一行汇报后立即回到用户原来的消息，不要展开其它话题。
 1) 本地 pin：读 .pi/settings.json 里 @nathan33/nao-skill 的版本（X）；本仓若无该文件或无此 pin ⇒ 直接走 4 的情形 ④（不要说成必然有 pin）。
@@ -264,7 +264,7 @@ require_tmux() {
 # 终端后端门面（#96 二期 B1 · PRD 附二「门面 + 双实现并存」）
 #
 #   契约：**业务区只调** term_require / term_snapshot / term_liveness / term_argv /
-#         term_spawn / term_session_start / term_reclaim / term_cleanup（+ 纯谓词 term_deliverable）。
+#         term_spawn / term_deliver / term_session_start / term_reclaim / term_cleanup（+ 纯谓词 term_deliverable）。
 #         后端差异只允许出现在本区间与 `# >>> term-impl-tmux` 区间
 #         （静态 lint：tests/t4/lib.sh::t4_scan_term_bare_calls）。
 #   默认值唯一：**常量区的 `NAO_TERMINAL` 赋值就是全脚本唯一的赋值点**（此处不重述默认值字面量 ——
@@ -341,6 +341,7 @@ term_argv() {  # <pane_id> → 每行 "process-name<TAB>argv"
 # herdr 侧：tab label = 角色名，每 tab 恰 1 pane（结构判据，零几何算式）；既有 pane 若在共享 tab 里
 #   ⇒ `pane move --new-tab` + `tab rename` 迁移（pane_id 不变、被搬空的 tab 由 herdr 自动关闭）。
 # 返回三态码（SPAWN_RC_*）：0 成功 · 2 跳过 · 3 失败（含就绪超时 / 0 尺寸 pane；调用方计入 SPAWN_FAIL）。
+# 成功时**必须**回填 `_TERM_SPAWN_PANE`（T548 投递点依赖它；tmux 侧由 spawn_tmux 的 -P -F 回填）。
 term_spawn() {  # <name> <inner> <repo> [force] [label]
   case "$(term_backend)" in
     tmux) spawn_tmux "${1-}" "${2-}" ;;
@@ -353,6 +354,18 @@ term_session_start() {  # <session>
   case "$(term_backend)" in
     tmux) printf '[fleet] tmux 后端无需 session-start（server 随会话自动起）\n'; return 0 ;;
     herdr) _term_herdr_session_start "${1-}" ;;
+  esac
+}
+
+# ---- 5.5/8 投递（T548/Issue #140）：就绪后把**下游版本自检**作为一条用户消息送进已就绪会话 ----
+#   为什么单独一门面：投递通道两后端不同（herdr `agent prompt` / tmux load-buffer+paste-buffer），
+#     且**只在 spawn 成功后**才允许调用（就绪门语义不放宽 —— 自检不再进 argv，见 spawn_one）。
+#   契约：0 = 已投递 · 1 = 投递失败（**调用方不计 SPAWN_FAIL**：会话确实可用，自检只读非阻塞）。
+#     失败时 stdout 给一行可粘贴的诊断（herdr = error code / tmux = 失败阶段），供调用方 warn。
+term_deliver() {  # <pane_id> <message>
+  case "$(term_backend)" in
+    tmux) _term_tmux_deliver "${1-}" "${2-}" ;;
+    herdr) _term_herdr_deliver "${1-}" "${2-}" ;;
   esac
 }
 
@@ -1253,6 +1266,21 @@ _term_herdr_spawn() {  # <name> <inner> <repo> [force] <label> → SPAWN_RC_OK|F
     return "$SPAWN_RC_FAIL"
   fi
   return "$SPAWN_RC_OK"
+}
+
+# 投递（T548）：`agent prompt` 自带「提交 + 按 pane 的 bracketed-paste 模式包裹」⇒ **不再**补 Enter；
+#   不带 `--wait`（那会把「已投递」耦合到「自检 turn 跑完」，两类失败混在一起）。
+#   成功判据 = rc==0 **且 stdout 无 `"error":{"code"`**（真 herdr 把错误写在 stdout，别只吞 stderr）。
+_term_herdr_deliver() {  # <pane_id> <message> → 0 已投递 / 1 失败（stdout: error code）
+  local pane="${1-}" msg="${2-}" out="" rc=0 code=""
+  [[ -n "$pane" ]] || { printf 'pane_id 缺失\n'; return 1; }
+  out="$(_term_herdr_exec agent prompt "$pane" "$msg" 2>&1)" || rc=$?
+  if (( rc != 0 )) || grep -qF '"error":{"code"' <<< "$out"; then
+    code="$(sed -nE 's/.*"error":\{[[:space:]]*"code":[[:space:]]*"([^"]+)".*/\1/p' <<< "$out" | head -1)"
+    printf 'rc=%s code=%s\n' "$rc" "${code:-unknown}"
+    return 1
+  fi
+  return 0
 }
 
 # 就绪探针（单次）：七条件全与 ⇒ 0；结果落 _TR_* 供超时时**逐条**报缺。
@@ -2957,15 +2985,62 @@ spawn_tmux() {
   # 窄窗口/宿主上限会让 split-window 失败（no space for new pane，含宿主窗已关竞态）；
   # 捕获后 warn 并继续，不因单个 pane 失败中断整轮 ensure。
   # T539：显式回报「失败」；两条 warn 是诊断信息，保留不合并。
-  local serr
-  if ! serr=$(tmux split-window -h -t "$HOST_WINDOW" "$wrapped" 2>&1); then
-    warn "pane 创建失败（宿主窗口 $HOST_WINDOW 过窄/已关或已达上限）：${serr:-<no message>}"
+  # T548：`-P -F '#{pane_id}'` 回填投递目标（arch 遗留②）；成功时 stdout 只有 pane_id，失败时是诊断串。
+  local out
+  if ! out=$(tmux split-window -h -t "$HOST_WINDOW" -P -F '#{pane_id}' "$wrapped" 2>&1); then
+    warn "pane 创建失败（宿主窗口 $HOST_WINDOW 过窄/已关或已达上限）：${out:-<no message>}"
     warn "  已跳过该 pane，其余角色继续拉起；可放大窗口后重跑 ensure"
     return "$SPAWN_RC_FAIL"
   fi
+  _TERM_SPAWN_PANE="$out"
   # 布局是尽力而为（内部各 tmux 调用已 || true）；布局成败不影响「pane 已创建」这一结果。
   apply_tmux_layout || true
   return "$SPAWN_RC_OK"
+}
+
+# 投递（T548 · tmux 通道）：复用既有 `_term_tmux_argv` 等 `pane_current_command==pi`（≤50×100ms，**不新增轮询面**）
+#   —— tmux 后端没有 herdr 那种就绪门，投递必须自己等到 pi 真的在前台，否则按键会落到 shell。
+#   bracketed paste（arch 遗留③ / PM 拍 · QA 复核 P3）：`paste-buffer -p` **只在 pane 已协商 bracketed paste
+#   时**包 ESC[200~…201~（本机 tmux 3.8 实测；判定面 = `#{bracket_paste_flag}`）。未协商 ⇒ 多行会被逐行
+#   当 Enter 提交 ⇒ 投递前做**形态归一**（换行 → 空格）：只改投递形态，文案单一源 `$NAO_UPDATE_MSG` 不动。
+#   **真 pi 的多行路径在本机不可达（不是两条活路径）**：QA 实测真 pi 的 flag 在 `pane_current_command==pi`
+#   之后 ~1349ms 才置 1（RD 独立实测 577ms，同向）而本函数在 10–100ms 判定 ⇒ 实际总走归一（文案被压成
+#   一行，送达/执行不受影响）。保留 `flag==1` 分支是为了已协商的 pane（如手工起的 REPL），**不得**据此
+#   声称真 pi 保留多行。
+#   其余要点：独立 buffer 名 + `-d`（**别动用户粘贴板**）；末尾一次键名 `Enter`；禁 `send-keys -l` 逐行 + sleep。
+_term_tmux_deliver() {  # <pane_id> <message> → 0 已投递 / 1 失败（stdout: 失败阶段）
+  local pane="${1-}" msg="${2-}" i name flag buf
+  [[ -n "$pane" ]] || { printf 'pane_id 缺失\n'; return 1; }
+  command -v tmux >/dev/null 2>&1 || { printf 'tmux 不在 PATH\n'; return 1; }
+  for ((i = 1; i <= ${TERM_READY_POLL_MAX:-50}; i++)); do
+    name="$(_term_tmux_argv "$pane" | cut -f1)"
+    [[ "$name" == "pi" ]] && break
+    sleep "${TERM_READY_POLL_INT:-0.1}"
+  done
+  if [[ "${name:-}" != "pi" ]]; then
+    printf '等 pi 前台超时（pane_current_command=%s）\n' "${name:-<空>}"
+    return 1
+  fi
+  # 退化归一：bracket_paste_flag == 1 ⇒ 保留多行（已协商的 pane）；否则单行化。
+  #   注：真 pi 本机在判定点（10–100ms）尚未置 1（~1349ms 才置）⇒ 实际总走归一（QA P3）。
+  flag="$(tmux display-message -p -t "$pane" '#{bracket_paste_flag}' 2>/dev/null || true)"
+  if [[ "$flag" != "1" ]]; then
+    msg="${msg//$'\n'/ }"
+  fi
+  buf="nao-sc-${pane//[^A-Za-z0-9]/_}"
+  if ! printf '%s' "$msg" | tmux load-buffer -b "$buf" - 2>/dev/null; then
+    printf 'load-buffer 失败（pane=%s buffer=%s）\n' "$pane" "$buf"
+    return 1
+  fi
+  if ! tmux paste-buffer -p -d -b "$buf" -t "$pane" 2>/dev/null; then
+    printf 'paste-buffer 失败（pane=%s buffer=%s）\n' "$pane" "$buf"
+    return 1
+  fi
+  if ! tmux send-keys -t "$pane" Enter 2>/dev/null; then
+    printf 'send-keys Enter 失败（pane=%s）\n' "$pane"
+    return 1
+  fi
+  return 0
 }
 # <<< term-impl-tmux END (spawn)
 
@@ -2998,12 +3073,9 @@ spawn_one() {
   inner="cd $(printf %q "$repo") && export CODEGRAPH_TELEMETRY=0 && exec pi --name $(printf %q "$name")"
   [[ -n "$model" ]] && inner+=" --model $(printf %q "$model")"
   inner+=" --append-system-prompt $(printf %q "$prompt_file")"
-  # M20261103/R2/R4：pm 目标在 `--append-system-prompt` **之后**以 `--` 分隔追加一条固定首条用户消息
-  #   （版本自检提示）；文本整体 printf %q 转义（禁拼接未转义文本）⇒ 不会被当成 @file 或选项。
-  #   纯字符串拼接，不跑任何外部命令（零网络）；非 pm / 开关关闭 ⇒ 本段不执行（命令行逐字不变）。
-  if [[ "$role_id" == "pm" ]] && update_check_enabled; then
-    inner+=" -- $(printf %q "$NAO_UPDATE_MSG")"
-  fi
+  # T548/Issue #140：自检**不再**拼进 argv（那会把「要 pi 干活」放在「等 pi 空闲」的就绪门之前 ⇒
+  #   就绪门恒超时，rc=1 假失败）。改为 spawn 成功后由 term_deliver 投递（见下方 SPAWN_RC_OK 分支）；
+  #   开关关/非 pm ⇒ 整段不执行 ⇒ 命令行与本缺陷前逐字等价（AC3）。
   # T536/BR2：后台清理必须**完全脱离调用方 fd**。原写法 `( sleep 60; … ) &` 让子 shell 继承调用方
   #   stdout/stderr ⇒ 输出被 `| cat` / CI 捕获时调用方要等 EOF 到 60s 才返回（实测 60.3s vs 0.3s）。
   #   `disown` 只脱离作业表，不关继承而来的 fd。⇒ ① 三路重定向到 /dev/null；② 改用独立 argv 的
@@ -3023,6 +3095,23 @@ spawn_one() {
                         log "[herdr] 已拉起 $name @ $repo${model:+（model=$model）}${_TERM_SPAWN_PANE:+（pane=$_TERM_SPAWN_PANE）}"
                       else
                         log "[tmux] 已拉起 $name @ $repo${model:+（model=$model）}（layout=$TMUX_LAYOUT）"
+                      fi
+                      # T548/AC2/AC4：投递点**唯一**（新 pane / 幽灵复用 / --force 重开均经此处恰 1 次）；
+                      #   投递失败 ⇒ **rc 仍 0、不计 SPAWN_FAIL**（会话确实可用；计 FAIL 正是本缺陷的假红灯源）
+                      #   ！失败必须**默认可见**（一条 warn + error code），`-v` 再补诊断指路。
+                      if [[ "$role_id" == "pm" ]] && update_check_enabled; then
+                        local derr=""
+                        if ! derr="$(term_deliver "$_TERM_SPAWN_PANE" "$NAO_UPDATE_MSG")"; then
+                          warn "版本自检投递失败（$name ⇒ pane=${_TERM_SPAWN_PANE:-?}；${derr:-未知错误}）—— 会话仍可用，本次**不计失败**（自检只读非阻塞）"
+                          if [[ "$VERBOSE" == "true" ]]; then
+                            if [[ "$NAO_TERMINAL" == "herdr" ]]; then
+                              warn "  · 诊断：herdr --session ${HERDR_SESSION:-<session>} agent explain ${_TERM_SPAWN_PANE:-<pane>}"
+                              warn "  · 常见原因：启动浮层（What's New / 信任提示）吃按键 / agent 处于 blocked（agent_blocked）"
+                            else
+                              warn "  · 诊断：tmux capture-pane -p -J -t ${_TERM_SPAWN_PANE:-<pane>} -S -200（确认 pi 是否已在前台）"
+                            fi
+                          fi
+                        fi
                       fi ;;
     "$SPAWN_RC_SKIP") SPAWN_SKIP=$((SPAWN_SKIP + 1)) ;;
     *)                SPAWN_FAIL=$((SPAWN_FAIL + 1)) ;;   # 3 = fail；未知值按失败处理（宁可少报成功）

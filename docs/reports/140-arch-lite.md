@@ -1,0 +1,25 @@
+# T548 / Issue #140 · 延迟投递落地细节（arch-lite）
+
+- **结论**：可行。只改「投递时机 + 通道」；就绪门七条件、spawn 三态、ensure 的 rc/计数契约均不变 ⇒ **本批不需要 ADR**。实测环境 herdr 0.9.5 / tmux 3.8（临时 pane 已关闭，无残留）。
+- **落点**：`nao-fleet.sh:3005` 删除 `inner+=" -- $(printf %q "$NAO_UPDATE_MSG")"`；改在 `spawn_one` 内 `term_spawn` 返回 `SPAWN_RC_OK` 之后投递（herdr 用 `_TERM_SPAWN_PANE`；tmux 需让 `spawn_tmux` 补 `-P -F '#{pane_id}'` 回填同一变量）。
+- **§1 通道（herdr）= `herdr agent prompt <pane> "$NAO_UPDATE_MSG"`，不带 `--wait`**：官方 `--skill` 写明「honors the pane's live bracketed-paste mode and sends text followed by encoded Enter as one ordered submission」⇒ **不再**配 `send-keys Enter`；`<pane>` 是合法 target（实测错误为 `agent target w1:p7 not found`）。
+- §1 **不选 `pane send-text`（本机实测 `od -c`）**：裸字节、**无 paste markers、无 Enter** ⇒ 该文案 14 行 / 13 个内嵌换行会被 pi 各当一次 Enter = 14 次独立提交；`pane run` 虽带 Enter 但同样无包裹。
+- §1 **失败判据 = rc + stdout JSON**：成功 `{"id":…,"result":…}` rc=0；失败 `{"error":{"code":…}}` rc=1（实测 `agent_not_found`）⇒ 判 `rc==0` 且输出里 `grep -F '"error":{"code"'` 无命中；错误在 **stdout**，别只吞 stderr。
+- §1 **不用 `--wait`**：它把「已投递」耦合到「自检 turn 跑完（npm view ≤5s + 模型）」，caller timeout 非 0 ⇒ 混淆两类失败。
+- **§2 tmux 对等 = `printf %s "$MSG" | tmux load-buffer -b "nao-sc-$pane" -` → `tmux paste-buffer -p -d -b "nao-sc-$pane" -t "$pane"` → `tmux send-keys -t "$pane" Enter`**。
+- §2 **坑①多行（决定性）**：`send-keys -l` 送裸字节、无 paste 包裹 ⇒ 与 §1 同病（14 次提交）；只有 `paste-buffer -p` 会按 pane 的 bracketed-paste 请求包 `ESC[200~…201~`（pi 已请求；tmux ≥2.1，本机 3.8）；若 `-p` 退化 ⇒ 只能先单行化文案（超本批，归 PM）。
+- §2 **坑②键名**：不带 `-l` 时参数先按键名表解析（`Enter`/`C-c`/`Escape` 同形词变按键）⇒ 字面量必须 `-l`；本方案只在末尾用一次 `Enter`。**坑③缓冲名**：必须独立 `-b`（默认 buffer 会覆盖用户粘贴板）+ `-d`。**坑④速率**：~1.8KB 一次 paste 整块写，禁逐行 `send-keys`+`sleep`（慢且仍分行提交）。
+- **§3 时机：不加第二次就绪等待**。四条证据（idle / `agent_session≠null` / `state_change_seq≥1` / `screen_detection_skipped=true`）全由 pi **进程内** herdr 扩展上报 ⇒ 上报者与读 stdin 的输入循环同进程、同时在线，不存在「REPL 尚未读 stdin」的独立窗口。
+- §3 即便投递早于读取也**不丢**：写的是 pty master，内核 line discipline 缓冲（≤4096B > 1.8KB），pi 起来后按序读；paste 包裹还保证万一落到 shell 时不把多行逐条执行。
+- §3 残余风险 = 启动浮层（What's New / 信任提示）吃按键：`agent prompt` 对 blocked 直接拒发（`agent_blocked`），漏网由 §6 回读暴露 + 既有 `:1329` 指路；不靠再轮询。
+- §3 **轮询面预算**：新增就绪轮询 **0 个**；只允许 1 个**回读**面（`agent read` 锚串 ≤10×100ms，兼作 AC2）；禁第二次 `pane list`/`agent list` 门。
+- **§4 失败语义：rc=0 + 一条 warn（默认级别）+ `-v` 细节行**。会话确实可用（自检只读、非阻塞）⇒ 计 FAIL 会造假红灯（本缺陷 A/B 的 rc=1 正是假失败）、诱出 `--force` 重开（真破坏）、把 ensure 层无法处置的 `agent_blocked` 变成重试风暴。
+- §4 **可见性**：成功路径新增 **0 行**（既有串断言不破）；失败路径必打一条 `warn`（pane + herdr error code），`-v` 再补 `agent explain <pane>` 指路 —— rc 不表达失败时，静默等于把失败伪装成成功。
+- §4 **计数不变**：不并入 `SPAWN_FAIL`；摘要行「成功/跳过/失败」三类计数逐字不动。
+- **§5 幂等（1/3）**：投递点唯一 = `spawn_one` 内 `SPAWN_RC_OK` 之后 ⇒ 新 pane / 幽灵 pane 复用重跑 / `--force` 重开各投 **1** 次；`SKIP`/`FAIL` 一律不投。
+- §5（2/3）已在运行：`cmd_ensure` 的 `running_verdict=same` 走 `continue`，压根不进 `spawn_one` ⇒ 天然不二次投递；**禁**为此外挂「已投递」状态文件（第二事实源）。
+- §5（3/3）不重试：锚串缺失只 warn 一次，禁 loop 重发（重发会把自检变成新的用户指令）。
+- **§6 AC2 机械断言（herdr）**：`LC_ALL=C herdr agent read "$pane" --source recent-unwrapped --lines 80` 命中固定锚 `【nao 机制包版本自检`（`recent-unwrapped` 防换行把锚串劈开）**且** `state_change_seq` > 就绪门时的快照（证明真起了 turn，非仅回显）。
+- §6 **tmux**：`tmux capture-pane -p -J -t "$pane" -S -200` 同锚串（`-J` 合并折行）。
+- §6 **负控**：`NAO_UPDATE_ON_ENSURE=0` 的新会话在就绪后 2s 内**不得**出现该锚 —— 开关与投递用同一条用例钉住。
+- **遗留（归 PM/RD，不属本评审结论）**：tmux 无就绪门，「延迟到何时」建议复用既有 `_term_tmux_argv` 等 `pane_current_command==pi`（≤50×100ms，不新增轮询面）。
