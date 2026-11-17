@@ -1592,8 +1592,8 @@ t4_assert_eq "2" "$(printf '%s\n' "$RBE_LINES" | grep -c . || true)" \
   "P3-2 同场：rd-be 与 rd-be@todo **两条都显示**（旧写法只留裸名 ⇒ 本断言红）"
 t4_assert_contains "$RBE_LINES" "--name rd-be；" "P3-2 同场：裸名那条仍在（逐字格式不变）"
 t4_assert_contains "$RBE_LINES" "--name rd-be@todo；" "P3-2 同场：带 scope 那条在位（名字经 builder 生成）"
-t4_assert_contains "$RBE_LINES" "·scope=todo" "P3-2 / D5：带 scope 行尾有 ·scope=<x> 字段"
-t4_assert_not_contains "$(printf '%s\n' "$RBE_LINES" | grep -F -- '·scope=todo')" "--name rd-be；" \
+t4_assert_contains "$RBE_LINES" "·fleet=todo" "P3-2 / D5：带 fleet 行尾有 ·fleet=<x> 字段"
+t4_assert_not_contains "$(printf '%s\n' "$RBE_LINES" | grep -F -- '·fleet=todo')" "--name rd-be；" \
   "P3-3① ·scope 行只出现在带 scope 的那条上（不是裸名行被追加字段）"
 t4_assert_contains "$T4_OUT_ANSI" "rd-be@todo" \
   "P2-1 正控C：带 scope 常驻可在 status 定位（不整条消失）"

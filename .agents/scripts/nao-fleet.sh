@@ -3742,7 +3742,7 @@ cmd_status() {
         if [[ "$backend" == "herdr" && "${hv[$a_nm]:-absent}" != "online" ]]; then
           continue
         fi
-        printf '  ✓ %-14s 在线（--name %s；卡片 %s）·scope=%s\n' \
+        printf '  ✓ %-14s 在线（--name %s；卡片 %s）·fleet=%s\n' \
           "$a" "$a_nm" "${ROLE_CARDS[$a]}" "$a_sc"
         a_ok=1
       done
@@ -3787,7 +3787,7 @@ cmd_status() {
     pout="$(fleet_name_parse "$dname")"
     if [[ "$pout" == "OK "* ]]; then IFS=',' read -r p_kind p_role p_task p_scope <<< "${pout#OK }"; fi
     scope_tag=""
-    [[ -n "$p_scope" ]] && scope_tag=" ·scope=$p_scope"    # D5：只追加字段，既有行格式不动（BR1）
+    [[ -n "$p_scope" ]] && scope_tag=" ·fleet=$p_scope"    # D5：只追加字段，既有行格式不动（BR1）；展示术语与 --fleet 对齐
     # herdr：非在线证据类**单列**（下方「终端证据异常」节），此处不重复渲染成残留/进行态
     if [[ "$backend" == "herdr" ]]; then
       case "${hv[$dname]:-absent}" in
