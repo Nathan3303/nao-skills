@@ -6,6 +6,9 @@
 #   bash tests/t4/run.sh --list              # 只列用例（不执行）
 #   bash tests/t4/run.sh --preflight         # 打印前置探测（不执行用例）
 #   bash tests/t4/run.sh --case 03           # 只跑指定编号
+#   bash tests/t4/run.sh -t                  # 同上，另加 per-case 耗时（每例一行 + 末尾合计）
+#   bash tests/t4/run.sh --timings           # -t 的长写法（等价）
+#     ⇒ **仅 `-t`/`--timings` 时**多打印 `[TIMING]` 行；默认输出逐字不变（golden 类断言不受影响）。
 #   T4_ALLOW_MISSING=1 bash tests/t4/run.sh  # 宽松：依赖缺失=BLOCKED（仅显式 1）
 #   T4_REQUIRE_FULL=1 bash tests/t4/run.sh   # 发布前置：SKIP+DEGRADE 计数>0 即 FAIL，非白名单 NOTE 亦 FAIL（与上者正交）
 #   NAO_TEST_TERMINAL=herdr bash tests/t4/run.sh   # 后端自检：只跑 tests/t4/backends/herdr.txt 登记集，未登记点名 PENDING
@@ -69,12 +72,13 @@ CASE_TITLES=(
   "stash 滞留机械闸（#126 · B2-2）：无 stash 零输出 / 有 stash 恰 1 条 warn + warn=1 且 rc 仍 0 / pop 双向 / 只碰临时仓"
 )
 
-mode="run"; only=""; arg_err=""
+mode="run"; only=""; arg_err=""; timings=0
 while [ $# -gt 0 ]; do
   a="$1"; shift
   case "$a" in
     --list) mode="list" ;;
     --preflight) mode="preflight" ;;
+    -t|--timings) timings=1 ;;
     --case)
       if [ $# -eq 0 ]; then arg_err="--case 缺少参数值"; break; fi
       mode="case"; only="$1"; shift ;;
@@ -98,6 +102,21 @@ if [ -n "$arg_err" ]; then
   printf '用法: bash tests/t4/run.sh [--list | --preflight | --case <用例编号>]\n' >&2
   exit 1
 fi
+
+# ---------------------------------------------------------------- per-case 计时（-t / --timings · PRD #143 AC2）
+# 只读测量：不改变用例脚本、不改判据、不改日志内容（用例日志仍只含用例自身的输出）。
+# 默认（无 -t）⇒ 零输出、零新增行 ⇒ 与改动前逐字一致。
+timing_ns_total=0
+timing_rows=()
+_t4_now_ns() { local n; n="$(date +%s%N 2>/dev/null)"; printf '%s' "${n%%[!0-9]*}"; }
+_t4_fmt_ns() { printf '%d.%03d' "$(( $1 / 1000000000 ))" "$(( ($1 / 1000000) % 1000 ))"; }
+_t4_timing_row() { # $1=用例编号 $2=起始 ns
+  local ns=$(( $(_t4_now_ns) - $2 ))
+  [ "$ns" -lt 0 ] && ns=0
+  timing_ns_total=$(( timing_ns_total + ns ))
+  timing_rows+=("$1")
+  printf '  [TIMING] 用例 %s %ss\n' "$1" "$(_t4_fmt_ns "$ns")"
+}
 
 # ---------------------------------------------------------------- 后端开关（PRD #96 · 三期 P2 默认翻 herdr）
 # 取值来源（优先级从高到低）：NAO_TEST_TERMINAL > NAO_TERMINAL > **生产默认 herdr**。
@@ -233,21 +252,24 @@ declare -A results
 for i in "${!CASE_IDS[@]}"; do
   id="${CASE_IDS[$i]}"
   if [ "$mode" = "case" ] && [ "$only" != "$id" ]; then continue; fi
+  iter_ns=0; [ "$timings" = 1 ] && iter_ns="$(_t4_now_ns)"
   if [ "$BACKEND" = "herdr" ] && [ -n "${TMUX_ONLY[$id]:-}" ]; then
     # 本后端不适用（三期重判）：点名 + 单独计数，**不算 PENDING**（也不是 SKIP）
     results[$id]="TMUX-ONLY"
     printf '  [TMUX-ONLY] 用例 %s: %s —— 声明为 tmux 专有（tests/t4/backends/herdr.txt 注释区；三期重判）\n' "$id" "${CASE_TITLES[$i]}"
+    [ "$timings" = 1 ] && _t4_timing_row "$id" "$iter_ns"
     continue
   fi
   if [ "$BACKEND" = "herdr" ] && [ -z "${REG_KIND[$id]:-}" ]; then
     # 未登记 ⇒ **点名**（不得静默 SKIP）：不跑、不计 SKIP，汇总结算为 PENDING
     results[$id]="PENDING"
     printf '  [PENDING] 用例 %s: %s —— 未登记 tests/t4/backends/herdr.txt（点名，不静默 SKIP）\n' "$id" "${CASE_TITLES[$i]}"
+    [ "$timings" = 1 ] && _t4_timing_row "$id" "$iter_ns"
     continue
   fi
   printf '\n===== 用例 %s: %s =====\n' "$id" "${CASE_TITLES[$i]}"
   script="$(ls "$HERE/cases/${id}-"*.sh 2>/dev/null | head -1)"
-  if [ -z "$script" ]; then results[$id]="MISSING"; continue; fi
+  if [ -z "$script" ]; then results[$id]="MISSING"; [ "$timings" = 1 ] && _t4_timing_row "$id" "$iter_ns"; continue; fi
   log="$T4_CACHE_DIR/case-${id}.log"
   bash "$script" 2>&1 | tee "$log"
   rc="${PIPESTATUS[0]}"
@@ -259,6 +281,7 @@ for i in "${!CASE_IDS[@]}"; do
     124) results[$id]="FAIL(timeout)" ;;
     *) results[$id]="FAIL(rc=$rc)" ;;
   esac
+  [ "$timings" = 1 ] && _t4_timing_row "$id" "$iter_ns"
 done
 
 printf '\n==================== T4 汇总 ====================\n'
@@ -334,6 +357,11 @@ if [ "${#note_bad[@]}" -gt 0 ]; then
   if [ "$T4_REQUIRE_FULL" != "1" ]; then
     printf '  WARN: 非白名单 NOTE（非 full 仅警告，不阻断；T4_REQUIRE_FULL=1 时判 FAIL）\n'
   fi
+fi
+
+if [ "$timings" = 1 ]; then
+  printf '\n==================== T4 耗时 ====================\n'
+  printf '  [TIMING] 合计 %ss · %d 例（每例一行见上）\n' "$(_t4_fmt_ns "$timing_ns_total")" "${#timing_rows[@]}"
 fi
 
 # 最终 rc 与三态 disposition 先算好，保证打印与磁盘实况一致（BR6）：
