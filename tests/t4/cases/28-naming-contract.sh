@@ -1096,14 +1096,17 @@ chmod +x "$B2ST_BIN/herdr"
 mkdir -p "$LAB/tmp"
 # ---- D-1（T547 · QA P2-1②）继承面全摘：不能用单值钉 `HERDR_PANE_ID=w9:p9` 冒充隔离 ----
 #   缺陷：钉值是**单一取值**，若宿主 pane 恰好撞上钉值（或守卫被删）就会重新 flaky；
-#   且 HERDR_WORKSPACE_ID / HERDR_TAB_ID 同样会渗进 stub 场景。与 `_be_herdr_exec` 同口径——
-#   三个宿生句柄一律 `-u` 摘除，使 B2 夹具与跑者所在 pane **脱钩**（host-independent）。
-B2_ENV=(env -u HERDR_PANE_ID -u HERDR_WORKSPACE_ID -u HERDR_TAB_ID \
+#   且 HERDR_WORKSPACE_ID / HERDR_TAB_ID 同样会渗进 stub 场景。⇒ 直接引用单源清单
+#   `tests/t4/lib.sh::T4_HERDR_UNSET_ARGS`（与 `_be_herdr_exec` / `be_run_fleet` 同口径），
+#   使 B2 夹具与跑者所在 pane **脱钩**（host-independent；#130 D2 也要求调用点不手写清理变量名）。
+B2_ENV=(env "${T4_HERDR_UNSET_ARGS[@]}" \
   HERDR_ENV=1 HERDR_SESSION=nao-b2-stub XDG_CONFIG_HOME="$LAB/cfg" \
   HERDR_SOCKET_PATH="$LAB/cfg/herdr/sessions/nao-b2-stub/herdr.sock" \
   HERDR_STUB_CWD="$LAB" \
   NAO_SKILLS="$LAB" TMPDIR="$LAB/tmp" PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" \
   PATH="$B2ST_BIN:$PATH")
+t4_assert_eq "1" "$(grep -F 'B2_ENV=(env "${T4_HERDR_UNSET_ARGS[@]}"' "${BASH_SOURCE[0]}" | grep -c '^B2_ENV=' || true)" \
+  "D-1 静态：B2_ENV 从单源派生（#130 D2：调用点零手写）"
 for v in HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID; do
   t4_assert_eq "1" "$([[ " ${B2_ENV[*]} " == *" -u $v "* ]] && echo 1 || echo 0)" \
     "D-1 静态：B2_ENV 继承面全摘含「-u $v」（单值钉不回流）"

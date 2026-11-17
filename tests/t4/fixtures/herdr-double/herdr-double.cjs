@@ -161,7 +161,9 @@ function readKnobs(st) { return Object.assign({}, DEFAULT_KNOBS, st.knobs || {})
 function paneStatus(st, p) {
   const pane = st.panes[p];
   if (!pane || pane.fg !== 'pi') return 'unknown';
-  if (pane.working) return 'working';                 // T548 复核：agent prompt 起 turn ⇒ working（真 herdr 同义）
+  // T548 复核：agent prompt 起 turn ⇒ working；turn 时长由 T4_HERDR_PROMPT_TURN_MS 控制（默认 0 = 立即完成，
+  //   贴近真 pi「自检很快跑完」；case 23 需要稳定观察 working/agent_not_idle，显式设 60000）。
+  if (pane.working_until && Date.now() < pane.working_until) return 'working';
   if ((pane.argv || []).indexOf('--') >= 0) return 'working';
   return readKnobs(st).pi_status || 'idle';
 }
@@ -497,7 +499,7 @@ if (sub === 'pane' && a1 === 'run') {
   st.panes[pid].cmd = cmd;
   st.panes[pid].fg = d.fg;
   st.panes[pid].argv = d.argv;
-  st.panes[pid].working = false;   // 重跑 = 新进程，旧 turn 的 working 不继承
+  st.panes[pid].working_until = 0;   // 重跑 = 新进程，旧 turn 的 working 不继承
   writeState(st);
   out({ id: 'cli:pane:run', result: { pane_id: pid, type: 'pane_run' } });
 }
@@ -570,7 +572,8 @@ if (sub === 'agent' && a1 === 'prompt') {
   st.panes[pid].delivered = st.panes[pid].delivered || [];
   st.panes[pid].delivered.push(text);
   st.panes[pid].screen = ((st.panes[pid].screen || '') + text + '\n').slice(-20000);
-  st.panes[pid].working = true;   // T548 复核：投递即起 turn ⇒ working（直到用例自行结束，替身不做时序模拟）
+  const turnMs = Number(process.env.T4_HERDR_PROMPT_TURN_MS || 0);
+  st.panes[pid].working_until = turnMs > 0 ? Date.now() + turnMs : 0;   // 0 = 立即完成（默认）
   st.knobs = Object.assign({}, DEFAULT_KNOBS, st.knobs || {});
   st.knobs.pi_seq = (Number(st.knobs.pi_seq) || 0) + 1;   // 真起一轮 turn（不是屏幕回显）
   writeState(st);

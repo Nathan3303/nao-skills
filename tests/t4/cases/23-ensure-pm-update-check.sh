@@ -98,6 +98,9 @@ export NAO_SKILLS="$LAB" PI_CODING_AGENT_DIR="$LAB/pi-empty"
 export NAO_T23_REAL_TMUX="${REAL_TMUX:-}"
 export PATH="$LAB/bin:$PATH"
 export T4_HERDR_SPAWN_LOG="$SPLIT_LOG"
+# T548 复核：替身的「投递起 turn」默认立即完成（避免污染其他用例的 close 忙闲闸门）；
+#   本用例需要稳定观察 working / `--lines` 报 agent_not_idle ⇒ 显式把 turn 拉长到 60s。
+export T4_HERDR_PROMPT_TURN_MS=60000
 run_fleet() { # <args...> → BE_RC / BE_OUT / BE_ERR（*_ANSI = 去色后版本）
   export NAO_UPDATE_ON_ENSURE="${T23_SWITCH:-1}"   # 开关每次调用现读（块内会切换）
   be_run_fleet "$LAB" "$@"
