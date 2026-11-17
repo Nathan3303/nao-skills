@@ -190,6 +190,14 @@
 
 ## 需求分支 / PR / 发布（PM 维护）
 
+### ✅ T547 终态（2026-11-17 · 已合并 `380b9f7` · **已发布 v0.25.0**）
+
+PR [#141](https://github.com/Nathan3303/nao-skills/pull/141) squash 合并；AC1–AC13 全 PASS（QA 三轮 + PM 抽验 + 用户 CLI 走查）。交付：`--fleet` 三档解析 / 放置键与身份键同源 / `--scope` 弃用 / 保留前缀只限 core / 名长两态 / legacy 等价（堵同仓第二个 PM）/ pane cwd 物理归一（AC13）。QA 三轮挖出并修复：夹具未隔离宿主 pane id（默认后端门禁必红）· `case 06` SIGPIPE 假红（我的全量 rc=1 根因）· pane cwd 落 server 目录 · `case 23` 三层判据与七条件机械负控。遗留：`136-F1`–`F7`（已在 `docs/reports/136-followups.md`）+ `140-F1`。
+
+### ✅ T548 终态（2026-11-17 · 已合并 `68536fd` · **已发布 v0.25.0**）
+
+PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix 通道。交付：自检改「就绪后投递」（herdr `agent prompt` / tmux `paste-buffer`）、失败 rc 仍 0、幂等、tmux 换行归一；`B2_ENV` 改单源全摘 `HERDR_*` + 撞号注入断言；替身补 `agent_not_idle`/`invalid read source` 语义。门禁：herdr 2200 PASS / tmux 1973 PASS / 0 FAIL。遗留 `140-F1`（`case 33` 夹具真机时序假设，到期 2026-12-05）。
+
 ### 本批 T547（`ensure` 舰队身份显式化 · `--fleet` 单一来源 · Issue [#138](https://github.com/Nathan3303/nao-skills/issues/138) · 开工中 · 分支 `feat/138-fleet-param`）
 
 - **PRD**：`docs/prds/2026-11-17-fleet-param.md`（92 行 · 9 模块 · AC1–AC10）· **发版**：单独 MINOR **0.25.0**（用户 2026-11-17 拍板）
