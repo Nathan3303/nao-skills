@@ -308,7 +308,8 @@ else
 fi
 kill37 "$P_F"
 
-# 负控⑥（P3-1）：把卡分支锚改回 `$PWD`（未剥/未取卡所在仓）⇒ ③ 落空、判定层必红
+# 负控⑥（P3-1）：把卡分支锚改回 `$PWD`（未剥/未取卡所在仓）⇒ **先红在结果层**：h=0 ⇒ ④ 按名取 cwd
+#   得 2 条 ⇒「close 目标歧义」die（rc≠0 + 零回收）；③「同仓 legacy 裸名」同时消失，但仅作双保险。
 MUT="$(mut_new 6)" && mut37 "$MUT" 'anchor="$(nao_phys_path "$fallback_repo")"' \
   '      anchor="$(nao_phys_path "$PWD")"' \
   || t4_bad "负控⑥ 变异未应用（实现写法已变：卡分支锚行）"
