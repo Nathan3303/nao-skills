@@ -56,3 +56,4 @@
 34  shared  —  后端无关（端前提声明一致性 warn：只读夹具 md + 桩 herdr/tmux/pi，不建 server；断言面 = check 的 warn 行与 rc）
 35  shared  —  后端无关（stash 滞留 warn：夹具 = 临时 git 仓 + 桩 herdr/tmux/pi；断言面 = check 的 warn 行 / 摘要 warn=N / rc，不建 server）
 36  shared  —  后端无关（PRD 结构探针 warn-only：夹具 = lab 内 .agents + docs/prds 造文件；断言面 = check 的提示行 / 摘要 warn= / rc / md5 等价，不建 server、不 exec 真 pi）
+37  shared  —  后端无关（#146 裸名 close 的仓来源：假名册（pretty-print）+ 两仓 pane 经 be_*；断言面 = rc / 输出文案与候选 cwd 列表 / @ 字段 / pane 存活 / 探针调用计数，不建真 server、零网络）
