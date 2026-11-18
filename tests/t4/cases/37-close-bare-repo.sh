@@ -181,17 +181,18 @@ v_offline_none() { # 与 cases/13 ⑥ 基线逐字一致（rc=0 + 「未启用 t
   grep -qF '目标歧义' <<< "$T4_ALL" && { printf 'RED:误报歧义'; return; }
   printf 'GREEN'
 }
-v_card_reclaim() { # <目标 pane>（卡目标 + 子目录调用：锚必须是卡所在仓根）
-  local pane="$1" a
+v_card_reclaim() { # <卡会话 pane> [他仓见证 pane]（卡目标 + 子目录调用：锚必须是卡所在仓根）
+  local pane="$1" other="${2:-}" a
+  # 结果层（**主判据**，不读任何实现层文案）：rc / 未运行 / 卡 pane 消失 / 他仓 pane 存活 / @ 字段
   [ "$T4_RC" = "0" ] || { printf 'RED:rc=%s' "$T4_RC"; return; }
   grep -qF '未运行（无需回收）' <<< "$T4_ALL" && { printf 'RED:误报未运行'; return; }
   be_pane_alive "$pane" && { printf 'RED:卡会话 pane 仍在'; return; }
+  [ -z "$other" ] || be_pane_alive "$other" || { printf 'RED:他仓见证 pane 被误杀'; return; }
   a="$(at_field "$T4_OUT")"
   [ "$a" = "$PRA" ] || { printf 'RED:@=%s（期望仓根 %s）' "${a:-<空>}" "$PRA"; return; }
-  # 判定层（红点来源）：锚 = 仓根 ⇒ ③ 同仓 legacy 裸名**当场命中**；锚退化成子目录 ⇒ ③ 落空、
-  #   只能靠 ④「该名唯一 cwd」兜回仓根（对外 4 条仍是绿 —— 与 QA §四旁证一致）⇒ 变异红点在此。
+  # 判定层（**双保险**，非主判据）：锚 = 仓根 ⇒ ③ 同仓 legacy 裸名当场命中。
   grep -qF "close 命中同仓 legacy 裸名 $CARD_CORE" <<< "$T4_OUT" \
-    || { printf 'RED:③ 判定层未命中（锚未落到卡所在仓根，靠 ④ 唯一 cwd 兜底）'; return; }
+    || { printf 'RED:③ 判定层未命中（锚未落到卡所在仓根）'; return; }
   printf 'GREEN'
 }
 t4_expect_red() { # <verdict> <label>
@@ -287,21 +288,40 @@ mkdir -p "$RA/.agents/prompts" "$RA/sub"
 printf -- '---\nrole: fxcard\n---\n# T4 case37 一次性卡（close 只做卡名/路径匹配，正文不进判据）\n' \
   > "$RA/.agents/prompts/fxcard.md"
 CARD_CORE="fxcard-$T37"
+# 他仓侧两件（判别力加强 · P3-B）：
+#   ① 名册里**同名另仓**条目（cwd = 他仓根）：锚退化时 h=0 ⇒ ④ 唯一同 core ⇒ 按名取 cwd 得 2 条
+#      ⇒「close 目标歧义」die ⇒ **结果层**（rc）就红，不依赖 ③ 的实现层文案；
+#   ② 他仓**见证 pane**（异名 = 不会与卡会话争同名 label）：断言「跨仓不误杀」。
+#   ⚠ 为什么不给他仓那条同名会话配 pane：同 label 两 pane 在 herdr 侧本身即歧义（句柄层禁改区
+#     会保守拒）⇒ 正确路径也会红；故同名以名册条目表达、pane 存活以异名见证表达。
+P_FW="$(stage37 "$RB" "rd-be-$T37")" || t4_bad "f 夹具：他仓见证 pane 建立失败"
 P_F="$(stage37 "$RA" "$CARD_CORE")" || t4_bad "f 夹具：卡会话 pane 建立失败"
 SRC_MD5="$(md5sum "$RA/.agents/scripts/nao-fleet.sh" | cut -d' ' -f1)"
-run37 "$RA/sub" "$(roster "$(rent "$CARD_CORE" "$PRA")")" --task "$T37" fxcard
-t4_assert_eq "GREEN" "$(v_card_reclaim "$P_F")" \
-  "f card 目标 + 子目录调用：rc=0 · @ = 卡所在仓根（非子目录）· pane 消失 · 无「未运行」· ③ 当场命中"
+FROSTER="$(roster "$(rent "$CARD_CORE" "$PRA")" "$(rent "$CARD_CORE" "$PRB")" "$(rent "rd-be-$T37" "$PRB")")"
+run37 "$RA/sub" "$FROSTER" --task "$T37" fxcard
+t4_assert_eq "GREEN" "$(v_card_reclaim "$P_F" "$P_FW")" \
+  "f card 目标 + 子目录调用：rc=0 · @ = 卡所在仓根 · 卡 pane 消失 · 他仓见证 pane 存活 · 无「未运行」"
+if be_pane_alive "$P_FW"; then
+  t4_ok "f 作用域（他仓 pane 存活）：$P_FW 未被误杀（跨仓不越界）"
+else
+  t4_bad "f 作用域（他仓 pane 存活）：$P_FW 被他仓回收（跨仓越界）"
+fi
 kill37 "$P_F"
 
 # 负控⑥（P3-1）：把卡分支锚改回 `$PWD`（未剥/未取卡所在仓）⇒ ③ 落空、判定层必红
 MUT="$(mut_new 6)" && mut37 "$MUT" 'anchor="$(nao_phys_path "$fallback_repo")"' \
   '      anchor="$(nao_phys_path "$PWD")"' \
   || t4_bad "负控⑥ 变异未应用（实现写法已变：卡分支锚行）"
+P_M6W="$(stage37 "$RB" "rd-be-$T37")"
 P_M6="$(stage37 "$RA" "$CARD_CORE")"
-FLEET_SCRIPT="$MUT" run37 "$RA/sub" "$(roster "$(rent "$CARD_CORE" "$PRA")")" --task "$T37" fxcard
-t4_expect_red "$(v_card_reclaim "$P_M6")" "负控⑥ 卡分支锚回退 \$PWD ⇒ f 必红（红点：③ 落空，靠 ④ 唯一 cwd 兜底）"
-kill37 "$P_M6"
+FLEET_SCRIPT="$MUT" run37 "$RA/sub" "$FROSTER" --task "$T37" fxcard
+t4_expect_red "$(v_card_reclaim "$P_M6" "$P_M6W")" \
+  "负控⑥ 卡分支锚回退 \$PWD ⇒ f 必红（**结果层**：h=0 → ④ 按名 2 条 cwd ⇒ 目标歧义 die；先红的是 rc）"
+t4_assert_eq "2" "$(alive37 "$P_M6" "$P_M6W")" \
+  "负控⑥ 同场景零回收（卡 pane + 他仓见证 pane 均存活 ⇒ 不误杀）"
+t4_assert_not_contains "$T4_OUT" "close 命中同仓 legacy 裸名 $CARD_CORE" \
+  "负控⑥ 同场景 ③ 也同时红（双保险明细：③ 未命中）"
+kill37 "$P_M6" "$P_M6W"
 t4_assert_eq "$SRC_MD5" "$(md5sum "$FLEET_SRC" | cut -d' ' -f1)" \
   "负控⑥ 变异只动副本：仓库脚本 md5 与变异前逐字节一致（无残留改写）"
 
@@ -359,11 +379,14 @@ t4_expect_red "$(v_offline_none)" "负控⑤ roster_ok=0 当 die ⇒ (e) 必红�
 #   `declare -p repo`，不成立即 die。证法**不靠「应会红」**：把 `die` + 该函数抽到裸 shell 里，
 #   ① 无 repo 声明 ⇒ 必 die 且点名内部错误；② 有 repo 声明 ⇒ 不 die（守卫不误伤）；③ 副本删掉
 #   守卫行 ⇒ ① 翻绿（证明 ① 抓到的是守卫本身，不是别的东西）。
+#   子壳里必须 **stub `intercom_cwds_for`**（否则它对未定义命令 ⇒ 0 条 cwd ⇒ repo 恒空，
+#   「repo=」这类断言对空值同样吃绿 = 空转断言）；stub 后判据精确到 **repo=/tmp/x**。
 adopt_unit() { # <脚本> <模式：bare|local> → 子 shell 的输出 + `rc=<退出码>`（die 是 exit 1，故 rc 必须从进程取）
   local src="$1" mode="$2" prog out rc
   prog="$(
     grep -m1 '^die()' "$src"
     sed -n '/^_close_adopt_repo()/,/^}/p' "$src"
+    printf 'intercom_cwds_for() { printf "%%s\\n" /tmp/x; }\n'
     case "$mode" in
       local) printf 'h37() { local repo=""; _close_adopt_repo "qa-x" "1"; printf "repo=%%s\\n" "$repo"; }\nh37\n' ;;
       *)     printf '_close_adopt_repo "qa-x" "1"\n' ;;
@@ -378,7 +401,9 @@ t4_assert_contains "$OUT_BARE" "内部错误：_close_adopt_repo 须在声明 lo
 t4_assert_contains "$OUT_BARE" "rc=1" "P3-2① 同场景 rc=1（die 生效，不继续回写）"
 OUT_LOCAL="$(adopt_unit "$FLEET_SRC" local)"
 t4_assert_contains "$OUT_LOCAL" "rc=0" "P3-2② 已声明 local repo 的调用点 ⇒ 守卫不误伤（rc=0）"
-t4_assert_contains "$OUT_LOCAL" "repo=" "P3-2② 同场景正常回写（repo 可赋值，非静默丢弃）"
+# 判据必须**精确到值**：stub 的 cwd 是 /tmp/x ⇒ 回写成功才会出现 repo=/tmp/x
+#   （「repo=」对空值同样匹配 = 空转，QA 实测指出并订正）
+t4_assert_contains "$OUT_LOCAL" "repo=/tmp/x" "P3-2② 同场景回写值 = stub cwd（repo=/tmp/x；非空值也算绿的空转断言）"
 t4_assert_not_contains "$OUT_LOCAL" "内部错误" "P3-2② 同场景无「内部错误」文案"
 MUT="$(mut_new 7)" && mut37 "$MUT" 'declare -p repo >/dev/null 2>&1' \
   '    : # 守卫被移除（P3-2 负控）' \
@@ -387,5 +412,15 @@ OUT_BARE2="$(adopt_unit "$MUT" bare)"
 t4_assert_not_contains "$OUT_BARE2" "内部错误" \
   "P3-2③ 删掉守卫行 ⇒ ① 翻绿（证明 ① 抓到的就是这一行守卫，判据非空转）"
 t4_assert_contains "$OUT_BARE2" "rc=0" "P3-2③ 同场景退回静默（rc=0 无报错）= 守卫要堵的形态"
+
+# ④ 判据非空转的**反向**证明：副本删掉 `repo="${cw[0]}"` 这一行 ⇒ 回写消失 ⇒ ② 的 `repo=/tmp/x` 必不成立
+MUT="$(mut_new 8)" && mut37 "$MUT" 'repo="${cw[0]}"' \
+  '  (( ${#cw[@]} == 1 )) && { return 0; }' \
+  || t4_bad "P3-2④ 变异未应用（实现写法已变：回写行）"
+OUT_LOCAL2="$(adopt_unit "$MUT" local)"
+t4_assert_not_contains "$OUT_LOCAL2" "repo=/tmp/x" \
+  "P3-2④ 删掉回写行 ⇒ ② 必红（判据非空转；实测 repo= 为空，见回执）"
+t4_assert_contains "$OUT_LOCAL2" "repo=" \
+  "P3-2④ 同场景仍能打印 repo=（空值）⇒ 证明旧断言「repo=」会被空值吃绿（QA 结论复现）"
 
 t4_exit
