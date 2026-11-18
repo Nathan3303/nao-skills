@@ -2170,6 +2170,48 @@ intercom_cwd_for() {  # <name> [repo]
   return 0
 }
 
+# 名册中该会话的**全部** cwd（0..N 行；Issue #146）。
+#   为什么必须复数通道：intercom_cwd_for 命中即 return，且**无命中也 rc=0 / 0 行** ⇒ 结构上分不出
+#   「本仓并列」与「名册不可知」；给旧函数加 anchor 参数只能再旁路计数（双判据）。本函数只查询、不决策。
+#   anchor（可选）：只留 cwd 等于或落在 anchor 子树内的条目（组件级前缀，见 repo_contains_path）；
+#   路径两侧都物理归一（nao_phys_path），避免 symlink / 相对路径造成「本仓条目看不见」。
+#   探针零新增：名册读 intercom_roster，复用 _INTERCOM_JSON 进程内缓存（名册探针每命令 ≤1 次）。
+intercom_cwds_for() {  # <name> [anchor]
+  local n c abs=""
+  [[ -n "${2:-}" ]] && abs="$(nao_phys_path "$2")"
+  while IFS=$'\t' read -r n c; do
+    [[ "$n" == "$1" ]] || continue
+    [[ -n "$c" ]] || continue
+    [[ -z "$abs" ]] || repo_contains_path "$abs" "$(nao_phys_path "$c")" || continue
+    printf '%s\n' "$c"
+  done < <(intercom_roster)
+  return 0
+}
+
+# close 裸名解析的**调用方锚**（Issue #146 §二）：只取本地事实，**禁**名册/`$repo`/ROLE_WS 反查（否则成环）。
+#   居民目标 = $PWD 物理 toplevel（git toplevel 是严格祖先时归一，否则 pwd -P）；卡目标 = 卡文件所在仓。
+#   git 调用 ≤1 次/close：只读复用 repo_anchor_roots 的单次实现（不改其语义/输出形状）；
+#   该函数先印 pwd -P、再印严格祖先 toplevel ⇒ **末行 = 最宽锚**。
+_close_anchor() {  # → 单值物理路径（stdout）
+  local l last=""
+  while IFS= read -r l; do [[ -n "$l" ]] && last="$l"; done < <(repo_anchor_roots)
+  printf '%s\n' "${last:-$(nao_phys_path "$PWD")}"
+}
+
+# 采用候选名后的 repo 复核（Issue #146 §二 · 三态）：该名名册 cwd **唯一** ⇒ 采用；>1 ⇒ die；0 ⇒ 保留现值。
+#   为什么不再「按目标仓过滤确认」：跨仓 close 采用唯一候选 `pm@x` 时，按调用方仓过滤必得 0
+#   ⇒ repo 停在调用方仓 ⇒ herdr 侧 liveness/忙闲按仓过滤 ⇒ 「未运行」rc=0 假成功（R2 同类）。
+#   名册不可用（roster_ok≠1）⇒ 不改写（与改动前逐字等价）。回填调用方的 `repo`（bash 动态作用域）。
+_close_adopt_repo() {  # <name> <roster_ok>
+  local nm="${1-}" ok="${2:-0}"
+  local -a cw=()
+  [[ "$ok" == "1" ]] || return 0
+  mapfile -t cw < <(intercom_cwds_for "$nm")
+  (( ${#cw[@]} == 1 )) && { repo="${cw[0]}"; return 0; }
+  (( ${#cw[@]} > 1 )) || return 0
+  die "close 目标歧义：$nm 在名册中对应 ${#cw[@]} 个 cwd：$(printf '%s ' "${cw[@]}")（该怎么办：用 intercom({action:'list'}) 人工核对该会话的仓位置；同名多仓没有「全名」写法可区分）"
+}
+
 # 会话所在的 tmux pane。三层后备（标题可被外部改写，如 "pi:c"）：
 #   ① 终端标题契约 "π - <会话名> - <repo basename>"（pi 自设；最快）
 #   ② pi-intercom 名册 tmuxPane（注册时读 $TMUX_PANE；与标题改名无关，权威）
@@ -4098,6 +4140,8 @@ cmd_close() {
   fi
   local name repo cls bus pane pids st tgt a best="" bestc="" is_resident=1 card_role="" card_path="" cr cp croot k
   local pout="" p_kind="" p_role="" p_task="" p_scope="" parsed=0 core="" kindc="" scope="" base_name=""
+  local anchor="" roster_ok=0
+  local -a name_cwds=()
   local fallback_repo="" scoped_cands=() same_core=() r2="" caller_name="" caller_fleet=""
   intercom_list_json >/dev/null 2>&1 || true   # 预热名册缓存
   fleet_roles_init --cards                     # BR8：parse 的角色事实表（常驻 + 卡 role）
@@ -4201,10 +4245,31 @@ cmd_close() {
     r2="$(intercom_cwd_for "$name" "$repo")"       # P8：按目标仓复核（同名多仓时不取首命中）
     [[ -n "$r2" ]] && repo="$r2"
   else
-    # ② 裸名/派生名：先按**裸名无 scope**定位目标仓（既有跨仓行为逐字保留）
+    # ② 裸名/派生名：仓来源 = **调用方锚 + 名册按名复数查询**（Issue #146 · 三态决策，禁猜）
+    #    旧行为「名册首命中即定仓」在跨仓同名时会把本仓目标改指他仓（liveness / 忙闲 / 回收全链错位）。
     base_name="$(fleet_name_build "$kindc" "$core" "")"
-    repo="$(intercom_cwd_for "$base_name")"
-    [[ -n "$repo" ]] || repo="$fallback_repo"
+    # 锚只取本地事实（居民 = $PWD 物理 toplevel；卡 = 卡文件所在仓）—— 禁 $repo / ROLE_WS / 名册反查。
+    if [[ "$is_resident" == "1" ]]; then
+      anchor="$(_close_anchor)"
+    else
+      anchor="$(nao_phys_path "$fallback_repo")"
+    fi
+    [[ -n "$anchor" ]] || anchor="$(nao_phys_path "$PWD")"
+    # 名册可用性：调用点**局部**取一次（命缓存 ⇒ 零额外探针）；禁用 rc / 空行承载（mapfile 丢 rc，
+    #   且「0 命中」已占用空行语义）。不可用时不过滤、不判并列（与改动前逐字等价）。
+    roster_ok=0
+    intercom_list_json >/dev/null 2>&1 && roster_ok=1
+    repo="$fallback_repo"
+    if [[ "$roster_ok" == "1" ]]; then
+      mapfile -t name_cwds < <(intercom_cwds_for "$base_name" "$anchor")
+      if (( ${#name_cwds[@]} == 1 )); then
+        repo="${name_cwds[0]}"                       # h=1 ⇒ 采用本仓唯一命中
+      elif (( ${#name_cwds[@]} > 1 )); then
+        die "close 目标歧义：$base_name 在本仓锚（$anchor）内有 ${#name_cwds[@]} 个同名会话：$(printf '%s ' "${name_cwds[@]}")（该怎么办：先 intercom({action:'list'}) 人工核对并关掉多余的那个；同仓同名没有「全名」写法可区分）"
+      else
+        repo="$anchor"                               # h=0 ⇒ 保留锚（**禁**回退「名册首命中」）
+      fi
+    fi
     mapfile -t scoped_cands < <(fleet_scoped_candidates "$core")
     # R2/AC6 的第 1 档：**调用方仓推导的 fleet** 候选优先（多 fleet 同 core 时不必先报歧义）。
     caller_name=""
@@ -4219,8 +4284,7 @@ cmd_close() {
         die "close 目标歧义：同 core 的 legacy 裸名 $base_name 与 $caller_name 同时在场（该怎么办：用全名 <core>@<fleet> 指定要回收的哪一个，如 close $caller_name）"
       fi
       name="$caller_name"; scope="$caller_fleet"
-      r2="$(intercom_cwd_for "$name" "$repo")"
-      [[ -n "$r2" ]] && repo="$r2"
+      _close_adopt_repo "$name" "$roster_ok"
     elif (( ${#scoped_cands[@]} > 1 )); then
       die "close 目标歧义：$core 的带 fleet 会话有多个：${scoped_cands[*]}（该怎么办：用全名 <core>@<fleet> 指定，如 close ${scoped_cands[0]}）"
     elif (( ${#scoped_cands[@]} == 1 )); then
@@ -4232,8 +4296,7 @@ cmd_close() {
       pout="$(fleet_name_parse "${scoped_cands[0]}")"
       IFS=',' read -r p_kind p_role p_task scope <<< "${pout#OK }"
       name="$(fleet_name_build "$kindc" "$core" "$scope")"
-      r2="$(intercom_cwd_for "$name" "$repo")"
-      [[ -n "$r2" ]] && repo="$r2"
+      _close_adopt_repo "$name" "$roster_ok"
     else
       # ③ 同仓 legacy 裸名（R2 第 4 档）：只要真实在跑就命中它，禁打印「未运行」 rc=0 假成功
       if running "$base_name" "$repo"; then
@@ -4248,8 +4311,7 @@ cmd_close() {
           name="${same_core[0]}"; scope=""
           pout="$(fleet_name_parse "$name")"
           IFS=',' read -r p_kind p_role p_task scope <<< "${pout#OK }"
-          r2="$(intercom_cwd_for "$name" "$repo")"
-          [[ -n "$r2" ]] && repo="$r2"
+          _close_adopt_repo "$name" "$roster_ok"
         else
           # ⑤ 全无命中（场里根本没有该 core 的会话）⇒ 保留裸名走「未运行（无需回收）」幂等路径。
           #   这是**兼容面**：升级后旧裸名会话若连名册都没有，用户仍会看到旧文案（rc=0 不谎报）。
