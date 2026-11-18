@@ -260,7 +260,16 @@ PR [#148](https://github.com/Nathan3303/nao-skills/pull/148) squash 合并 · �
   - AC3 `cases/36` 七条判据全绿，且**至少三条有负控**（删探针 ⇒ 必红）
   - AC4 用例计数口径同步（34 → **35**）：`run.sh --list`、`case 06` 对账、`tests/README.md` 三处一致
   - AC5 全量 `npm test` 双后端 rc=0；本仓 `check` 输出与改前**逐字一致**（`cases/06` golden 不得因本批而改）
-- **当前状态**：已派 `rd-infra`
+- **闸门 ② 实现已回（`9d72e84` · 7 文件 +269 −28 · 用户用例 34→35）**
+  - **Q7 门面**：`be_clean_unset_args()`（`-u` 唯一出口：声明单源 `T4_HERDR_ENV_VARS` + **动态兜底** 当前 env 的 `HERDR_*`/`TMUX*`/`NAO_*` + `BE_ENV_EXTRA_CLEAR` 例外）· `be_isolated_env()`（lab 作用域 `HOME`/agent 根）· `be_clean_env()` 合并；两 spawn 入口 `be_run_fleet` / `_be_herdr_exec` 统一走门面；保留名单 `BE_ENV_KEEP_DEFAULT`（夹具注入通道，glob）。**迁移演练**：宿主注入 `NAO_TEST_LEAK=1` ⇒ 子进程 `<unset>`（命名面内零改动即清）；`T550_FAKE_OUTSIDE=1` ⇒ 需加 `BE_ENV_EXTRA_CLEAR` 一行才清（证明"例外只改一处"），已还原
+  - **Q8 `cases/36`**：31 断言 / **14s** / 后端无关；七判据全绿 + 三条负控（删探针调用 0 提示 · 去掉 `'^  ! PRD 结构'` 排除 ⇒ 摘要出 `warn=` · 中和追溯过滤 ⇒ 老文件被报）。**先红 5 条**（聚合口径 + N3 选错变异点）已修，N3 换成**唯一承重**的追溯过滤（原「空文件守卫」删掉也会因缺 10 模块被点名 ⇒ 假演练，已弃）
+  - **Q9**：`github-flow.md` 起分支步补「开 PR 前 `rebase origin/main`」+ 成因（含 PR #149 实测 `files=13` → rebase 后 `files=5`）
+- **PM 独立验证**：`check` md5 **`f0fb8a04…`** = 改前基线（**逐字一致**）· 调用点手写 `-u`/`HOME=` grep **0** · 门面定义 3 处 · `--case 36` **PASS** · `--list` 计数 **35**、`tests/README.md` 口径一致 · **自跑全量 rc=0（35 例 · 2236 PASS · 0 FAIL · NOTE=9）** 与其数字一致
+- **PM 追认两处 `cases/06` 改写**：① **E2-2 ④⑤** 从「字面 `-u NAO_STASH_ROOT`」改为「门面定义 1 + 调用 1 + **行为面**（宿主导出该变量 ⇒ 门面参数含它）」，变异改为中和动态兜底 ⇒ **判据变强不是变弱** ② **P2③** 用例文件数 34→35（新增一例的必然连带）
+- **遗留裁定**：**O1** 暂**不纳入 `--fast`**（接受，到期 2026-12-18；理由：快档现 95–103s，+14s 逼近 120 上限，且它是文档结构契约、只在改 PRD 时相关；待 `143-F2` 替身常驻化后余量变大再议）· **O2 接受**（注入通道漏加会立刻红，非静默；反向面由 `cases/06` E2-3 覆盖）· **O3 接受**（每次 spawn +5ms，herdr 侧 `bash -c` 循环已删，净耗持平）
+- **当前状态**：PM 全量已复核绿 → 授权开 PR + 合并
+
+
 
 ## 需求分支 / PR / 发布（PM 维护）
 
