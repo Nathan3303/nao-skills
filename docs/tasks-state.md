@@ -188,6 +188,10 @@
 - ⚠️ **PM 失误（本批第 2 次·已控制）**：T548 三条 P2 的派单**误发给 `rd-infra-138`**（未先 `intercom list` 核实 short id）。已即时纠错：要求它停手、不改文件不提交不切分支、只回 `git status`；它回「工作树干净、未执行」并**正确拒绝 checkout**（与 `rd-infra-548` 共用同一 worktree，切分支会打断对方）。正确派单已发 `rd-infra-548`。**规矩固化：派单前先 `intercom list` 取 short id，禁止凭记忆发**
 - **当前状态**：等 `rd-infra-548` 修三条 P2 → QA 复验 → **先合 T547（`gh pr merge` 远端，免切分支）** → T548 rebase → 双后端跑绿 → 合 T548 → 发 0.25.0
 
+### ✅ T549 终态（2026-11-18 · 已合并 `77ad193` · 不单独发版）
+
+PR [#144](https://github.com/Nathan3303/nao-skills/pull/144) squash 合并 · Issue #143 CLOSED · 六条自核全过（subject 逐字 / `wip(` 0 / `Closes #143` 1 / 远端分支删净 / 工作区空 / `check` rc=0）· **合并后在 `origin/main` 导出树实测快档 91.3s / 498 PASS / 跳过 20 例清单一致**。交付：`test:fast`（≈95s）+ `run.sh --fast/-t`，**`npm test` 一字未改**（2202 PASS 差值 0）；白名单 14 例（单点数组 + 逐项依据注释）；跳过与「本档未覆盖」进默认输出；未登记用例 ⇒ 硬错；`--fast` 不 export。遗留 `143-F1`（阈值断言在 case 06，快档不覆盖，**QA 已独立复验「改常量 ⇒ 快档仍绿、case 06 必红」**）· `143-F2`（替身常驻化 = 覆盖率真杠杆），均到期 2026-12-05。
+
 ### 本批 T549（门禁分层提速 · Issue [#143](https://github.com/Nathan3303/nao-skills/issues/143) · 开工中 · 分支 `nao/T549-test-tiering` · 不单独发版）
 
 - **PRD**：`docs/prds/2026-11-17-test-tiering.md`（AC1–AC8）· **用户目标**：日常快档 **≤2 分钟**，全量复时长但只在 **PR CI 与发布前**
@@ -202,6 +206,16 @@
 - **AC6 例子覆盖缺口（PM 裁定）**：初稿例子（`MIN_PI_VERSION` 一致性）在 `case 06`（57s > 上限）⇒ 快档不覆盖；三出口评估后**采③接受**（放宽上限 152.7s ✗ / 上提到 `check` 属机制改动另批）⇒ AC6 改用快档覆盖面内断言 + 登记漏检 **A3**（到期 2026-12-05）
 - **闸门 ③ QA 终判（GO · `docs/reports/143-qa-verify.md` 38 行）**：AC1 三次 69/92/92s（p90 92 ≤120）· **未偷跳断言**：白名单 14 例 PASS 数 498 = 全量同例 498 · AC2/AC3（2202、`test` 行逐字未改）/AC5/AC6（改「默认 herdr」⇒ case 34 恰 8 项红）/AC7（tmux 80s/483 PASS）/AC8/AC9（自造 case 99 ⇒ 硬错且一例不跑；互斥两条均 rc=1）/AC10（6 例豁免注释）全过 · **AC4 自跑 strace**（不许读 RD 表）：31=84 次替身/真 pi 0/真 server 0；14/10 零；01 真 pi 恰 1 次 `--version` + 1 次 `api schema` 客户端查询 ⇒ 判据成立 · **A3 独立复验**：改 `MIN_PI_VERSION` 1.4.0→1.3.0 ⇒ `--fast` 仍绿 92s/498 PASS，同树 `--case 06` rc=1 点名三处声明 ⇒ **A3 成立** · 额外风险：`31` 合规（余量 21%，随 Stage 2 复核）· 快档不会被误用于 CI/发布（workflow 无测试作业、`--fast` 在 `.github/`+`.agents/` 0 命中、prepack 未变）
 - **当前状态**：PM 核 AC 通过 → 派 `rd-infra-549` 开 PR + squash 合并（用户已授权自主推进）→ 归档 + 回收会话
+
+### 本批 M20261118-card-trim（角色卡与技能瘦身 · 维护型 · 分支 `nao/M20261118-card-trim` · 不单独发版）
+
+- **来源**：用户 2026-11-18「优化角色卡和 SKILL，列出非必要的我来决定删不删」→ PM 审计后列 6 项候选，**用户拍板做 1–6**（后经 PM 自查撤回第 5 项，见下）
+- **审计证据**：卡 655 行 / 技能 1281 行；`禁 cat` 6 处 · PM 卡 §六 与 `pm-operations §一` 有 9 条近乎逐字重复 · `pm-rice`(36 行/引用 1) · `pm-grill`(30 行/引用 2) · `nao-fleet/SKILL`(45 行，与 README/INSTALL 重叠)
+- **本批范围（1/2/3/4/6）**：① PM 卡 §六 去重（只留「唯一调度者 + 闸门名词 + 指针」，细则交 `pm-operations §一`）② `commit.md` 合并段改 3 行指针（**该段命令缺 `--subject/--body-file`，与 `github-flow` 的硬要求冲突 —— 属"错的"而非"多余的"**）③ `pm-rice.md` 并入 `pm-to-spec.md` ④ `pm-grill.md` 并入 `pm-to-spec.md` ⑥ `nao-fleet/SKILL.md` 缩到 ~15 行并指向 `docs/INSTALL.md`（description 必须非空，否则 pi 不加载）
+- ⚠️ **PM 自查纠错（撤回第 5 项）**：我曾以「`frontend-design/SKILL.md` 73 行每会话常驻吃上下文」为由建议删 —— **事实错误**。`pi/docs/skills.md:41-44` 明确：启动只把 **name/description/path** 放进系统提示，**正文按需加载**。故删它只省 1–2 行描述，收益≈0；且它可能对 rd-fe 有用 ⇒ **本批保留**，等用户另行定夺
+- **纪律**：改角色卡必须 **bump version + updated** 并广播 `card product-manager v<N+1>`；无结构性决策 ⇒ **不需要 ADR**（报告明写）
+- **门禁**：`check` rc=0 · 全量 `npm test` rc=0（case 02 的「skills 恰 2 个」与 case 18 的「每卡 ≥1 单源指针」不得被破坏）· 行数前后对比 · 被删文件名全仓引用归零
+- **当前状态**：已派 `rd-infra` 实现
 
 ## 需求分支 / PR / 发布（PM 维护）
 

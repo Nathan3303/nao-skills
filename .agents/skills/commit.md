@@ -30,10 +30,7 @@ description: 按需技能——Git 提交规范（仅在执行 git commit 前读
 ## 合并（squash，由 RD 在 PM 验收通过后执行）
 
 - **闸门**：PM 验收通过 = 授权合并；**PM 不亲自合并、不 push main**。未过验收一律不得合并。
-- 正常（有远端 + `gh`）：`gh pr merge <n> --squash --delete-branch`；提交信息取 PR 标题 + 正文，因此**可读性硬性落在 PR 标题**。
-- 降级（无远端 / 无 `gh`）：`git checkout main && git merge --squash feat/… && git commit` + 删分支。
-- 合并后：main 上本需求**恰好 1 条提交**，且不含任何 `wip()` 提交；不符则回退重做。
-- 合并前清理：工作区干净、无游离文件、分支已 push 到最新。
+- 命令与两处陷阱见 @.agents/skills/github-flow.md「分支与提交」。
 
 ## 特殊情况白名单（封闭列举，其余一律走需求分支 + PR）
 
