@@ -1073,7 +1073,7 @@ t4_assert_eq "2" "$(grep -cE "printf 'NAO_TERMINAL=(tmux|herdr)" "$T4_ROOT/tests
   "P2③ 测试基座：be_fleet_handles 两后端都显式给 NAO_TERMINAL（不靠默认值）"
 t4_assert_eq "" "$(t4_scan_nao_terminal_default_probe "$CASES_DIR")" \
   "P2③ 全部用例：默认值探针块外 0 处 unset / env -u / 空串 NAO_TERMINAL ⇒ 无任何用例在 unset 下跑生产路径"
-t4_assert_eq "34" "$(ls -1 "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" "P2③ 扫描面 = 全部 34 个用例文件（不是子集；T545 增 cases/33 · #124 增 cases/34 · #126 增 cases/35）"
+t4_assert_eq "35" "$(ls -1 "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" "P2③ 扫描面 = 全部 35 个用例文件（不是子集；T545 增 cases/33 · #124 增 cases/34 · #126 增 cases/35 · Q8 增 cases/36）"
 t4_assert_eq "2" "$(grep -l 'default-value-probe BEGIN' "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" \
   "P2③ 默认值探针块白名单 = 2 个文件（cases/06 默认值段 · cases/28 B1① 反向断言）"
 # 负控：块外注入 unset ⇒ 必被扫到（并点名行号与形态）
@@ -1422,11 +1422,16 @@ t4_assert_eq "$(e2_warn_n "$E2_LAB2_BASE")" "$(e2_warn_n "$E2_LAB2_INJ")" \
 # ---- ⑤ 反空转：副本删掉 helper 的 `-u NAO_STASH_ROOT` ⇒ 注入根那次恰 +1 ----
 E2_MUT="$T4_CACHE_DIR/e2-2-mut-$$"; mkdir -p "$E2_MUT"
 sed 's/env -u NAO_STASH_ROOT "\$@"/env "\$@"/' "$T4_ROOT/tests/t4/lib.sh" > "$E2_MUT/lib.sh"
-sed 's/-u NAO_STASH_ROOT)/)/' "$T4_ROOT/tests/t4/lib-backend.sh" > "$E2_MUT/lib-backend.sh"
+# Q7（M20261118-test-hygiene）：lib-backend 侧已收成**环境净化门面**（`be_clean_env` ⇒ `be_clean_unset_args`），
+#   `NAO_STASH_ROOT` 不再以字面 `-u NAO_STASH_ROOT` 出现，由门面的**动态兜底**（宿主导出的 `NAO_*` 一律清）覆盖。
+#   判据形态随之改为「门面里承重的那一处 = 动态兜底」，变异 = 中和它；**强度不减**（仍验行为 + 单点）。
+sed 's/< <(be_env_ambient_names)/< <(:)/' "$T4_ROOT/tests/t4/lib-backend.sh" > "$E2_MUT/lib-backend.sh"
 t4_assert_eq "0" "$(grep -c 'env -u NAO_STASH_ROOT' "$E2_MUT/lib.sh" || true)" \
   "E2-2④ 变异锚点：副本 lib.sh 的 \`-u NAO_STASH_ROOT\` 已删"
-t4_assert_eq "0" "$(grep -c 'NAO_STASH_ROOT' "$E2_MUT/lib-backend.sh" || true)" \
-  "E2-2④ 变异锚点：副本 lib-backend.sh 的 \`-u NAO_STASH_ROOT\` 已删"
+t4_assert_eq "1" "$(grep -c '< <(be_env_ambient_names)' "$T4_ROOT/tests/t4/lib-backend.sh" || true)" \
+  "E2-2④ 单点锚点：门面的动态兜底调用恰 1 处"
+t4_assert_eq "0" "$(grep -c '< <(be_env_ambient_names)' "$E2_MUT/lib-backend.sh" || true)" \
+  "E2-2④ 变异锚点：副本已中和动态兜底（NAO_STASH_ROOT 不再被清）"
 t4_assert_eq "0" "$(bash -n "$E2_MUT/lib.sh" 2>&1; echo $?)" "E2-2④ 变异副本 lib.sh 语法仍合法（红点只能来自判据）"
 t4_assert_eq "0" "$(bash -n "$E2_MUT/lib-backend.sh" 2>&1; echo $?)" "E2-2④ 变异副本 lib-backend.sh 语法仍合法"
 E2_SHIM_BAD="$(e2_shim_via "$E2_MUT/lib.sh" "$T4_ROOT" "$C6_GIT")"
@@ -1439,8 +1444,15 @@ t4_assert_eq "$(( $(e2_warn_n "$E2_BE_BASE") + 1 ))" "$(e2_warn_n "$E2_BE_BAD")"
 # ---- ⑥ 静态单点：两个 helper 各恰 1 处（行为判据之外的定位面）----
 t4_assert_eq "1" "$(grep -c 'env -u NAO_STASH_ROOT' "$T4_ROOT/tests/t4/lib.sh" || true)" \
   "E2-2⑤ 单点①：t4_run_shim 带 \`env -u NAO_STASH_ROOT\` 恰 1 处"
-t4_assert_eq "1" "$(grep -c -- '-u NAO_STASH_ROOT' "$T4_ROOT/tests/t4/lib-backend.sh" || true)" \
-  "E2-2⑤ 单点②：be_run_fleet 的 envs 带 \`-u NAO_STASH_ROOT\` 恰 1 处"
+t4_assert_eq "1" "$(grep -c '^be_clean_env() {' "$T4_ROOT/tests/t4/lib-backend.sh" || true)" \
+  "E2-2⑤ 单点②：净化入口定义恰 1 处（`be_clean_env`，Q7）"
+t4_assert_eq "1" "$(grep -cF 'clean=($(be_clean_env))' "$T4_ROOT/tests/t4/lib-backend.sh" || true)" \
+  "E2-2⑤ 单点②：净化入口的调用点恰 1 处（be_run_fleet；调用点不再手写 `-u`）"
+E2_BE_ARGS="$( T4_CACHE_DIR="$T4_CACHE_DIR" NAO_STASH_ROOT=/x NAO_SKILLS=/x \
+  bash -c 'source "$1/tests/t4/lib.sh" >/dev/null 2>&1; source "$1/tests/t4/lib-backend.sh" >/dev/null 2>&1; be_clean_unset_args' \
+  _ "$T4_ROOT" 2>/dev/null || true )"
+t4_assert_eq "1" "$(printf '%s\n' "$E2_BE_ARGS" | grep -cx 'NAO_STASH_ROOT' || true)" \
+  "E2-2⑤ 行为面：宿主导出 NAO_STASH_ROOT ⇒ 门面净化参数含它（清空面非空转）"
 rm -rf "$E2_LAB2" "$E2_NONE"
 
 # ============================================================================

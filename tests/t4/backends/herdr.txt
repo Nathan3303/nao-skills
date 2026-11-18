@@ -55,3 +55,4 @@
 33  own     2027-06-30  herdr 放置键（workspace label）与 scope 解耦（T545 · ADR 2026-11-13）：U1 跨仓空 scope / U2 同仓复用 / U3 worktree 同键 / U4 scope 优先两来源 / U5 两仓同 core 仍 fail loud + N1/N2 放置键变异负控。断言面是 herdr 结构（workspace.label / pane.workspace_id），tmux 无 workspace 概念 ⇒ 本后端专有；夹具走替身（不依赖真 herdr）。到期复核：herdr 若引入 workspace 级 cwd/worktree 字段，是否补「按仓归属」判据
 34  shared  —  后端无关（端前提声明一致性 warn：只读夹具 md + 桩 herdr/tmux/pi，不建 server；断言面 = check 的 warn 行与 rc）
 35  shared  —  后端无关（stash 滞留 warn：夹具 = 临时 git 仓 + 桩 herdr/tmux/pi；断言面 = check 的 warn 行 / 摘要 warn=N / rc，不建 server）
+36  shared  —  后端无关（PRD 结构探针 warn-only：夹具 = lab 内 .agents + docs/prds 造文件；断言面 = check 的提示行 / 摘要 warn= / rc / md5 等价，不建 server、不 exec 真 pi）
