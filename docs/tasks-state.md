@@ -291,7 +291,17 @@ PR [#148](https://github.com/Nathan3303/nao-skills/pull/148) squash 合并 · �
 - **期望**：裸名解析**先按调用方仓过滤**；过滤后仍 >1 ⇒ 拒绝并列候选（不猜）；0 命中再回落「全 session 唯一同 core」
 - **门禁**：**arch lite 必过**（动的是归属/回收语义）· 新增用例（名册内造两条同名不同仓会话，断言各自仓内 `close` 只命中本仓那条）+ 负控 · 双后端全量 rc=0
 - **回退**：单条 squash `git revert`
-- **当前状态**：待 arch lite → 实现
+- **当前状态**：**验收通过、待合并**（2026-11-18 · HEAD `78da313` · 6 提交 · 未推送）
+
+### T551 验收记录（2026-11-18 · PM）
+
+- **交付链**：arch lite `fde0555`/`a709749`（+PM 拍板 `d1b3524`）→ 实现 `5c7463f` → 用例+登记 `1ea8d35` → 返工 P3×3 `1d8170f` → 收口 A+B `78da313`
+- **PM 自证（不采信回执）**：`check` rc=0 · roles=7 · **files=52** · 用例 **36**（`--list`）· `--case 37` **33 断言** · tmux 全量 **2037 断言 PASS**（SKIP=0 / DEGRADE=0 / NOTE=10；基线 2027 ⇒ +10 来自 case37 首版）· 工作区静默
+- **QA 两轮**：一轮 **GO**（0 阻塞 · 3 P3）—— 换入旧版 `d1b3524` 复现先红：**a/b/b2/c/c2/e 绿、d/d2/d3 红**（双后端）；禁改区 14 函数体 + 全名分支 md5 **全 SAME**；五向变异真做；探针≤1 **非空转**（副本 reset 缓存 ⇒ 期望1实际2 双红）；偏差 ①(d 换形) 判「判别力等价」并**实证**（纯同名两裸名 tmux 按枚举顺序各回收其一、herdr 保守拒 ⇒ 跨后端不可断言）→ 二轮增量 **GO**（3 P3 均判修好）+ 抓出新 P3 = 守卫自证 ② **空转断言**
+- **PM 判据失准第 4 次（认账）**：我据 `grep 'ROLE_WS\['` 判「卡目标锚 = 调用方 cwd、跨仓/子目录退步」，**被 QA 实证推翻** —— 卡分支 `fallback_repo="${card_path%/.agents/prompts/*}"`（`:4237`）本就是卡所在仓根，我漏了这条赋值。真实成立的部分 = **case37 对卡目标 0 覆盖**（已由 P3-1 补）
+- **本批裁定**：D1–D4 全照 arch 建议 · R1 出界转 **Issue #151** · 3 条 P3 **全当批修**（P3 默认当批改、遗留 0）· `run.sh` `CASE_TITLES[37]` 同步 **接受**（标题失真属可读性义务，非夹带）· P3-2 的**彻底版**（case 侧静态 lint 检查每个调用点声明 `local repo`）**接受并记录不修**（运行时守卫已盖最常见形态，收益/风险不划算）
+- **产物**：`docs/reports/146-arch-lite.md`（79 行）· `docs/reports/146-qa-verify.md`（90 行）· `tests/t4/cases/37-close-bare-repo.sh`（33 断言）
+- **待办** = push → 建 PR → 授权 RD squash 合并 → **v0.25.1 PATCH**（release notes 一并交代今日三批工具链改动 + R5 行为变更面一句：同名跨仓且「本仓 0 命中 + 他仓不唯一」时「取首命中」→「拒绝列候选 cwd」，唯一命中行为不变）
 
 ## 需求分支 / PR / 发布（PM 维护）
 
@@ -603,7 +613,7 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **T551** | `arch-designer`（lite 判据）→ `rd-infra` → `qa` | `close` 裸名解析 `intercom_cwd_for` 缺 repo 过滤（Issue #146 · fix 轻通道） | 2026-11-18 | #146 期望/实际三条（仓内优先 · 不唯一拒并列候选 · 0 命中回落全 session 唯一） | `fix/146-close-bare-name`（分支已建，实现未开工） |
+| **T551** | `arch-designer`（lite 判据）→ `rd-infra` → `qa` | `close` 裸名解析 `intercom_cwd_for` 缺 repo 过滤（Issue #146 · fix 轻通道）· **验收通过、待合并** | 2026-11-18 | #146 期望/实际三条（仓内优先 · 不唯一拒并列候选 · 0 命中回落全 session 唯一） | `fix/146-close-bare-name`（HEAD `78da313` · 6 提交 · 未推送待 push） |
 
 **开工确认（2026-11-18 ask-me 三答）**：① 现在开工 ② arch lite = **派 arch-designer 独立出判据**（不跳） ③ T551 合并后发 **v0.25.1 PATCH**（release notes 一并交代今日三批工具链改动）。**环境自检**：`check` rc=0 · roles=7 · files=52 · 后端 herdr。
 
