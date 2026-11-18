@@ -4144,8 +4144,8 @@ cmd_close() {
   local name repo cls bus pane pids st tgt a best="" bestc="" is_resident=1 card_role="" card_path="" cr cp croot k
   local pout="" p_kind="" p_role="" p_task="" p_scope="" parsed=0 core="" kindc="" scope="" base_name=""
   local anchor="" roster_ok=0
-  local -a name_cwds=()
-  local fallback_repo="" scoped_cands=() same_core=() r2="" caller_name="" caller_fleet=""
+  local -a name_cwds=() scoped_cwds=()
+  local fallback_repo="" scoped_cands=() same_core=() caller_name="" caller_fleet=""
   intercom_list_json >/dev/null 2>&1 || true   # 预热名册缓存
   fleet_roles_init --cards                     # BR8：parse 的角色事实表（常驻 + 卡 role）
 
@@ -4242,11 +4242,22 @@ cmd_close() {
   fi
   if [[ -n "$p_scope" ]]; then
     # ① 全名给了 fleet ⇒ 只认这一个名字（**忽略** fleet 文件；同 core 多 fleet 时由用户显式定）
+    #    仓来源 = **全名双键**（名字本身即 `<core>@<fleet>`）的复数查询 + 三态决策（Issue #151 · T552）。
+    #    旧行为「名册首命中即定仓」在同名跨仓时会把 repo 改指别仓（忙闲 / liveness 按错仓过滤）。
+    #    全名是用户**显式键** ⇒ 不用调用方锚：唯一命中不经锚 ⇒ 跨仓唯一回收照旧（cases/09 AC3 不回归）。
     name="$(fleet_name_build "$kindc" "$core" "$p_scope")"
-    repo="$(intercom_cwd_for "$name")"             # 名册 cwd 优先（跨仓会话真实仓）
-    [[ -n "$repo" ]] || repo="$fallback_repo"
-    r2="$(intercom_cwd_for "$name" "$repo")"       # P8：按目标仓复核（同名多仓时不取首命中）
-    [[ -n "$r2" ]] && repo="$r2"
+    repo="${fallback_repo}"                        # 唯一回落值（h=0 保留；**禁**回退「名册首命中」）
+    roster_ok=0
+    intercom_list_json >/dev/null 2>&1 && roster_ok=1   # 局部取一次（命缓存 ⇒ 每命令探针仍 =1）
+    if [[ "$roster_ok" == "1" ]]; then
+      mapfile -t scoped_cwds < <(intercom_cwds_for "$name")
+      if (( ${#scoped_cwds[@]} == 1 )); then
+        repo="${scoped_cwds[0]}"                     # h=1 ⇒ 采用双键唯一命中（可跨仓）
+      elif (( ${#scoped_cwds[@]} > 1 )); then
+        # 多命中**一律**拒绝（不按调用方仓过滤：过滤会把跨仓并列静默收敛成本仓一条 = 又变成猜）
+        die "close 目标歧义：$name 在名册中对应 ${#scoped_cwds[@]} 个 cwd：$(printf '%s ' "${scoped_cwds[@]}")（该怎么办：先 intercom({action:'list'}) 人工核对该会话的仓位置并关掉多余的那个；同名同 fleet 多仓没有别的写法可区分）"
+      fi                                             # h=0 ⇒ 保留回落值
+    fi
   else
     # ② 裸名/派生名：仓来源 = **调用方锚 + 名册按名复数查询**（Issue #146 · 三态决策，禁猜）
     #    旧行为「名册首命中即定仓」在跨仓同名时会把本仓目标改指他仓（liveness / 忙闲 / 回收全链错位）。
