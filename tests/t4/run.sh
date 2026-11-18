@@ -9,6 +9,10 @@
 #   bash tests/t4/run.sh -t                  # 同上，另加 per-case 耗时（每例一行 + 末尾合计）
 #   bash tests/t4/run.sh --timings           # -t 的长写法（等价）
 #     ⇒ **仅 `-t`/`--timings` 时**多打印 `[TIMING]` 行；默认输出逐字不变（golden 类断言不受影响）。
+#   bash tests/t4/run.sh --fast              # 快档：只跑白名单（PRD #143）· 显式打印跳过的例与未覆盖清单
+#   bash tests/t4/run.sh --fast -t           # 快档 + per-case 计时（可组合）
+#   bash tests/t4/run.sh --fast -v           # 快档 + 逐例展开跳过原因（AC5）
+#     ⇒ 快档白名单与判据单点定义在下面的 FAST_CASES（每条一行注释写依据）；未登记的新用例会硬错。
 #   T4_ALLOW_MISSING=1 bash tests/t4/run.sh  # 宽松：依赖缺失=BLOCKED（仅显式 1）
 #   T4_REQUIRE_FULL=1 bash tests/t4/run.sh   # 发布前置：SKIP+DEGRADE 计数>0 即 FAIL，非白名单 NOTE 亦 FAIL（与上者正交）
 #   NAO_TEST_TERMINAL=herdr bash tests/t4/run.sh   # 后端自检：只跑 tests/t4/backends/herdr.txt 登记集，未登记点名 PENDING
@@ -71,14 +75,55 @@ CASE_TITLES=(
   "端前提声明一致性单点 warn（#124 · AC5/AC6）：一致零输出 / 协议与 AGENTS.md 双向负控 / warn 不改 rc"
   "stash 滞留机械闸（#126 · B2-2）：无 stash 零输出 / 有 stash 恰 1 条 warn + warn=1 且 rc 仍 0 / pop 双向 / 只碰临时仓"
 )
+declare -A CASE_TITLE=()
+for i in "${!CASE_IDS[@]}"; do CASE_TITLE[${CASE_IDS[$i]}]="${CASE_TITLES[$i]}"; done
 
-mode="run"; only=""; arg_err=""; timings=0
+# ---------------------------------------------------------------- 快档白名单（--fast · PRD #143 §五 修订判据）
+# 判据（**三条同时满足**，逐例依据就写在本数组每项的注释里）：
+#   ① 不 exec **真 `pi` 会话进程** —— `pi --version` 这类 ~40ms 探针**豁免**（不联网/无凭据/非会话），注释须标注；
+#   ② 不起**真 herdr server** —— `fixtures/herdr-double` 替身不算真 server；
+#   ③ 实测单价 ≤15s（profile `docs/reports/143-profile.md` 全量冷跑数字；`test:fast` 总目标 ≤120s）。
+# 集合由实测数据决定（不按改动面、不按主观分类）；**改本数组 = 改门禁覆盖面**，须同步 profile 报告「未覆盖」段。
+FAST_CASES=(
+  01  # 3.5s · 无真 pi（豁免：check 的 `pi --version` ~40ms 探针，非会话进程）· 无 server
+  03  # 4.9s · 同上豁免（shim check ×5）· 无 server
+  04  # 5.0s · 同上豁免（零网络 check：unshare-net / 代理黑洞 / strace connect）· 无 server
+  05  # 3.2s · 同上豁免（迁移后 check）· 无 server
+  08  # 3.7s · 同上豁免（lock 缩进 / init --force 走 migrate）· 无 server
+  10  # 3.6s · 零 pi / 零 herdr（shim 判定式 / 开关 / lock 去重 / B2，纯文件系统）
+  13  # 2.2s · 零 pi / 零 herdr（close 前提用 tmux 假句柄，不建真 server）
+  14  # 12.4s · 零 pi / 零 herdr（只驱 run.sh 模式；内嵌 `--case 01` 不继承 --fast —— 快档状态不 export）
+  16  # 1.5s · 零 pi / 零 herdr（子代理桥契约：只读 Node 探针）
+  17  # 2.8s · 无真 pi（豁免：check 的 `pi --version` 探针）· 无 server（桩/纯 Node 探针）
+  26  # 11.4s · 桩 pi（非真 pi，PATH 桩 + t4_pi_smoke）· 无 herdr
+  31  # 11.9s · 零 pi · 替身 herdr（非真 server；判据②③通过 —— profile 归「替身」但单价 ≤15s）
+  34  # 8.6s · 桩 pi/herdr（非真）· 无 server（端前提声明一致性 warn）
+  35  # 14.0s · 桩 pi/herdr（非真）· 无 server（stash 滞留 warn）
+)
+
+# 未纳入快档的例与其类别（AC9：**显式列出未覆盖面**，防「快档绿 = 全绿」误解；禁止静默跳过）。
+# 这四组的并集 + FAST_CASES 必须 == CASE_IDS（下方起跑前自检，缺登记 ⇒ 硬错）。
+FAST_SKIP_REAL=(02 07 27 32)                             # 真机类：真 pi 会话 / 真 `pi install` / 真 herdr server
+FAST_SKIP_DOUBLE=(09 15 19 20 21 22 23 24 28 29 30 33)  # 替身 herdr 重档：无真机，但单价 >15s
+FAST_SKIP_PRICE=(06 18)                                  # 静态/契约主档但单价 >15s（06=56.7s · 18=17.1s）
+FAST_SKIP_BACKEND=(12 25)                                # tmux 专有面：herdr 下 TMUX-ONLY（跳过=不跑），不纳入
+
+declare -A FAST_SET=() FAST_SKIP_GROUP=()
+for id in "${FAST_CASES[@]}"; do FAST_SET[$id]=1; done
+for id in "${FAST_SKIP_REAL[@]}";    do FAST_SKIP_GROUP[$id]="真机类"; done
+for id in "${FAST_SKIP_DOUBLE[@]}";  do FAST_SKIP_GROUP[$id]="替身重档"; done
+for id in "${FAST_SKIP_PRICE[@]}";   do FAST_SKIP_GROUP[$id]="单价超限"; done
+for id in "${FAST_SKIP_BACKEND[@]}"; do FAST_SKIP_GROUP[$id]="TMUX-ONLY"; done
+
+mode="run"; only=""; arg_err=""; timings=0; fast=0; verbose=0
 while [ $# -gt 0 ]; do
   a="$1"; shift
   case "$a" in
     --list) mode="list" ;;
     --preflight) mode="preflight" ;;
     -t|--timings) timings=1 ;;
+    --fast) fast=1 ;;
+    -v|--verbose) verbose=1 ;;
     --case)
       if [ $# -eq 0 ]; then arg_err="--case 缺少参数值"; break; fi
       mode="case"; only="$1"; shift ;;
@@ -88,6 +133,9 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+if [ -z "$arg_err" ] && [ "$fast" = 1 ] && [ "$mode" = "case" ]; then
+  arg_err="--fast 与 --case 不可组合（快档只跑白名单；单例请直接 --case <编号>）"
+fi
 if [ -z "$arg_err" ] && [ "$mode" = "case" ]; then
   [ -n "$only" ] || arg_err="--case 缺少参数值"
   if [ -n "$only" ]; then
@@ -99,8 +147,28 @@ fi
 
 if [ -n "$arg_err" ]; then
   printf '参数错误: %s\n' "$arg_err" >&2
-  printf '用法: bash tests/t4/run.sh [--list | --preflight | --case <用例编号>]\n' >&2
+  printf '用法: bash tests/t4/run.sh [--list | --preflight | --case <用例编号> | --fast] [-t] [-v]\n' >&2
   exit 1
+fi
+
+# 快档分类自检（AC9 · 禁止静默漏测）：① 每个用例要么在白名单、要么在跳过分组；② 两组不得重叠。
+# 新增用例不登记 ⇒ 快档**硬错**（而不是悄悄不跑）；改动本文件的白名单必须同步 profile 报告。
+if [ "$fast" = 1 ]; then
+  _unclassified=(); _overlap=()
+  for id in "${CASE_IDS[@]}"; do
+    [ -n "${FAST_SET[$id]:-}" ] && continue
+    [ -n "${FAST_SKIP_GROUP[$id]:-}" ] && continue
+    _unclassified+=("$id")
+  done
+  for id in "${FAST_CASES[@]}"; do
+    [ -n "${FAST_SKIP_GROUP[$id]:-}" ] && _overlap+=("$id")
+  done
+  if [ "${#_unclassified[@]}" -gt 0 ] || [ "${#_overlap[@]}" -gt 0 ]; then
+    [ "${#_unclassified[@]}" -gt 0 ] && printf '参数错误: 快档分类缺失用例 %s —— 新增用例必须在 run.sh 的 FAST_CASES 或 FAST_SKIP_* 中登记（AC9：禁止静默漏测）\n' "${_unclassified[*]}" >&2
+    [ "${#_overlap[@]}" -gt 0 ] && printf '参数错误: 用例 %s 同时出现在 FAST_CASES 与 FAST_SKIP_*（白名单自相矛盾）\n' "${_overlap[*]}" >&2
+    exit 1
+  fi
+  unset _unclassified _overlap
 fi
 
 # ---------------------------------------------------------------- per-case 计时（-t / --timings · PRD #143 AC2）
@@ -203,9 +271,17 @@ export T4_REQUIRE_FULL="${T4_REQUIRE_FULL:-0}"
 
 if [ "$mode" = "list" ]; then
   printf 'T4 用例清单（PRD #18）\n'
+  _listed=0
   for i in "${!CASE_IDS[@]}"; do
-    printf '  %s  %s\n' "${CASE_IDS[$i]}" "${CASE_TITLES[$i]}"
+    id="${CASE_IDS[$i]}"
+    if [ "$fast" = 1 ] && [ -z "${FAST_SET[$id]:-}" ]; then continue; fi
+    printf '  %s  %s\n' "$id" "${CASE_TITLES[$i]}"
+    _listed=$((_listed + 1))
   done
+  if [ "$fast" = 1 ]; then
+    printf '  （--fast：仅白名单 %d 例；另 %d 例被跳过，类别见 run.sh FAST_SKIP_* / `run.sh --fast` 起跑段）\n' \
+      "$_listed" "$(( ${#CASE_IDS[@]} - _listed ))"
+  fi
   exit 0
 fi
 
@@ -224,6 +300,25 @@ if [ "$mode" = "preflight" ]; then
   printf '  strace connect    : %s\n' "$(bash -c "T4_CACHE_NO_CREATE=1 source '$HERE/lib.sh'; t4_strace_available && echo 可用 || echo 不可用")"
   printf '  pi CLI            : %s\n' "$(command -v pi >/dev/null 2>&1 && echo 可用 || echo 缺失)"
   exit 0
+fi
+
+# ---------------------------------------------------------------- 快档起跑声明（AC5/AC9 · 禁止静默跳过）
+# 快档**只跑** FAST_CASES；其余按类别分成四组，**必须显式点名**（默认一行列编号，`-v` 逐例展开名称+类别）。
+# 「未覆盖」声明也在起跑时就打印（不等失败才说），防把「快档绿」误读成「全绿」。
+if [ "$fast" = 1 ]; then
+  _skip_ids=()
+  for id in "${CASE_IDS[@]}"; do [ -n "${FAST_SKIP_GROUP[$id]:-}" ] && _skip_ids+=("$id"); done
+  printf '快档（--fast）：只跑白名单 %d 例（判据与逐例依据见 tests/t4/run.sh 的 FAST_CASES 注释）\n' "${#FAST_CASES[@]}"
+  printf '跳过 %d 例（真机类/重档）：%s\n' "${#_skip_ids[@]}" "${_skip_ids[*]}"
+  printf '本档未覆盖（快档绿 ≠ 全绿）：真机类 %s · 替身重档 %s · 单价超限 %s · TMUX-ONLY %s\n' \
+    "${FAST_SKIP_REAL[*]}" "${FAST_SKIP_DOUBLE[*]}" "${FAST_SKIP_PRICE[*]}" "${FAST_SKIP_BACKEND[*]}"
+  printf '  （全量语义不变：`npm test` = 全部用例照跑；发布前置 `test:t4:full` 也必跑全量）\n'
+  if [ "$verbose" = 1 ]; then
+    for id in "${_skip_ids[@]}"; do
+      printf '  · %s  %s —— %s\n' "$id" "${CASE_TITLE[$id]:-}" "${FAST_SKIP_GROUP[$id]}"
+    done
+  fi
+  unset _skip_ids
 fi
 
 # 夹具缓存创建下移到早退之后（BR8）：--list/--preflight/参数错误均已 exit，不建目录。
@@ -252,6 +347,7 @@ declare -A results
 for i in "${!CASE_IDS[@]}"; do
   id="${CASE_IDS[$i]}"
   if [ "$mode" = "case" ] && [ "$only" != "$id" ]; then continue; fi
+  if [ "$fast" = 1 ] && [ -z "${FAST_SET[$id]:-}" ]; then results[$id]="FAST-SKIP"; continue; fi
   iter_ns=0; [ "$timings" = 1 ] && iter_ns="$(_t4_now_ns)"
   if [ "$BACKEND" = "herdr" ] && [ -n "${TMUX_ONLY[$id]:-}" ]; then
     # 本后端不适用（三期重判）：点名 + 单独计数，**不算 PENDING**（也不是 SKIP）
@@ -285,7 +381,7 @@ for i in "${!CASE_IDS[@]}"; do
 done
 
 printf '\n==================== T4 汇总 ====================\n'
-fail=0; blocked=0; skip_cases=0; degrade_lines=0; note_lines=0
+fail=0; blocked=0; skip_cases=0; degrade_lines=0; note_lines=0; fast_skipped=0
 run_shared=0; run_own=0; run_pending=0; run_tmuxonly=0
 # NOTE 白名单聚合（T531 · BR1/BR2）：逐条解析行首 `[NOTE]` 后的首个 token，合法性判定只在此处。
 note_wl=(); note_bad=()
@@ -293,6 +389,8 @@ for i in "${!CASE_IDS[@]}"; do
   id="${CASE_IDS[$i]}"
   if [ "$mode" = "case" ] && [ "$only" != "$id" ]; then continue; fi
   st="${results[$id]:-NOT_RUN}"
+  # 快档跳过：不计 PASS/SKIP、不计 FAIL，但汇总结算里**点名计数**（AC5/AC9，禁止静默）
+  if [ "$st" = "FAST-SKIP" ]; then fast_skipped=$((fast_skipped + 1)); continue; fi
   log="$T4_CACHE_DIR/case-${id}.log"
   sub_skip=0; sub_degrade=0; sub_note=0
   if [ -f "$log" ]; then
@@ -339,10 +437,14 @@ join_by() { local sep="$1" out="" x; shift; for x in "$@"; do out="${out:+$out$s
 printf '  ---\n'
 printf '  SKIP=%d · DEGRADE=%d · NOTE=%d\n' "$skip_cases" "$degrade_lines" "$note_lines"
 printf '  （SKIP 含用例内 [SKIP]/SKIP: 行；DEGRADE=能力降级，默认豁免、full 计分；NOTE 按白名单分轴）\n'
+if [ "$fast" = 1 ]; then
+  printf '  快档：白名单已跑 %d 例 · 跳过 %d 例（真机类/重档；清单见起跑段与 -v；未覆盖声明同处）\n' \
+    "${#FAST_CASES[@]}" "$fast_skipped"
+fi
 if [ "$BACKEND" = "herdr" ]; then
   printf '  后端索引（herdr）：共享 %d / 本后端专有 %d / tmux 专有 %d / PENDING %d（登记文件 tests/t4/backends/herdr.txt）\n' \
     "$run_shared" "$run_own" "$run_tmuxonly" "$run_pending"
-  if [ "$mode" = "run" ]; then
+  if [ "$mode" = "run" ] && [ "$fast" = 0 ]; then
     printf '  对账：共享+专有+tmux专有+PENDING = %d（--list 计数 %d）\n' \
       "$((run_shared + run_own + run_tmuxonly + run_pending))" "${#CASE_IDS[@]}"
   fi
