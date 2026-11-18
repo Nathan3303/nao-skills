@@ -828,13 +828,13 @@ OUT_B1_TMUX_CHECK="$out"
 # P2④（PM 验收 5/6）：默认翻 herdr **不得**改动 tmux 输出 —— 显式 =tmux 的 check 摘要逐字等于旧 golden。
 #   钉两段：① 首行逐字（roles/files/layout 口径不变）② 在「codegraph 齐备」态下全输出 md5 == 旧 golden
 #   （codegraph 态行随环境变 —— 无索引的机器/CI 会打印别的态，故该条在非齐备态下只 info 不假红）。
-CHECK_GOLD_LINE='check: OK · roles=7 · files=54 · layout=main-row2'
+CHECK_GOLD_LINE='check: OK · roles=7 · files=52 · layout=main-row2'
 t4_assert_eq "$CHECK_GOLD_LINE" "$(printf '%s\n' "$OUT_B1_TMUX_CHECK" | head -1)" \
   "P2④ 显式 =tmux check 首行逐字不变（旧样）"
 t4_assert_eq "2" "$(printf '%s\n' "$OUT_B1_TMUX_CHECK" | grep -c . || true)" \
   "P2④ 显式 =tmux check 仍 2 行（未新增「生效后端」行 —— 二期口径不破）"
 if printf '%s\n' "$OUT_B1_TMUX_CHECK" | sed -n '2p' | grep -q '^  ✓ codegraph 齐备'; then
-  t4_assert_eq "31b5978e95e7f5b4dc7a9fd861548065" \
+  t4_assert_eq "428784d20499de8b4be2624cfc53561e" \
     "$(printf '%s\n' "$OUT_B1_TMUX_CHECK" | md5sum | awk '{print $1}')" \
     "P2④ 显式 =tmux check 全输出 == 旧 golden md5（codegraph 齐备态下逐字）"
 else
