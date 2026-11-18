@@ -136,6 +136,10 @@ done
 if [ -z "$arg_err" ] && [ "$fast" = 1 ] && [ "$mode" = "case" ]; then
   arg_err="--fast 与 --case 不可组合（快档只跑白名单；单例请直接 --case <编号>）"
 fi
+# 发布前置（T4_REQUIRE_FULL=1）不接受快档：它会跳过 20 例却可能报 PASS ⇒ 假绿。发布前置请用 `npm run test:t4:full`。
+if [ -z "$arg_err" ] && [ "$fast" = 1 ] && [ "${T4_REQUIRE_FULL:-0}" = "1" ]; then
+  arg_err="--fast 不接受 T4_REQUIRE_FULL=1（发布前置必须全量：npm run test:t4:full）"
+fi
 if [ -z "$arg_err" ] && [ "$mode" = "case" ]; then
   [ -n "$only" ] || arg_err="--case 缺少参数值"
   if [ -n "$only" ]; then
