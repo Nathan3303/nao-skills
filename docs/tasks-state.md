@@ -603,6 +603,9 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **T551** | `arch-designer`（lite 判据）→ `rd-infra` → `qa` | `close` 裸名解析 `intercom_cwd_for` 缺 repo 过滤（Issue #146 · fix 轻通道） | 2026-11-18 | #146 期望/实际三条（仓内优先 · 不唯一拒并列候选 · 0 命中回落全 session 唯一） | `fix/146-close-bare-name`（分支已建，实现未开工） |
+
+**开工确认（2026-11-18 ask-me 三答）**：① 现在开工 ② arch lite = **派 arch-designer 独立出判据**（不跳） ③ T551 合并后发 **v0.25.1 PATCH**（release notes 一并交代今日三批工具链改动）。**环境自检**：`check` rc=0 · roles=7 · files=52 · 后端 herdr。
 
 （#121 已闭环，终态见「已验收 / 已归档」）
 
