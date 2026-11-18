@@ -723,6 +723,30 @@ be_herdr_unset_args() {
   printf '%s\n' "${hu[@]}"
 }
 
+# 跑测试者的 HOME/agent 根隔离（T550 · 单源派生）。
+#   缺陷类（现场复刻）：生产脚本会读 **pi-intercom 名册**（`PI_AGENT_DIR` = `$PI_CODING_AGENT_DIR` 或
+#   `$HOME/.pi/agent`），而夹具进程继承**跑测试的人**的 HOME ⇒ 名册里那个「恰好叫裸名 `pm` 且正在 working」
+#   的会话（就是 PM 本会话）会被忙闲闸门的**第二信号**（名册状态 OR agent_status）命中
+#   ⇒ `close pm` rc=1 —— 与实现无关的假红（实测：PM 会话 3/3 红，其他会话 0/5 绿，差分变量 = HOME）。
+#   做法：给生产脚本注入 **lab 内** 的 `HOME` + agent 根；tsx 经符号链保留（夹具探针要跑 `.mts`），
+#   但不给 `pi-intercom` 包 ⇒ 名册**读不到**（这正是隔离点）。
+#   纪律：# 唯一派生点在本函数；调用点**禁**手写 `HOME=` / `PI_CODING_AGENT_DIR=`（cases/06 静态断言）。
+#   逃生口：`BE_ROSTER_ISOLATION=0`（负控/诊断用；默认隔离）。
+# 输出：每行一个 `KEY=VALUE`，供 env 数组展开（无一行 = 不隔离）。
+be_isolated_env() {
+  [ "${BE_ROSTER_ISOLATION:-1}" = "1" ] || return 0
+  local home agent real
+  home="${BE_ISOLATED_HOME:-${BE_LAB:-$T4_CACHE_DIR}/.t4-home}"
+  agent="$home/.pi/agent"
+  real="${PI_CODING_AGENT_DIR:-${REAL_AGENT_DIR:-$HOME/.pi/agent}}"
+  mkdir -p "$agent/npm/node_modules" 2>/dev/null || true
+  if [ ! -e "$agent/npm/node_modules/tsx" ] && [ -d "$real/npm/node_modules/tsx" ]; then
+    ln -sfn "$real/npm/node_modules/tsx" "$agent/npm/node_modules/tsx" 2>/dev/null || true
+  fi
+  printf 'HOME=%s\n' "$home"
+  printf 'PI_CODING_AGENT_DIR=%s\n' "$agent"
+}
+
 # 跑生产脚本（本用例的后端句柄由 be_fleet_handles 注入；调用方只补业务 env）。
 # 结果：BE_RC / BE_OUT / BE_ERR / BE_OUT_ANSI / BE_ERR_ANSI（ANSI 已去色）。
 be_run_fleet() { # <cwd 目录> <args...>
@@ -739,6 +763,11 @@ be_run_fleet() { # <cwd 目录> <args...>
                  "${hu[@]}"
                  -u NAO_STASH_ROOT)   # #126 P3④：夹具 check 不该读到宿主导出的 stash 根
   local kv
+  # T550：跑测试者的 HOME / agent 根隔离（单源 `be_isolated_env`；调用点禁手写）——
+  #   不加这一段，夹具就会读到**跑测试那个人**的真实名册（裸名 `pm` + working ⇒ close pm 假红）。
+  local -a iso=()
+  iso=($(be_isolated_env)) || { be_guard_fail "be_run_fleet：隔离参数派生失败"; return 1; }
+  envs+=("${iso[@]}")
   # BE_FLEET_NO_HANDLES=1：不注入后端句柄（负控用：验「不在终端内」时入口闸门必须 exit 3）
   if [ "${BE_FLEET_NO_HANDLES:-0}" != "1" ]; then
     while IFS= read -r kv; do [ -n "$kv" ] && envs+=("$kv"); done < <(be_fleet_handles)
