@@ -50,7 +50,7 @@
 
 - 🔁 **交接快照（2026-11-18 深夜 · T551 合并后 / v0.25.1 发布中）**：本会话从 2026-11-18 夜里那份快照接手，已把 **T551 全链跑完**。接手者只需读本文件。要点：
   - **T551 已合并 `da7378c`**（PR [#152](https://github.com/Nathan3303/nao-skills/pull/152) squash · main 恰 1 条 · 分支删净 · 9 文件 **+713 −14**）· `main` 上 `check` rc=0 · roles=7 · files=52
-  - **正在发 v0.25.1 PATCH**（分支 `nao/v0.25.1-release`：`package.json` 0.25.1 + `docs/releases/v0.25.1.md` + 本台账）· 待 → 发布前置 `npm run test:t4:full:dual` 空载 rc=0 → 派 RD 按显式 sha push → tag `v0.25.1` + `gh release create` → **用户** `npm publish` → PM 按 integrity 核验回填
+  - **v0.25.1 已发布并核验（2026-11-18 全闭环）**：发布提交 `4140eb8` · tag/Release `v0.25.1`（标题裸版本号 · 正文 = `docs/releases/v0.25.1.md`）· `dist-tags.latest` = **0.25.1** · `dist.integrity` 与本地 `npm pack` tarball（**226,330 B** / unpacked 593,235 B）**逐字节一致** · **注意**：发布文档的状态行改动（`已核验`）按 BR5 压在 `stash@{0}`（`BR5: v0.25.1 发布后事实`），**下一任务 PR 首提交须 pop 并带上**（勿丢）
   - **队列**：**#151**（R1 全名分支同类首命中缺陷，已入待派发队列）· 三档表新增 R2/R6 一条（接受 · 到期 2027-05-09）· 其余同旧
   - **现成会话**：`arch-designer-T551` / `rd-infra-T551` / `qa-T551`（均 idle）—— 发布收尾后按 `close --task T551 <别名>` 一并回收
   - **本批教训 2 条（新）**：① **PM 判据也要过实测**：我据 `grep 'ROLE_WS\['` 断言「卡目标锚错」，被 QA 用「卡分支另有 `fallback_repo="${card_path%/.agents/prompts/*}"`」实证推翻 ⇒ **同一变量在不同分支多处理时，单条 grep 不足以定论** ② **变异要挑「能咬住的那一层」**：卡目标锚退化时对外 4 条断言仍绿（被「唯一 cwd 采用」兜回）⇒ 断言要么下沉到结果层，要么就得接受它只是双保险（RD/QA 两边都主动报了这个拧点）
@@ -615,7 +615,10 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-（T551 已合并归档 ⇒ 行已清空；终态见下方「已验收 / 已归档」归档墙）
+| **T552** | `rd-infra`（判据→实现）→ `qa` | `close <core>@<fleet>` 全名分支首命中缺陷（Issue [#151](https://github.com/Nathan3303/nao-skills/issues/151) · fix 轻通道 · T551 R1 出界项） | 2026-11-18 | ① 双键多命中拒并列候选 ② 或按调用方仓过滤后唯一才采用 ③ 唯一命中行为不变 ④ `cases/09` 跨仓 close 零回归 | `fix/151-close-fleet-name`（判据阶段，未写码） |
+
+**开工确认（2026-11-18 ask-me 四答）**：① 现在开工 ② **保留跨仓唯一回收**（`<core>@<fleet>` 双键不唯一才拒，唯一命中照旧可跨仓回收 ⇒ 不破 `cases/09` AC3）③ arch = **rd-infra 先出判据、PM 核可再写码**（复用 T551 判据骨架，不单开 arch 会话）④ 合并后发 **v0.25.2 PATCH**。**环境自检**：`check` rc=0 · roles=7 · files=52。
+**首提交顺带（BR5）**：`stash@{0}`「v0.25.1 发布后事实」已 pop 并一并提交（release notes 状态行 = 已核验 + 接续快照）。
 
 **开工确认（2026-11-18 ask-me 三答）**：① 现在开工 ② arch lite = **派 arch-designer 独立出判据**（不跳） ③ T551 合并后发 **v0.25.1 PATCH**（release notes 一并交代今日三批工具链改动）。**环境自检**：`check` rc=0 · roles=7 · files=52 · 后端 herdr。
 
