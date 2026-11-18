@@ -15,11 +15,19 @@ T4_ALLOW_MISSING=1 bash tests/t4/run.sh        # 宽松：缺产物=BLOCKED（�
 T4_REQUIRE_FULL=1 bash tests/t4/run.sh         # 发布前置：SKIP/DEGRADE>0 或非白名单 NOTE 即 FAIL
 NAO_TEST_TERMINAL=herdr bash tests/t4/run.sh   # 后端自检：只跑登记集（tests/t4/backends/herdr.txt），未登记点名 PENDING
 NAO_TEST_TERMINAL=herdr bash tests/t4/run.sh --case 27   # 后端抽象层自检（隔离 / 零渗透 / 拆场幂等 / 零残留）
-npm test                                       # 唯一机械门禁 = test:agents + test:t4
+npm test                                       # 唯一机械门禁 = test:agents + test:t4（全量 34 例，不变）
+npm run test:fast                              # 快档：test:agents + run.sh --fast（白名单 14 例，≈95s）
+bash tests/t4/run.sh --fast -t                  # 快档 + per-case 耗时（-t 可组合）
+bash tests/t4/run.sh --fast -v                  # 快档 + 逐例展开跳过原因（AC5）
+bash tests/t4/run.sh --list --fast              # 只看快档白名单
 npm run test:t4:full                           # 发布前置双轴（= 上面两个环境变量 · 单环境）
 npm run test:t4:full:dual                      # 发布前置**双后端** gate（tmux / herdr 各一组串跑，任一红即红）
 ```
 
+- **快档 / 全量分档（PRD #143）**：`npm run test:fast` 只跑白名单（当前 14 例，实测 ≈95s），**`npm test` 仍是全量唯一机械门禁**（34 例，PR CI / 合并前 / 发布前照跑；发布前置再加 `test:t4:full`）。
+  - 白名单与判据**单点**在 `tests/t4/run.sh` 的 `FAST_CASES`（每项一行注释：不 exec 真 pi / 不起真 server / 实测单价 ≤15s）；其余例分四组（真机类 · 替身重档 · 单价超限 · TMUX-ONLY），起跑即打印「跳过 N 例（真机类/重档）：编号…」+「本档未覆盖」声明，`-v` 逐例展开 —— **禁止静默跳过**（AC5/AC9）。
+  - **新增用例必须登记**白名单或跳过分组，否则 `--fast` 硬错（防新用例被悄悄漏测）；未覆盖面、单价与 profile 见 `docs/reports/143-profile.md`。
+  - 发布前置 `T4_REQUIRE_FULL=1` 与 `--fast` **互斥**（快档跳过 20 例却可能报 PASS ⇒ 假绿）；发布前置一律 `npm run test:t4:full`。
 - **后端登记集与后端自检（#96 · 一期建机制 / 二期 B4 终态 / 三期 P2 默认翻 herdr）**：开关 `NAO_TEST_TERMINAL=tmux|herdr|auto`（**未设 = herdr**，与生产默认一致；`auto` = herdr；回退全量跑用 `NAO_TERMINAL=tmux npm test`）。**只有 herdr** 走登记集：唯一准入清单 = `tests/t4/backends/herdr.txt`（每行 `<编号> <shared|own> <到期> <理由>`，登记集非法 ⇒ rc=1），**登记集内的用例才跑**；未登记且未声明的用例输出 `[PENDING]` 并点名（**不得静默 SKIP**）。
   - **tmux 专有声明**：`# tmux-only: <编号...>`（注释区、机器可读）⇒ 运行期输出 `[TMUX-ONLY]` 并单列计数，**不进 PENDING、也不算 SKIP**。当前 = `12`（派生落点/宿主窗口属三期布局）与 `25`（tmux 宽度算式），三期重判。
   - **汇总行**：`后端索引（herdr）：共享 N / 本后端专有 M / tmux 专有 K / PENDING P` + `对账：N+M+K+P = <--list 计数>`。
