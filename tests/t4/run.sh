@@ -38,7 +38,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 
-CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "30" "31" "32" "33" "34" "35" "36")
+CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "30" "31" "32" "33" "34" "35" "36" "37")
 CASE_TITLES=(
   "主路径足迹 + check exit=0（AC1）"
   "设计一致性：注册 skill 数==2 且无 collision（AC1/AC6）"
@@ -75,6 +75,7 @@ CASE_TITLES=(
   "端前提声明一致性单点 warn（#124 · AC5/AC6）：一致零输出 / 协议与 AGENTS.md 双向负控 / warn 不改 rc"
   "stash 滞留机械闸（#126 · B2-2）：无 stash 零输出 / 有 stash 恰 1 条 warn + warn=1 且 rc 仍 0 / pop 双向 / 只碰临时仓"
   "PRD 结构探针（Q8 · warn-only）：缺 AC 组 / 超行数 / 老日期不追溯 / 空文件拒判合格 / SINCE 非法回落 / warn= 不污染 / 本仓输出与探针关闭逐字一致 + 三条变异负控"
+  "close 裸名解析的仓来源（#146 · T551）：五态 a/b/b2/c/c2/d/d2/d3/e + 锚过滤与「按名唯一 cwd」三态 + 探针 ≤1 次 + 五向变异负控"
 )
 declare -A CASE_TITLE=()
 for i in "${!CASE_IDS[@]}"; do CASE_TITLE[${CASE_IDS[$i]}]="${CASE_TITLES[$i]}"; done
@@ -105,7 +106,7 @@ FAST_CASES=(
 # 未纳入快档的例与其类别（AC9：**显式列出未覆盖面**，防「快档绿 = 全绿」误解；禁止静默跳过）。
 # 这四组的并集 + FAST_CASES 必须 == CASE_IDS（下方起跑前自检，缺登记 ⇒ 硬错）。
 FAST_SKIP_REAL=(02 07 27 32)                             # 真机类：真 pi 会话 / 真 `pi install` / 真 herdr server
-FAST_SKIP_DOUBLE=(09 15 19 20 21 22 23 24 28 29 30 33)  # 替身 herdr 重档：无真机，但单价 >15s
+FAST_SKIP_DOUBLE=(09 15 19 20 21 22 23 24 28 29 30 33 37)  # 替身 herdr 重档：无真机，但单价 >15s（37 = 假名册 + 两仓 pane + 五向变异副本，每次 close 一进程探针）
 FAST_SKIP_PRICE=(06 18 36)                                  # 静态/契约主档：06=56.7s · 18=17.1s（单价超限）· 36=14s（单价合格，但属「契约档」；扩快档面须同步 profile 报告「未覆盖」段 ⇒ 归 PM 裁定，不夹带）
 FAST_SKIP_BACKEND=(12 25)                                # tmux 专有面：herdr 下 TMUX-ONLY（跳过=不跑），不纳入
 
