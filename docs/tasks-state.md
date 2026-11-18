@@ -48,12 +48,12 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 🔁 **交接快照（2026-11-18 夜 · pm 会话重开前落盘）**：本会话在 **54% context** 时按「超 40% 重开」纪律交班。**接手的 PM 只需读本文件**，不依赖上一段对话。要点：
-  - **今日 7 批已全部合并**（见下方 T546/T547/T548/T549/T550/M20261118×3 终态行）· `main` = `0e8756d` · `check` rc=0 · `files=52` · `/tmp/nao-t4.*` 已清零 · 无脏工作树 · 无 stash
-  - **手上唯一在飞分支** = `fix/146-close-bare-name`（已 push，含本文件的本日终态 + T551 立项条目），**尚未开工实现**
-  - **下一批 = T551 / Issue [#146](https://github.com/Nathan3303/nao-skills/issues/146)**：`close` 裸名解析 `intercom_cwd_for` 缺 repo 过滤；**先 arch lite 再实现**（动归属语义）· AC/回退见下方 T551 条目
-  - **队列**：`#146`（上述）· 发版节奏（`package.json` 仍 **0.25.0**，今日三批工具链改动可攒 **PATCH**）· 已关闭 Q7/Q8/Q9
-  - **现成会话**：`rd-infra-M20261118@nao-skills`（idle，可直接派单；若发现残留按 `status` 提示回收）
+- 🔁 **交接快照（2026-11-18 深夜 · T551 合并后 / v0.25.1 发布中）**：本会话从 2026-11-18 夜里那份快照接手，已把 **T551 全链跑完**。接手者只需读本文件。要点：
+  - **T551 已合并 `da7378c`**（PR [#152](https://github.com/Nathan3303/nao-skills/pull/152) squash · main 恰 1 条 · 分支删净 · 9 文件 **+713 −14**）· `main` 上 `check` rc=0 · roles=7 · files=52
+  - **正在发 v0.25.1 PATCH**（分支 `nao/v0.25.1-release`：`package.json` 0.25.1 + `docs/releases/v0.25.1.md` + 本台账）· 待 → 发布前置 `npm run test:t4:full:dual` 空载 rc=0 → 派 RD 按显式 sha push → tag `v0.25.1` + `gh release create` → **用户** `npm publish` → PM 按 integrity 核验回填
+  - **队列**：**#151**（R1 全名分支同类首命中缺陷，已入待派发队列）· 三档表新增 R2/R6 一条（接受 · 到期 2027-05-09）· 其余同旧
+  - **现成会话**：`arch-designer-T551` / `rd-infra-T551` / `qa-T551`（均 idle）—— 发布收尾后按 `close --task T551 <别名>` 一并回收
+  - **本批教训 2 条（新）**：① **PM 判据也要过实测**：我据 `grep 'ROLE_WS\['` 断言「卡目标锚错」，被 QA 用「卡分支另有 `fallback_repo="${card_path%/.agents/prompts/*}"`」实证推翻 ⇒ **同一变量在不同分支多处理时，单条 grep 不足以定论** ② **变异要挑「能咬住的那一层」**：卡目标锚退化时对外 4 条断言仍绿（被「唯一 cwd 采用」兜回）⇒ 断言要么下沉到结果层，要么就得接受它只是双保险（RD/QA 两边都主动报了这个拧点）
   - **今日教训 3 条**（勿重犯）：① 归属/时序类判断**必须实测**（我曾误判"真 pi 启动期 working"，靠 `HOME` 差分才找到真因）② 删除/降级常驻 SKILL 前先查加载语义（`pi/docs/skills.md`：只放 name/description/path，正文按需加载）③ 改 golden 必须给「逐行只有一处差异」的证明
 
 
@@ -291,7 +291,7 @@ PR [#148](https://github.com/Nathan3303/nao-skills/pull/148) squash 合并 · �
 - **期望**：裸名解析**先按调用方仓过滤**；过滤后仍 >1 ⇒ 拒绝并列候选（不猜）；0 命中再回落「全 session 唯一同 core」
 - **门禁**：**arch lite 必过**（动的是归属/回收语义）· 新增用例（名册内造两条同名不同仓会话，断言各自仓内 `close` 只命中本仓那条）+ 负控 · 双后端全量 rc=0
 - **回退**：单条 squash `git revert`
-- **当前状态**：**验收通过、待合并**（2026-11-18 · HEAD `78da313` · 6 提交 · 未推送）
+- **当前状态**：**已合并 `da7378c`（PR #152 squash）· 随 v0.25.1 发布**（发布收尾见顶部快照）
 
 ### T551 验收记录（2026-11-18 · PM）
 
@@ -586,6 +586,7 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 | 任务编号 | 目标会话 | 概要 | 排队原因 |
 | :--- | :--- | :--- | :--- |
+| **#151** | `rd-infra`（待排期） | **R1 全名分支同类首命中**：`close <core>@<fleet>` 在 `core+fleet` 双键命中多条时仍取首命中 ⇒ 可跨仓改指 repo（与 T551 同型，本批明示出界、`:4197-4203` 逐字未动） | 出界转办（T551 arch lite §七 R1 / §八 D3）· 建议复用 `intercom_cwds_for` + 三态决策，判定键换 `core+fleet`；需补用例（两条同 core 同 fleet 不同仓） |
 
 > **队列已清空（2026-11-16 · M20261116-backlog-sweep）**：批次 A/B/C 与 T543-O2 全部合并闭环，划销行已移除；本表**空 = 无真待办**是合法状态，不是漏更新（判据：本表数据行数 = 0，其余仍在做的事在「进行中」）。历史上本表曾混入「已接受 / 观察 / 已关闭」行（14 行里 9 行不需动作）⇒ 2026-11-09 起纪律：**只放需要动作的项**。
 >
@@ -603,6 +604,7 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 | M20261102-F1 | 观察 · 2026-12-31 | **`check` 对 legacy 全量安装的同名机制卡副本跳过冲突检查**（T537 RD 范围外稳健性增补）：跳过逻辑若过宽，会漏报「下游卡与机制卡同名」这类人为异常；首次真实使用后决定是否文档化/加断言 | T537 观察项（PM 登记） |
 | M20261102-F2 | 观察 · 2026-12-31 | **`test:t4:full` 用例 02 真 `pi` 动态注册超时 flake**：RD 一次 5 跑中 2 次 `rc=124`（`timeout 120`，stdout 已出 82,900 B，非无凭据）；同批 QA 7 次运行（full ×3 + `--case 02` ×3 + `npm test` ×1）全 PASS、单跑 8–15 s ⇒ 量级差约 10× = 既有 O-1 类网络/负载抖动，非代码引入。候选处置：超时上调 /「真 pi 慢」与「无凭据」分开计数，独立任务做 | RD 转办（M20261102 报告 §四）· **复现率 ≈20 跑 3 次 ≈15%**（RD 5 跑 2 · QA 7 跑 0 + 本轮 2 跑 1 · PM 2 跑 0）⇒ 升级待派发候选 |
 | M20261109-install-scripts | 已接受 · 2027-05-09 | **`pi update --extensions` 报 3 条 install-scripts 未授权**（`protobufjs@1.6.6`/`1.6.5` postinstall 生成代码、`@google/genai@1.52.0` preinstall 为 no-op）：均为上游依赖脚本，`pi-subagents` 功能实测正常 ⇒ **不 approve**（维持默认安全姿态），到期动作 = 若 pi-subagents 出异常再回看 | PM 裁决（2026-11-09，用户报障输出） |
+| T551-R2R6 | 接受 · 2027-05-09 | **`close` 裸名归属的两个既有边界**（T551/#146 三态决策留下的，非回归）：① **R2** 名册条目缺 `cwd` 时该条目对仓过滤不可见（`intercom_roster` 逐行 awk 需 name/cwd 成对）；② **R6** herdr 后端 + 名册缺该名 `cwd` ⇒ 采用候选后 repo 无法校正，仍可能报「未运行（无需回收）」rc=0。**明示不修**：R2 只能靠 pane cwd 兜底，而 arch 否定条件明禁「pane cwd 充当名册唯一判据」（第二事实源）；R6 只能把 0 命中改 die ⇒ 破 D1/⑤ 兼容面（旧会话将不可回收）。判定要点：到期回看 herdr 名册是否已稳定给出 `cwd`（有 ⇒ 两条同时失效）| T551 QA 报告 §八 · v0.25.1 |
 | T545-O1 | 接受 · 2027-01-31 | **卡会话跨仓同 core 不判重**（旧行为延续、非回归）；到期重评是否加 `@scope` 强制。判定命令：`grep -n "fleet_scope_slug" .agents/scripts/nao-fleet.sh` —— 若结果只出现在放置键/显示名、未参与**判重**，则本条仍成立 | #96 全链路终态行 |
 | 96-未验三项 | 观察 · 2027-06-30 | **真机 attach 重排 / pi TUI 最小行列 / `pane move` 后长稳** —— PRD 标注「未验」。**人工判定型**（无机械命令：真机行为类；`grep` 只能命中设计/实现报告里的**提及**，不能当已验证据 —— 实测 8 处命中全为提及）。判定要点：到期时在 `docs/reports/` 找**真机实测结论**（有 ⇒ 关闭并回填该报告指针；无 ⇒ 续期）| #96 全链路终态行 |
 | T545-same-slug | 接受 · 2027-01-31 | **同 slug 两仓共用 workspace**（label=slug 兜底）；到期重评是否加仓标识。判定：`grep -n "fleet_scope_slug" .agents/scripts/nao-fleet.sh` 看放置键是否已含仓后缀 | T545 验收行 · 方案行 |
@@ -613,7 +615,7 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **T551** | `arch-designer`（lite 判据）→ `rd-infra` → `qa` | `close` 裸名解析 `intercom_cwd_for` 缺 repo 过滤（Issue #146 · fix 轻通道）· **验收通过、待合并** | 2026-11-18 | #146 期望/实际三条（仓内优先 · 不唯一拒并列候选 · 0 命中回落全 session 唯一） | `fix/146-close-bare-name`（HEAD `78da313` · 6 提交 · 未推送待 push） |
+（T551 已合并归档 ⇒ 行已清空；终态见下方「已验收 / 已归档」归档墙）
 
 **开工确认（2026-11-18 ask-me 三答）**：① 现在开工 ② arch lite = **派 arch-designer 独立出判据**（不跳） ③ T551 合并后发 **v0.25.1 PATCH**（release notes 一并交代今日三批工具链改动）。**环境自检**：`check` rc=0 · roles=7 · files=52 · 后端 herdr。
 
@@ -652,6 +654,7 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 | 任务编号 | 结论 | 详情路径 | 备注 |
 | :--- | :--- | :--- | :--- |
+| **T551**（Issue [#146](https://github.com/Nathan3303/nao-skills/issues/146)） | **验收通过（AC 三条全达 · 0 未过项）· 已 squash 合并 `da7378c`（PR [#152](https://github.com/Nathan3303/nao-skills/pull/152)）· 随 v0.25.1 发布**：**`close` 裸名解析按调用方仓归属** —— 新增 `intercom_cwds_for <name> [anchor]`（0..N 行复数通道，复用名册缓存、零新增探针）+ `_close_anchor`（`$PWD` 物理 toplevel；卡目标 = 卡文件所在仓；git ≤1 次/close）+ `_close_adopt_repo`（该名唯一 cwd ⇒ 采用 / >1 ⇒ die 列全部候选 / 0 ⇒ 保留，含「调用点须 `local repo`」fail-loud 守卫）；裸名分支三态决策（本仓唯一采用 / 本仓并列拒并列候选 / 0 命中保留锚再走既有回落，**禁首命中**）。**PM 自证**：`check` rc=0 roles=7 files=52 · 用例 **36** · `--case 37` **33 断言** · tmux 全量 **2037 断言 PASS**（SKIP=0/DEGRADE=0/NOTE=10）· 合并前三核对 未推送0/落后0/工作区0。**QA 三轮 GO**（先红在旧版 `d1b3524` 上实测：(d)/(d2)/(d3) 红、(a)(b)(b2)(c)(c2)(e) 绿；六向变异负控；探针 ≤1 非空转；守卫自证去空转的反向证明）。**PM 判据失准第 4 次（认账）**：据 `grep ROLE_WS\[` 误判卡目标锚，被 QA 实证推翻（卡分支另有 `fallback_repo="${card_path%/.agents/prompts/*}"`）；真实成立部分 = case37 卡目标 0 覆盖 ⇒ 由 P3-1 补齐。**裁定**：arch D1–D4 全照建议 · 3 条 P3 全当批修 · `run.sh` 标题同步接受 · P3-2 彻底版（case 侧静态 lint）接受不修。**遗留**：R1 出界 → Issue [#151](https://github.com/Nathan3303/nao-skills/issues/151)（已入待派发队列）· R2/R6 接受含到期（三档表 `T551-R2R6`）| PR [#152](https://github.com/Nathan3303/nao-skills/pull/152) · `docs/reports/146-arch-lite.md` · `docs/reports/146-qa-verify.md` · release notes `docs/releases/v0.25.1.md` | 9 文件 **+713 −14** · main 恰 1 条 · 分支删净 · `roles.yaml` diff 0 · 会话 3 个（arch/rd-infra/qa T551）待回收 |
 | **M20261116-final-audit**（Issue [#134](https://github.com/Nathan3303/nao-skills/issues/134)） | **台账终局审计（纯台账 · 零代码 · 不发版）**：#132 合并后三档表逐条再判 —— **关闭 4 项并移出表**（按 L2「已完成项 ⇒ 已归档表」）：`M20261109-pi-threshold-docs`（**#132 E2-1 已加一致性断言**，文档下限声明必须 == `MIN_PI_VERSION`）· `T537-O3`（卡路径含 `@` 歧义：PM 裁定**保持现状**，显式拒绝可能误拒含 `@` 合法名，成本 > 收益）· `T537-O4`（下游卡集宽松口径：**保持 warn**，无真实数据支撑且升 error 会硬拦首次使用者）· `T534-O2`（`case 16` flake：**观察期满无复现**，#132 前连续 6 批 `npm test` 34 例 + dual 两组全 0 FAIL）。**新增观察 1 条** `M20261116-pkgver-classified`（完备性判据会把 `pi-subagents 0.x` 类包版本判「未归类」，现仓 0 命中，口径已定）。**复核形态**：单人项目自审（唯二载体 = 本行 + PR 描述「复核」节）；每项关闭均带判定命令。| PR [#135](https://github.com/Nathan3303/nao-skills/pull/135) · Issue [#134](https://github.com/Nathan3303/nao-skills/issues/134) |  零代码 · 不发版 · 三档表 **17 → 9 行**（全部带未来到期日；其中 9 行移除 = 关 4 + 按 L2 移出 5，新增 1 行观察）· `待派发队列` 仍 **0** |
 | **M20261116-backlog-sweep**（Issue [#132](https://github.com/Nathan3303/nao-skills/issues/132)） | **验收通过（E1+E2 · 0 未过项）· 已 squash 合并 `fff4efb`（PR [#133](https://github.com/Nathan3303/nao-skills/pull/133)）· 不发版**：**队列清零批**。**E1 台账（PM）**：三档表 **21 → 17**（关 4：`br5-stash-warn-tension`（D1 交付且实测当天 stash 不再 warn）· `M20261114-stash-exit` · `T529-D1`（下游三仓自管，三仓存在无异常）· `M20261028-F2`（nao-todo-server `.codegraph` 实测 4.0K 仅 `.gitignore` ⇒ 下游自管）· 另关 `M20261114-helper-u-guard`（E2-2 已补守卫）· 移出 3（`herdr-base` 决策轨迹 / `T545-cache-residue` / `T543-O2`）· 续期 1（`M20261014-F1`→2027-02-14，上游仍 0.1.1））；`待派发队列` 数据行 **0**。**E2 断言（RD · `cases/06` 284 → 324）**：**pi 阈值文档面一致性**（下限声明值 == `MIN_PI_VERSION` + **完备性**：任何 `pi … x.y.z` 提及须「是下限声明」或「行带『截至』」；扫描面 **7 文件 / 10 行 / 11 处**，留裕度阈值 ≥6/≥9/≥40）+ **helper `NAO_STASH_ROOT` 守卫**（warn 数差判据 + 解耦自证）+ **`NAO_SKILLS` 渗漏修复**（11 处点 + 正负控 + 静态审计；修前 `NAO_SKILLS=$PWD --case 06` = 319/3 FAIL → 修后 **324/0**）。**QA 三轮已收敛**（GO · 3 P3 全裁修）：① `NAO_SKILLS` 未清 ⇒ E1 夹具读真卡（与 `NAO_STASH_ROOT` 同族）② E2-2① 断言「无任何 `warn=`」⇒ 与卡预算 warn 耦合（与 #126 P2-1 同族）③ 阈值 `≥11 处/42 文件` **贴脸**（= 「写死数字」变体，正常文档演进会以错误原因红）⇒ 改留裕度 + 完整性交完备性判据。**门禁**：`check` rc=0 ×2 IDENTICAL（files=54）· `cases/06` **324 PASS / 0 FAIL**（含宿主 `NAO_SKILLS` 污染态）· `npm test` rc=0（34 例 · P2④ 旧 golden 未破）· 真仓 stash 0 / worktree 1。| 报告 `docs/reports/132-sweep.md` · QA `docs/reports/132-qa-verify.md` · Issue [#132](https://github.com/Nathan3303/nao-skills/issues/132) |  不发版（纯测试断言 + 台账）· 遗留：P3-3(c) 观察（`pi-subagents 0.x` 类包版本会被完备性判「未归类」，现仓 0 命中；处置仍是写 `≥` 或加「截至」）· 合并 sha 待回填（BR5）· 派生会话 2 个待回收 |
 | （Issue [#130](https://github.com/Nathan3303/nao-skills/issues/130)） | **验收通过（全 AC · 0 未过项）· 已 squash 合并 `28b5d44`（PR [#131](https://github.com/Nathan3303/nao-skills/pull/131)）· 不发版**：**D1 stash 闸加年龄阈值** —— 只对最老一条 > `NAO_STASH_WARN_HOURS`（默认 6）warn，当天回填静默；**修掉前导零硬伤**（`08`/`0008` ⇒ 旧实现 `check` **rc=1**；`010` 旧实现按八进制静默=8）⇒ 算术前 `10#` 归一，三档实测 rc=0 且文案回显与实际生效值一致；`%ct` 不可解析 ⇒ 不 warn 但 `-v` 留降级注记（避免「与无 stash 不可区分」）。**D2 `HERDR_*` 清理清单单源化**（= T543-O2）—— `tests/t4/lib.sh` `T4_HERDR_ENV_VARS`（8 变量，新增只改这一行）→ 派生 `-u` 参数；调用点手写 `-u HERDR_*` 归零；`BE_HERDR_KEEP` 显式豁免（支持空格/逗号）+ `cases/09` AC3h③ 保留故意注入的 `HERDR_PANE_ID`（原意仍被测，非假绿）。**覆盖升级（本批核心）**：新增 `D2⑨` **行为反渗漏**（验被测子进程真实 env，非 argv 文本）+ `D2⑩` **「清理→注入」顺序面**（① 父 8 值逐条查无 ② 实验句柄在场 ③ 上下文真初始化）；QA 四变异四连：删 `${hu[@]}` ⇒ ①5红/②绿 · `handles return 1` ⇒ ②5红/①绿 · 去 `BE_BACKEND` ⇒ ③红 · **语义顺序变异（进程仍起、`BE_RC=0`）⇒ ②3红**。**PM 判据失准 2 次（认账）**：① 「删 `HERDR_SOCKET_FILE` ⇒ 现有断言红」不成立（fleet 从不读它）⇒ 判据改落 golden 静态断言 ② 「去 `BE_FLEET_NO_HANDLES` ⇒ D2⑨ 应红」不成立（bare 子壳无 BE 上下文 ⇒ 注入面为空）⇒ QA 挖出真缺口「清完再注入无覆盖」，采 B 方案补 `D2⑩`。**门禁**：`check` rc=0 ×2 逐字一致（files=54）· `npm test` rc=0 · `test:t4:full:dual` 两组 rc=0（tmux NOTE=9 / herdr NOTE=10 全白名单）· `cases/06` **285 断言**双后端 PASS · `cases/09/28/33/35` 均 PASS · 敏感值 0 · 真实仓 stash 0。| 报告 `docs/reports/130-gate-tune.md` · QA `docs/reports/130-qa-verify.md` · Issue [#130](https://github.com/Nathan3303/nao-skills/issues/130) |  不发版（测试侧 + 一处 warn 阈值）· 遗留 0（P3④ 记录、P3 其余已修）· 合并后复核：main 恰 1 条 · `%s`/`%b` 的 `wip` 前缀判据各 0 · 分支删净 · 工作区静默 · 派生会话 2 个已回收 · ⚠️ 观察：`cases/35` 合并提交含 `100644→100755` 模式位变化（未见披露，判定无害但属未声明改动）|
