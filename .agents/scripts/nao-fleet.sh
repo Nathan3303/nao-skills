@@ -1624,6 +1624,75 @@ check_stash_residue() {
   return 0
 }
 
+# PRD 结构探针（M20261118-prd-structure · **warn-only**：只提示，**不进 warn 计数、不改 rc**）。
+#   动机：ADR 有结构契约（checklists §四），PRD 长期无任何门禁 ⇒ 结构漂移只能靠人眼看。
+#   口径（PM 定，防刷屏）：
+#     · 只在本仓存在 `docs/prds/*.md` 时生效（无目录 / 无 PRD ⇒ 零输出）。
+#     · **只查文件名日期 ≥ `NAO_PRD_STRUCT_SINCE`（默认 2026-11-18）** 的 PRD：老 PRD 不追溯
+#       （前缀 `YYYY-MM-DD-`；无前缀 / 不可解析 ⇒ 不查，`-v` 给一条跳过注记，**不猜**）。
+#     · 三条判据：① 必含 9 个 `## ` 模块标题（TL;DR + 一…九；`## 附录` 可缺）
+#                  ② §七 AC 节内 `### ` 组 ≥5（五覆盖：主路径/异常/边界/负向闭环/设计一致性）
+#                  ③ 全文 ≤150 行（PRD 上限，见 checklists §一）
+#     · 违反 ⇒ **恰一条** `  ! PRD 结构…`（排除计入 warn 的名单见 cmd_check 摘要处）；`-v` 逐文件展开。
+#     · **防假绿**：文件不可读 / 0 字节 **不算通过** —— 单列「不可读/空」，不得当「结构合格」放行。
+#     · 局限（可接受）：统计按行首标记，不区分数围栏内的示例；warn-only 不阻断，误报代价低。
+check_prd_structure() {
+  local dir="$PWD/docs/prds" since="${NAO_PRD_STRUCT_SINCE:-2026-11-18}"
+  [[ "$since" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] \
+    || { $VERBOSE && printf '  · PRD 结构：NAO_PRD_STRUCT_SINCE=%s 非法（应为 YYYY-MM-DD）⇒ 回落默认 2026-11-18\n' "$since"; since="2026-11-18"; }
+  [[ -d "$dir" ]] || return 0
+  local -a files=()
+  shopt -s nullglob
+  files=("$dir"/*.md)
+  shopt -u nullglob
+  (( ${#files[@]} > 0 )) || return 0
+  local f base d nlines ac_groups miss h total=0 bad=0 first="" detail=""
+  local -a req=("TL;DR" "一、" "二、" "三、" "四、" "五、" "六、" "七、" "八、" "九、")
+  for f in "${files[@]}"; do
+    base="$(basename "$f")"
+    if [[ ! "$base" =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2})- ]]; then
+      $VERBOSE && printf '  · PRD 结构：跳过 %s（文件名无 `YYYY-MM-DD-` 前缀 ⇒ 无法判定是否追溯面）\n' "$base"
+      continue
+    fi
+    d="${BASH_REMATCH[1]}"
+    [[ "$d" < "$since" ]] && continue        # ISO 日期可直接按字串比较
+    total=$((total + 1))
+    miss=""
+    if [[ ! -r "$f" || ! -s "$f" ]]; then
+      # 防假绿：读不到 / 空文件 ≠ 合格（否则「删内容凑绿」永不可发现）
+      miss="不可读或空文件（拒绝判为合格）"
+    else
+      nlines="$(wc -l <"$f" 2>/dev/null | tr -d ' ' || echo 0)"
+      [[ "$nlines" =~ ^[0-9]+$ ]] || nlines=0
+      local -a lack=()
+      for h in "${req[@]}"; do
+        grep -qE "^##[[:space:]]+${h}" "$f" 2>/dev/null || lack+=("$h")
+      done
+      (( ${#lack[@]} > 0 )) && miss+="缺模块 ${lack[*]}；"
+      # §七 AC 节内的 `###` 组数（到下一个小节标题为止）
+      ac_groups="$(awk '
+        /^##[[:space:]]/ { if (ins) exit; if ($0 ~ /^##[[:space:]]+七、/) { ins=1; next } }
+        ins && /^###[[:space:]]/ { n++ }
+        END { print n + 0 }
+      ' "$f" 2>/dev/null || echo 0)"
+      [[ "$ac_groups" =~ ^[0-9]+$ ]] || ac_groups=0
+      (( ac_groups < 5 )) && miss+="AC 分组 ${ac_groups} < 5；"
+      (( nlines > 150 )) && miss+="${nlines} 行 > 150；"
+      # 防御：读成功但三条全空（含 0 行且标记齐的神文件）⇒ 合格
+      miss="${miss%；}"
+    fi
+    [[ -n "$miss" ]] || continue
+    bad=$((bad + 1))
+    if [[ -z "$first" ]]; then first="$base：$miss"; fi
+    detail+="  · PRD 结构：docs/prds/$base —— $miss"$'\n'
+  done
+  (( bad > 0 )) || return 0
+  printf '  ! PRD 结构（warn-only，不计 warn / 不改 rc）：%s 份新 PRD（≥%s）中 %s 份缺结构（%s）⇒ -v 看明细（规范：checklists/deliverable-docs.md §三）\n' \
+    "$total" "$since" "$bad" "$first"
+  $VERBOSE && printf '%s' "$detail"
+  return 0
+}
+
 # roles.yaml 缩进契约：角色 id 2 空格 / 字段 4 空格 / 禁 Tab（与 load_manifest 解析器同契约，独立报行号）
 check_roles_indent() {
   awk '
@@ -3275,6 +3344,9 @@ cmd_check() {
   # #126 B2-2：stash 滞留机械闸（单点 · warn-only ⇒ 不改 rc；无 stash / 不适用 ⇒ 零输出）
   check_stash_residue || true
 
+  # M20261118：PRD 结构探针（warn-only ⇒ 不计 warn、不改 rc；无新 PRD / 结构合格 ⇒ 零输出）
+  check_prd_structure || true
+
   echo "== 按需技能 =="
   if [[ -d "$SKILLS_SUB" ]]; then
     shopt -s nullglob
@@ -4575,7 +4647,8 @@ case "$CMD" in
     if (( CHECK_RC == 0 )) && ! $VERBOSE; then
       # D4（arch 裁 A）：codegraph 任态**不计入** warn 计数 —— 它是常驻第 2 行，不必重复计数；
       # 六条 CG_MSG_* 全以 `codegraph ` 开头 ⇒ 前缀匹配不误伤其它体检项（grep -c 0 命中 rc=1，|| true 别丢）。
-      WARNS="$(grep '^  !' "$REPFILE" | grep -vc '^  ! codegraph ' || true)"
+      # M20261118：PRD 结构探针同理**不计入**（`  ! PRD 结构` 单列；「不计数的可见性」由它自己那行承担）。
+      WARNS="$(grep '^  !' "$REPFILE" | grep -v -e '^  ! codegraph ' -e '^  ! PRD 结构' | grep -c . || true)"
       ROLES_N="$(grep -oE '解析成功，[0-9]+ 个角色' "$REPFILE" | grep -oE '[0-9]+' | head -1 || true)"
       FILES_N="$(grep -oE '[0-9]+ 个文本文件全 LF' "$REPFILE" | grep -oE '^[0-9]+' | head -1 || true)"
       if (( WARNS > 0 )); then
@@ -4588,6 +4661,8 @@ case "$CMD" in
       # CodeGraph 四态行常驻可见（BR9 不静默）：摘要模式下也从报告里抽这一行原样回显，
       # 保持「默认只出四态中的一行」（PRD AC1）且不额外 fork（full=0 已在报告期算完）。
       grep -m1 -E '^  . codegraph ' "$REPFILE" || true
+      # M20261118：PRD 结构提示也常驻可见（与 codegraph 同口径：**不计入 warn**，可见性由它自己这行承担）
+      grep -m1 -E '^  ! PRD 结构' "$REPFILE" || true
       # B1（BR1 六条机械保证之「check 打印生效后端」）：**仅 herdr 模式加行**；tmux 路径零新增输出
       if [[ "$NAO_TERMINAL" == "herdr" ]]; then
         echo '  · 生效后端 NAO_TERMINAL=herdr（默认后端；#96 二期 B4：status/ensure/close/cleanup 走门面；session-start 起 server；台账 0 条）'
