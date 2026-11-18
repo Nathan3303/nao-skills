@@ -2205,6 +2205,9 @@ _close_anchor() {  # → 单值物理路径（stdout）
 _close_adopt_repo() {  # <name> <roster_ok>
   local nm="${1-}" ok="${2:-0}"
   local -a cw=()
+  # 守卫（T551 P3-2）：回写靠 bash 动态作用域 ⇒ 调用点**必须**自己声明 `local repo`。
+  #   否则赋值会静默创建/改写**全局** repo（无报错、无文案、下一次调用读到脏值）⇒ fail loud 比静默好。
+  declare -p repo >/dev/null 2>&1 || die "内部错误：_close_adopt_repo 须在声明 local repo 的调用点内调用（否则会静默创建全局 repo；该怎么办：调用点先 local repo）"
   [[ "$ok" == "1" ]] || return 0
   mapfile -t cw < <(intercom_cwds_for "$nm")
   (( ${#cw[@]} == 1 )) && { repo="${cw[0]}"; return 0; }

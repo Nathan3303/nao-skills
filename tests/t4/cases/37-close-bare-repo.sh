@@ -19,8 +19,11 @@
 #   d2 本仓 2 条        ⇒ die 列全部候选 cwd + 零回收 + 无「未运行」+ **不**指路「全名」（同仓同名无区分力）
 #   d3 本仓 0 + 他仓 2 条 ⇒ 采用候选时按名计数 >1 ⇒ die 列全部候选 + 零回收 + 无「未运行」
 #   e  名册不可用        ⇒ 不过滤 / 不判并列：rc 与 stdout 与既有基线（cases/13 ⑥）逐字一致
-# 负控五向（真跑变异副本，每向点名对应红点）：过滤写空 · 过滤用 `$repo`（循环） · `>1` 取首条 ·
-#   删回落档 · `roster_ok=0` 当 die。
+#   f  card 目标 · 子目录调用 ⇒ 锚 = **卡文件所在仓根**（不是 $PWD）⇒ 回收落到仓根（arch §二）
+# 负控六向（真跑变异副本，每向点名对应红点）：过滤写空 · 过滤用 `$repo`（循环） · `>1` 取首条 ·
+#   删回落档 · `roster_ok=0` 当 die · 卡分支锚回退 `$PWD`（P3-1）。
+# 守卫自证（P3-2）：`_close_adopt_repo` 经动态作用域回写调用方 `local repo` ⇒ 函数内一行 fail-loud
+#   守卫；本用例**在不声明 repo 的裸 shell 里调该函数必 die**（正/负/去守卫三向自证，不靠「应会红」）。
 #
 # 夹具 hermetic（BR6）：
 #   · 假名册探针（`NAO_QA_FAKE_ROSTER`）**pretty-print** —— 名册解析是逐行 awk（紧凑 JSON 会把多条目
@@ -105,6 +108,21 @@ stage37() { # <cwd> <会话名> → pane_id（身份面就位后输出；失败 
 }
 kill37() { local p; for p in "$@"; do [ -n "$p" ] && be_kill_pane "$p"; done; return 0; }
 
+# 变异工具（P3-1/2 与五向负控共用）：只动 $T4_CACHE_DIR/lab 内的副本，仓库脚本 md5 不变
+FLEET_SRC="$RA/.agents/scripts/nao-fleet.sh"
+mut37() { # <文件> <定位串（须唯一）> <替换整行> → 0 = 已应用且定位串消失
+  local f="$1" pat="$2" repl="$3" ln
+  ln="$(grep -nF -- "$pat" "$f" | head -1 | cut -d: -f1)"
+  [ -n "$ln" ] || return 1
+  awk -v n="$ln" -v r="$repl" 'NR==n { print r; next } { print }' "$f" > "$f.new" || return 1
+  mv "$f.new" "$f" || return 1
+  ! grep -qF -- "$pat" "$f"
+}
+mut_new() { # <编号> → 变异副本路径
+  local d="$LAB/mut37-$1.sh"
+  cp "$FLEET_SRC" "$d" && printf '%s' "$d"
+}
+
 # 跑生产脚本（**唯一**入口 = be_run_fleet：后端句柄 + 环境净化单点派生）
 #   FLEET_SCRIPT（可选）= 变异副本路径；其余形参 = fleet 参数
 FLEET_SCRIPT=""
@@ -161,6 +179,19 @@ v_offline_none() { # 与 cases/13 ⑥ 基线逐字一致（rc=0 + 「未启用 t
   [ "$T4_RC" = "0" ] || { printf 'RED:rc=%s' "$T4_RC"; return; }
   [ "$T4_OUT" = "$want" ] || { printf 'RED:stdout 与基线不一致（实际=%s）' "${T4_OUT//$'\n'/ | }"; return; }
   grep -qF '目标歧义' <<< "$T4_ALL" && { printf 'RED:误报歧义'; return; }
+  printf 'GREEN'
+}
+v_card_reclaim() { # <目标 pane>（卡目标 + 子目录调用：锚必须是卡所在仓根）
+  local pane="$1" a
+  [ "$T4_RC" = "0" ] || { printf 'RED:rc=%s' "$T4_RC"; return; }
+  grep -qF '未运行（无需回收）' <<< "$T4_ALL" && { printf 'RED:误报未运行'; return; }
+  be_pane_alive "$pane" && { printf 'RED:卡会话 pane 仍在'; return; }
+  a="$(at_field "$T4_OUT")"
+  [ "$a" = "$PRA" ] || { printf 'RED:@=%s（期望仓根 %s）' "${a:-<空>}" "$PRA"; return; }
+  # 判定层（红点来源）：锚 = 仓根 ⇒ ③ 同仓 legacy 裸名**当场命中**；锚退化成子目录 ⇒ ③ 落空、
+  #   只能靠 ④「该名唯一 cwd」兜回仓根（对外 4 条仍是绿 —— 与 QA §四旁证一致）⇒ 变异红点在此。
+  grep -qF "close 命中同仓 legacy 裸名 $CARD_CORE" <<< "$T4_OUT" \
+    || { printf 'RED:③ 判定层未命中（锚未落到卡所在仓根，靠 ④ 唯一 cwd 兜底）'; return; }
   printf 'GREEN'
 }
 t4_expect_red() { # <verdict> <label>
@@ -249,20 +280,32 @@ kill37 "$P_D3A" "$P_D3B"
 run37 "$RA" - --task "$T37" qa
 t4_assert_eq "GREEN" "$(v_offline_none)" "e 名册不可用：rc/stdout 与基线（cases/13 ⑥）逐字一致"
 
-# ================================================================ 负控五向（真跑变异副本）
-FLEET_SRC="$RA/.agents/scripts/nao-fleet.sh"
-mut37() { # <文件> <定位串（须唯一）> <替换整行> → 0 = 已应用且定位串消失
-  local f="$1" pat="$2" repl="$3" ln
-  ln="$(grep -nF -- "$pat" "$f" | head -1 | cut -d: -f1)"
-  [ -n "$ln" ] || return 1
-  awk -v n="$ln" -v r="$repl" 'NR==n { print r; next } { print }' "$f" > "$f.new" || return 1
-  mv "$f.new" "$f" || return 1
-  ! grep -qF -- "$pat" "$f"
-}
-mut_new() { # <编号> → 变异副本路径
-  local d="$LAB/mut37-$1.sh"
-  cp "$FLEET_SRC" "$d" && printf '%s' "$d"
-}
+# ================================================================ f card 目标 · 子目录调用（arch §二）
+# 卡目标的锚 = **卡文件所在仓根**（本地事实），**不是** $PWD：从仓的子目录调用也必须落到仓根，
+# 否则锚 = 子目录 ⇒ 名册条目（cwd = 仓根）看不见 ⇒ liveness/忙闲按错目录过滤。
+mkdir -p "$RA/.agents/prompts" "$RA/sub"
+printf -- '---\nrole: fxcard\n---\n# T4 case37 一次性卡（close 只做卡名/路径匹配，正文不进判据）\n' \
+  > "$RA/.agents/prompts/fxcard.md"
+CARD_CORE="fxcard-$T37"
+P_F="$(stage37 "$RA" "$CARD_CORE")" || t4_bad "f 夹具：卡会话 pane 建立失败"
+SRC_MD5="$(md5sum "$RA/.agents/scripts/nao-fleet.sh" | cut -d' ' -f1)"
+run37 "$RA/sub" "$(roster "$(rent "$CARD_CORE" "$PRA")")" --task "$T37" fxcard
+t4_assert_eq "GREEN" "$(v_card_reclaim "$P_F")" \
+  "f card 目标 + 子目录调用：rc=0 · @ = 卡所在仓根（非子目录）· pane 消失 · 无「未运行」· ③ 当场命中"
+kill37 "$P_F"
+
+# 负控⑥（P3-1）：把卡分支锚改回 `$PWD`（未剥/未取卡所在仓）⇒ ③ 落空、判定层必红
+MUT="$(mut_new 6)" && mut37 "$MUT" 'anchor="$(nao_phys_path "$fallback_repo")"' \
+  '      anchor="$(nao_phys_path "$PWD")"' \
+  || t4_bad "负控⑥ 变异未应用（实现写法已变：卡分支锚行）"
+P_M6="$(stage37 "$RA" "$CARD_CORE")"
+FLEET_SCRIPT="$MUT" run37 "$RA/sub" "$(roster "$(rent "$CARD_CORE" "$PRA")")" --task "$T37" fxcard
+t4_expect_red "$(v_card_reclaim "$P_M6")" "负控⑥ 卡分支锚回退 \$PWD ⇒ f 必红（红点：③ 落空，靠 ④ 唯一 cwd 兜底）"
+kill37 "$P_M6"
+t4_assert_eq "$SRC_MD5" "$(md5sum "$FLEET_SRC" | cut -d' ' -f1)" \
+  "负控⑥ 变异只动副本：仓库脚本 md5 与变异前逐字节一致（无残留改写）"
+
+# ================================================================ 负控六向（真跑变异副本）
 
 # ① 过滤写空：锚过滤恒拒（h 恒 0）⇒ (d2) 的「本仓并列」判据必消失，退化成「按名回收」（负控红点）
 #    负控用的 d2 变体 = 名册 2 条同 cwd + **实存 1 条 pane**（陈旧条目形态）：并列仍必须零回收，
@@ -309,5 +352,40 @@ MUT="$(mut_new 5)" && mut37 "$MUT" '    repo="$fallback_repo"' \
   || t4_bad "负控⑤ 变异未应用（实现写法已变：名册不可用时的 repo 赋值行）"
 FLEET_SCRIPT="$MUT" run37 "$RA" - --task "$T37" qa
 t4_expect_red "$(v_offline_none)" "负控⑤ roster_ok=0 当 die ⇒ (e) 必红（红点：rc≠0 / stdout 偏离基线）"
+
+# ================================================================ 守卫自证（P3-2 · 动态作用域回写）
+# 为什么要守卫：`_close_adopt_repo` 用 bash 动态作用域回写调用方的 `local repo`；将来在**未声明**
+#   `local repo` 的调用点复用 ⇒ 赋值会静默创建全局（无报错、无文案）。守卫 = 函数内首语句
+#   `declare -p repo`，不成立即 die。证法**不靠「应会红」**：把 `die` + 该函数抽到裸 shell 里，
+#   ① 无 repo 声明 ⇒ 必 die 且点名内部错误；② 有 repo 声明 ⇒ 不 die（守卫不误伤）；③ 副本删掉
+#   守卫行 ⇒ ① 翻绿（证明 ① 抓到的是守卫本身，不是别的东西）。
+adopt_unit() { # <脚本> <模式：bare|local> → 子 shell 的输出 + `rc=<退出码>`（die 是 exit 1，故 rc 必须从进程取）
+  local src="$1" mode="$2" prog out rc
+  prog="$(
+    grep -m1 '^die()' "$src"
+    sed -n '/^_close_adopt_repo()/,/^}/p' "$src"
+    case "$mode" in
+      local) printf 'h37() { local repo=""; _close_adopt_repo "qa-x" "1"; printf "repo=%%s\\n" "$repo"; }\nh37\n' ;;
+      *)     printf '_close_adopt_repo "qa-x" "1"\n' ;;
+    esac
+  )"
+  out="$(printf '%s\n' "$prog" | bash -s 2>&1)"; rc=$?
+  printf '%s\nrc=%s\n' "$out" "$rc"
+}
+OUT_BARE="$(adopt_unit "$FLEET_SRC" bare)"
+t4_assert_contains "$OUT_BARE" "内部错误：_close_adopt_repo 须在声明 local repo 的调用点内调用" \
+  "P3-2① 无 repo 声明的调用点 ⇒ 守卫 fail loud 点名内部错误（不是静默造全局）"
+t4_assert_contains "$OUT_BARE" "rc=1" "P3-2① 同场景 rc=1（die 生效，不继续回写）"
+OUT_LOCAL="$(adopt_unit "$FLEET_SRC" local)"
+t4_assert_contains "$OUT_LOCAL" "rc=0" "P3-2② 已声明 local repo 的调用点 ⇒ 守卫不误伤（rc=0）"
+t4_assert_contains "$OUT_LOCAL" "repo=" "P3-2② 同场景正常回写（repo 可赋值，非静默丢弃）"
+t4_assert_not_contains "$OUT_LOCAL" "内部错误" "P3-2② 同场景无「内部错误」文案"
+MUT="$(mut_new 7)" && mut37 "$MUT" 'declare -p repo >/dev/null 2>&1' \
+  '    : # 守卫被移除（P3-2 负控）' \
+  || t4_bad "P3-2③ 变异未应用（实现写法已变：守卫行）"
+OUT_BARE2="$(adopt_unit "$MUT" bare)"
+t4_assert_not_contains "$OUT_BARE2" "内部错误" \
+  "P3-2③ 删掉守卫行 ⇒ ① 翻绿（证明 ① 抓到的就是这一行守卫，判据非空转）"
+t4_assert_contains "$OUT_BARE2" "rc=0" "P3-2③ 同场景退回静默（rc=0 无报错）= 守卫要堵的形态"
 
 t4_exit

@@ -75,7 +75,7 @@ CASE_TITLES=(
   "端前提声明一致性单点 warn（#124 · AC5/AC6）：一致零输出 / 协议与 AGENTS.md 双向负控 / warn 不改 rc"
   "stash 滞留机械闸（#126 · B2-2）：无 stash 零输出 / 有 stash 恰 1 条 warn + warn=1 且 rc 仍 0 / pop 双向 / 只碰临时仓"
   "PRD 结构探针（Q8 · warn-only）：缺 AC 组 / 超行数 / 老日期不追溯 / 空文件拒判合格 / SINCE 非法回落 / warn= 不污染 / 本仓输出与探针关闭逐字一致 + 三条变异负控"
-  "close 裸名解析的仓来源（#146 · T551）：五态 a/b/b2/c/c2/d/d2/d3/e + 锚过滤与「按名唯一 cwd」三态 + 探针 ≤1 次 + 五向变异负控"
+  "close 裸名解析的仓来源（#146 · T551）：五态 a/b/b2/c/c2/d/d2/d3/e + 卡目标子目录 f + 锚过滤与「按名唯一 cwd」三态 + 探针 ≤1 次 + 六向变异负控 + 动态作用域守卫自证"
 )
 declare -A CASE_TITLE=()
 for i in "${!CASE_IDS[@]}"; do CASE_TITLE[${CASE_IDS[$i]}]="${CASE_TITLES[$i]}"; done
