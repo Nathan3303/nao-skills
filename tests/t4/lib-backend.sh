@@ -176,7 +176,7 @@ be_init() { # <lab-root> [session]
 _be_tmux() { tmux -S "${BE_SOCK:?未初始化 BE_SOCK}" "$@"; }
 
 # herdr 唯一调用入口。`--session` 由本函数注入（调用方**无法**绕过 ⇒ 缺 --session 不可能发生）；
-# 环境清洗在此单点完成：TMUX* 显式 -u + `HERDR_*` **枚举** unset（只 -u 已知变量会漏）。
+# 环境清洗也在此单点完成 —— **参数一律取门面**（`be_clean_unset_args`，Q7），本函数不再手写 `-u`。
 # XDG_CONFIG_HOME 指向私有实验根；**XDG_STATE_HOME 原样透传**（BR6③）。
 # $1 = session；其余 = herdr 子命令与参数。BE_HERDR_SETSID=1 时用 setsid 脱离进程组（起 server 用）。
 _be_herdr_exec() {
@@ -185,10 +185,12 @@ _be_herdr_exec() {
   [ "$#" -gt 0 ] || { be_guard_fail "herdr 调用缺子命令（session=$s）"; return 1; }
   local detach=()
   [ "${BE_HERDR_SETSID:-0}" = "1" ] && detach=(--setsid)
+  local -a clean=()
+  clean=($(be_clean_unset_args)) || { be_guard_fail "herdr 调用：环境净化参数派生失败（见上）"; return 1; }
+  [ "${#clean[@]}" -gt 0 ] || { be_guard_fail "herdr 调用：净化参数为空 ⇒ 不带宿主句柄跑（宁可 fail loud）"; return 1; }
   XDG_CONFIG_HOME="$BE_CFGROOT" \
-  env -u TMUX -u TMUX_PANE -u TMUX_TMPDIR \
-    bash -c 'for v in $(env | grep -o "^HERDR_[A-Z_]*"); do unset "$v"; done
-             if [ "${1:-}" = "--setsid" ]; then shift; exec setsid herdr --session "$0" "$@"; fi
+  env "${clean[@]}" \
+    bash -c 'if [ "${1:-}" = "--setsid" ]; then shift; exec setsid herdr --session "$0" "$@"; fi
              exec herdr --session "$0" "$@"' "$s" "${detach[@]}" "$@"
 }
 
@@ -723,6 +725,82 @@ be_herdr_unset_args() {
   printf '%s\n' "${hu[@]}"
 }
 
+# ---------------------------------------------------------------- 环境净化门面（Q7 · 单源入口）
+#   缺陷类（已三次同型，每次都在调用点补一条 `env -u`）：
+#     T543 `HERDR_*` 渗漏 · #126 `NAO_STASH_ROOT` 渗漏 · #145 `HOME`/agent 根渗漏（夹具读跑测试者的名册）。
+#   现状：所有「起子进程」的调用点**只从这里取参数**，调用点禁手写 `-u` / `HOME=`：
+#     · `be_clean_unset_args` —— 纯 `-u` 参数（宿主句柄 / 宿主配置面）：fleet、herdr 两个入口共用
+#     · `be_isolated_env`   —— lab 作用域 `HOME` / `PI_CODING_AGENT_DIR`：**只给 fleet**
+#                              （pane 内的真 pi 需要真实凭据；把 pane 的 HOME 换掉会让 pi 起不来）
+#     · `be_clean_env`      —— 两者合并（fleet 专用）
+#   清空规则（单源，改这里就够）：
+#     ① 声明名单：lib.sh `T4_HERDR_ENV_VARS`（8 个，`BE_HERDR_KEEP` 可显式保留）
+#     ② **动态兜底**：当前进程 env 里出现的 `HERDR_*` / `TMUX*` / `NAO_*` 一律清
+#        （宿主新增一个变量**无需改代码**；这也是原先 `_be_herdr_exec` 里 `bash -c` 循环的等价物）
+#     ③ 保留名单：`BE_ENV_KEEP_DEFAULT`（夹具**注入通道**，不是宿主泄漏面）+ 调用方 `BE_ENV_KEEP`
+#        —— 新增一条注入通道 = 本数组加一个名字（仍只改一处）；`BE_HERDR_KEEP` 语义不变。
+#   条目支持 **glob**（`NAO_T*_REAL_TMUX` / `HERDR_DOUBLE_*` 这类夹具旋钮族）。
+BE_ENV_KEEP_DEFAULT=(
+  NAO_SKILLS NAO_TASKS_STATE NAO_QA_FAKE_ROSTER NAO_UPDATE_ON_ENSURE
+  NAO_T539_FAIL_SPLIT 'NAO_T*_REAL_TMUX' 'HERDR_DOUBLE_*'
+)
+
+# 声明式扩展点：不在 `HERDR_* / TMUX* / NAO_*` 命名面内、但确认是宿主泄漏的变量加在这里
+#   （动态兜底靠命名面，涵盖绝大多数；本数组用于**命名面之外**的例外，仍只改这一处）。
+BE_ENV_EXTRA_CLEAR=()
+
+# 是否属「夹具注入通道」（保留）；`BE_ENV_KEEP` 逗号/空格分隔追加
+be_env_kept() { # <变量名> → 0 = 保留
+  local n="${1:-}" k
+  [ -n "$n" ] || return 1
+  case " ${BE_HERDR_KEEP:-} ${BE_ENV_KEEP:-} " in *" $n "*) return 0 ;; esac
+  for k in "${BE_ENV_KEEP_DEFAULT[@]}"; do
+    # shellcheck disable=SC2254  # 故意用 glob（保留名单里的 `NAO_T*_REAL_TMUX` 等族）
+    case "$n" in $k) return 0 ;; esac
+  done
+  return 1
+}
+
+# 当前进程 env 里命中的宿主面变量名（排序去重；`env` 自身是子进程，不污染本 shell）
+be_env_ambient_names() {
+  env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' \
+      | grep -E '^(HERDR_|TMUX|NAO_)' | sort -u || true
+}
+
+# 净化参数：每行一个 argv（`-u` / 变量名 交替），供 `env` 直接展开
+be_clean_unset_args() {
+  local -a hu=() out=()
+  local -A seen=()
+  local i n
+  hu=($(be_herdr_unset_args)) || return 1        # ① 声明单源（HERDR 8 个 + BE_HERDR_KEEP）
+  [ "${#hu[@]}" -gt 0 ] || return 1
+  for ((i = 0; i < ${#hu[@]}; i++)); do
+    [[ "${hu[i]}" == "-u" ]] && seen["${hu[i + 1]}"]=1
+  done
+  out=("${hu[@]}")
+  while IFS= read -r n; do                        # ② 动态兜底
+    [ -n "$n" ] || continue
+    [[ -n "${seen[$n]:-}" ]] && continue
+    be_env_kept "$n" && continue
+    out+=(-u "$n")
+    seen["$n"]=1
+  done < <(be_env_ambient_names)
+  for n in "${BE_ENV_EXTRA_CLEAR[@]:-}"; do      # ③ 命名面之外的显式例外
+    [ -n "$n" ] || continue
+    [[ -n "${seen[$n]:-}" ]] && continue
+    be_env_kept "$n" && continue
+    out+=(-u "$n")
+    seen["$n"]=1
+  done
+  printf '%s\n' "${out[@]}"
+}
+
+# fleet 专用：净化 + lab 作用域 HOME / agent 根（后者见 `be_isolated_env`）
+be_clean_env() {
+  be_clean_unset_args || return 1
+  be_isolated_env
+}
+
 # 跑测试者的 HOME/agent 根隔离（T550 · 单源派生）。
 #   缺陷类（现场复刻）：生产脚本会读 **pi-intercom 名册**（`PI_AGENT_DIR` = `$PI_CODING_AGENT_DIR` 或
 #   `$HOME/.pi/agent`），而夹具进程继承**跑测试的人**的 HOME ⇒ 名册里那个「恰好叫裸名 `pm` 且正在 working」
@@ -754,20 +832,14 @@ be_run_fleet() { # <cwd 目录> <args...>
   [ -n "$dir" ] || { be_guard_fail "be_run_fleet 缺工作目录"; return 1; }
   command -v t4_run_in_dir >/dev/null 2>&1 || { be_guard_fail "be_run_fleet 需要 lib.sh（t4_run_in_dir）"; return 1; }
   local script="${BE_FLEET_SCRIPT:-${BE_FLEET_ROOT:-$BE_LAB}/.agents/scripts/nao-fleet.sh}"
-  # HERDR_* 清除清单的**单源**在 lib.sh（T4_HERDR_ENV_VARS）—— 调用点不得再手写 `-u` + 变量名（#130 D2）
-  local -a hu
-  hu=($(be_herdr_unset_args)) || { be_guard_fail "be_run_fleet：清理参数派生失败（见上）"; return 1; }
-  [ "${#hu[@]}" -gt 0 ] \
-    || { be_guard_fail "be_run_fleet：清理参数为空 ⇒ 不带生产句柄跑（宁可 fail loud）"; return 1; }
-  local -a envs=(env -u TMUX -u TMUX_PANE -u TMUX_TMPDIR
-                 "${hu[@]}"
-                 -u NAO_STASH_ROOT)   # #126 P3④：夹具 check 不该读到宿主导出的 stash 根
+  # Q7 环境净化门面：**唯一**参数来源（宿主句柄/配置面 + lab 作用域 HOME/agent 根）。
+  #   调用点禁手写 `-u` / `HOME=`；新增外部泄漏变量走门面的动态兜底，无需改本函数。
+  local -a clean=()
+  clean=($(be_clean_env)) || { be_guard_fail "be_run_fleet：环境净化参数派生失败（见上）"; return 1; }
+  [ "${#clean[@]}" -gt 0 ] \
+    || { be_guard_fail "be_run_fleet：净化参数为空 ⇒ 不带生产句柄跑（宁可 fail loud）"; return 1; }
+  local -a envs=(env "${clean[@]}")
   local kv
-  # T550：跑测试者的 HOME / agent 根隔离（单源 `be_isolated_env`；调用点禁手写）——
-  #   不加这一段，夹具就会读到**跑测试那个人**的真实名册（裸名 `pm` + working ⇒ close pm 假红）。
-  local -a iso=()
-  iso=($(be_isolated_env)) || { be_guard_fail "be_run_fleet：隔离参数派生失败"; return 1; }
-  envs+=("${iso[@]}")
   # BE_FLEET_NO_HANDLES=1：不注入后端句柄（负控用：验「不在终端内」时入口闸门必须 exit 3）
   if [ "${BE_FLEET_NO_HANDLES:-0}" != "1" ]; then
     while IFS= read -r kv; do [ -n "$kv" ] && envs+=("$kv"); done < <(be_fleet_handles)

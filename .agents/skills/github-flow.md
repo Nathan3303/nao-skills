@@ -68,6 +68,7 @@ PM 在**受理 / 立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 P
 ## 分支与提交
 
 - 命名：`fix/<issue-id>-<slug>`（缺陷修复）｜`feat/<issue-id>-<slug>`（新能力 / 行为变更）；无 Issue 时统一降级 `nao/<批次-slug>`；线上补丁用 `hotfix/<issue-id>`，且**从受影响版本 tag 切出**（tag 作为基线的唯一场景）。
+- **起分支后、开 PR 前：先 `git fetch origin && git rebase origin/main`**（无冲突则一条命令；有冲突按补丁语义解，禁「--ours/--theirs 一刀切」）。**为何**：分支若基于「随后被 squash 的分支」，会继承那些原提交（内容已在 main、历史不在）—— 两边又同时改 `docs/tasks-state.md` 这类高频文件 ⇒ PR 被 GitHub 判 `CONFLICTING` 且文件数虚高（实测 PR #149：`files=13`、3-way 冲突；`rebase` 后 `files=5`、内容零变化）。
 - **禁止** `git push` 到 main、**禁止绕过 PR 合并**；feature 分支允许 `--force-with-lease`（改基 / 压缩历史时）。
 - 提交规范、`wip()` 前缀、路径级暂存、可读性：见 @.agents/skills/commit.md。
 - **squash 后 main 上的提交信息 = PR 标题 + PR 正文** → **可读性硬性落在 PR 标题**（用户可见行为，禁纯编号/类名/路径）。
