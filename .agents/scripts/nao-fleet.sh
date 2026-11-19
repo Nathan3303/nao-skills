@@ -2198,6 +2198,23 @@ _close_anchor() {  # → 单值物理路径（stdout）
   printf '%s\n' "${last:-$(nao_phys_path "$PWD")}"
 }
 
+# 候选 cwd 去重（#151/T552 P2 · **单源**）：stdin 每行一个 cwd → stdout 去重后的**物理路径**（保序）。
+#   为什么单源：全名分支与裸名分支都要「同 name 同 cwd 的陈旧重复条目 ≠ 并列候选」，
+#   复制两份必然漂移（T552 QA 实测：全名分支去重后采用、裸名分支仍 die 且同一路径列两遍）。
+#   键 = 物理路径（`nao_phys_path`：symlink / 相对路径 / 尾斜杠归一），不是字符串比较。
+_close_dedupe_cwds() {
+  local -A seen=()
+  local p q
+  while IFS= read -r p; do
+    [[ -n "$p" ]] || continue
+    q="$(nao_phys_path "$p")"
+    [[ -n "$q" ]] || continue
+    [[ -n "${seen[$q]:-}" ]] && continue
+    seen[$q]=1
+    printf '%s\n' "$q"
+  done
+}
+
 # 采用候选名后的 repo 复核（Issue #146 §二 · 三态）：该名名册 cwd **唯一** ⇒ 采用；>1 ⇒ die；0 ⇒ 保留现值。
 #   为什么不再「按目标仓过滤确认」：跨仓 close 采用唯一候选 `pm@x` 时，按调用方仓过滤必得 0
 #   ⇒ repo 停在调用方仓 ⇒ herdr 侧 liveness/忙闲按仓过滤 ⇒ 「未运行」rc=0 假成功（R2 同类）。
@@ -4144,8 +4161,8 @@ cmd_close() {
   local name repo cls bus pane pids st tgt a best="" bestc="" is_resident=1 card_role="" card_path="" cr cp croot k
   local pout="" p_kind="" p_role="" p_task="" p_scope="" parsed=0 core="" kindc="" scope="" base_name=""
   local anchor="" roster_ok=0
-  local -a name_cwds=()
-  local fallback_repo="" scoped_cands=() same_core=() r2="" caller_name="" caller_fleet=""
+  local -a name_cwds=() scoped_cwds=()
+  local fallback_repo="" scoped_cands=() same_core=() caller_name="" caller_fleet=""
   intercom_list_json >/dev/null 2>&1 || true   # 预热名册缓存
   fleet_roles_init --cards                     # BR8：parse 的角色事实表（常驻 + 卡 role）
 
@@ -4242,11 +4259,32 @@ cmd_close() {
   fi
   if [[ -n "$p_scope" ]]; then
     # ① 全名给了 fleet ⇒ 只认这一个名字（**忽略** fleet 文件；同 core 多 fleet 时由用户显式定）
+    #    仓来源 = **全名双键**（名字本身即 `<core>@<fleet>`）的复数查询 + 三态决策（Issue #151 · T552）。
+    #    旧行为「名册首命中即定仓」在同名跨仓时会把 repo 改指别仓（忙闲 / liveness 按错仓过滤）。
+    #    全名是用户**显式键** ⇒ 不用调用方锚：唯一命中不经锚 ⇒ 跨仓唯一回收照旧（cases/09 AC3 不回归）。
     name="$(fleet_name_build "$kindc" "$core" "$p_scope")"
-    repo="$(intercom_cwd_for "$name")"             # 名册 cwd 优先（跨仓会话真实仓）
-    [[ -n "$repo" ]] || repo="$fallback_repo"
-    r2="$(intercom_cwd_for "$name" "$repo")"       # P8：按目标仓复核（同名多仓时不取首命中）
-    [[ -n "$r2" ]] && repo="$r2"
+    repo="$fallback_repo"                         # 唯一回落值（h=0 保留；**禁**回退「名册首命中」）
+    local -a cw_uniq=()
+    scoped_cwds=()
+    if intercom_list_json >/dev/null 2>&1; then     # 名册可用性：本分支局部判一次（命缓存 ⇒ 探针仍 =1）
+      mapfile -t scoped_cwds < <(intercom_cwds_for "$name")
+    fi
+    # 按**物理路径去重**（单源 helper `_close_dedupe_cwds`，与裸名分支共用同一实现）：
+    #   同 name 同 cwd 的陈旧重复条目不是「并列候选」（P2 · 同仓重复不能误判成多仓）。
+    if (( ${#scoped_cwds[@]} > 0 )); then
+      mapfile -t cw_uniq < <(printf '%s\n' "${scoped_cwds[@]}" | _close_dedupe_cwds)
+    fi
+    if (( ${#cw_uniq[@]} == 1 )); then
+      repo="${cw_uniq[0]}"                         # h=1（去重后唯一）⇒ 采用双键唯一仓（可跨仓）
+    elif (( ${#cw_uniq[@]} > 1 )); then
+      # 多命中**一律**拒绝（不按调用方仓过滤：过滤会把跨仓并列静默收敛成本仓一条 = 又变成猜）
+      # 文案：一律说「**路径**」（同仓不同子目录各 1 条时不得误称「N 个仓」）；有重复条目时点名条数。
+      if (( ${#scoped_cwds[@]} > ${#cw_uniq[@]} )); then
+        die "close 目标歧义：$name 在名册中对应 ${#cw_uniq[@]} 个路径的会话：$(printf '%s ' "${cw_uniq[@]}")（名册共 ${#scoped_cwds[@]} 条记录，含同名同仓重复条目）（该怎么办：先 intercom({action:'list'}) 人工核对并关掉多余的会话；同仓重复条目不必区分仓，不要当成多仓歧义）"
+      else
+        die "close 目标歧义：$name 在名册中对应 ${#cw_uniq[@]} 个路径：$(printf '%s ' "${cw_uniq[@]}")（该怎么办：先 intercom({action:'list'}) 人工核对该会话的仓位置并关掉多余的那个；同名同 fleet 多仓没有别的写法可区分）"
+      fi
+    fi                                             # h=0 ⇒ 保留回落值
   else
     # ② 裸名/派生名：仓来源 = **调用方锚 + 名册按名复数查询**（Issue #146 · 三态决策，禁猜）
     #    旧行为「名册首命中即定仓」在跨仓同名时会把本仓目标改指他仓（liveness / 忙闲 / 回收全链错位）。
@@ -4268,7 +4306,25 @@ cmd_close() {
       if (( ${#name_cwds[@]} == 1 )); then
         repo="${name_cwds[0]}"                       # h=1 ⇒ 采用本仓唯一命中
       elif (( ${#name_cwds[@]} > 1 )); then
-        die "close 目标歧义：$base_name 在本仓锚（$anchor）内有 ${#name_cwds[@]} 个同名会话：$(printf '%s ' "${name_cwds[@]}")（该怎么办：先 intercom({action:'list'}) 人工核对并关掉多余的那个；同仓同名没有「全名」写法可区分）"
+        # 文案只做「路径去重」（P2 的**文案面**）；决策面 = 原始条数（三态一行不动）。
+        #   B 裁定（PM 2026-11-19）：裸名分支多一层「本仓同名多 pane」风险 ⇒ **不**采用去重后的 cwd：
+        #   采用就会走到句柄层，而 tmux 按标题取首条 = 猜（正是 T551 要堵的形态）。
+        #   故此处去重只负责：① 同一路径不列两遍；②不说误称「N 个仓」。
+        local -a cw_show=()
+        local raw_cwds_n="${#name_cwds[@]}"
+        mapfile -t cw_show < <(printf '%s\n' "${name_cwds[@]}" | _close_dedupe_cwds)
+        local cw_note="" cw_howto=""
+        if (( ${#cw_show[@]} == 1 )); then
+          # 去重后只剩 1 个路径（卡在句柄层：同仓同名多记录 / 多 pane）⇒ 指路关多余会话，**不**指路全名
+          cw_note="（名册共 $raw_cwds_n 条记录，含同名同仓重复条目；同仓重复条目不必区分仓，不要当成多仓歧义）"
+          cw_howto="；该怎么办：先 intercom({action:'list'}) 人工核对并关掉多余的会话（同仓同名多 pane 时本命令不猜哪一个是目标）"
+        elif (( raw_cwds_n > ${#cw_show[@]} )); then
+          cw_note="（名册共 $raw_cwds_n 条记录，含同名同仓重复条目；同仓重复条目不必区分仓，不要当成多仓歧义）"
+          cw_howto="；该怎么办：先 intercom({action:'list'}) 人工核对并关掉多余的会话"
+        else
+          cw_howto="；该怎么办：先 intercom({action:'list'}) 人工核对并关掉多余的那个（同仓同名没有「全名」写法可区分）"
+        fi
+        die "close 目标歧义：$base_name 在本仓锚（$anchor）内有 ${#cw_show[@]} 个路径的同名会话：$(printf '%s ' "${cw_show[@]}")$cw_note$cw_howto"
       else
         repo="$anchor"                               # h=0 ⇒ 保留锚（**禁**回退「名册首命中」）
       fi
