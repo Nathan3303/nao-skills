@@ -18,7 +18,9 @@
 #   c  多命中·都在他仓    ⇒ h>1 die 列全部候选 + 零回收 + 不指路「用全名」
 #   d  多命中·跨仓 1+1    ⇒ h>1 die（**禁**先按调用方仓过滤：过滤会把并列静默收敛成本仓 1 条）
 #   g1 同 name 同 cwd ×2（1 个 pane）⇒ 按物理路径去重后唯一 ⇒ 采用并回收（rc=0；同仓陈旧重复条目不当歧义）
-#   g2 同 name 同 cwd ×2（2 个 pane）⇒ 仓层已去重；**句柄层**两后端结论不同（tmux 收 1 条 / herdr「>1 label ⇒ 不猜」拒）
+#   g2 同 name 同 cwd ×2（2 个 pane）⇒ 仓层已去重；**句柄层**两后端结论不同（tmux 收 1 条 / herdr「>1 label ⇒ 不猜」拒；
+#      **herdr 判据必须绑拒绝理由文本**「同名 label 命中 2 个 pane」，禁「任何拒绝都吃绿」——由负控⑦ 反证）
+#   m  混合态（PRB, PRB, PRC）⇒ 去重后 2 个路径 ⇒ 仍 die，候选只列去重后路径，文案点名「名册共 3 条记录」
 #   e  0 命中·裸名在跑    ⇒ h=0 保留回落 ⇒ 「未运行」rc=0 · 裸名 pane 存活（兼容面，不猜）
 #   f  名册不可用         ⇒ 不判并列：stdout 与既有基线逐字一致
 #
@@ -179,6 +181,17 @@ v_online_no_pane() { # —— 结果层：非 0 且不谎报「未运行」（�
   grep -qF '未运行（无需回收）' <<< "$T4_ALL" && { printf 'RED:谎报「未运行（无需回收）」'; return; }
   printf 'GREEN'
 }
+v_dup_label_refuse() { # <pane...> —— herdr 结构拒绝：**绑理由文本**（禁「任何拒绝都吃绿」）
+  local alive
+  [ "$T4_RC" != "0" ] || { printf 'RED:rc=0（同名 label 未拒）'; return; }
+  grep -qF '未运行（无需回收）' <<< "$T4_ALL" && { printf 'RED:误报未运行'; return; }
+  grep -qF '拒绝回收' <<< "$T4_ALL" || { printf 'RED:无「拒绝回收」'; return; }
+  grep -qF '同名 label 命中 2 个 pane' <<< "$T4_ALL" \
+    || { printf 'RED:拒绝理由未绑定（缺「同名 label 命中 2 个 pane」）'; return; }
+  alive="$(alive38 "$@")"
+  [ "$alive" = "$#" ] || { printf 'RED:pane 被回收（%s/%s 存活）' "$alive" "$#"; return; }
+  printf 'GREEN'
+}
 v_offline_none() { # 与「旧脚本 + 名册不可用」逐字一致（rc=0 + 未启用 tasks-state + 未运行两行）
   local want
   want="$(printf '[fleet] 未启用 %s（跳过状态闸门）\n[fleet] %s 未运行（无需回收）' "$NONE_MD" "$N_TGT")"
@@ -270,6 +283,24 @@ t4_assert_eq "GREEN" "$(v_ambiguous "$PRB|$PRA" "$P_D1" "$P_D2")" \
   "d 多命中·跨仓 1+1：die 列 PRA+PRB + 零回收（本仓 pane 存活）"
 kill38 "$P_D1" "$P_D2"
 
+# ================================================================ m 混合态（重复条目 + 另一路径）
+# 名册 (PRB, PRB, PRC)：去重后仍是 2 个路径 ⇒ 仍 die（真并列）；候选只列去重后路径，不因重复条数虚增。
+#   文案必须点名「名册共 3 条记录，含同名同仓重复条目」且**不说「N 个仓」**（同仓重复被说成多仓 = 误导）。
+P_MIXA="$(stage38 "$RB" "$N_B")" || t4_bad "m 夹具：他仓#2 pane 建立失败"
+P_MIXB="$(stage38 "$RC" "$N_C")" || t4_bad "m 夹具：他仓#3 pane 建立失败"
+N_TGT="$N_B"
+run38 "$RA" "$(roster "$(rent "$N_B" "$PRB")" "$(rent "$N_B" "$PRB")" "$(rent "$N_B" "$PRC")")" "$N_B"
+t4_assert_eq "GREEN" "$(v_ambiguous "$PRB|$PRC" "$P_MIXA" "$P_MIXB")" \
+  "m 混合态 (PRB,PRB,PRC)：去重后 2 个路径 ⇒ die 列去重后候选 + 零回收"
+t4_assert_contains "$T4_ALL" "名册共 3 条记录" \
+  "m 作用域（文案）：点名「名册共 3 条记录，含同名同仓重复条目」"
+if grep -qF '个仓' <<< "$T4_ALL"; then
+  t4_bad "m：文案不得说「N 个仓」（同一路径重复应说「路径」）"
+else
+  t4_ok "m 作用域（文案）：不说「N 个仓」（同仓重复 / 同仓不同子目录均只称路径）"
+fi
+kill38 "$P_MIXA" "$P_MIXB"
+
 # ================================================================ g1 同 name 同 cwd ×2（1 个 pane）
 # 陈旧的重复名册条目（同 name 同 cwd）不是「并列候选」：按物理路径去重后唯一 ⇒ 采用并回收（rc=0）。
 # 回归点（P2 实指）：去重前该形态会 die（同一条路径列两次、且指路「多仓」= 误导）。
@@ -293,8 +324,8 @@ if [ "$BE_NAME" = "tmux" ]; then
   grep -qF '目标歧义' <<< "$T4_ALL" && t4_bad "g2：同仓重复条目不得报「目标歧义」" || t4_ok "g2：同仓重复条目不报「目标歧义」（去重生效）"
   t4_assert_eq "1" "$((2 - $(alive38 "$P_G2A" "$P_G2B")))" "g2 作用域（pane 存活）：恰回收 1 条（另一条存活）"
 else
-  t4_assert_eq "GREEN" "$(v_busy_refuse "$P_G2A" "$P_G2B")" \
-    "g2 作用域（herdr）：同名 label 2 个 pane ⇒ 不猜（rc≠0 + 零回收）"
+  t4_assert_eq "GREEN" "$(v_dup_label_refuse "$P_G2A" "$P_G2B")" \
+    "g2 作用域（herdr）：同名 label 2 个 pane ⇒ 不猜（rc≠0 + 零回收 + **理由文本绑定**）"
   t4_note backend-gate "g2 在 herdr 不可判定：同 name 同 cwd 的两个 pane 在 label 层不可区分（后端无 pane-cwd 级歧义消解）⇒ 断言取「不猜」，与 tmux 的「收 1 条」非同形，故分后端写明"
 fi
 kill38 "$P_G2A" "$P_G2B"
@@ -356,7 +387,7 @@ t4_expect_red "$(v_ambiguous "$PRB|$PRA" "$P_M2A" "$P_M2B")" \
 kill38 "$P_M2A" "$P_M2B"
 
 # ③ 退化成回落值（h=1 不采用 cwd）⇒ a2 辅助条必红；b3 的结果层咬合只在 herdr（tmux 无按仓忙闲信号）
-MUT="$(mut_new 3)" && mut38 "$MUT" '        repo="${cw_uniq[0]}"' '        repo="$repo"' \
+MUT="$(mut_new 3)" && mut38 "$MUT" '      repo="${cw_uniq[0]}"' '      repo="$repo"' \
   || t4_bad "负控③ 变异未应用（实现写法已变：h=1 采用行）"
 P_M3="$(stage38 "$RB" "$N_B")"
 mut_run "$MUT" "$(roster "$(rent "$N_B" "$PRB" working)")" "$N_B"
@@ -394,7 +425,42 @@ MUT="$(mut_new 5)" && mut38 "$MUT" 'if intercom_list_json >/dev/null 2>&1; then'
 T38_FLEET_SCRIPT="$MUT" run38 "$RA" - "$N_A"
 t4_expect_red "$(v_offline_none)" "负控⑤ roster_ok=0 当 die ⇒ (f) 必红（红点：rc≠0 / stdout 偏离基线）"
 
+# ⑥ 删去重守卫（helper 退化为恒等）⇒ (g1) 必红（红点：同仓重复条目被当成并列 ⇒ die 零回收）
+#   QA 手工验证过这条红点（「删去重守卫行 ⇒ g 态 FAIL=4」）；本负控把它变成**用例内自动跑**，不靠人工。
+MUT="$(mut_new 6)" && mut38 "$MUT" '    [[ -n "${seen[$q]:-}" ]] && continue' \
+  '    : # 去重守卫被移除（负控⑥）' \
+  || t4_bad "负控⑥ 变异未应用（实现写法已变：去重守卫行）"
+P_M6="$(stage38 "$RA" "$N_A")"
+N_TGT="$N_A"
+mut_run "$MUT" "$(roster "$(rent "$N_A" "$PRA")" "$(rent "$N_A" "$PRA")")" "$N_A"
+t4_expect_red "$(v_reclaim "$PRA" "$P_M6")" \
+  "负控⑥ 删去重守卫 ⇒ (g1) 必红（红点：同仓重复条目当成并列 ⇒ 不回收）"
+kill38 "$P_M6"
+
+# ⑦ g2-herdr 的拒绝理由文本被改写（判定不变：仍拒、仍零回收）⇒ g2 必红
+#   为什么必须：g2 旧判据只查「拒绝回收」⇒ 任何拒绝都吃绿（理由换了也绿 = 空转）。
+#   变异只换理由字样，不碰「拒/不拒」的分支，红点只能来自「理由绑不住」。
+if [ "$BE_NAME" = "herdr" ]; then
+  PAT38_7='拒绝回收 $name：同名 label 命中 $nrows 个 pane'
+  HITS38_7="$(grep -cF -- "$PAT38_7" "$FLEET_SRC" || true)"
+  if [ "${HITS38_7:-0}" = "0" ]; then
+    t4_bad "负控⑦ 锚未命中（实现写法已变：herdr 同名 label 拒绝行）"
+  elif [ "$HITS38_7" != "1" ]; then
+    t4_bad "负控⑦ 锚不唯一（$HITS38_7 处命中）⇒ 换语叉唯一的锚，不得改断言口径"
+  fi
+  MUT="$(mut_new 7)" && mut38 "$MUT" "$PAT38_7" \
+    '      warn "拒绝回收 $name：同名 label 多命中（负控⑦ 理由改写）⇒ 不猜"' \
+    || t4_bad "负控⑦ 变异未应用（锚未命中/不唯一，见上）"
+  P_M7A="$(stage38 "$RA" "$N_A")"; P_M7B="$(stage38 "$RA" "$N_A")"
+  N_TGT="$N_A"
+  mut_run "$MUT" "$(roster "$(rent "$N_A" "$PRA")" "$(rent "$N_A" "$PRA")")" "$N_A"
+  t4_expect_red "$(v_dup_label_refuse "$P_M7A" "$P_M7B")" \
+    "负控⑦ 拒绝理由文本被改写 ⇒ g2-herdr 必红（断言绑的是理由，不是「任何拒绝」）"
+  kill38 "$P_M7A" "$P_M7B"
+else
+  t4_note backend-gate "负控⑦（g2 理由绑定）在 tmux 不可达：tmux 无「同名 label 拒绝」路径（按标题定位到 1 个 pane ⇒ 收 1 条）⇒ 该向只在 herdr 跑"
+fi
+
 t4_assert_eq "$SRC_MD5" "$(md5sum "$FLEET_SRC" | cut -d' ' -f1)" \
   "变异只动副本：夹具脚本 md5 与用例开始时逐字节一致（无残留改写）"
-
 t4_exit

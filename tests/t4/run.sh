@@ -76,7 +76,7 @@ CASE_TITLES=(
   "stash 滞留机械闸（#126 · B2-2）：无 stash 零输出 / 有 stash 恰 1 条 warn + warn=1 且 rc 仍 0 / pop 双向 / 只碰临时仓"
   "PRD 结构探针（Q8 · warn-only）：缺 AC 组 / 超行数 / 老日期不追溯 / 空文件拒判合格 / SINCE 非法回落 / warn= 不污染 / 本仓输出与探针关闭逐字一致 + 三条变异负控"
   "close 裸名解析的仓来源（#146 · T551）：五态 a/b/b2/c/c2/d/d2/d3/e + 卡目标子目录 f + 锚过滤与「按名唯一 cwd」三态 + 探针 ≤1 次 + 六向变异负控 + 动态作用域守卫自证"
-  "close 全名解析的仓来源（#151 · T552）：唯一命中 a/b + 不退化 b3/a2 + 多命中 c/d（die 零回收）+ 同仓重复去重 g1/g2 + 0 命中 e + 名册不可用 f + 探针 ≤1 次 + 五向变异负控"
+  "close 全名解析的仓来源（#151 · T552）：唯一命中 a/b + 不退化 b3/a2 + 多命中 c/d/m（die 零回收；m = 重复条目 + 另一路径）+ 同仓重复去重 g1/g2（g2-herdr 绑拒绝理由）+ 0 命中 e + 名册不可用 f + 探针 ≤1 次 + 七向变异负控"
 )
 declare -A CASE_TITLE=()
 for i in "${!CASE_IDS[@]}"; do CASE_TITLE[${CASE_IDS[$i]}]="${CASE_TITLES[$i]}"; done
@@ -107,7 +107,7 @@ FAST_CASES=(
 # 未纳入快档的例与其类别（AC9：**显式列出未覆盖面**，防「快档绿 = 全绿」误解；禁止静默跳过）。
 # 这四组的并集 + FAST_CASES 必须 == CASE_IDS（下方起跑前自检，缺登记 ⇒ 硬错）。
 FAST_SKIP_REAL=(02 07 27 32)                             # 真机类：真 pi 会话 / 真 `pi install` / 真 herdr server
-FAST_SKIP_DOUBLE=(09 15 19 20 21 22 23 24 28 29 30 33 37 38)  # 替身 herdr 重档：无真机，但单价 >15s（37 = 假名册 + 两仓 pane + 五向变异副本；38 = 假名册 + 三仓 pane + 五向变异副本，实测 herdr 22.6s / tmux 8.3s ⇒ 按最慢后端计价超预算）
+FAST_SKIP_DOUBLE=(09 15 19 20 21 22 23 24 28 29 30 33 37 38)  # 替身 herdr 重档：无真机，但单价 >15s（37 = 假名册 + 两仓 pane + 六向变异副本；38 = 假名册 + 三仓 pane + 七向变异副本，实测 herdr 31.0s / tmux 17.7s ⇒ 按最慢后端计价超预算）
 FAST_SKIP_PRICE=(06 18 36)                                  # 静态/契约主档：06=56.7s · 18=17.1s（单价超限）· 36=14s（单价合格，但属「契约档」；扩快档面须同步 profile 报告「未覆盖」段 ⇒ 归 PM 裁定，不夹带）
 FAST_SKIP_BACKEND=(12 25)                                # tmux 专有面：herdr 下 TMUX-ONLY（跳过=不跑），不纳入
 
