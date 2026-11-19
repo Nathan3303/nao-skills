@@ -368,9 +368,19 @@ t4_expect_red "$(v_ambiguous "$PRB" "$P_M4A" "$P_M4B")" "负控④ 删回落档 
 kill37 "$P_M4A" "$P_M4B"
 
 # ⑤ `roster_ok=0` 当 die：名册不可用不再走「不过滤」⇒ (e) 必红（红点：rc≠0，破坏幂等基线）
-MUT="$(mut_new 5)" && mut37 "$MUT" '    repo="$fallback_repo"' \
-  '    [[ "$roster_ok" == "1" ]] || die "close 中止：名册不可用（负控变异）"' \
-  || t4_bad "负控⑤ 变异未应用（实现写法已变：名册不可用时的 repo 赋值行）"
+#    锚 = 裸名分支的**名册可用性闸门行**（语义唯一：只此一处分流「名册可用 / 不可用」）。
+#    #151/T552 P3-a：产品行 `repo="$fallback_repo"` 在全名分支同样出现（字形撞车）⇒ **不**再拿它当锚，
+#    否则 grep 取首行会把变异打到全名分支（本负控当场假绿）。变异语义不变：roster_ok≠1 ⇒ die。
+PAT37_5='    if [[ "$roster_ok" == "1" ]]; then'
+HITS37_5="$(grep -cF -- "$PAT37_5" "$FLEET_SRC" || true)"
+if [ "${HITS37_5:-0}" = "0" ]; then
+  t4_bad "负控⑤ 锚未命中（实现写法已变：裸名分支的名册可用性闸门行）"
+elif [ "$HITS37_5" != "1" ]; then
+  t4_bad "负控⑤ 锚不唯一（$HITS37_5 处命中：该行不再是裸名分支独有）⇒ 改用语叉唯一的锚，不得改断言口径"
+fi
+MUT="$(mut_new 5)" && mut37 "$MUT" "$PAT37_5" \
+  '    [[ "$roster_ok" == "1" ]] || die "close 中止：名册不可用（负控变异）"; if true; then' \
+  || t4_bad "负控⑤ 变异未应用（锚未命中/不唯一，见上）"
 FLEET_SCRIPT="$MUT" run37 "$RA" - --task "$T37" qa
 t4_expect_red "$(v_offline_none)" "负控⑤ roster_ok=0 当 die ⇒ (e) 必红（红点：rc≠0 / stdout 偏离基线）"
 

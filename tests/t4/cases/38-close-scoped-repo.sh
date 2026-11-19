@@ -17,12 +17,17 @@
 #   a2 唯一·本仓 + 名册在线无 pane ⇒ 结果层 rc≠0 且不谎报「未运行」；文案 `cwd=<本仓>` 只作辅助
 #   c  多命中·都在他仓    ⇒ h>1 die 列全部候选 + 零回收 + 不指路「用全名」
 #   d  多命中·跨仓 1+1    ⇒ h>1 die（**禁**先按调用方仓过滤：过滤会把并列静默收敛成本仓 1 条）
+#   g1 同 name 同 cwd ×2（1 个 pane）⇒ 按物理路径去重后唯一 ⇒ 采用并回收（rc=0；同仓陈旧重复条目不当歧义）
+#   g2 同 name 同 cwd ×2（2 个 pane）⇒ 仓层已去重；**句柄层**两后端结论不同（tmux 收 1 条 / herdr「>1 label ⇒ 不猜」拒）
 #   e  0 命中·裸名在跑    ⇒ h=0 保留回落 ⇒ 「未运行」rc=0 · 裸名 pane 存活（兼容面，不猜）
 #   f  名册不可用         ⇒ 不判并列：stdout 与既有基线逐字一致
 #
 # 先红基线（§四）：`T38_FLEET_SCRIPT=<旧脚本>` 跑本用例；旧脚本 = `git show <sha>:.agents/scripts/nao-fleet.sh`。
-#   旧脚本上 c/d 必红（tmux：rc/零回收；herdr：仅文案红 —— pane 层本就「同名 label >1 ⇒ 不猜」），
-#   a/b/b3/a2/e/f 在旧脚本上本身即绿（唯一命中时首命中 ≡ h=1）⇒ 不得充作先红证据。
+#   旧脚本（首命中）上 c/d 必红 —— 但**红点的成因按后端不同，别读成同一件事**：
+#     · tmux：rc=0（首命中照旧回收）—— 这才是「h>1 未拒」的直接证据。
+#     · herdr：仅文案红（无「close 目标歧义」），**因为 pane 层「同名 label 命中 2 个 pane ⇒ 不猜」先拒了**
+#       ⇒ herdr 的 c/d 红点**不是 h>1 的独立证据**（herdr 侧 h>1 的独立证据由负控①承担）。
+#       QA 补测：并列但只剩 1 个存活 pane 时，旧 herdr 会静默回收（同一缺陷的另一面）。
 #
 # 夹具 hermetic（沿用 cases/37 三件套）：
 #   · 假名册探针（`NAO_QA_FAKE_ROSTER`）pretty-print（名册解析逐行 awk，紧凑 JSON 会折叠条目）
@@ -265,7 +270,36 @@ t4_assert_eq "GREEN" "$(v_ambiguous "$PRB|$PRA" "$P_D1" "$P_D2")" \
   "d 多命中·跨仓 1+1：die 列 PRA+PRB + 零回收（本仓 pane 存活）"
 kill38 "$P_D1" "$P_D2"
 
-# ================================================================ e 0 命中·裸名在跑
+# ================================================================ g1 同 name 同 cwd ×2（1 个 pane）
+# 陈旧的重复名册条目（同 name 同 cwd）不是「并列候选」：按物理路径去重后唯一 ⇒ 采用并回收（rc=0）。
+# 回归点（P2 实指）：去重前该形态会 die（同一条路径列两次、且指路「多仓」= 误导）。
+P_G1="$(stage38 "$RA" "$N_A")" || t4_bad "g1 夹具：本仓 pane 建立失败"
+N_TGT="$N_A"
+run38 "$RA" "$(roster "$(rent "$N_A" "$PRA")" "$(rent "$N_A" "$PRA")")" "$N_A"
+t4_assert_eq "GREEN" "$(v_reclaim "$PRA" "$P_G1")" \
+  "g1 同 name 同 cwd ×2：去重后唯一 ⇒ 回收本仓（rc=0 · pane 消失 · @=本仓 · 无「歧义」）"
+kill38 "$P_G1"
+
+# ================================================================ g2 同 name 同 cwd ×2（2 个 pane）
+# 仓层已去重（→ 采用本仓）；**句柄层**两后端结论不同，断言按后端分开，差距点名（禁静默）：
+#   tmux：按标题定位到 1 个 pane ⇒ 回收 1 条、另 1 条存活（rc=0）——「去重后不再因陈旧名单误拒」的结果层证据。
+#   herdr：同名 label 命中 2 个 pane ⇒「不猜」拒（rc≠0、零回收）—— 后端结构不可判定，非本批退化。
+P_G2A="$(stage38 "$RA" "$N_A")" || t4_bad "g2 夹具：pane#1 建立失败"
+P_G2B="$(stage38 "$RA" "$N_A")" || t4_bad "g2 夹具：pane#2 建立失败"
+N_TGT="$N_A"
+run38 "$RA" "$(roster "$(rent "$N_A" "$PRA")" "$(rent "$N_A" "$PRA")")" "$N_A"
+if [ "$BE_NAME" = "tmux" ]; then
+  t4_assert_eq "0" "$T4_RC" "g2 作用域（rc）：tmux 按标题定位到 1 个 pane ⇒ rc=0"
+  grep -qF '目标歧义' <<< "$T4_ALL" && t4_bad "g2：同仓重复条目不得报「目标歧义」" || t4_ok "g2：同仓重复条目不报「目标歧义」（去重生效）"
+  t4_assert_eq "1" "$((2 - $(alive38 "$P_G2A" "$P_G2B")))" "g2 作用域（pane 存活）：恰回收 1 条（另一条存活）"
+else
+  t4_assert_eq "GREEN" "$(v_busy_refuse "$P_G2A" "$P_G2B")" \
+    "g2 作用域（herdr）：同名 label 2 个 pane ⇒ 不猜（rc≠0 + 零回收）"
+  t4_note backend-gate "g2 在 herdr 不可判定：同 name 同 cwd 的两个 pane 在 label 层不可区分（后端无 pane-cwd 级歧义消解）⇒ 断言取「不猜」，与 tmux 的「收 1 条」非同形，故分后端写明"
+fi
+kill38 "$P_G2A" "$P_G2B"
+
+
 # 名册只有 legacy 裸名（cwd=本仓）+ 其 pane；全名查不到 ⇒ h=0 ⇒ 保留回落 ⇒ 「未运行」rc=0（不猜）。
 P_E="$(stage38 "$RA" "$CORE")" || t4_bad "e 夹具：裸名 pane 建立失败"
 run38 "$RA" "$(roster "$(rent "$CORE" "$PRA")")" "$N_A"
@@ -299,9 +333,9 @@ mut_run() { # <变异脚本> <roster> <target> —— 以 cwd=$RA 跑变异副�
   T38_FLEET_SCRIPT="$1" run38 "$RA" "$2" "$3"
 }
 
-# ① h>1 取首条（`== 1` 改 `>= 1`）⇒ (d) 不再 die（红点：rc=0 / 发生回收）
-MUT="$(mut_new 1)" && mut38 "$MUT" '(( ${#scoped_cwds[@]} == 1 ))' \
-  '      if (( ${#scoped_cwds[@]} >= 1 )); then' \
+# ① h>1 取首条（去重后 `== 1` 改 `>= 1`）⇒ (d) 不再 die（红点：rc=0 / 发生回收）
+MUT="$(mut_new 1)" && mut38 "$MUT" '(( ${#cw_uniq[@]} == 1 ))' \
+  '      if (( ${#cw_uniq[@]} >= 1 )); then' \
   || t4_bad "负控① 变异未应用（实现写法已变：h=1 判定行）"
 P_M1A="$(stage38 "$RA" "$N_A")"; P_M1B="$(stage38 "$RB" "$N_B")"
 N_TGT="$N_A"
@@ -322,7 +356,7 @@ t4_expect_red "$(v_ambiguous "$PRB|$PRA" "$P_M2A" "$P_M2B")" \
 kill38 "$P_M2A" "$P_M2B"
 
 # ③ 退化成回落值（h=1 不采用 cwd）⇒ a2 辅助条必红；b3 的结果层咬合只在 herdr（tmux 无按仓忙闲信号）
-MUT="$(mut_new 3)" && mut38 "$MUT" '        repo="${scoped_cwds[0]}"' '        repo="$repo"' \
+MUT="$(mut_new 3)" && mut38 "$MUT" '        repo="${cw_uniq[0]}"' '        repo="$repo"' \
   || t4_bad "负控③ 变异未应用（实现写法已变：h=1 采用行）"
 P_M3="$(stage38 "$RB" "$N_B")"
 mut_run "$MUT" "$(roster "$(rent "$N_B" "$PRB" working)")" "$N_B"
@@ -341,10 +375,10 @@ if [ "$BE_NAME" = "tmux" ]; then
     "负控③ 同变异 ⇒ a2 辅助条必红（warn 的 cwd 退化成回落值 \".\"）"
 fi
 
-# ④ h=0 改 die（`> 1` 改 `>= 0`）⇒ (e) 破坏幂等基线
-MUT="$(mut_new 4)" && mut38 "$MUT" '(( ${#scoped_cwds[@]} > 1 ))' \
-  '      elif (( ${#scoped_cwds[@]} >= 0 )); then' \
-  || t4_bad "负控④ 变异未应用（实现写法已变：h>1 判定行）"
+# ④ h=0 改 die（无同名记录时派死）⇒ (e) 破坏幂等基线
+MUT="$(mut_new 4)" && mut38 "$MUT" 'if (( ${#scoped_cwds[@]} > 0 )); then' \
+  '    [[ ${#scoped_cwds[@]} -gt 0 ]] || die "close 中止：名册无该全名（负控变异）"; if true; then' \
+  || t4_bad "负控④ 变异未应用（实现写法已变：三态外层入口行）"
 P_M4="$(stage38 "$RA" "$CORE")"
 T38_FLEET_SCRIPT="$MUT" run38 "$RA" "$(roster "$(rent "$CORE" "$PRA")")" "$N_A"
 case "$T4_RC" in
@@ -353,10 +387,10 @@ case "$T4_RC" in
 esac
 kill38 "$P_M4"
 
-# ⑤ roster_ok=0 当 die ⇒ (f) 破坏逐字基线
-MUT="$(mut_new 5)" && mut38 "$MUT" '局部取一次（命缓存' \
-  '    intercom_list_json >/dev/null 2>&1 && roster_ok=1; [[ "$roster_ok" == "1" ]] || die "close 中止：名册不可用（负控变异）"' \
-  || t4_bad "负控⑤ 变异未应用（实现写法已变：roster_ok 取一次行）"
+# ⑤ 名册不可用当 die ⇒ (f) 破坏逐字基线
+MUT="$(mut_new 5)" && mut38 "$MUT" 'if intercom_list_json >/dev/null 2>&1; then' \
+  '    intercom_list_json >/dev/null 2>&1 || die "close 中止：名册不可用（负控变异）"; if true; then' \
+  || t4_bad "负控⑤ 变异未应用（实现写法已变：名册可用性闸门行）"
 T38_FLEET_SCRIPT="$MUT" run38 "$RA" - "$N_A"
 t4_expect_red "$(v_offline_none)" "负控⑤ roster_ok=0 当 die ⇒ (f) 必红（红点：rc≠0 / stdout 偏离基线）"
 

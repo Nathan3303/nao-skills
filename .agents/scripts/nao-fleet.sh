@@ -4246,16 +4246,31 @@ cmd_close() {
     #    旧行为「名册首命中即定仓」在同名跨仓时会把 repo 改指别仓（忙闲 / liveness 按错仓过滤）。
     #    全名是用户**显式键** ⇒ 不用调用方锚：唯一命中不经锚 ⇒ 跨仓唯一回收照旧（cases/09 AC3 不回归）。
     name="$(fleet_name_build "$kindc" "$core" "$p_scope")"
-    repo="${fallback_repo}"                        # 唯一回落值（h=0 保留；**禁**回退「名册首命中」）
-    roster_ok=0
-    intercom_list_json >/dev/null 2>&1 && roster_ok=1   # 局部取一次（命缓存 ⇒ 每命令探针仍 =1）
-    if [[ "$roster_ok" == "1" ]]; then
+    repo="$fallback_repo"                         # 唯一回落值（h=0 保留；**禁**回退「名册首命中」）
+    scoped_cwds=()
+    if intercom_list_json >/dev/null 2>&1; then     # 名册可用性：本分支局部判一次（命缓存 ⇒ 探针仍 =1）
       mapfile -t scoped_cwds < <(intercom_cwds_for "$name")
-      if (( ${#scoped_cwds[@]} == 1 )); then
-        repo="${scoped_cwds[0]}"                     # h=1 ⇒ 采用双键唯一命中（可跨仓）
-      elif (( ${#scoped_cwds[@]} > 1 )); then
+    fi
+    # 按**物理路径去重**：同 name 同 cwd 的陈旧重复条目不是「并列候选」（P2 · 同仓重复不能误判成多仓）。
+    if (( ${#scoped_cwds[@]} > 0 )); then
+      local -A cw_seen=()
+      local -a cw_uniq=()
+      local cw_p=""
+      for cw_p in "${scoped_cwds[@]}"; do
+        cw_p="$(nao_phys_path "$cw_p")"
+        [[ -n "${cw_seen[$cw_p]:-}" ]] && continue
+        cw_seen[$cw_p]=1
+        cw_uniq+=("$cw_p")
+      done
+      if (( ${#cw_uniq[@]} == 1 )); then
+        repo="${cw_uniq[0]}"                         # h=1（去重后唯一）⇒ 采用双键唯一仓（可跨仓）
+      elif (( ${#cw_uniq[@]} > 1 )); then
         # 多命中**一律**拒绝（不按调用方仓过滤：过滤会把跨仓并列静默收敛成本仓一条 = 又变成猜）
-        die "close 目标歧义：$name 在名册中对应 ${#scoped_cwds[@]} 个 cwd：$(printf '%s ' "${scoped_cwds[@]}")（该怎么办：先 intercom({action:'list'}) 人工核对该会话的仓位置并关掉多余的那个；同名同 fleet 多仓没有别的写法可区分）"
+        if (( ${#scoped_cwds[@]} > ${#cw_uniq[@]} )); then
+          die "close 目标歧义：$name 在名册中对应 ${#cw_uniq[@]} 个仓的会话：$(printf '%s ' "${cw_uniq[@]}")（名册共 ${#scoped_cwds[@]} 条记录，含同名同仓重复条目）（该怎么办：先 intercom({action:'list'}) 人工核对并关掉多余的会话；同仓重复条目不必区分仓，不要当成多仓歧义）"
+        else
+          die "close 目标歧义：$name 在名册中对应 ${#cw_uniq[@]} 个 cwd：$(printf '%s ' "${cw_uniq[@]}")（该怎么办：先 intercom({action:'list'}) 人工核对该会话的仓位置并关掉多余的那个；同名同 fleet 多仓没有别的写法可区分）"
+        fi
       fi                                             # h=0 ⇒ 保留回落值
     fi
   else
