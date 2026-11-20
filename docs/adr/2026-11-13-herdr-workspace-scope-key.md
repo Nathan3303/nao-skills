@@ -44,6 +44,7 @@
 
 - 非 git 仓 slug = 目录名；>16 字符截断或同名仓可能撞键（不做自动探测，靠声明 scope 或改目录名）。
 - 不改命名契约语法，不改 `status`/`close` 的归属判据（pane label + pane cwd）。
+  **后续演进（2026-11-19 · Issue #139）**：本篇「1 workspace/仓」被 `docs/adr/2026-11-19-fleet-repo-manifest.md` 改写为「1 workspace/**舰队**」（联动仓角色同住，tab 以 `<code>/` 前缀分组）；放置键仍恒非空、仍由单点传参、仍禁由名字反解 —— 本篇双键分离原则与本篇其余边界不变。
 
 ## 相关指针
 

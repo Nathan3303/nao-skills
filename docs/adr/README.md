@@ -25,3 +25,4 @@
 | 2026-11-13 | [herdr workspace 放置键与 scope 分离](2026-11-13-herdr-workspace-scope-key.md) | 未声明 scope 时放置键取仓 slug | 已接受（已落地 v0.23.1） |
 | 2026-11-16 | [文档站构建与交付管线（独立包 + 编译期注入 + 构建后部署）](2026-11-16-docs-site-pipeline.md) | 独立包 + 编译期注入 + 构建 | 已接受（待落地） |
 | 2026-11-17 | [舰队身份单一来源（`--fleet` 同时定名字 scope 与放置键）](2026-11-17-fleet-identity-source.md) | fleet 单源，名字恒带 @ | 已接受（待落地） |
+| 2026-11-19 | [联动仓 manifest（1 fleet = 1 workspace · tab 前缀分组）](2026-11-19-fleet-repo-manifest.md) | 放置键与身份键不同源 | 已接受（待落地） |
