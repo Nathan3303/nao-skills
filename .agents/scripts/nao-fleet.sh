@@ -342,10 +342,10 @@ term_argv() {  # <pane_id> → 每行 "process-name<TAB>argv"
 #   ⇒ `pane move --new-tab` + `tab rename` 迁移（pane_id 不变、被搬空的 tab 由 herdr 自动关闭）。
 # 返回三态码（SPAWN_RC_*）：0 成功 · 2 跳过 · 3 失败（含就绪超时 / 0 尺寸 pane；调用方计入 SPAWN_FAIL）。
 # 成功时**必须**回填 `_TERM_SPAWN_PANE`（T548 投递点依赖它；tmux 侧由 spawn_tmux 的 -P -F 回填）。
-term_spawn() {  # <name> <inner> <repo> [force] [label]
+term_spawn() {  # <name> <inner> <repo> [force] [label] [group]
   case "$(term_backend)" in
     tmux) spawn_tmux "${1-}" "${2-}" ;;
-    herdr) _term_herdr_spawn "${1-}" "${2-}" "${3-}" "${4:-false}" "${5-}" ;;
+    herdr) _term_herdr_spawn "${1-}" "${2-}" "${3-}" "${4:-false}" "${5-}" "${6-}" ;;
   esac
 }
 
@@ -1074,8 +1074,11 @@ _term_herdr_space_check() {  # <pane_id> <name> → 0 可继续 / 1 不可用（
 #   旧布局（一个 tab 内 split 出多 pane）⇒ 迁移无损：`pane move <pane> --new-tab`（pane_id 不变，
 #   被搬空的 tab 由 herdr 自动关闭）+ `tab rename` 把新 tab 标成角色名；
 #   tab 已独占但 label 旧（如根 tab 的 "1"）⇒ 只改 tab 名（effect 零风险）。
-_term_herdr_layout_converge() {  # <pane_id> <name> → 0 布局 A 达成 / 1 未达成（fail loud）
-  local pid="${1-}" name="${2-}" pt tid wsid row label cnt js newtid prev_tid="" closed_note=""
+_term_herdr_layout_converge() {  # <pane_id> <name> [group] → 0 布局 A 达成 / 1 未达成（fail loud）
+  local pid="${1-}" name="${2-}" group="${3-}" pt tid wsid row label cnt js newtid prev_tid="" closed_note=""
+  # #139（M3）：期望标签 = `<组前缀>/<name>`（group 空 ⇒ 逐字旧行为）。四处同源之一（收敛判据）。
+  local tablabel="$name"
+  [[ -n "$group" ]] && tablabel="$group/$name"
   pt="$(_term_herdr_pane_tab "$pid")"
   if [[ -z "$pt" ]]; then
     warn "布局判据不可用：pane=$pid 不在 pane list（无法确认独立 tab）⇒ 计 SPAWN_FAIL"
@@ -1084,16 +1087,16 @@ _term_herdr_layout_converge() {  # <pane_id> <name> → 0 布局 A 达成 / 1 �
   tid="${pt%%$'\t'*}"; wsid="${pt#*$'\t'}"
   row="$(_term_herdr_tab_row "$wsid" "$tid")"
   label="${row%%$'\t'*}"; cnt="${row#*$'\t'}"
-  if [[ "$label" == "$name" ]]; then
+  if [[ "$label" == "$tablabel" ]]; then
     if [[ "$cnt" != "1" ]]; then
-      warn "布局 A 违例：tab=$tid（label=$name）含 ${cnt:-?} 个 pane（契约 = 每角色 tab 恰 1 pane）；不擅自搬动他人 pane"
+      warn "布局 A 违例：tab=$tid（label=$tablabel）含 ${cnt:-?} 个 pane（契约 = 每角色 tab 恰 1 pane）；不擅自搬动他人 pane"
       warn "  该怎么办：attach 后人工收口（herdr session attach ${HERDR_SESSION:-<session>}），或 cleanup 后 session-start 重建会话"
     fi
     return 0
   fi
   if [[ "$cnt" == "1" ]]; then
-    if _term_herdr_exec tab rename "$tid" "$name" >/dev/null 2>&1; then return 0; fi
-    warn "tab rename 失败（tab=$tid → label=$name）⇒ 布局 A 未达成（计 SPAWN_FAIL）"
+    if _term_herdr_exec tab rename "$tid" "$tablabel" >/dev/null 2>&1; then return 0; fi
+    warn "tab rename 失败（tab=$tid → label=$tablabel）⇒ 布局 A 未达成（计 SPAWN_FAIL）"
     return 1
   fi
   js="$(_term_herdr_exec pane move "$pid" --new-tab 2>/dev/null)" \
@@ -1102,8 +1105,8 @@ _term_herdr_layout_converge() {  # <pane_id> <name> → 0 布局 A 达成 / 1 �
   newtid="$(printf '%s' "$js" | sed -nE 's/.*"created_tab":\{[^}]*"tab_id":"([^"]+)".*/\1/p' | head -1)"
   if [[ -z "$newtid" ]]; then pt="$(_term_herdr_pane_tab "$pid")"; newtid="${pt%%$'\t'*}"; fi
   [[ -n "$newtid" ]] || { warn "pane move 后未取到新 tab_id（pane=$pid name=$name）⇒ 布局 A 未达成"; return 1; }
-  if ! _term_herdr_exec tab rename "$newtid" "$name" >/dev/null 2>&1; then
-    warn "tab rename 失败（tab=$newtid → label=$name）⇒ 布局 A 未达成（计 SPAWN_FAIL）"; return 1
+  if ! _term_herdr_exec tab rename "$newtid" "$tablabel" >/dev/null 2>&1; then
+    warn "tab rename 失败（tab=$newtid → label=$tablabel）⇒ 布局 A 未达成（计 SPAWN_FAIL）"; return 1
   fi
   if [[ -n "$(_term_herdr_tab_row "$wsid" "$prev_tid")" ]]; then
     closed_note="源 tab $prev_tid 仍有其他 pane（未关闭）"
@@ -1114,9 +1117,12 @@ _term_herdr_layout_converge() {  # <pane_id> <name> → 0 布局 A 达成 / 1 �
   return 0
 }
 
-_term_herdr_spawn() {  # <name> <inner> <repo> [force] <label> → SPAWN_RC_OK|FAIL
-  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" pout="" pl="" obj js
+_term_herdr_spawn() {  # <name> <inner> <repo> [force] <label> [group] → SPAWN_RC_OK|FAIL
+  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" pout="" pl="" obj js
   local pane="" wsid="" tid="" first="" nmatch=0 hit="" verdict="" seq="" launched=0
+  # #139（M3）：tab 标签 = `<组前缀>/<name>`（placement 仍 = fleet/slug）。组前缀空 ⇒ 逐字旧行为。
+  local tablabel="$name"
+  [[ -n "$group" ]] && tablabel="$group/$name"
   [[ -n "$name" && -n "$inner" ]] || { warn "herdr spawn 参数缺失（name/inner）"; return "$SPAWN_RC_FAIL"; }
   # 放置键（ADR 2026-11-17-fleet-identity-source · D1）：**入参 label = fleet 值**（调用方已解析并校验）。
   #   本函数职责 = 放置，不再从名字反解、也不再在 spawn 内重算仓 slug（第二数据源消失；静态判据 = 0 次）。
@@ -1224,21 +1230,21 @@ _term_herdr_spawn() {  # <name> <inner> <repo> [force] <label> → SPAWN_RC_OK|F
       wsid="$(_term_json_str "$js" workspace_id)"
       tid="$(_term_json_str "$js" tab_id)"
       [[ -n "$pane" ]] || { warn "herdr workspace create 未返回 root_pane.pane_id（label=$label）"; return "$SPAWN_RC_FAIL"; }
-      # 布局 A：workspace 的根 tab 归位为角色 tab（label = 角色名）
-      if [[ -z "$tid" ]] || ! _term_herdr_exec tab rename "$tid" "$name" >/dev/null 2>&1; then
-        warn "herdr tab rename 失败（tab=${tid:-<无>} label=$name）⇒ 布局 A 未达成"; return "$SPAWN_RC_FAIL"
+      # 布局 A：workspace 的根 tab 归位为角色 tab（label = 组前缀/角色名）
+      if [[ -z "$tid" ]] || ! _term_herdr_exec tab rename "$tid" "$tablabel" >/dev/null 2>&1; then
+        warn "herdr tab rename 失败（tab=${tid:-<无>} label=$tablabel）⇒ 布局 A 未达成"; return "$SPAWN_RC_FAIL"
       fi
     else
-      tid="$(_term_herdr_tab_id_for "$wsid" "$name")"
+      tid="$(_term_herdr_tab_id_for "$wsid" "$tablabel")"
       if [[ -n "$tid" ]]; then
-        warn "角色 tab 已在场但无 pane 命中该角色（workspace=$wsid tab=$tid label=$name）⇒ 不猜：既不新建第二个同名 tab，也不接管他人 pane"
+        warn "角色 tab 已在场但无 pane 命中该角色（workspace=$wsid tab=$tid label=$tablabel）⇒ 不猜：既不新建第二个同名 tab，也不接管他人 pane"
         warn "  该怎么办：先回收该角色（nao-fleet.sh close ${name%%@*}）再重跑 ensure；--force 不绕过本条（避免同名 label 重复）"
         return "$SPAWN_RC_FAIL"
       fi
-      js="$(_term_herdr_exec tab create --workspace "$wsid" --cwd "$repo" --label "$name" --no-focus 2>/dev/null)" \
-        || { warn "herdr tab create 失败（workspace=$wsid label=$name cwd=$repo）"; return "$SPAWN_RC_FAIL"; }
+      js="$(_term_herdr_exec tab create --workspace "$wsid" --cwd "$repo" --label "$tablabel" --no-focus 2>/dev/null)" \
+        || { warn "herdr tab create 失败（workspace=$wsid label=$tablabel cwd=$repo）"; return "$SPAWN_RC_FAIL"; }
       pane="$(_term_json_str "$js" pane_id)"
-      [[ -n "$pane" ]] || { warn "herdr tab create 未返回 root_pane.pane_id（label=$name）"; return "$SPAWN_RC_FAIL"; }
+      [[ -n "$pane" ]] || { warn "herdr tab create 未返回 root_pane.pane_id（label=$tablabel）"; return "$SPAWN_RC_FAIL"; }
     fi
     # ---- 先 label 后启动（顺序是契约：否则 status 可能抓到无 label 的 pi pane）----
     if ! _term_herdr_exec pane rename "$pane" "$name" >/dev/null 2>&1; then
@@ -1253,7 +1259,7 @@ _term_herdr_spawn() {  # <name> <inner> <repo> [force] <label> → SPAWN_RC_OK|F
   if [[ -n "${_TERM_SNAP_FILE:-}" ]]; then rm -f "$_TERM_SNAP_FILE" 2>/dev/null || true; _TERM_SNAP_FILE=""; fi
 
   # ---- J2 结构收敛（布局 A）：复用路径也跑（旧布局的 pane 在共享 tab 里 ⇒ 迁移到独立 tab）----
-  if ! _term_herdr_layout_converge "$pane" "$name"; then
+  if ! _term_herdr_layout_converge "$pane" "$name" "$group"; then
     return "$SPAWN_RC_FAIL"
   fi
   # ---- J1/J5 空间判据（放置后自测；0 尺寸 ⇒ SPAWN_FAIL，不足 ⇒ 只 warn）----
@@ -2044,6 +2050,202 @@ fleet_of_invocation() {
   FLEET_RESOLVED="$slug"; FLEET_RESOLVED_SOURCE="slug"
 }
 # <<< fleet-name-contract END
+
+# ===========================================================================
+# 联动仓 manifest（`.agents/fleet.yaml` · Issue #139 / ADR 2026-11-19-fleet-repo-manifest）
+#
+# 数据通道（判据 docs/reports/139-lite-spec.md §二；**单一读点**在本节）：
+#   fleet_manifest_load <repo_phys> → stdout 记录流，rc 承载「合法 / 非法」：
+#     NONE                             无 manifest（**合法事实**，不是错误）
+#     FLEET<TAB><slug><TAB><root_phys>
+#     REPO<TAB><code><TAB><path_phys>  ×N
+#   rc=1 ⇒ stderr 单行 `<文件>:<行号> <字段> <原因>`（fail loud）。
+#   禁：用 rc / 空行承载「不可知」· 空输出当 NONE（那是实现缺陷，调用方 die）· 落盘缓存
+#   （AC8 由「每命令一次、无落地」构造性满足）。
+#   manifest 源 = 调用方仓根（不做向上查找、不自动发现联动仓 —— 已知边界见 ADR §限制）。
+# 受限 YAML 子集（零新依赖、零网络）：顶层键只 slug / repos；项键只 code / path；
+#   缩进用空格（整行 `#` 注释）、值单双引号可省可留；锚点/别名/流式/多文档/制表符/未知键 ⇒ 非法。
+# ===========================================================================
+fleet_manifest_root() {  # <dir> → 仓根物理路径（git toplevel；非 git 仓 = 该目录物理路径）
+  local d="${1-}" top=""
+  [[ -n "$d" ]] || d="$PWD"
+  if command -v git >/dev/null 2>&1; then
+    top="$(git -C "$d" rev-parse --show-toplevel 2>/dev/null || true)"
+  fi
+  [[ -n "$top" ]] || top="$d"
+  _fleet_phys "$top"
+}
+
+fleet_manifest_load() {  # <repo_phys> → 记录流（见上）· rc=1 非法（stderr 点名文件:行号 字段 原因）
+  local repo="${1-}" f="" line="" indent="" rest="" key="" val="" sec=""
+  local slug="" slugno=0 in_item=0 istart=0 icode="" ipath="" icno=0 ipno=0
+  local no=0 why="" i=0 j=0 pp="" need_in=0
+  local -a codes=() cpaths=() cnos=() plits=() istarts=()
+
+  [[ -n "$repo" ]] || { printf 'fleet_manifest_load：缺仓路径\n' >&2; return 1; }
+  repo="$(_fleet_phys "$repo")"
+  f="$repo/.agents/fleet.yaml"
+  if [[ ! -e "$f" && ! -L "$f" ]]; then printf 'NONE\n'; return 0; fi
+  if [[ ! -f "$f" ]]; then
+    printf '%s:1 fleet.yaml 不是常规文件（目录 / fifo / socket 一律拒绝）\n' "$f" >&2; return 1
+  fi
+  [[ -r "$f" ]] || { printf '%s:1 fleet.yaml 不可读\n' "$f" >&2; return 1; }
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    no=$((no + 1))
+    line="${line%$'\r'}"
+    [[ -z "${line//[[:space:]]/}" ]] && continue
+    if [[ "$line" == *$'\t'* ]]; then
+      printf '%s:%d 缩进/值 含制表符（本子集只接受空格缩进）\n' "$f" "$no" >&2; return 1
+    fi
+    indent="${line%%[![:space:]]*}"; rest="${line#"$indent"}"
+    [[ "$rest" == \#* ]] && continue
+    if [[ -z "$indent" ]]; then
+      case "$rest" in
+        ---|...) printf '%s:%d 多文档分隔 %s 不受支持（只接受单文档）\n' "$f" "$no" "$rest" >&2; return 1 ;;
+      esac
+      [[ "$rest" =~ ^([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*:(.*)$ ]] \
+        || { printf '%s:%d %s 无法解析（期望 `键: 值`；本子集只接受 slug / repos）\n' "$f" "$no" "${rest%% *}" >&2; return 1; }
+      key="${BASH_REMATCH[1]}"; val="${BASH_REMATCH[2]}"
+      val="${val#"${val%%[![:space:]]*}"}"; val="${val%"${val##*[![:space:]]}"}"
+      if (( ${#val} >= 2 )); then
+        case "$val" in \"*\") val="${val:1:${#val}-2}" ;; \'*\') val="${val:1:${#val}-2}" ;; esac
+      fi
+      case "$key" in
+        slug)
+          [[ -z "$val" ]] && { printf '%s:%d slug 不能为空\n' "$f" "$no" >&2; return 1; }
+          [[ -n "$slug" ]] && { printf '%s:%d slug 重复声明\n' "$f" "$no" >&2; return 1; }
+          slug="$val"; slugno=$no; sec=""
+          ;;
+        repos)
+          [[ -n "$val" ]] && { printf '%s:%d repos 只接受缩进列表（值必须为空）\n' "$f" "$no" >&2; return 1; }
+          sec="repos"
+          ;;
+        *)
+          printf '%s:%d 未知键 %s（本子集只接受 slug / repos）\n' "$f" "$no" "$key" >&2; return 1
+          ;;
+      esac
+      continue
+    fi
+    # ---- 缩进项：只允许位于 repos: 之下 ----
+    [[ "$sec" == "repos" ]] || { printf '%s:%d 缩进项必须位于 `repos:` 之下\n' "$f" "$no" >&2; return 1; }
+    if [[ "$rest" == -* ]]; then
+      if (( in_item )); then
+        codes+=("$icode"); cpaths+=("$ipath"); cnos+=("$icno"); plits+=("$ipno"); istarts+=("$istart")
+      fi
+      in_item=1; istart=$no; icode=""; ipath=""; icno=0; ipno=0
+      rest="${rest#-}"; rest="${rest#"${rest%%[![:space:]]*}"}"
+      [[ -n "$rest" ]] || { printf '%s:%d 列表项为空（期望 `- code: <短代号>`）\n' "$f" "$no" >&2; return 1; }
+    elif (( ! in_item )); then
+      printf '%s:%d 缩进项必须跟在 `- ` 列表项之后\n' "$f" "$no" >&2; return 1
+    fi
+    [[ "$rest" =~ ^([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*:(.*)$ ]] \
+      || { printf '%s:%d %s 无法解析（期望 `code: <短代号>` / `path: <路径>`）\n' "$f" "$no" "${rest%% *}" >&2; return 1; }
+    key="${BASH_REMATCH[1]}"; val="${BASH_REMATCH[2]}"
+    val="${val#"${val%%[![:space:]]*}"}"; val="${val%"${val##*[![:space:]]}"}"
+    if (( ${#val} >= 2 )); then
+      case "$val" in \"*\") val="${val:1:${#val}-2}" ;; \'*\') val="${val:1:${#val}-2}" ;; esac
+    fi
+    case "$val" in
+      ''|'&'*|'*'*|'{'*|'['*|'|'*|'>'*|'!'*|'%'*)
+        printf '%s:%d %s 值不受支持（空值 / 锚点 / 别名 / 流式 / 块标量 ⇒ 非法）\n' "$f" "$no" "$key" >&2; return 1 ;;
+    esac
+    case "$key" in
+      code)
+        [[ -n "$icode" ]] && { printf '%s:%d code 重复声明\n' "$f" "$no" >&2; return 1; }
+        icode="$val"; icno=$no ;;
+      path)
+        [[ -n "$ipath" ]] && { printf '%s:%d path 重复声明\n' "$f" "$no" >&2; return 1; }
+        ipath="$val"; ipno=$no ;;
+      *)
+        printf '%s:%d 未知键 %s（repos 项只接受 code / path）\n' "$f" "$no" "$key" >&2; return 1 ;;
+    esac
+  done < "$f"
+  if (( in_item )); then
+    codes+=("$icode"); cpaths+=("$ipath"); cnos+=("$icno"); plits+=("$ipno"); istarts+=("$istart")
+  fi
+
+  # ---- 全量校验（错误一律点名 文件:行号 字段 原因）----
+  [[ -n "$slug" ]] || { printf '%s:1 slug 缺失（manifest 必须声明舰队名）\n' "$f" >&2; return 1; }
+  if ! why="$(fleet_scope_problem "$slug")"; then
+    printf '%s:%d slug 不可用（%s）\n' "$f" "$slugno" "$why" >&2; return 1
+  fi
+  for i in "${!codes[@]}"; do
+    if [[ -z "${codes[$i]}" ]]; then
+      printf '%s:%d repos 项缺 code\n' "$f" "${istarts[$i]}" >&2; return 1
+    fi
+    if [[ -z "${cpaths[$i]}" ]]; then
+      printf '%s:%d repos 项缺 path\n' "$f" "${istarts[$i]}" >&2; return 1
+    fi
+    if ! why="$(fleet_scope_problem "${codes[$i]}")"; then
+      printf '%s:%d code 不可用（%s）\n' "$f" "${cnos[$i]}" "$why" >&2; return 1
+    fi
+    [[ "${codes[$i]}" == "main" ]] && { printf '%s:%d code 不能用保留代号 main（主仓组前缀固定为 main）\n' "$f" "${cnos[$i]}" >&2; return 1; }
+    [[ "${codes[$i]}" == "$slug" ]] && { printf '%s:%d code 与 slug 相同（%s）—— 任意 @ 值必须三分法唯一\n' "$f" "${cnos[$i]}" "${codes[$i]}" >&2; return 1; }
+    for j in "${!codes[@]}"; do
+      (( j < i )) || break
+      [[ "${codes[$j]}" == "${codes[$i]}" ]] && { printf '%s:%d code 重复（%s，首次声明在第 %d 行）\n' "$f" "${cnos[$i]}" "${codes[$i]}" "${cnos[$j]}" >&2; return 1; }
+    done
+    case "${cpaths[$i]}" in
+      /*|..|../*) need_in=0 ;;
+      *) need_in=1 ;;
+    esac
+    pp="$(_fleet_phys "$repo/${cpaths[$i]}")"
+    if (( need_in )) && ! repo_contains_path "$repo" "$pp"; then
+      printf '%s:%d path 经 symlink 逃出仓根（%s → %s；显式 ../ 或绝对路径才允许出仓）\n' "$f" "${plits[$i]}" "${cpaths[$i]}" "$pp" >&2; return 1
+    fi
+    [[ -e "$pp" ]] || { printf '%s:%d path 不存在（%s → %s）\n' "$f" "${plits[$i]}" "${cpaths[$i]}" "$pp" >&2; return 1; }
+    [[ -d "$pp" ]] || { printf '%s:%d path 不是目录（%s → %s）\n' "$f" "${plits[$i]}" "${cpaths[$i]}" "$pp" >&2; return 1; }
+  done
+
+  printf 'FLEET\t%s\t%s\n' "$slug" "$repo"
+  for i in "${!codes[@]}"; do
+    printf 'REPO\t%s\t%s\n' "${codes[$i]}" "$(_fleet_phys "$repo/${cpaths[$i]}")"
+  done
+  return 0
+}
+
+# `@` 段解析（AC4 · R2 唯一顺序）：① code 命中 ⇒ 联动仓 ② 否则既有仓路径语义 ③ 两者同时命中
+#   且物理路径不同 ⇒ fail loud ④ 都未命中 ⇒ fail loud 列 code + slug + 「按路径」写法。
+#   纯函数：输入 = 段 + stdin 记录流；输出单行 `OK<TAB>main|linked|path<TAB>repo_phys<TAB>scope<TAB>group`
+#   （path 分支 = legacy 仓路径语义，scope/group 留空由调用方走既有三档 fleet 解析）。
+#   名字 scope 与放置键**不同源**：scope = code（联动仓）/ slug（主仓），placement 恒 = manifest slug。
+fleet_repo_resolve() {  # <段>（stdin = manifest 记录流）
+  local seg="${1-}" kind="" a="" b="" slug="" root="" cpath="" pp="" i=0
+  local -a codes=() cpaths=()
+  while IFS=$'\t' read -r kind a b; do
+    case "$kind" in
+      FLEET) slug="$a"; root="$b" ;;
+      REPO)  codes+=("$a"); cpaths+=("$b") ;;
+    esac
+  done
+  [[ -n "$slug" && -n "$root" ]] \
+    || { printf 'fleet_repo_resolve：manifest 记录流缺 FLEET 行（实现缺陷，不得猜）\n' >&2; return 1; }
+  pp="$(_fleet_phys "$seg")"; [[ -d "$pp" ]] || pp=""
+  for i in "${!codes[@]}"; do
+    [[ "${codes[$i]}" == "$seg" ]] || continue
+    cpath="${cpaths[$i]}"
+    if [[ -n "$pp" && "$pp" != "$cpath" ]]; then
+      printf 'fleet_repo_resolve：@%s 同时命中联动仓 code（%s）与仓路径（%s）且物理路径不同 ⇒ 不猜（该怎么办：二者只能取一个，改 code 或在 manifest 里指到同一物理路径）\n' \
+        "$seg" "$cpath" "$pp" >&2
+      return 1
+    fi
+    printf 'OK\tlinked\t%s\t%s\t%s\n' "$cpath" "${codes[$i]}" "${codes[$i]}"
+    return 0
+  done
+  if [[ "$seg" == "$slug" ]]; then
+    if [[ -n "$pp" && "$pp" != "$root" ]]; then
+      printf 'fleet_repo_resolve：@%s 同时命中舰队名（主仓 %s）与仓路径（%s）且物理路径不同 ⇒ 不猜\n' "$seg" "$root" "$pp" >&2
+      return 1
+    fi
+    printf 'OK\tmain\t%s\t%s\tmain\n' "$root" "$slug"
+    return 0
+  fi
+  if [[ -n "$pp" ]]; then printf 'OK\tpath\t%s\t\t\n' "$pp"; return 0; fi
+  printf 'fleet_repo_resolve：@%s 未命中（可用 code：%s；舰队 slug：%s；也可写 @<仓路径> 走既有语义）\n' \
+    "$seg" "${codes[*]:-无}" "$slug" >&2
+  return 1
+}
 
 # 角色事实表灌入（每 run 一次）。--cards ⇒ 并入锚根下的下游卡 role（status/close 用；
 #   ensure 不读卡集，避免为 parse 引入额外 glob/IO 与 CARD_SET_MAX 告警）。
@@ -3187,7 +3389,7 @@ build_system_prompt() {
 }
 
 spawn_one() {
-  local name="$1" repo="$2" model="$3" card_override="${4:-}" role_id="${5:-}" card_name="${6:-}" force="${7:-false}" label="${8:-}" card prompt_file inner
+  local name="$1" repo="$2" model="$3" card_override="${4:-}" role_id="${5:-}" card_name="${6:-}" force="${7:-false}" label="${8:-}" group="${9:-}" card prompt_file inner
   # T537：卡路径可由调用方显式给出（下游仓卡）；未给出时仍走清单（PROMPTS_DIR/<card>）逐字不变
   # #75：**两条取卡通道分两个参数，禁混用** ——
   #   ④ card_override = `--card` 的**完整路径**（下游卡，已由 resolve_card 限定在 <repo>/.agents/prompts/ 内）
@@ -3219,7 +3421,7 @@ spawn_one() {
   #   `|| rc=$?` 是 set -e 下的必需写法（|| 列表豁免 errexit）；函数返回值即结果契约。
   local rc=0
   _TERM_SPAWN_PANE=""
-  term_spawn "$name" "$inner" "$repo" "$force" "$label" || rc=$?
+  term_spawn "$name" "$inner" "$repo" "$force" "$label" "$group" || rc=$?
   case "$rc" in
     "$SPAWN_RC_OK")   SPAWN_OK=$((SPAWN_OK + 1))
                       if [[ "$NAO_TERMINAL" == "herdr" ]]; then
@@ -3869,6 +4071,20 @@ check_downstream_cards() {
 }
 
 # ---------------------------------------------------------------------------
+# status 的 scope 展示面（M5 · #139）：manifest 可读 ⇒ `fleet=<slug>` + `code=<code>` 两字段；
+#   非法/不可读 ⇒ `fleet=?`（显式不可知，禁空值）。无 manifest ⇒ 逐字旧形态（AC2 结构性保持）。
+STATUS_MN_OK=0; STATUS_MN_SLUG=""; STATUS_MN_CODES=""
+_status_scope_tag() {  # <scope> → " ·fleet=…[ ·code=…]"
+  local s="${1-}"
+  if (( STATUS_MN_OK == 2 )); then printf ' ·fleet=?'; return 0; fi
+  if (( STATUS_MN_OK == 1 )); then
+    case " $STATUS_MN_CODES " in
+      *" $s "*) printf ' ·fleet=%s ·code=%s' "$STATUS_MN_SLUG" "$s"; return 0 ;;
+    esac
+  fi
+  printf ' ·fleet=%s' "$s"
+}
+
 cmd_status() {
   local a backend
   backend="$(term_backend)"
@@ -3884,6 +4100,21 @@ cmd_status() {
   fi
   # BR8：parse 的角色事实表（常驻 id + 锚根下合法卡 role）；**一次** glob，不再二次 card_role_set
   fleet_roles_init --cards
+  # M5（#139）：manifest 读面（只在 manifest 可读时追加字段；无 manifest / 不可读不动既有行格式）
+  #   可读 ⇒ `fleet=<slug>` + `code=<code>`；非法/不可读 ⇒ `fleet=?`（显式不可知，禁空值）。
+  STATUS_MN_OK=0; STATUS_MN_SLUG=""; STATUS_MN_CODES=""
+  local st_root="" st_mn=""
+  st_root="$(fleet_manifest_root "$PWD")"
+  if st_mn="$(fleet_manifest_load "$st_root" 2>/dev/null)"; then
+    if [[ -n "$st_mn" && "$st_mn" != "NONE" ]]; then
+      STATUS_MN_OK=1
+      STATUS_MN_SLUG="$(printf '%s\n' "$st_mn" | awk -F'\t' '$1=="FLEET"{print $2; exit}')"
+      STATUS_MN_CODES="$(printf '%s\n' "$st_mn" | awk -F'\t' '$1=="REPO"{printf "%s ", $2}')"
+      STATUS_MN_CODES="${STATUS_MN_CODES% }"
+    fi
+  else
+    STATUS_MN_OK=2
+  fi
   # 一次枚举会话名（标题/会话/名册去重）：下面两轮共用，避免多一轮 tmux/node 调用
   local -a field_names=()
   local dname pout p_kind p_role p_task p_scope
@@ -3965,8 +4196,8 @@ cmd_status() {
         if [[ "$backend" == "herdr" && "${hv[$a_nm]:-absent}" != "online" ]]; then
           continue
         fi
-        printf '  ✓ %-14s 在线（--name %s；卡片 %s）·fleet=%s\n' \
-          "$a" "$a_nm" "${ROLE_CARDS[$a]}" "$a_sc"
+        printf '  ✓ %-14s 在线（--name %s；卡片 %s）%s\n' \
+          "$a" "$a_nm" "${ROLE_CARDS[$a]}" "$(_status_scope_tag "$a_sc")"
         a_ok=1
       done
     fi
@@ -4010,7 +4241,7 @@ cmd_status() {
     pout="$(fleet_name_parse "$dname")"
     if [[ "$pout" == "OK "* ]]; then IFS=',' read -r p_kind p_role p_task p_scope <<< "${pout#OK }"; fi
     scope_tag=""
-    [[ -n "$p_scope" ]] && scope_tag=" ·fleet=$p_scope"    # D5：只追加字段，既有行格式不动（BR1）；展示术语与 --fleet 对齐
+    [[ -n "$p_scope" ]] && scope_tag="$(_status_scope_tag "$p_scope")"    # D5：只追加字段，既有行格式不动（BR1）
     # herdr：非在线证据类**单列**（下方「终端证据异常」节），此处不重复渲染成残留/进行态
     if [[ "$backend" == "herdr" ]]; then
       case "${hv[$dname]:-absent}" in
@@ -4263,6 +4494,20 @@ cmd_close() {
     #    旧行为「名册首命中即定仓」在同名跨仓时会把 repo 改指别仓（忙闲 / liveness 按错仓过滤）。
     #    全名是用户**显式键** ⇒ 不用调用方锚：唯一命中不经锚 ⇒ 跨仓唯一回收照旧（cases/09 AC3 不回归）。
     name="$(fleet_name_build "$kindc" "$core" "$p_scope")"
+    # M5（#139）：期望仓的**回落值** = manifest 的 code → path（`main` ⇒ manifest 根）；
+    #   无 manifest / 不是 code 也不是 slug ⇒ 逐字沿用 T551/T552。期望仓只作回落，不参与并列判定。
+    local mnr="" mnstream="" mnslug="" mnkind="" mna="" mnb=""
+    mnr="$(fleet_manifest_root "$PWD")"
+    if mnstream="$(fleet_manifest_load "$mnr" 2>/dev/null)" && [[ -n "$mnstream" && "$mnstream" != "NONE" ]]; then
+      mnslug="$(printf '%s\n' "$mnstream" | awk -F'\t' '$1=="FLEET"{print $2; exit}')"
+      if [[ "$p_scope" == "$mnslug" ]]; then
+        fallback_repo="$mnr"
+      else
+        while IFS=$'\t' read -r mnkind mna mnb; do
+          [[ "$mnkind" == "REPO" && "$mna" == "$p_scope" ]] && { fallback_repo="$mnb"; break; }
+        done <<< "$mnstream"
+      fi
+    fi
     repo="$fallback_repo"                         # 唯一回落值（h=0 保留；**禁**回退「名册首命中」）
     local -a cw_uniq=()
     scoped_cwds=()
@@ -4426,10 +4671,36 @@ cmd_ensure() {
   local force="$1" model="$2" task="$3"
   local i spec role repo key seen k card_arg card_as disp role_id fleet fleet_src core kind vrd legacy_ok
   local chk_core chk_full chk_p maxs chk_role chk_added old_fleet
-  local -a cg_done=() t_names=() t_repos=() t_cards=() t_roles=() t_prompts=() t_fleets=() t_fleet_srcs=() t_kinds=()
+  local MN="" MANIFEST_ROOT="" MANIFEST_OK=0 MANIFEST_SLUG="" rres="" rkind="" scope_name="" place="" group=""
+  local -a cg_done=() t_names=() t_repos=() t_cards=() t_roles=() t_prompts=() t_fleets=() t_fleet_srcs=() t_kinds=() t_labels=() t_groups=()
   # BR8：parse 的角色事实表（常驻 id）。ensure 不读卡集（不为判重引入额外 glob 与 CARD_SET_MAX 告警）
   fleet_roles_init
   [[ ${#TARGETS[@]} -gt 0 ]] || die "ensure 需要至少一个角色，如: nao-fleet.sh ensure arch rd-fe rd-infra"
+  # ==== 相位 0（#139）：manifest 单次加载 + 放置来源一致性（M1 唯一解析点）====
+  #   源 = 调用方仓根（不做向上查找）；`NONE` 是合法事实（无 manifest ⇒ 既有行为逐字不变）。
+  #   禁 mapfile：必须拿 rc（T551 教训）；空输出 = 实现缺陷 ⇒ die，不得当 NONE。
+  MANIFEST_ROOT="$(fleet_manifest_root "$PWD")"
+  MN="$(fleet_manifest_load "$MANIFEST_ROOT")" \
+    || die "ensure 中止：$MANIFEST_ROOT/.agents/fleet.yaml 非法（见上；该怎么改：按报错的文件:行号修字段，或删掉该文件回到无 manifest 语义）"
+  if [[ "$MN" == "NONE" ]]; then
+    MN=""
+  else
+    [[ -n "$MN" ]] || die "ensure 中止：manifest 解析返回空输出（实现缺陷，不得当 NONE）"
+    MANIFEST_OK=1
+    MANIFEST_SLUG="$(printf '%s\n' "$MN" | awk -F'\t' '$1=="FLEET"{print $2; exit}')"
+    [[ -n "$MANIFEST_SLUG" ]] || die "ensure 中止：manifest 记录流缺 FLEET 行（实现缺陷）"
+    # H（AC6）：同一 manifest 只有一支舰队名 ⇒ `--fleet` 与 slug 分歧即 fail loud
+    if [[ -n "$CLI_FLEET" && "$CLI_FLEET" != "$MANIFEST_SLUG" ]]; then
+      die "ensure 中止：--fleet「$CLI_FLEET」与 $MANIFEST_ROOT/.agents/fleet.yaml 的 slug「$MANIFEST_SLUG」不一致（同一 manifest 只有一支舰队名；该怎么办：去掉 --fleet，或改用 --fleet $MANIFEST_SLUG）"
+    fi
+    # G（AC6）：fleet-scope 与 manifest.slug 同权来源 —— 分歧 ⇒ fail loud，禁静默取一
+    if ! fleet_of_invocation "$MANIFEST_ROOT" ""; then
+      die "ensure 中止：$MANIFEST_ROOT/.agents/fleet-scope 不可用（${FLEET_RESOLVED_ERR:-见上}）"
+    fi
+    if [[ "$FLEET_RESOLVED_SOURCE" == "file" && "$FLEET_RESOLVED" != "$MANIFEST_SLUG" ]]; then
+      die "ensure 中止：两个放置来源分歧 —— $MANIFEST_ROOT/.agents/fleet-scope = 「$FLEET_RESOLVED」· .agents/fleet.yaml slug = 「$MANIFEST_SLUG」（该怎么办：只留一处并把值改成一致）"
+    fi
+  fi
   # ==== 相位 1：全量解析 + 校验（BR11 两相执行）====
   #   卡、role、BR9、--as 全过才进相位 2；任一项失败都在**建 pane 之前** die ⇒ BR6「零副作用」可达
   for i in "${!TARGETS[@]}"; do
@@ -4472,6 +4743,7 @@ cmd_ensure() {
       fleet="$FLEET_RESOLVED"; fleet_src="$FLEET_RESOLVED_SOURCE"
       t_names+=("$disp"); t_repos+=("$CARD_REPO"); t_cards+=("$CARD_PATH"); t_roles+=("${CARD_ROLE:-}")
       t_fleets+=("$fleet"); t_fleet_srcs+=("$fleet_src"); t_kinds+=("card")
+      t_labels+=("$fleet"); t_groups+=("")   # 卡目标不走 manifest 语义（既有行为逐字不变）
       if $VERBOSE; then
         log "fleet=$fleet @ $CARD_REPO（来源：$([ "$fleet_src" = cli ] && printf -- '--fleet/--scope' || { [ "$fleet_src" = file ] && printf '.agents/fleet-scope' || printf '默认仓 slug'; })）"
       fi
@@ -4480,20 +4752,50 @@ cmd_ensure() {
     else
       [[ -z "$card_as" ]] || die "--as 只能用于同一目标的 --card 之后（如 ensure --card <卡> --as <会话名>）"
       resolve_role "$role"
-      [[ -n "$repo" ]] || repo="${ROLE_WS[$NAME]:-$PWD}"
-      # AC13（T547-O-1）：`roles.yaml` 的 `workspace: .` 是**相对值** —— 必须在此归一成物理绝对路径。
-      #   否则 `herdr workspace create --cwd .` 由 **server** 解析 ⇒ pane/`cd .` 落到 server 目录
-      #   （症状：两仓 pane 同目录、同仓重复 ensure 假冲突、归属判据拿不到仓 cwd）。
-      #   归一一次 ⇒ 下游 fleet 解析 / 判重 / codegraph / spawn 全部拿到同一绝对仓路径。
-      repo="$(_fleet_phys "$repo")"
-      if ! fleet_of_invocation "$repo" "$CLI_FLEET"; then
-        die "ensure 中止：无法确定 <$repo> 的 fleet（${FLEET_RESOLVED_ERR:-见上}；该怎么办：修或删 <目标仓>/.agents/fleet-scope，或用 --fleet <slug> 显式指定）"
+      scope_name=""; place=""; group=""
+      if (( MANIFEST_OK )); then
+        # M2：`@` 四步解析的唯一顺序（code → 既有仓路径 → 两者冲突 ⇒ fail loud → 都未命中 ⇒ fail loud）
+        if [[ -n "$repo" ]]; then
+          if ! rres="$(fleet_repo_resolve "$repo" <<< "$MN")"; then
+            die "ensure 中止：目标段 @$repo 不可判定（见上一条列出的可用 code / 舰队名；也可改用 @<仓路径> 走既有语义）"
+          fi
+          IFS=$'\t' read -r _res_ok rkind repo scope_name group <<< "$rres"
+        else
+          # 无 `@` ⇒ 主仓（组前缀固定 main，放置键 = manifest slug）
+          rkind="main"; repo="$MANIFEST_ROOT"; scope_name="$MANIFEST_SLUG"; group="main"
+        fi
+        if [[ "$rkind" == "path" ]]; then
+          # 既有仓路径语义：三档 fleet 照旧，无 tab 组前缀（AC2 结构性保持）
+          scope_name=""; place=""; group=""
+        else
+          place="$MANIFEST_SLUG"
+        fi
+      else
+        [[ -n "$repo" ]] || repo="${ROLE_WS[$NAME]:-$PWD}"
+        # AC13（T547-O-1）：`roles.yaml` 的 `workspace: .` 是**相对值** —— 必须在此归一成物理绝对路径。
+        #   否则 `herdr workspace create --cwd .` 由 **server** 解析 ⇒ pane/`cd .` 落到 server 目录
+        #   （症状：两仓 pane 同目录、同仓重复 ensure 假冲突、归属判据拿不到仓 cwd）。
+        #   归一一次 ⇒ 下游 fleet 解析 / 判重 / codegraph / spawn 全部拿到同一绝对仓路径。
+        repo="$(_fleet_phys "$repo")"
       fi
-      fleet="$FLEET_RESOLVED"; fleet_src="$FLEET_RESOLVED_SOURCE"
+      if [[ -z "$scope_name" ]]; then
+        if ! fleet_of_invocation "$repo" "$CLI_FLEET"; then
+          die "ensure 中止：无法确定 <$repo> 的 fleet（${FLEET_RESOLVED_ERR:-见上}；该怎么办：修或删 <目标仓>/.agents/fleet-scope，或用 --fleet <slug> 显式指定）"
+        fi
+        fleet="$FLEET_RESOLVED"; fleet_src="$FLEET_RESOLVED_SOURCE"
+        scope_name="$fleet"; place="$fleet"; group=""
+      else
+        fleet_src="manifest"
+      fi
       t_names+=("$NAME"); t_repos+=("$repo"); t_cards+=(""); t_roles+=("$NAME")
-      t_fleets+=("$fleet"); t_fleet_srcs+=("$fleet_src"); t_kinds+=("resident")
+      t_fleets+=("$scope_name"); t_fleet_srcs+=("$fleet_src"); t_kinds+=("resident")
+      t_labels+=("$place"); t_groups+=("$group")
       if $VERBOSE; then
-        log "fleet=$fleet @ $repo（来源：$([ "$fleet_src" = cli ] && printf -- '--fleet/--scope' || { [ "$fleet_src" = file ] && printf '.agents/fleet-scope' || printf '默认仓 slug'; })）"
+        if [[ "$fleet_src" == "manifest" ]]; then
+          log "name-scope=$scope_name · placement=$place · tab-group=${group:-<无>} @ $repo（来源：.agents/fleet.yaml slug=$MANIFEST_SLUG）"
+        else
+          log "fleet=$scope_name @ $repo（来源：$([ "$fleet_src" = cli ] && printf -- '--fleet/--scope' || { [ "$fleet_src" = file ] && printf '.agents/fleet-scope' || printf '默认仓 slug'; })）"
+        fi
       fi
       # #75：常驻卡名**当场**取证（resolve_role 每目标覆写全局 PROMPT ⇒ 只有此刻的值属于本目标）
       t_prompts+=("$PROMPT")
@@ -4531,7 +4833,7 @@ cmd_ensure() {
           fleet="${old_fleet:0:maxs}"
           while [[ "$fleet" == *- ]]; do fleet="${fleet%-}"; done
           if [[ -n "$fleet" ]] && fleet_scope_problem "$fleet" >/dev/null; then
-            t_fleets[$i]="$fleet"
+            t_fleets[$i]="$fleet"; t_labels[$i]="$fleet"   # 名字 scope 与放置键同步截短（同一来源）
             log "fleet 值超长：默认 tier 的仓 slug「$old_fleet」按名长预算截短为「$fleet」（core ${#chk_core} + '@' + fleet ≤ 48）"
             chk_full="$(fleet_name_build "$kind" "$chk_core" "$fleet")"
             chk_p="$(fleet_name_parse "$chk_full")"
@@ -4594,9 +4896,9 @@ cmd_ensure() {
     fi
     # #75：卡按目标下发（④ 完整路径 / ⑥ 相对名；两条通道互不混用），不再依赖全局 PROMPT
     if [[ -n "${t_cards[$i]}" ]]; then
-      spawn_one "$disp" "$repo" "$model" "${t_cards[$i]}" "${t_roles[$i]:-}" "" "$force" "$fleet"
+      spawn_one "$disp" "$repo" "$model" "${t_cards[$i]}" "${t_roles[$i]:-}" "" "$force" "${t_labels[$i]:-$fleet}" "${t_groups[$i]:-}"
     else
-      spawn_one "$disp" "$repo" "$model" "" "${t_roles[$i]:-}" "${t_prompts[$i]:-}" "$force" "$fleet"
+      spawn_one "$disp" "$repo" "$model" "" "${t_roles[$i]:-}" "${t_prompts[$i]:-}" "$force" "${t_labels[$i]:-$fleet}" "${t_groups[$i]:-}"
     fi
   done
   # T536/BR3/AC4 + T539/BR3：**恰一行**摘要，三类计数（成功/跳过/失败）；三类全 0 不打印（与现状一致）。
