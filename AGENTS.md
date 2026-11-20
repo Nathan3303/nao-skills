@@ -29,6 +29,7 @@
 ## 与 nao 机制衔接
 
 - 角色清单与别名：`.agents/roles.yaml`（唯一事实；卡片 frontmatter 与其一致，`check` 校验）。
+- 「一支舰队能派到哪些仓」的事实源 = 各仓 `.agents/fleet.yaml`（本文件/角色卡只给指针，不复制清单）；写法与边界见 `docs/INSTALL.md`「联动仓 manifest」。
 - 本文档构建与机制：本仓不复制任一机制条款到本文件——需要时引用 `.agents/` 内文件，勿双写。
 - 布局/宿主/句柄语义：`.agents/scripts/nao-fleet.sh` + `.agents/common/intercom-protocol.md`（运行前提 = 终端后端**默认 herdr**（`NAO_TERMINAL=tmux` 回退）+ pi ≥1.4.0；布局：herdr = 1 workspace/仓 + 1 tab/角色，tmux 三选一、窄列回退 `main-col → grid`）。
 - 文档规范：`.agents/checklists/deliverable-docs.md`（PRD/ADR/报告/调研统一骨架；默认不用表格）。

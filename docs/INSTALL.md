@@ -166,6 +166,34 @@ cd ~/proj/web && .agents/scripts/nao-fleet.sh ensure rd-be    # → rd-be@web，
 - 升级前起的裸名会话（`pm`、`rd-be`）**不会被自动回收或顶掉**；在对应仓内 `close pm` 能命中（同仓等价规则），不会误伤 `pm@api`。
 - 同仓内裸名 `pm` 与 `pm@<该仓 slug>` 视为**同一会话**：不会因此起出第二个 PM。
 
+## 联动仓 manifest（`.agents/fleet.yaml`，0.26 起）
+
+单仓单舰队不需要它（不写 = 与 0.25 完全一致）。要「一支舰队声明它能派到哪些仓」，在**主仓根**写 `.agents/fleet.yaml`：
+
+```yaml
+slug: alpha            # 舰队名（放置键）；≤16，同 fleet-scope 语法
+repos:
+  - code: api          # 仓短代号（≤16）⇒ 会话名里的 scope
+    path: ../api       # 相对主仓根；也可写绝对路径
+  - code: web
+    path: ../web
+```
+
+然后 `ensure rd-be@api` ⇒ 会话名 `rd-be@api`、pane cwd = api 仓、**与主仓同住 label=alpha 的 workspace**；tab 标签为 `api/rd-be@api`（主仓会话是 `main/<name>`，`main` 是保留组前缀）。`ensure rd-be`（不带 `@`）= 主仓会话。
+
+规则与边界：
+
+- **放置键 = `slug`**（不再按目标仓分裂 workspace）；名字 scope = `code`（联动仓）或 `slug`（主仓）——两者只在主仓会话上相同。
+- `@<段>` 四步解析（唯一顺序）：① 命中 `code` ⇒ 联动仓；② 否则按**既有仓路径**语义（`ensure rd-be@../api` 照旧）；③ 两者都命中但物理路径不同 ⇒ **fail loud**；④ 都未命中 ⇒ fail loud 并列出可用 code。**不猜**。
+- 校验（解析期就拒，**零 pane**）：`slug` 必填；`code` 不得重复、不得为 `main`、不得等于 `slug`、≤16 且 `^[a-z0-9][a-z0-9_-]*$`；`path` 必须存在且是目录；看似仓内却经 symlink 逃出仓根 ⇒ 拒绝（显式 `../` / 绝对路径才允许出仓）；未知键 / 锚点 / 别名 / 流式 / 多文档 / 制表符缩进 ⇒ 拒绝。报错恒为 `文件:行号 字段 原因`。
+- 与 `.agents/fleet-scope` 共存：同值放行；**分歧 fail loud**（点名两文件两值）。`--fleet` 与 manifest `slug` 不一致 ⇒ fail loud（同一 manifest 只有一支舰队名）。
+- 三预算不放宽：`code` ≤16 / 卡 core ≤32 / 总名长 ≤48；撞线 fail loud，**不**自动截短 code。
+- 名长：manifest 派生（`code`/`slug`）与显式 tier 一样**不自动截短**；只有默认 tier（仓 slug）保留既有截短。
+- 源 = **调用方仓根**的 `.agents/fleet.yaml`：不做向上查找、不自动发现联动仓；在联动仓里 `ensure` 无 manifest 语义（= 单仓行为，已知边界）。
+- 每次命令重新读文件（**无落盘缓存**）：运行期改坏 manifest ⇒ 下一次调用即 fail loud。
+- `status` 对 code scope 同时显示 `·fleet=<slug> ·code=<code>`（manifest 不可读时 `·fleet=?`，显式不可知）；`close <core>@<code>` 的期望仓回落 = manifest 的 code → path（候选 >1 仍拒绝、零回收）。
+- tmux 后端没有 tab 模型 ⇒ 分组只是标签命名空间，**不**追求 tab 物理相邻（herdr 0.9.x 也没有 tab 重排）。
+
 ## 体检（`check`）的提示面
 
 `check` 有**三类提示**，都不改退出码（rc 仍可用于闸门）；`rc=0` 但有提示时用 `-v` 看明细。

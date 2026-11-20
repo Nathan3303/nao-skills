@@ -352,7 +352,7 @@ fi
 # ---- C3④ 负控 2：spawn 内重新调用 fleet_scope_slug ⇒ 必红（第二数据源不得回来）----
 NEG_D2="$T4_CACHE_DIR/c3-neg-d2.sh"
 if mutate_file "$SUBJECT" "$NEG_D2" \
-    'label="${5-}" pout="" pl="" obj js' \
+    'label="${5-}" group="${6-}" pout="" pl="" obj js' \
     'label="$(fleet_scope_slug "$repo")" pout="" pl="" obj js'; then
   t4_assert_eq "1" "$(lint4b "$NEG_D2")" "C3④ 负控 2：spawn 内重算 slug ⇒ 命中 1（D1 零调用判据不空转）"
 else
@@ -1524,7 +1524,7 @@ t4_info "C2② 新期望表：fleet=$LAB_SLUG · 已拉起 $LAUNCH_N_B 条 · bl
 
 # 负控（arch D2 点名）：把默认 tier 改回空 ⇒ 名字丢 @ ⇒ 新期望表必红（证明判据不是同义反复）
 MUT_NEG="$T4_CACHE_DIR/c2-neg-empty-fleet.sh"
-if mutate_file "$LAB/.agents/scripts/nao-fleet.sh" "$MUT_NEG" 't_fleets+=("$fleet")' 't_fleets+=("")'; then
+if mutate_file "$LAB/.agents/scripts/nao-fleet.sh" "$MUT_NEG" 't_fleets+=("$scope_name")' 't_fleets+=("")'; then
   t4_assert_ne "$(md5sum < "$LAB/.agents/scripts/nao-fleet.sh")" "$(md5sum < "$MUT_NEG")" \
     "C2② 负控：副本确实把 fleet 写回空（变异锚点有效）"
   : > "$PI_NAMES"
