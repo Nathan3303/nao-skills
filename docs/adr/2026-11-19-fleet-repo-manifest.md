@@ -22,6 +22,8 @@
 6. **命名预算不变**：scope = code（≤16，复用 `fleet_scope_problem`），**不拼接** `slug-code`；core ≤32 / full ≤48 原样。撞线 fail loud 并点名够不着的那一段；**禁**自动截短 code（截短 = 猜）；默认 tier 的 slug 截短只对 `slug` 来源保留。
 7. **回收（AC7 · 沿用 T551/T552 不猜）**：`close <core>@<code>` 的期望仓 = manifest 的 code → path（`main` ⇒ manifest 根）；无 manifest 逐字沿用 T551 锚 + T552 双键三态。期望仓只是**回落值**，不参与并列判定：候选 >1 一律 die 列候选、零回收。
 
+- **拍板记录（2026-11-20 · PM · D1–D6 全部照本篇建议）**：D1 未命中 code ⇒ fail loud 列候选（不回落三档，PRD M2 已收敛）· D2 `--fleet` ≠ `manifest.slug` ⇒ fail loud · D3 tab 分组 = `<组前缀>/<name>` 首段判据 · D4 主仓组前缀固定 `main` · D5 用例 39 不入快档 · D6 AC9③ 事实源 = manifest + `AGENTS.md` 一行指针。**本篇技术签字生效**，实施口径见 `docs/reports/139-lite-spec.md`。
+
 ## 理由
 
 1. 业务：辖域从「一个仓」变「一组声明过的仓」，而摆放 / 身份 / 单例三件事仍各有一个来源；PM 唯一调度者的边界不动。

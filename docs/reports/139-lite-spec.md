@@ -1,6 +1,6 @@
 # T553 / Issue #139 · 联动仓 manifest（arch-lite 判据）
 
-- 状态：待 PM 拍板（D1–D6）· 更新：2026-11-19 · Owner：arch-designer
+- 状态：已拍板（D1–D6，2026-11-20 全部照建议）· 更新：2026-11-20 · Owner：arch-designer
 - 指针：Issue [#139](https://github.com/Nathan3303/nao-skills/issues/139) · PRD `docs/prds/2026-11-19-fleet-manifest.md` · ADR `docs/adr/2026-11-19-fleet-repo-manifest.md` · 代码 `.agents/scripts/nao-fleet.sh:4439`（positional `@` 旧义）`:4564`（名字 scope）`:4597`（放置入参）`:1209-1241`（放置）`:1073-1109`（布局 A 收敛）`:1985-2043`（fleet 三档）· 夹具参照 `tests/t4/cases/33-herdr-placement-key.sh`
 
 **结论：有条件可行**（条件 = §二 通道 + §三 各态断言 + §五 禁改区）。改动面 = 新 manifest 解析器 + `ensure` 相位 1 的「目标仓 / 名字 scope / 放置键 / tab 组前缀」四元解析 + `close` 期望仓回落 + tab label 四处同源。命名契约语法、`fleet_of_invocation`、布局 A 结构判据、零回归断言面**不动**。
@@ -69,7 +69,7 @@
 - `docs/INSTALL.md` · `README.md`（PM / rd-infra · 实现批 M6）：manifest 写法与边界、`@` 双语义、tab 前缀分组。
 - `AGENTS.md` 一行指针 + PM 卡的「能派到哪些仓」（PM）+ `docs/tasks-state.md` 状态推进（PM）：事实源 = 各仓 manifest；`.agents/**` 本批不动。
 
-## 八、待 PM 拍板
+## 八、拍板记录（PM 2026-11-20）
 
 - **D1** PRD **M2「未命中 ⇒ 回落三档」与 AC4「拒绝并列可用 code」冲突** ⇒ 建议按 AC4 收敛（fail loud），M2 措辞改一行；请确认。
 - **D2** `--fleet` ≠ `manifest.slug` ⇒ 建议 **fail loud**（同一 manifest 只有一支舰队名）；替代 = 允许显式覆盖但 warn（会造出「同 manifest 两支舰队」，不建议）。
@@ -77,4 +77,4 @@
 - **D4** 主仓组前缀固定 **`main`**（不用 slug），与 manifest 保留代号一致。
 - **D5** 用例 39 **不入快档**（建 pane 超预算）；全量 + 双后端各一次。
 - **D6** AC9③「能派到哪些仓」= 各仓 manifest 为事实源 + `AGENTS.md` 一行指针（本批不改 PM 卡 / `.agents/**`）。
-- 附带确认：PRD **AC5 的「code ≤16」判定落在 manifest 解析期**（非命名期），文案点名字段+行号。
+- 附带确认（AC5 判定落 manifest 解析期）与 **D1–D6 全部照建议** —— **PM 拍板 2026-11-20**（PRD 已按 D1 收敛 M2，提交 `8295346`）；本判据即实施口径。
