@@ -85,6 +85,8 @@ cd 你的项目
 
 会话名形如 **`<role>[-<task>]@<fleet>`**：`rd-be@api`、`rd-be-T1@api`。fleet 是舰队身份（默认取仓目录 slug，可用 `ensure --fleet <名>` 或 `.agents/fleet-scope` 覆盖），它同时决定会话名、herdr workspace 放置与单例边界。**两个仓同时跑同一套角色不需要任何配置**（各自默认取仓 slug）；只有算出同一个 fleet 值时才撞车，此时第二仓会**直接报错**并列出冲突会话，而不是悄悄顶掉第一个——要分开就 `--fleet <不同值>`。细节见 [docs/INSTALL.md](docs/INSTALL.md)「会话命名与多仓舰队」。
 
+**多仓编队（可选，0.26 起）**：在仓根写 `.agents/fleet.yaml`（舰队名 + 联动仓短代号/路径），就能把角色派到联动仓干活、仍住同一个 herdr workspace：`ensure rd-be@api`。不写这个文件 = 与以前**完全一致**。写法与边界见 [docs/INSTALL.md](docs/INSTALL.md)「联动仓 manifest」。
+
 然后**在 PM 会话里说需求**就行，剩下的它自己流转。大概长这样：
 
 ```text
