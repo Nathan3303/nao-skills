@@ -617,7 +617,18 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **T553** | `arch-designer`（ADR）→ `rd-infra` → `qa` | **联动仓 manifest（多仓编队）**（Issue [#139](https://github.com/Nathan3303/nao-skills/issues/139) · feat · 批次二） | 2026-11-19 | PRD `docs/prds/2026-11-19-fleet-manifest.md` AC1–AC10（五组） | `feat/139-fleet-manifest`（PRD 已落，未写码） |
+| **T553** | `arch-designer`（ADR）→ `rd-infra` → `qa` | **联动仓 manifest（多仓编队）**（Issue [#139](https://github.com/Nathan3303/nao-skills/issues/139) · feat · 批次二）· **验收通过、待合并** | 2026-11-19 | PRD `docs/prds/2026-11-19-fleet-manifest.md` AC1–AC10（五组） | `feat/139-fleet-manifest`（HEAD `878f68f` · PR [#154](https://github.com/Nathan3303/nao-skills/pull/154)） |
+
+### T553 验收记录（2026-11-20 · PM · 加速档）
+
+- **交付链**：PRD `05ace15` → ADR + 判据 `8295346` → arch 签字留痕 `c06e765` → M1–M5 `8f59029` → 用例 39 + 登记 `772e4cd` → M6 文档 `04a7627` → 返工 `878f68f`
+- **加速档口径（用户 2026-11-20 拍板）**：实现期 `check` + 目标用例 + `test:fast`；**合并前一次** `test:t4:full:dual`；QA **一轮**（不做逐条变异全覆盖、不做终检轮）
+- **PM 自证**：`check` rc=0 · roles=7 · **files=52** · 用例 **38** · `--case 39` **91 herdr / 74 tmux** · 受影响抽查 `06/28/37/38` PASS · `--fast` rc=0 · **`test:t4:full:dual` 两组 rc=0**（非白名单 NOTE=0）
+- **PM 裁定**：arch 的 D1–D6 **全照建议** —— 关键一条 = `@` **今天已是仓路径**（`nao-fleet.sh` positional 解析）⇒ PRD M2 从「未命中回落三档」**收敛为四步唯一顺序 + 不同路径即 fail loud**（否则「先试 code 失败再当路径」会把派错仓伪装成成功）
+- **QA 一轮 = CONDITIONAL → 返工后我复核通过**：抓到 ① **AC2 逐字偏差**（`status` 常驻行多 1 空格，两树 diff 才看得见）② 新 tag `backend-no-signal` 全仓 **0 调用点**（死白名单）。RD 修为：helper 去前导空格（派发行由调用点补 ±1，注释留坑）+ 用例两向改用新 tag（B1）
+- **RD 自报 3 处差异（我判必要联动、接受）**：`cases/28` 两处变异锚点跟随实现（spawn 增第 6 参 `group`、`t_fleets` 改 `scope_name`）· 新增 NOTE tag（`lib.sh` + `tests/README.md` 双处同步）· `AGENTS.md` 1 行指针（未动红线）
+- **禁改区**：`fleet_of_invocation` 与六个 `close` 侧函数体**逐字未动**（AC2 零回归由结构保证）· `cases/37/38/09/13` 断言未动 · `lib-backend.sh` / `docs/tasks-state.md` 未动
+- **待办** = 授权 RD squash 合并 → 发 **v0.26.0 MINOR**
 
 **开工拍板（2026-11-19 ask-me 三答）**：① **MVP = A 最小可用**（manifest 解析 + `ensure <角色>@<仓代号>` + 放置键 = fleet + scope = 仓代号；`fleet-scope` **保留不动、不迁移**）② **门禁 = 加速档**（实现期 `check` + 目标用例 + `test:fast`；合并前一次 `test:t4:full:dual`；QA **一轮**）③ **ADR 由 arch-designer 独立出**。
 **首提交顺带（BR5）**：`stash@{0}`「v0.25.2 发布后事实」已 pop 一并提交（release notes 状态行 = 已核验 + 台账快照 + 陈旧队列行划销）。
