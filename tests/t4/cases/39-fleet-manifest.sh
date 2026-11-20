@@ -24,7 +24,7 @@
 #   H `--fleet beta` vs manifest(slug alpha) ⇒ fail loud 点名两值 + 零 pane；`--fleet alpha` ⇒ rc=0
 #   I full > 48          ⇒ fail loud 点明够不着的段（core 32 + '@' + code 16 = 49），**不**自动截短 code
 #   J `close rd-fe@api`  ⇒ 回收行 `@` 后 = api 物理路径 · 该 pane 消失（期望仓回落 = manifest code → path）
-#   K 跨仓同 code 并列   ⇒ herdr：拒绝列候选、零回收（tmux 句柄层取首条 = 既有语义，NOTE backend-gate）
+#   K 跨仓同 code 并列   ⇒ herdr：拒绝列候选、零回收（tmux 无 label 契约 ⇒ NOTE backend-no-signal）
 #   L 运行期改坏 manifest ⇒ 下一次调用即 fail loud（无落盘缓存）、零 pane
 #   静态：`.agents/fleet.yaml` 字面读点 ≤1（AC10 单源）
 #
@@ -40,7 +40,7 @@ PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
 HAS_TABS=0
 [ "$BE_NAME" = "herdr" ] && HAS_TABS=1
 if [ "$HAS_TABS" = "0" ]; then
-  t4_note backend-gate "tab 分组（<组前缀>/<name>）依赖 herdr tab 模型：tmux 无 tab（rc / 名字 / cwd 断言照跑；workspace 放置面亦不可达）"
+  t4_note backend-no-signal "tab 分组（<组前缀>/<name>）只在 herdr tab 模型上有信号：tmux 无 tab（rc / 名字 / cwd 断言照跑；workspace 放置面亦不可达）"
 fi
 
 FLEET_MAIN="$T4_ROOT/.agents/scripts/nao-fleet.sh"
@@ -313,7 +313,7 @@ if [ "$HAS_TABS" = "1" ]; then
   t4_assert_not_contains "$BE_OUT_ANSI" "未运行" "K 不谎报「未运行」"
   t4_assert_eq "$N_BEFORE" "$(pane_count)" "K 零回收（两 pane 均存活）"
 else
-  t4_note backend-gate "K 并列拒绝面属 herdr「同名 label >1 ⇒ 不猜」句柄层：tmux 无 label 契约（取首条 = 既有语义，cases/38 g2 同口径）"
+  t4_note backend-no-signal "K 并列拒绝面只在 herdr「同名 label >1」句柄层有信号：tmux 无 label 契约（取首条 = 既有语义，cases/38 g2 同口径）"
 fi
 be_kill_pane "$K1"; be_kill_pane "$K2"
 

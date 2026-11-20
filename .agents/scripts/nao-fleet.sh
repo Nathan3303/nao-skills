@@ -4074,15 +4074,17 @@ check_downstream_cards() {
 # status 的 scope 展示面（M5 · #139）：manifest 可读 ⇒ `fleet=<slug>` + `code=<code>` 两字段；
 #   非法/不可读 ⇒ `fleet=?`（显式不可知，禁空值）。无 manifest ⇒ 逐字旧形态（AC2 结构性保持）。
 STATUS_MN_OK=0; STATUS_MN_SLUG=""; STATUS_MN_CODES=""
-_status_scope_tag() {  # <scope> → " ·fleet=…[ ·code=…]"
+#   ⚠️ 返回值**不带前导空格**：常驻行在 main 的形态是 `）·fleet=`（紧贴），派发行是 `name ·fleet=`
+#   （有空格）—— 两条成对调用各自补空格，AC2 逐字等价才成立（QA 实测过 ±1 空格的偏差）。
+_status_scope_tag() {  # <scope> → "·fleet=…[ ·code=…]"
   local s="${1-}"
-  if (( STATUS_MN_OK == 2 )); then printf ' ·fleet=?'; return 0; fi
+  if (( STATUS_MN_OK == 2 )); then printf '·fleet=?'; return 0; fi
   if (( STATUS_MN_OK == 1 )); then
     case " $STATUS_MN_CODES " in
-      *" $s "*) printf ' ·fleet=%s ·code=%s' "$STATUS_MN_SLUG" "$s"; return 0 ;;
+      *" $s "*) printf '·fleet=%s ·code=%s' "$STATUS_MN_SLUG" "$s"; return 0 ;;
     esac
   fi
-  printf ' ·fleet=%s' "$s"
+  printf '·fleet=%s' "$s"
 }
 
 cmd_status() {
@@ -4241,7 +4243,7 @@ cmd_status() {
     pout="$(fleet_name_parse "$dname")"
     if [[ "$pout" == "OK "* ]]; then IFS=',' read -r p_kind p_role p_task p_scope <<< "${pout#OK }"; fi
     scope_tag=""
-    [[ -n "$p_scope" ]] && scope_tag="$(_status_scope_tag "$p_scope")"    # D5：只追加字段，既有行格式不动（BR1）
+    [[ -n "$p_scope" ]] && scope_tag=" $(_status_scope_tag "$p_scope")"   # D5：只追加字段，既有行格式不动（BR1）
     # herdr：非在线证据类**单列**（下方「终端证据异常」节），此处不重复渲染成残留/进行态
     if [[ "$backend" == "herdr" ]]; then
       case "${hv[$dname]:-absent}" in
