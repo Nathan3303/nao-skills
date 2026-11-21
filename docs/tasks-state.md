@@ -50,7 +50,7 @@
 
 - 🔁 **交接快照（2026-11-20 · T553 合并后 / v0.26.0 发布中）**：接手者只需读本文件。要点：
   - **T553 已合并 `475b251`**（PR #154 squash · 20 文件 · main 恰 1 条）· `check` rc=0 · roles=7 · files=52 · 用例 **38**
-  - **正在发 v0.26.0 MINOR**（分支 `nao/v0.26.0-release`：`package.json` 0.26.0 + `docs/releases/v0.26.0.md` + 本台账终态）· 待 → 发布前置 dual 门禁 → RD 按显式 sha push → tag `v0.26.0` + Release → **用户** `npm publish` → 按 integrity 核验回填
+  - **v0.26.0 已发布并核验（2026-11-20）**：发布提交 `10ef3b6` · tag/Release `v0.26.0` · `dist-tags.latest` = **0.26.0** · `dist.integrity` 与本地 `npm pack` tarball（**233,165 B** / unpacked 615,443 B）**逐字节一致** · **注意**：状态行改动按 BR5 压在 `stash@{0}`，**下一任务 PR 首提交须 pop**
   - **v0.25.1 / v0.25.2 均已核验**（integrity 与本地 tarball 逐字节一致：226,330 B / 227,687 B）
   - **队列**：空（#146 / #151 / #139 均闭环）· 三档表仍 13 条（最近到期 2026-12-28）
   - **现成会话**：`arch-designer-T553` / `rd-infra-T553` / `qa-T553`（均 idle 或 done）—— 发布收尾后 `close --force --task T553 <别名>` 回收
@@ -617,6 +617,10 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **T554** | `arch-designer`（ADR）→ `rd-infra` → `qa` | **舰队模型 v2：取消 fleet，workspace 为绑定单位**（feat · 破坏性 · 用户 2026-11-20 四答） | 2026-11-20 | PRD `docs/prds/2026-11-20-fleet-model-v2.md` AC1–AC10 | `feat/554-fleet-model-v2`（PRD 已落，未写码） |
+
+**用户拍板（2026-11-20 · ask-me 四答）**：① **彻底取消 fleet**（重名加数字 `pm2`…）② 名字**只用角色名 + 数字后缀**，`@` 段彻底去掉 ③ **每仓一个 pm** ④ `fleet.yaml` 保留为「仓代号 → 路径」映射、去 `slug`；⑤ **default session 全放行**。
+**PM 实测（决定可行性 · 已回收探测 session）**：herdr 0.9.5 **不做任何 label 唯一性校验** —— 不同 workspace 各有 `pm` tab 允许、**同一 workspace 内两个 `pm` 也允许**、同 label workspace 也允许 ⇒ 唯一性必须由机制自己做 ⇒ 取消 fleet 无技术障碍。
 （T553 已合并归档 ⇒ 行已清空；终态见下方「已验收 / 已归档」归档墙）
 
 ### T553 验收记录（2026-11-20 · PM · 加速档）
