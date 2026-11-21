@@ -1,6 +1,6 @@
 # ADR：舰队身份单一来源（`--fleet` 同时定会话名 scope 与 workspace 放置键）
 
-- 状态：已接受（待落地）
+- 状态：已废弃（被 2026-11-20-workspace-as-binding-unit 取代）
 - 更新：2026-11-17
 - Owner：arch-designer
 - 指针：Issue [#138](https://github.com/Nathan3303/nao-skills/issues/138) · PRD `docs/prds/2026-11-17-fleet-param.md` · 评审 `docs/reports/138-arch-review.md` · 前序 `docs/adr/2026-11-13-herdr-workspace-scope-key.md` · 批次二占位 [#139](https://github.com/Nathan3303/nao-skills/issues/139)
@@ -46,6 +46,7 @@
 - 单 `@` 语法冻结 ⇒ 批次二「一 fleet 多仓」必须把仓编进同一段 slug，16 字符预算届时是真约束（已登记 `docs/tasks-state.md:10`）。
   **后续演进（2026-11-19 · Issue #139）**：本篇「放置键与身份键同源」被 `docs/adr/2026-11-19-fleet-repo-manifest.md` 取代 —— 放置键 = manifest `slug`、名字 `@` 段 = 仓 `code`（**不同源**）；单 `@` 语法与三预算（32/16/48）**不变**，且不拼接 slug+code ⇒ 16 字符预算的担忧作废。本篇其余结论（`--fleet` 三档 · 禁由名字反解放置键 · `label` 与 identity 保持两个变量）继续有效，并成为批次二的解耦点。
 - 不做：`--fleet` 用于 `close`/`status`（跨 fleet 用全名）；同名仓自动探测；对已存在的 pane 重排或改名。
+  **已被 `docs/adr/2026-11-20-workspace-as-binding-unit.md` 取代（2026-11-20）**：本篇「放置键与身份键同源（都 = fleet）」不再成立（名字去位置段，放置键 = 仓）；`--fleet` 三档随弃用退场；「禁由名字反解放置键」被新篇继承并加强。
 
 ## 相关指针
 

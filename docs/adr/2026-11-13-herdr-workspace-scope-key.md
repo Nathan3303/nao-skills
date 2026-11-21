@@ -1,6 +1,6 @@
 # ADR：herdr workspace 放置键与 scope 分离（label = 声明 scope 否则仓 slug）
 
-- 状态：已接受（已落地 v0.23.1）
+- 状态：已废弃（被 2026-11-20-workspace-as-binding-unit 取代）
 - 更新：2026-11-17
 - Owner：arch-designer
 - 指针：Issue [#112](https://github.com/Nathan3303/nao-skills/issues/112) · 评审 `docs/reports/T545-scope-isolation-arch.md` · 上游 `docs/prds/2026-11-10-herdr-base.md`（AC3.1）· 既有放置口径 `docs/reports/96p3-layout-p1.md:22` · **后续演进** `docs/adr/2026-11-17-fleet-identity-source.md`（Issue #138）
@@ -44,6 +44,7 @@
 
 - 非 git 仓 slug = 目录名；>16 字符截断或同名仓可能撞键（不做自动探测，靠声明 scope 或改目录名）。
 - 不改命名契约语法，不改 `status`/`close` 的归属判据（pane label + pane cwd）。
+  **已被 `docs/adr/2026-11-20-workspace-as-binding-unit.md` 取代（2026-11-20）**：本篇「放置键 = 已声明 scope 否则仓 slug」不再成立（放置键只由仓派生，scope 退场）；「键恒非空 · worktree 同键 · 禁由名字反解放置键」被新篇继承。
   **后续演进（2026-11-19 · Issue #139）**：本篇「1 workspace/仓」被 `docs/adr/2026-11-19-fleet-repo-manifest.md` 改写为「1 workspace/**舰队**」（联动仓角色同住，tab 以 `<code>/` 前缀分组）；放置键仍恒非空、仍由单点传参、仍禁由名字反解 —— 本篇双键分离原则与本篇其余边界不变。
 
 ## 相关指针
