@@ -14,7 +14,7 @@
 ## 决策
 
 1. **新判据句：放置键 = 仓**（workspace label = 仓基键，同名加数字）；**名字不含位置**（`@` 段删除）。
-2. 名字 = `<role>[2-9][-<task>]`（后缀紧贴角色名、单字符）；同 workspace 内同名加数字，N > 9 fail loud。
+2. 名字 = 常驻 `<role>[<N>]` / 派生 `<role>[<N>](<task>)`（task 逐字入括号、紧贴角色名，N 在 `(` 前、单字符）；同 workspace 内同名加数字，N > 9 fail loud。
 3. 1 workspace = 1 仓 = 1 pm（pm 与 worker 同为 workspace 内 tab）；`.agents/fleet.yaml` 降级为 `code → path` 映射（去 `slug`）；`ensure <role>@<code>` 的 `@` 只选目标仓、不进名字。
 4. `default` 与专用 session 等价，差异只在破坏性动作**打印影响面**；`--fleet` / `--scope` / `.agents/fleet-scope` 本版 warn + 忽略，下一 MINOR 移除。
 
@@ -40,13 +40,13 @@
   - `2026-11-19-fleet-repo-manifest`：「1 fleet = 1 workspace」与「tab 前缀 `<code>/` 分组」失效（1 ws = 1 仓，同仓无需分组）；manifest 只留 `code → path`。
 - 正面：跨仓同名合法且互不影响；`close`/`status` 归属由 workspace + pane cwd 唯一确定；名字可读（`pm2` = 第二个 pm）。
 - 负面：升级期新旧名字并存 ⇒ 带 `@` 的旧会话只能走 legacy 读模式；`--fleet`/`fleet-scope` 被忽略属「配置静默失效」，靠恰一行 warn 兜住。
-- 风险：名字文法与 `-<task>` 的边界是最高回归面（后缀紧贴 + 单字符是唯一判据）；判据 §一 给反例，§四 逐处迁移 5 个用例的旧断言。
+- 风险：名字文法（括号位置 + 槽位形态）是最高回归面；判据 §一 给两条反例，§四 逐处迁移旧断言（实为 8 个用例，含 20/22/24）。
 
 ## 限制与已知边界
 
 - **`default` 放行的风险边界**：`cleanup --session default`（含内部 `session stop`）**必须**先打印「将停止 session=default，影响 N 个 workspace / M 个 pane」；无 `--force` 时零动作（rc=2），有 `--force` 才执行并点名「当前 pane 属于该 session，将被终止」。`close`（单会话）照旧打印目标名 + `@ <仓>`。
 - **不许旁路的护栏**：自面板守卫（`_term_herdr_self_refuse`，`cleanup default` 亦须拒当前 pane 自拆）/ 归属不可判定即拒（pane cwd 与名册均无 ⇒ die，禁「首命中」）/ 忙闲闸门（`cleanup` 含 working/blocked pane ⇒ 无 `--force` 拒绝）。
-- 名字预算：后缀占 1 字符，卡 core 上限仍 32（含后缀）、name ≤ 48；后缀只在角色名**紧贴**时成立（`qa-2` 仍是任务号 `2`，`qa2` 才是 qa#2）。
+- 名字预算：`<N>` 占 1 字符、`(task)` 逐字入括号（`T` 是任务号自带前缀，不另加）；name ≤ 48、role 段（含 N）≤ 32；三形态按首个分隔符 `(`/`-`/`@` 分派，旧形只读。
 - manifest 源仍 = 调用方仓根，不向上查找、不自动发现；旧 `slug:` 字段与 `fleet-scope` 同属弃用面（warn + 忽略一版）。
 - 不做：跨 herdr session 协同、自动发现联动仓、布局几何算式、`pi` 侧改动。
 
