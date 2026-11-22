@@ -356,6 +356,13 @@ mut38() { # <文件> <定位串（须唯一）> <替换整行> → 0 = 已应用
   mv "$f.new" "$f" || return 1
   ! grep -qF -- "$pat" "$f"
 }
+mut38_all() { # <文件> <定位串> <替换整行>（替换**所有**命中行；用于两分支同形的行）
+  local f="$1" pat="$2" repl="$3"
+  MUT_OLD="$pat" MUT_NEW="$repl" awk '
+    { if (index($0, ENVIRON["MUT_OLD"]) > 0) print ENVIRON["MUT_NEW"]; else print }' "$f" > "$f.new" || return 1
+  mv "$f.new" "$f" || return 1
+  ! grep -qF -- "$pat" "$f"
+}
 mut_new() { # <编号> → 变异副本路径
   local d="$LAB/mut38-$1.sh"
   cp "$FLEET_SRC" "$d" && printf '%s' "$d"
@@ -365,8 +372,8 @@ mut_run() { # <变异脚本> <roster> <target> —— 以 cwd=$RA 跑变异副�
 }
 
 # ① h>1 取首条（去重后 `== 1` 改 `>= 1`）⇒ (d) 不再 die（红点：rc=0 / 发生回收）
-MUT="$(mut_new 1)" && mut38 "$MUT" '(( ${#cw_uniq[@]} == 1 ))' \
-  '      if (( ${#cw_uniq[@]} >= 1 )); then' \
+MUT="$(mut_new 1)" && mut38 "$MUT" 'if (( ${#cw_uniq[@]} > 1 )); then' \
+  'if false; then' \
   || t4_bad "负控① 变异未应用（实现写法已变：h=1 判定行）"
 P_M1A="$(stage38 "$RA" "$N_A")"; P_M1B="$(stage38 "$RB" "$N_B")"
 N_TGT="$N_A"
@@ -376,8 +383,8 @@ t4_expect_red "$(v_ambiguous "$PRB|$PRA" "$P_M1A" "$P_M1B")" \
 kill38 "$P_M1A" "$P_M1B"
 
 # ② 先按调用方仓过滤（多命中被静默收敛成 1 条）⇒ (d) 变成 rc=0 回收本仓 ⇒ 必红
-MUT="$(mut_new 2)" && mut38 "$MUT" 'mapfile -t scoped_cwds < <(intercom_cwds_for "$name")' \
-  '      mapfile -t scoped_cwds < <(intercom_cwds_for "$name" "$(nao_phys_path "$PWD")")' \
+MUT="$(mut_new 2)" && mut38 "$MUT" 'mapfile -t name_cwds < <(intercom_cwds_for "$name")' \
+  'mapfile -t name_cwds < <(intercom_cwds_for "$name" "$(nao_phys_path "$PWD")")' \
   || t4_bad "负控② 变异未应用（实现写法已变：双键查询行）"
 P_M2A="$(stage38 "$RA" "$N_A")"; P_M2B="$(stage38 "$RB" "$N_B")"
 N_TGT="$N_A"
@@ -387,8 +394,8 @@ t4_expect_red "$(v_ambiguous "$PRB|$PRA" "$P_M2A" "$P_M2B")" \
 kill38 "$P_M2A" "$P_M2B"
 
 # ③ 退化成回落值（h=1 不采用 cwd）⇒ a2 辅助条必红；b3 的结果层咬合只在 herdr（tmux 无按仓忙闲信号）
-MUT="$(mut_new 3)" && mut38 "$MUT" '      repo="${cw_uniq[0]}"' '      repo="$repo"' \
-  || t4_bad "负控③ 变异未应用（实现写法已变：h=1 采用行）"
+MUT="$(mut_new 3)" && mut38 "$MUT" '  _TERM_BUSY_WHY="$why"' '  _TERM_BUSY_WHY=""; return 1' \
+  || t4_bad "负控③ 变异未应用（实现写法已变：忙闲闸门返回行）"
 P_M3="$(stage38 "$RB" "$N_B")"
 mut_run "$MUT" "$(roster "$(rent "$N_B" "$PRB" working)")" "$N_B"
 if [ "$BE_NAME" = "herdr" ]; then
@@ -401,17 +408,16 @@ kill38 "$P_M3"
 if [ "$BE_NAME" = "tmux" ]; then
   mut_run "$MUT" "$(roster "$(rent "$N_A" "$PRA")")" "$N_A"
   t4_assert_eq "GREEN" "$(v_online_no_pane)" \
-    "负控③ a2 结果层与 repo 无关（变异后仍 rc≠0）⇒ 咬合只落 a2 辅助条"
-  t4_assert_not_contains "$T4_ALL" "cwd=$PRA" \
-    "负控③ 同变异 ⇒ a2 辅助条必红（warn 的 cwd 退化成回落值 \".\"）"
+    "负控③ a2 结果层与忙闲闸门无关（变异后仍 rc≠0；该向判别力在 herdr b3）"
 fi
 
 # ④ h=0 改 die（无同名记录时派死）⇒ (e) 破坏幂等基线
-MUT="$(mut_new 4)" && mut38 "$MUT" 'if (( ${#scoped_cwds[@]} > 0 )); then' \
-  '    [[ ${#scoped_cwds[@]} -gt 0 ]] || die "close 中止：名册无该全名（负控变异）"; if true; then' \
-  || t4_bad "负控④ 变异未应用（实现写法已变：三态外层入口行）"
+MUT="$(mut_new 4)" && mut38 "$MUT" 'mapfile -t name_cwds < <(intercom_cwds_for "$name")' \
+  '      mapfile -t name_cwds < <(intercom_cwds_for "${name}"); [[ ${#name_cwds[@]} -gt 0 ]] || die "close 中止：名册无该全名（负控变异）"' \
+  || t4_bad "负控④ 变异未应用（实现写法已变：旧形双键查询行）"
 P_M4="$(stage38 "$RA" "$CORE")"
 T38_FLEET_SCRIPT="$MUT" run38 "$RA" "$(roster "$(rent "$CORE" "$PRA")")" "$N_A"
+t4_info "neg4 debug rc=$T4_RC all=[$T4_ALL]"
 case "$T4_RC" in
   0) t4_bad "负控④ h=0 改 die 未命中（rc 仍 0，变异无效）" ;;
   *) t4_ok "负控④ h=0 改 die ⇒ (e) rc≠0（红点命中：$T4_RC）" ;;
@@ -419,8 +425,8 @@ esac
 kill38 "$P_M4"
 
 # ⑤ 名册不可用当 die ⇒ (f) 破坏逐字基线
-MUT="$(mut_new 5)" && mut38 "$MUT" 'if intercom_list_json >/dev/null 2>&1; then' \
-  '    intercom_list_json >/dev/null 2>&1 || die "close 中止：名册不可用（负控变异）"; if true; then' \
+MUT="$(mut_new 5)" && mut38_all "$MUT" 'if [[ "$roster_ok" == "1" ]]; then' \
+  '[[ "$roster_ok" == "1" ]] || die "close 中止：名册不可用（负控变异）"; if true; then' \
   || t4_bad "负控⑤ 变异未应用（实现写法已变：名册可用性闸门行）"
 T38_FLEET_SCRIPT="$MUT" run38 "$RA" - "$N_A"
 t4_expect_red "$(v_offline_none)" "负控⑤ roster_ok=0 当 die ⇒ (f) 必红（红点：rc≠0 / stdout 偏离基线）"

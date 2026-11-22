@@ -62,124 +62,81 @@ if [ "${T4_28_C1_CHILD:-0}" = "1" ]; then
   W="$(mktemp -d "${T4_CACHE_DIR:-/tmp}/c1.XXXXXX")"
   trap 'rm -rf "$W"' EXIT
   OKN=0; BADN=0
-  chk() { # <label> <want> <got>
-    if [ "$2" = "$3" ]; then OKN=$((OKN + 1))
-    else BADN=$((BADN + 1)); printf '  ✗ %s\n    want=[%s]\n    got =[%s]\n' "$1" "$2" "$3"; fi
-  }
-  # 角色事实表（= roles.yaml 现状 + 一张下游卡）：parse 的**唯一**角色来源，不启 tmux、不读仓
+  chk() { if [ "$2" = "$3" ]; then OKN=$((OKN + 1)); else BADN=$((BADN + 1)); printf '  ✗ %s\n    want=[%s]\n    got =[%s]\n' "$1" "$2" "$3"; fi; }
   declare -A FLEET_ROLE_KIND
   for r in pm arch-designer uiux-designer rd-fe rd-be qa rd-infra; do FLEET_ROLE_KIND[$r]=resident; done
   FLEET_ROLE_KIND[sec-review]=card
-  # shellcheck disable=SC1090
   source "$CONTRACT"
   b() { fleet_name_build "$@" 2>/dev/null; }
   p() { fleet_name_parse "$@"; }
 
-  # ---- ① 字面量恒等（scope=""）+ ② 往返：一条表（core|kind|role|task）----
-  while IFS='|' read -r core kind role task; do
-    [ -n "$core" ] || continue
-    chk "① build($kind,$core,scope=空) == $core（@ 整段不出现）" "$core" "$(b "$kind" "$core" "")"
-    chk "① parse($core) == OK $kind,$role,$task,（role 输出 canonical id，非别名）" \
-      "OK $kind,$role,$task," "$(p "$core")"
-    chk "② 往返 parse(build($kind,$core,\"\"))" "OK $kind,$role,$task," "$(p "$(b "$kind" "$core" "")")"
+  # ---- ① 字面量恒等 + ② 往返：kind|role|num|task|name|parse ----
+  while IFS='|' read -r kind role num task name exp; do
+    [ -n "$kind" ] || continue
+    chk "① build($kind,$role,${num:-},${task:-}) == $name" "$name" "$(b "$kind" "$role" "$num" "$task")"
+    chk "① parse($name) == $exp" "$exp" "$(p "$name")"
+    chk "② 往返 parse(build(...)) == $exp" "$exp" "$(p "$(b "$kind" "$role" "$num" "$task")")"
   done <<'TBL'
-pm|resident|pm|
-arch-designer|resident|arch-designer|
-uiux-designer|resident|uiux-designer|
-rd-fe|resident|rd-fe|
-rd-be|resident|rd-be|
-qa|resident|qa|
-rd-infra|resident|rd-infra|
-rd-be-T1|derived|rd-be|T1
-qa-T508|derived|qa|T508
-arch-designer-96b|derived|arch-designer|96b
-pm-M20261109-queue-slim|derived|pm|M20261109-queue-slim
-rd-infra-M20261014-pi-ext-update|derived|rd-infra|M20261014-pi-ext-update
-sec-review|card|sec-review|
-sec-review-T42|card|sec-review|T42
-sec-review-notes|card|sec-review|notes
+resident|pm|||pm|OK resident,pm,,
+resident|pm|2||pm2|OK resident,pm,,2
+derived|rd-be||T1|rd-be(T1)|OK derived,rd-be,T1,
+derived|rd-be|2|T553|rd-be2(T553)|OK derived,rd-be,T553,2
+derived|arch-designer||96b|arch-designer(96b)|OK derived,arch-designer,96b,
+derived|pm||M20261109-queue-slim|pm(M20261109-queue-slim)|OK derived,pm,M20261109-queue-slim,
+derived|rd-infra||M20261014-pi-ext-update|rd-infra(M20261014-pi-ext-update)|OK derived,rd-infra,M20261014-pi-ext-update,
+card|sec-review|||sec-review|OK card,sec-review,,
+card|sec-review||notes|sec-review(notes)|OK card,sec-review,notes,
+card|sec-review||T42|sec-review(T42)|OK card,sec-review,T42,
+card|sec-review|2|T42|sec-review2(T42)|OK card,sec-review,T42,2
 TBL
-  # 别名不得被当成角色 id（须先 resolve_role 成 id 再进 builder）
-  for a in arch uiux ui-designer infra; do
-    chk "① 别名 $a 不得被 parse 当成角色 id（先 resolve_role 成 id）" "ERR" "$(p "$a")"
+  # 旧形只读（parse 前缀区分；第 4 段 = scope）
+  for pair in 'rd-be-T1|LEGACY OK derived,rd-be,T1,' 'qa-2|LEGACY OK derived,qa,2,' \
+              'pm@todo|LEGACY OK resident,pm,,todo' 'rd-be-T1@todo|LEGACY OK derived,rd-be,T1,todo'; do
+    chk "① 旧形只读 parse(${pair%%|*})" "${pair#*|}" "$(p "${pair%%|*}")"
   done
-  chk "① 解析后的 canonical id 反向可解析" "OK resident,arch-designer,," "$(p "arch-designer")"
+  for a in arch uiux ui-designer infra; do
+    chk "① 别名 $a 不得被 parse 当成角色 id" "ERR" "$(p "$a")"
+  done
 
-  # ---- ③ 语法钉住 ----
-  chk "③ build(card,sec-review,todo) 精确 == sec-review@todo" "sec-review@todo" "$(b card sec-review todo)"
-  chk "③ build(card,sec-review-T42,todo) 精确 == sec-review-T42@todo" "sec-review-T42@todo" "$(b card sec-review-T42 todo)"
-  chk "③ parse(sec-review@todo)" "OK card,sec-review,,todo" "$(p sec-review@todo)"
-  chk "③ parse(sec-review-T42@todo)" "OK card,sec-review,T42,todo" "$(p sec-review-T42@todo)"
-  chk "③ parse(rd-be-T1@todo)（派生 + scope ⇒ kind=derived）" "OK derived,rd-be,T1,todo" "$(p rd-be-T1@todo)"
-  chk "③ 往返带 scope" "OK card,sec-review,T42,todo" "$(p "$(b card sec-review-T42 todo)")"
+  # ---- ③ 语法钉住（v2）----
+  chk "③ build(card,sec-review) == sec-review" "sec-review" "$(b card sec-review)"
+  chk "③ build 第三参非空非法（旧 scope 形态）⇒ rc≠0" "1" "$(b card sec-review todo >/dev/null 2>&1; echo $?)"
+  chk "③ build(card,sec-review,2,T42) == sec-review2(T42)" "sec-review2(T42)" "$(b card sec-review 2 T42)"
+  chk "③ parse(sec-review@todo) 仍 ERR（v2 不再产生 scope）" "ERR" "$(p sec-review@todo)"
+  chk "③ parse(sec-review2(T42))" "OK card,sec-review,T42,2" "$(p "sec-review2(T42)")"
+  chk "③ parse(rd-be-T1@todo) = LEGACY" "LEGACY OK derived,rd-be,T1,todo" "$(p rd-be-T1@todo)"
 
   # ---- ④ parse 全函数（非法一律 ERR，禁猜）----
   L17="$(printf 'a%.0s' $(seq 1 17))"
-  L49="rd-be-$(printf 'T%.0s' $(seq 1 44))"     # 50 字符 > 48
+  L49="rd-be-$(printf 'T%.0s' $(seq 1 44))"
   for bad in "" "rd-fe@" "@todo" "rd-fe@@todo" "rd-fe@@@todo" "rd-fe@TODO" "rd-fe@a.b" "rd-fe@:x" \
              "rd-fe@$L17" "subagent-x@y" "nao-x@y" "$L49" "rd_fe" "rd-fe@todo!" "rd-fe@-x" "rd-fe@x-" \
-             "rd-fe " " rd-fe" "RD-FE" "unknown-role" "sec-review-$(printf 'x%.0s' $(seq 1 30))"; do
+             "rd-fe " " rd-fe" "RD-FE" "unknown-role" "sec-review-$(printf 'x%.0s' $(seq 1 30))" \
+             "pm1" "pm0" "pm10" "pm2x" "arch-designer(T554" "arch-designerT554)" \
+             "arch-designer((T554))" "arch-designer(T5)4" "rd-be(T553)2"; do
     chk "④ 非法/越界输入必须 ERR：[${bad}]" "ERR" "$(p "$bad")"
   done
-  chk "④ 非法输入下 build 必须拒绝（rc≠0）" "1" "$(b card rd-be 'bad scope!' >/dev/null 2>&1; echo $?)"
-  chk "④ 未知 kind 下 build 必须拒绝（rc≠0）" "1" "$(b bogus rd-be '' >/dev/null 2>&1; echo $?)"
+  chk "④ 非法 num 下 build 必须拒绝" "1" "$(b resident rd-be 1 >/dev/null 2>&1; echo $?)"
+  chk "④ 缺 task 的派生形态（build 第三参为 task 位）不得被当 num" "1" "$(b derived rd-be T553 >/dev/null 2>&1; echo $?)"
+  chk "④ 未知 kind 下 build 必须拒绝" "1" "$(b bogus rd-be '' >/dev/null 2>&1; echo $?)"
 
-  # ---- ⑤ fleet 三档解析与 fail loud（--fleet/--scope > 文件 > 仓 slug）----
-  #     D-1（用户拍板 A）：保留前缀**只管 core**，scope/fleet 位放行（nao-skills 零配置可用）。
-  R="$W/repo"; mkdir -p "$R/.agents"
-  fr() { FLEET_RESOLVED=""; fleet_of_invocation "$1" "${2-}" 2>/dev/null; printf '%s' "$FLEET_RESOLVED"; }
-  frc() { fleet_of_invocation "$1" "${2-}" >/dev/null 2>&1; echo $?; }
-  frs() { fleet_of_invocation "$1" "${2-}" >/dev/null 2>&1; printf '%s' "$FLEET_RESOLVED_SOURCE"; }
-  chk "⑤ 文件不存在 ⇒ 默认 = 仓 slug（repo，恒非空）" "repo" "$(fr "$R" "")"
-  chk "⑤ 文件不存在 ⇒ 来源 tier = slug" "slug" "$(frs "$R" "")"
-  printf 'todo\n' > "$R/.agents/fleet-scope"
-  chk "⑤ 单行合法 ⇒ todo" "todo" "$(fr "$R" "")"
-  chk "⑤ 文件存在 ⇒ 来源 tier = file" "file" "$(frs "$R" "")"
-  chk "⑤ --fleet/--scope 同档覆盖文件（显式胜出）" "other" "$(fr "$R" other)"
-  chk "⑤ 显式值 ⇒ 来源 tier = cli" "cli" "$(frs "$R" other)"
-  printf 'todo\r\n' > "$R/.agents/fleet-scope"
-  chk "⑤ CRLF ⇒ 剥 \\r 后合法（不因 EOL 拒绝）" "todo" "$(fr "$R" "")"
-  printf 'todo\n' > "$R/.agents/fleet-scope"
-  chk "⑤ 显式非法 ⇒ 失败（不回落文件）" "1" "$(frc "$R" 'BAD')"
-  for badf in "" "   " "todo
-other" "TODO" "a.b" ":x" "$L17" "-lead" "tail-" "todo x"; do
-    printf '%s' "$badf" > "$R/.agents/fleet-scope"
-    chk "⑤ 文件内容非法必须 fail loud：[${badf//$'\n'/\\n}]" "1" "$(frc "$R" "")"
-  done
-  # D-1 正向：保留前缀在 **scope/fleet 位**必须放行（nao-skills / subagent-* 目录默认可作 fleet）
-  for okf in subagent-x nao-x; do
-    printf '%s' "$okf" > "$R/.agents/fleet-scope"
-    chk "⑤ D-1 scope/fleet 位放行保留前缀：[$okf]" "$okf" "$(fr "$R" "")"
-  done
-  # D-1 对照：**core 位**仍必须拒（两处判据分叉：core 拒、fleet 过）
-  chk "⑤ D-1 core 位仍拒 subagent- 前缀" "ERR" "$(p "subagent-x@y")"
-  chk "⑤ D-1 core 位仍拒 nao- 前缀" "ERR" "$(p "nao-x@y")"
-  rm -f "$R/.agents/fleet-scope"; mkdir "$R/.agents/fleet-scope"
-  chk "⑤ 目录（非常规文件）必须 fail loud" "1" "$(frc "$R" "")"
-  rmdir "$R/.agents/fleet-scope"
-  mkdir -p "$W/outside"; printf 'evil\n' > "$W/outside/scope.txt"
-  ln -s "$W/outside/scope.txt" "$R/.agents/fleet-scope"
-  chk "⑤ symlink 逃出仓必须 fail loud" "1" "$(frc "$R" "")"
-  printf 'inside\n' > "$R/.agents/scope-real.txt"
-  rm -f "$R/.agents/fleet-scope"; ln -s "$R/.agents/scope-real.txt" "$R/.agents/fleet-scope"
-  chk "⑤ symlink 不逃仓 ⇒ 正常读取" "inside" "$(fr "$R" "")"
-  rm -f "$R/.agents/fleet-scope"
+  # ---- ⑤ 弃用 warn 单源（恰一行；不校验、不 fail）----
+  ow="$(_fleet_deprecated_warn --fleet 2>&1)"
+  chk "⑤ 弃用 warn 恰一行" "1" "$(printf '%s\n' "$ow" | grep -c .)"
+  chk "⑤ 弃用 warn 点名 --fleet" "1" "$(printf '%s\n' "$ow" | grep -c '弃用：--fleet')"
 
-  # ---- ⑤b slug：归一 + worktree 不分裂（--show-toplevel 会分裂 ⇒ 必须用 --git-common-dir）----
+  # ---- ⑤b 放置键（place_key_label）：归一 / 截断 / worktree 同键 ----
   mkdir -p "$W/My_Repo.V2"
-  chk "⑤ slug 归一：大写/_/. → -，非 git 仓用 basename" "my-repo-v2" "$(fleet_scope_slug "$W/My_Repo.V2")"
+  chk "⑤b 归一大写/_/. → -" "my-repo-v2" "$(place_key_label "$W/My_Repo.V2")"
   LONGDIR="$W/$(printf 'a%.0s' $(seq 1 30))"; mkdir -p "$LONGDIR"
-  chk "⑤ slug 截断 16 且不以 - 结尾" "aaaaaaaaaaaaaaaa" "$(fleet_scope_slug "$LONGDIR")"
+  chk "⑤b 截断 16 且不以 - 结尾" "aaaaaaaaaaaaaaaa" "$(place_key_label "$LONGDIR")"
   if command -v git >/dev/null 2>&1; then
     G="$W/gitrepo"; mkdir -p "$G"
     ( cd "$G" && git init -q . && git config user.email t@t.invalid && git config user.name t \
         && : > f && git add -A && git commit -qm init ) >/dev/null 2>&1
-    chk "⑤ slug 普通仓 = 仓目录名" "gitrepo" "$(fleet_scope_slug "$G")"
+    chk "⑤b 普通仓 = 仓目录名" "gitrepo" "$(place_key_label "$G")"
     ( cd "$G" && git worktree add -q "$W/wt" -b wtb ) >/dev/null 2>&1
-    chk "⑤ slug worktree 与主仓一致（--show-toplevel 会分裂 ⇒ 本断言守 P-hazard）" \
-      "gitrepo" "$(fleet_scope_slug "$W/wt")"
-  else
-    printf '  -- 环境缺少 git：slug 的 worktree 防止分裂断言跳过（归一断言已跑）\n'
+    chk "⑤b worktree 与主仓同键（git --git-common-dir）" "gitrepo" "$(place_key_label "$W/wt")"
   fi
 
   if [ "$BADN" -gt 0 ]; then printf 'C1_FAIL ok=%d bad=%d\n' "$OKN" "$BADN"; exit 1; fi
@@ -234,19 +191,18 @@ mutation_neg() { # <label> <old> <new>
   t4_assert_ne "0" "$rc" "M $label：变异后 C1 必须变红（未红 ⇒ 该断言组是同义反复）"
 }
 mutation_neg "M1 build 尾追加 -x" \
-  'printf '"'"'%s\n'"'"' "$core"' 'printf '"'"'%s-x\n'"'"' "$core"'
+  'printf '"'"'%s%s\n'"'"' "$role" "$num"' 'printf '"'"'%s%s-x\n'"'"' "$role" "$num"'
 mutation_neg "M2 parse 丢 task" \
-  'if [[ "$core" == "$role" ]]; then task=""; else task="${core:${#role}+1}"; fi' \
+  'if [[ "$pre" == "$role" ]]; then task=""; else task="${pre:${#role}+1}"; fi' \
   'if [[ -n "$role" ]]; then task=""; fi'
 mutation_neg "M3 parse 改 \${x%-*} 尾切片" \
-  'else task="${core:${#role}+1}"; fi' \
-  'else task="${core%-*}"; fi'
+  'else task="${pre:${#role}+1}"; fi' \
+  'else task="${pre%-*}"; fi'
 mutation_neg "M4 parse 对非法 scope 返猜测值" \
   'fleet_scope_problem "$scope" >/dev/null || { printf '"'"'ERR\n'"'"'; return 0; }' ':'
-mutation_neg "M5 D-1 回退：scope 位重新拒保留前缀" \
-  "  [[ \"\$s\" != *- ]] || { printf 'fleet/scope 不得以 - 结尾\\n'; return 1; }" \
-  "  [[ \"\$s\" != *- ]] || { printf 'fleet/scope 不得以 - 结尾\\n'; return 1; }
-  case \"\$s\" in subagent-*|nao-*) return 1 ;; esac"
+mutation_neg "M5 未知角色放行（兜底成 pm）" \
+  '[[ -n "$best" ]] || { printf '"'"'ERR\n'"'"'; return 0; }' \
+  '[[ -n "$best" ]] || best="pm"' 
 
 # ============================================================================
 # C3 单写点 lint（静态；负控只在副本上做）
@@ -335,10 +291,10 @@ fi
 # ============================================================================
 spawn_body() { awk '/^_term_herdr_spawn\(\)/,/^}/' "$1"; }
 lint4() { spawn_body "$1" | grep -c 'HERDR_SESSION' || true; }
-lint4b() { spawn_body "$1" | grep -c 'fleet_scope_slug' || true; }
+lint4b() { spawn_body "$1" | grep -c 'place_key_label' || true; }
 T545_MSG='herdr 放置键只认入参 label=fleet：禁取会话名、禁在 spawn 内重算 slug（ADR 2026-11-17-fleet-identity-source D1）'
 t4_assert_eq "0" "$(lint4 "$SUBJECT")" "C3④ ${T545_MSG}（_term_herdr_spawn 内 HERDR_SESSION 命中 = 0）"
-t4_assert_eq "0" "$(lint4b "$SUBJECT")" "C3④ ${T545_MSG}（_term_herdr_spawn 内 fleet_scope_slug 命中 = 0）"
+t4_assert_eq "0" "$(lint4b "$SUBJECT")" "C3④ ${T545_MSG}（_term_herdr_spawn 内 place_key_label 命中 = 0）"
 # ---- C3④ 负控：往 spawn 里注入一行 HERDR_SESSION ⇒ 必红 - 并且计数变 1（lint 不是恒 0）----
 NEG_D="$T4_CACHE_DIR/c3-neg-d.sh"
 if mutate_file "$SUBJECT" "$NEG_D" \
@@ -352,8 +308,8 @@ fi
 # ---- C3④ 负控 2：spawn 内重新调用 fleet_scope_slug ⇒ 必红（第二数据源不得回来）----
 NEG_D2="$T4_CACHE_DIR/c3-neg-d2.sh"
 if mutate_file "$SUBJECT" "$NEG_D2" \
-    'label="${5-}" group="${6-}" pout="" pl="" obj js' \
-    'label="$(fleet_scope_slug "$repo")" pout="" pl="" obj js'; then
+    'local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" pl="" obj js line' \
+    'local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="$(place_key_label "$repo")" group="${6-}" pl="" obj js line'; then
   t4_assert_eq "1" "$(lint4b "$NEG_D2")" "C3④ 负控 2：spawn 内重算 slug ⇒ 命中 1（D1 零调用判据不空转）"
 else
   t4_bad "C3④ 负控 2 变异锚点未命中（用例锚点须跟随实现）"
@@ -1115,10 +1071,10 @@ done
 #   （roles.yaml workspace="." ⇒ repo=$PWD=$LAB，非 git 仓 ⇒ slug = basename）。$LAB 名形如 `lab28-<pid>`
 #   只含 [a-z0-9-]，slug 归一为恒等 ⇒ 可以直接用 basename 当期望值（不复制归一算式）。
 B2_WS_LABEL="${LAB##*/}"
-B2_RD_FE="rd-fe@$B2_WS_LABEL"
-B2_RD_BE="rd-be@$B2_WS_LABEL"
+B2_RD_FE="rd-fe2(T1)"
+B2_RD_BE="rd-be2(T1)"
 b2_reset() { # 清桩状态（每场景一份）
-  rm -rf "$B2ST_ST"; mkdir -p "$B2ST_ST"; : > "$B2ST_ST/panes"; : > "$B2ST_ST/agents"; : > "$B2ST_ST/ws"; : > "$B2ST_ST/tabs"
+  rm -rf "$B2ST_ST"; mkdir -p "$B2ST_ST"; : > "$B2ST_ST/panes"; : > "$B2ST_ST/agents"; printf 'w1|%s\n' "$B2_WS_LABEL" > "$B2ST_ST/ws"; : > "$B2ST_ST/tabs"
   : > "$B2ST_ST/order.log"; : > "$B2ST_ST/calls.log"
 }
 b2_run() { # <onrun> <args...> → 清桩后跑 fleet（输出落 T4_OUT/T4_ERR）
@@ -1141,7 +1097,7 @@ printf 'w1:p1|%s|pi|w1|w1:t1\n' "$B2_RD_FE" > "$B2ST_ST/panes"
 printf 'w1:p1|idle|3|1|sess-a\n' > "$B2ST_ST/agents"
 t4_run_in_dir "$LAB" env HERDR_PANE_ID=w1:p1 HERDR_WORKSPACE_ID=w1 HERDR_TAB_ID=w1:t1 \
   "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=herdr timeout 60 \
-  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" close rd-fe
+  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" close "rd-fe2(T1)"
 B2_D1_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
 B2_D1_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
 t4_assert_eq "0" "$T4_RC" "D-1 注入撞号 HERDR_PANE_ID=w1:p1 ⇒ B2_ENV 摘除后 close rc=0（hermetic）"
@@ -1152,7 +1108,7 @@ t4_assert_not_contains "$B2_D1_OUT$B2_D1_ERR" "调用者自身" "D-1 不得把 s
 #   同时验 wall-clock 口径（P3-3）：用 NAO_HERDR_READY_TIMEOUT_MS=400 覆盖，避免本用例白等 5s。
 b2_reset
 t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|0|1|sess-x' \
-  NAO_HERDR_READY_TIMEOUT_MS=400 NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure rd-fe
+  NAO_HERDR_READY_TIMEOUT_MS=400 NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 rd-fe2
 T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
 T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
 t4_assert_eq "0" "$T4_RC" "B2① 就绪超时 ⇒ ensure rc 仍 0（D3：跨后端 rc 语义一致）"
@@ -1170,9 +1126,9 @@ t4_assert_contains "$T4_OUT_ANSI" "失败 1" "B2① 超时计入 SPAWN_FAIL（�
 b2_reset
 printf 'w1:p1|%s|bash|w1\n' "$B2_RD_FE" > "$B2ST_ST/panes"
 : > "$B2ST_ST/agents"
-: > "$B2ST_ST/ws"
+printf 'w1|%s\n' "$B2_WS_LABEL" > "$B2ST_ST/ws"
 t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-x' \
-  NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure rd-fe
+  NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 rd-fe2
 B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
 B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
 t4_assert_eq "0" "$T4_RC" "B2② 幽灵 pane：ensure rc=0"
@@ -1190,10 +1146,11 @@ t4_assert_eq "1" "$([ -n "$B2_RENAME_LINE" ] && [ -n "$B2_RUN_LINE" ] && [ "$B2_
 
 # ---- B2③ 同名 label 多 pane ⇒ warn 点名 + 不猜；status 单列歧义 ----
 b2_reset
+printf 'w1|%s\n' "$B2_WS_LABEL" > "$B2ST_ST/ws"
 printf 'w1:p1|%s|pi|w1\nw1:p2|%s|pi|w1\n' "$B2_RD_FE" "$B2_RD_FE" > "$B2ST_ST/panes"
 printf 'w1:p1|idle|1|1|sess-a\nw1:p2|idle|1|1|sess-b\n' > "$B2ST_ST/agents"
 t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=herdr timeout 60 \
-  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure rd-fe
+  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 rd-fe2
 B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
 B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
 t4_assert_eq "0" "$T4_RC" "B2③ 同名歧义：ensure rc=0（失败计 SPAWN_FAIL，不是 crash）"
@@ -1232,9 +1189,9 @@ t4_assert_eq "0" "$(grep -c '^herdr ' "$LAB/herdr-calls.log" || true)" \
 for b2fg in cat vim sleep; do
   b2_reset
   printf 'w1:p1|%s|%s|w1\n' "$B2_RD_FE" "$b2fg" > "$B2ST_ST/panes"
-  : > "$B2ST_ST/agents"; : > "$B2ST_ST/ws"
+  : > "$B2ST_ST/agents"; printf 'w1|%s\n' "$B2_WS_LABEL" > "$B2ST_ST/ws"
   t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-x' \
-    NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure rd-fe
+    NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 rd-fe2
   B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
   B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
   t4_assert_eq "0" "$T4_RC" "P2-2 前台=$b2fg：ensure rc=0（失败计 SPAWN_FAIL，不是 crash）"
@@ -1251,9 +1208,9 @@ done
 # ---- P2-2b：restart 回放幽灵（process-info 不可用）⇒ 关闭并重建，且不注入 ----
 b2_reset
 printf 'w1:p1|%s|phantom|w1\n' "$B2_RD_FE" > "$B2ST_ST/panes"
-: > "$B2ST_ST/agents"; : > "$B2ST_ST/ws"
+: > "$B2ST_ST/agents"; printf 'w1|%s\n' "$B2_WS_LABEL" > "$B2ST_ST/ws"
 t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-x' \
-  NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure rd-fe
+  NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 rd-fe2
 B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
 B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
 t4_assert_eq "0" "$T4_RC" "P3-6② 回放幽灵：ensure rc=0（原路径不退化）"
@@ -1269,9 +1226,9 @@ t4_assert_eq "1" "$(grep -c 'pane run ' "$B2ST_ST/calls.log" || true)" \
 for b2bad in internal empty; do
   b2_reset
   printf 'w1:p1|%s|%s|w1\n' "$B2_RD_FE" "$b2bad" > "$B2ST_ST/panes"
-  : > "$B2ST_ST/agents"; : > "$B2ST_ST/ws"
+  : > "$B2ST_ST/agents"; printf 'w1|%s\n' "$B2_WS_LABEL" > "$B2ST_ST/ws"
   t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-x' \
-    NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure rd-fe
+    NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 rd-fe2
   B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
   B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
   t4_assert_eq "0" "$T4_RC" "P3-6 $b2bad：ensure rc=0（失败计 SPAWN_FAIL，不是 crash）"
@@ -1298,45 +1255,36 @@ done
 #        ③ 对照：全程零 pane split（布局不靠分屏算式）。
 b2_reset
 printf 'w1|%s\n' "$B2_WS_LABEL" > "$B2ST_ST/ws"
-printf 'w1:p1||bash|w1\n' > "$B2ST_ST/panes"
+: > "$B2ST_ST/panes"
+: > "$B2ST_ST/tabs"
 : > "$B2ST_ST/agents"
 t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-x' \
-  NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure rd-fe
+  NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 rd-fe2
 B2A_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
 t4_assert_eq "0" "$T4_RC" "J2① 新放置 ensure rc=0"
 t4_assert_contains "$B2A_OUT" "已拉起 rd-fe" "J2① 成功行在位"
-t4_assert_eq "1" "$(grep -c '^herdr .*tab create' "$B2ST_ST/calls.log" || true)" \
-  "J2① 角色 pane 用 tab create 落独立 tab（不再 split 进共享 tab）"
+t4_assert_eq "0" "$(grep -cE '^herdr .*pane (move|split)' "$B2ST_ST/calls.log" || true)" \
+  "J2① 新放置零 pane move/split（tab 拓扑由 workspace/tab create 建立）"
 t4_assert_eq "0" "$(grep -c '^herdr .*pane split' "$B2ST_ST/calls.log" || true)" \
   "J2① 零 pane split（布局不靠分屏算式）"
 t4_assert_contains "$(cat "$B2ST_ST/tabs")" "|$B2_RD_FE" "J2① tab label = 角色名（结构判据）"
 t4_assert_eq "1" "$(awk -F'|' -v n="$B2_RD_FE" '$3==n{print $1}' "$B2ST_ST/tabs" | while read -r t; do awk -F'|' -v t="$t" '$5==t' "$B2ST_ST/panes" | wc -l; done)" \
   "J2① 该角色 tab 恰 1 个 pane（pane_count == 1）"
-# ② 旧布局迁移：两个 ghost pane 共处 w1:t1 ⇒ 各自 ensure 后搬到独立 tab，搬空的 t1 自动关
-b2_reset
-printf 'w1|%s\n' "$B2_WS_LABEL" > "$B2ST_ST/ws"
-printf 'w1:p1|%s|bash|w1\nw1:p2|%s|bash|w1\n' "$B2_RD_FE" "$B2_RD_BE" > "$B2ST_ST/panes"
-printf 'w1:t1|w1|1\n' > "$B2ST_ST/tabs"
-: > "$B2ST_ST/agents"
-for b2role in rd-fe rd-be; do
-  t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-x' \
-    NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure "$b2role"
-  t4_assert_eq "0" "$T4_RC" "J2② 迁移 $b2role：ensure rc=0"
+# ② 同仓第二个角色：仍落同一 workspace、各自独立 tab（每 tab 恰 1 pane）
+t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-x' \
+  NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 rd-be2
+t4_assert_eq "0" "$T4_RC" "J2② 同仓第二角色 ensure rc=0"
+t4_assert_eq "1" "$(grep -c "^w1|$B2_WS_LABEL$" "$B2ST_ST/ws" || true)" \
+  "J2② 同仓仍恰 1 个 workspace（不按角色新开）"
+for _lbl in "$B2_RD_FE" "$B2_RD_BE"; do
+  t4_assert_eq "1" "$(grep -cF -- "|$_lbl" "$B2ST_ST/tabs" || true)" \
+    "J2② tab label = 角色名（$_lbl）"
+  _tid="$(awk -F'|' -v n="$_lbl" '$3==n{print $1}' "$B2ST_ST/tabs" | head -1)"
+  t4_assert_eq "1" "$([ -n "$_tid" ] && awk -F'|' -v t="$_tid" '$5==t' "$B2ST_ST/panes" | grep -c . || true)" \
+    "J2② 该角色 tab 恰 1 个 pane（$_lbl）"
 done
-t4_assert_eq "1" "$(grep -c '^herdr .*pane move' "$B2ST_ST/calls.log" || true)" \
-  "J2② 共享 tab 里的 pane 用 pane move 迁移（不重建 pane）恰 1 次"
-t4_assert_eq "1" "$(grep -cE '^herdr .*pane move .* --new-tab' "$B2ST_ST/calls.log" || true)" \
-  "J2② 迁移走 --new-tab（把 pane 搬进独立 tab）"
-t4_assert_eq "1" "$(grep -cF -- "tab rename w1:t1 $B2_RD_BE" "$B2ST_ST/calls.log" || true)" \
-  "J2② 独占但 label 旧的 tab 只改名（零 pane 搬动：更小 effect）"
-t4_assert_contains "$(cat "$B2ST_ST/panes")" "w1:p1|$B2_RD_FE" "J2② 迁移后 pane_id 不变（rd-fe 仍 w1:p1）"
-t4_assert_contains "$(cat "$B2ST_ST/panes")" "w1:p2|$B2_RD_BE" "J2② 改名后 pane_id 不变（rd-be 仍 w1:p2）"
-t4_assert_eq "0" "$(printf '%s\n' "$(cat "$B2ST_ST/tabs")" | grep -c '|1$' || true)" \
-  "J2② 无 label=1 的旧 tab 残留（迁移/改名已收敛）"
-t4_assert_eq "2" "$(printf '%s\n' "$(cat "$B2ST_ST/tabs")" | grep -cE "\\|(${B2_RD_FE}|${B2_RD_BE})$")" \
-  "J2② 剩下恰 2 个角色 tab（label = 角色名）"
-t4_assert_eq "1" "$(awk -F'|' -v t=w1:t2 '$5==t' "$B2ST_ST/panes" | wc -l | tr -d ' ')" \
-  "J2② 迁移后的 tab 恰 1 个 pane（pane_count == 1）"
+t4_assert_eq "0" "$(grep -cE '^herdr .*pane split' "$B2ST_ST/calls.log" || true)" \
+  "J2② 全程零 pane split（布局不靠分屏算式）"
 
 # ---- P2-1（第二轮 QA）：文案与新语义一致（P1 把「角色 tab 被占 + --force」收紧成 fail loud）----
 #   旧文案说「--force ⇒ 新建 pane（随后同名 label 会有 2 个）」，但实际紧接着就 fail loud、根本不新建
@@ -1348,12 +1296,12 @@ printf 'w1:t1|w1|%s\n' "$B2_RD_FE" > "$B2ST_ST/tabs"
 printf 'w1:p1|intruder|bash|w1|w1:t1\n' > "$B2ST_ST/panes"
 : > "$B2ST_ST/agents"
 t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=herdr timeout 60 \
-  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --force rd-fe
+  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 --force rd-fe2
 B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
 B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
 t4_assert_eq "0" "$T4_RC" "P2-1① 角色 tab 被占 + --force：ensure rc=0（失败只进计数）"
 t4_assert_contains "$B2_ERR" "角色 tab 已在场但无 pane 命中该角色" "P2-1① 新文案点名「角色 tab 已在场但无 pane 命中」"
-t4_assert_contains "$B2_ERR" "先回收该角色（nao-fleet.sh close rd-fe）再重跑 ensure" \
+t4_assert_contains "$B2_ERR" '先回收该角色（nao-fleet.sh close rd-fe2(T1)）再重跑 ensure' \
   "P2-1① 指路 = 先 close 该角色再 ensure（不再说「新建 pane」）"
 t4_assert_not_contains "$B2_ERR" "同名 label 会有 2 个" "P2-1① 旧文案「同名 label 会有 2 个」已退场（实际不新建）"
 t4_assert_contains "$B2_OUT" "（成功 0 / 跳过 0 / 失败 1）" "P2-1① 摘要计失败 1（不冒充成功）"
@@ -1370,7 +1318,7 @@ printf 'w1:t1|w1|%s\n' "$B2_RD_FE" > "$B2ST_ST/tabs"
 printf 'w1:p1|%s|pi|w1|w1:t1\n' "$B2_RD_FE" > "$B2ST_ST/panes"
 printf 'w1:p1|idle|3|1|sess-a\n' > "$B2ST_ST/agents"
 t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=herdr timeout 60 \
-  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --force rd-fe
+  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 --force rd-fe2
 B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
 t4_assert_contains "$B2_ERR" "--force 也不向在场程序注入按键" "P2-1② --force 撞上在线 pi：仍不注入按键"
 t4_assert_contains "$B2_ERR" "角色 tab 已被占用 ⇒ fail loud" "P2-1② 明说随后会 fail loud（不再是「新建 pane」）"
@@ -1378,15 +1326,15 @@ t4_assert_eq "1" "$(printf '%s\n' "$(cat "$B2ST_ST/panes")" | grep -c . || true)
   "P2-1② 在线 pane 仍在场且未新增（同名 label 仍 1）"
 # close 提示（P2-1 的第二处文案）
 t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=herdr timeout 60 \
-  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" close rd-fe
+  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" close "rd-fe2(T1)"
 B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
 t4_assert_eq "0" "$T4_RC" "P2-1② close rd-fe rc=0"
-t4_assert_contains "$B2_ERR" "[fleet] 常驻会话 $B2_RD_FE：" "P2-1② close 提示固定前缀在位（名字恒带 @<fleet>）"
-t4_assert_contains "$B2_ERR" "先 close 该角色再 ensure 重开" "P2-1② close 提示改成「先 close 再 ensure」"
+t4_assert_contains "$B2_ERR" "[fleet] 常驻会话 $B2_RD_FE：" "P2-1② close 提示固定前缀在位（v2 名）"
+t4_assert_contains "$B2_ERR" "本批不再需要该角色时才回收；回收后可用 ensure 重开" "P2-1② close 提示改成「先 close 再 ensure」"
 t4_assert_not_contains "$B2_ERR" "应 ensure --force 重开" "P2-1② 旧提示「应 ensure --force 重开」已退场"
 # close 后（pane 与空 tab 均已消失）⇒ --force 成功新建（证明上一条提示可执行）
 t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-b' \
-  NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --force rd-fe
+  NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 --force rd-fe2
 B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
 t4_assert_eq "0" "$T4_RC" "P2-1② close 后 ensure --force rc=0"
 t4_assert_contains "$B2_OUT" "已拉起 rd-fe" "P2-1② close 后 ensure --force 成功新建（提示可执行，不再「照做即失败」）"
@@ -1506,14 +1454,14 @@ t4_assert_eq "9" "$LAUNCH_N_B" "C2② 新版场 9 个目标全部拉起（否则
 LAB_SLUG="$(printf '%s' "$(basename "$LAB")" | tr '[:upper:]' '[:lower:]' \
   | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//' | cut -c1-16)"
 while [[ "$LAB_SLUG" == *- ]]; do LAB_SLUG="${LAB_SLUG%-}"; done
-C2_NAMES=(pm arch-designer uiux-designer rd-fe rd-be qa rd-infra rd-be-T1 sec-review)
+C2_NAMES=(pm arch-designer uiux-designer rd-fe rd-be qa rd-infra "rd-be(T1)" sec-review)
 C2_BAD=0
 for _n in "${C2_NAMES[@]}"; do
-  printf '%s\n' "$BLOB_B" | grep -qxF "$_n@$LAB_SLUG" || { C2_BAD=1; printf '  -- 缺 --name %s@%s\n' "$_n" "$LAB_SLUG" >&2; }
-  printf '%s\n' "$BLOB_B" | grep -qF -- "[tmux] 已拉起 $_n@$LAB_SLUG @ " \
-    || { C2_BAD=1; printf '  -- 缺已拉起行 %s@%s\n' "$_n" "$LAB_SLUG" >&2; }
+  printf '%s\n' "$BLOB_B" | grep -qxF "$_n" || { C2_BAD=1; printf '  -- 缺 --name %s\n' "$_n" >&2; }
+  printf '%s\n' "$BLOB_B" | grep -qF -- "[tmux] 已拉起 $_n @ " \
+    || { C2_BAD=1; printf '  -- 缺已拉起行 %s\n' "$_n" >&2; }
 done
-t4_assert_eq "0" "$C2_BAD" "C2② 新期望表：9 个目标名恒带 @<仓 slug>（fleet=$LAB_SLUG；含 --task 派生与 --card）"
+t4_assert_eq "0" "$C2_BAD" "C2② 新期望表：9 个目标名（v2；含槽位/派生/卡；不含位置段）"
 t4_assert_eq "0" "$(printf '%s\n' "$BLOB_A" | grep -cF "@$LAB_SLUG" || true)" \
   "C2② 基线场（fixture $BASELINE_SHA）名字无 @<slug>（对照：新版差异是**设计**，不是自等价）"
 MDB_A="$(printf '%s' "$BLOB_A" | md5sum | awk '{print $1}')"
@@ -1524,16 +1472,14 @@ t4_info "C2② 新期望表：fleet=$LAB_SLUG · 已拉起 $LAUNCH_N_B 条 · bl
 
 # 负控（arch D2 点名）：把默认 tier 改回空 ⇒ 名字丢 @ ⇒ 新期望表必红（证明判据不是同义反复）
 MUT_NEG="$T4_CACHE_DIR/c2-neg-empty-fleet.sh"
-if mutate_file "$LAB/.agents/scripts/nao-fleet.sh" "$MUT_NEG" 't_fleets+=("$scope_name")' 't_fleets+=("")'; then
+if mutate_file "$LAB/.agents/scripts/nao-fleet.sh" "$MUT_NEG" '    printf '"'"'%s%s\n'"'"' "$role" "$num"' '    printf '"'"'%s%s@x\n'"'"' "$role" "$num"'; then
   t4_assert_ne "$(md5sum < "$LAB/.agents/scripts/nao-fleet.sh")" "$(md5sum < "$MUT_NEG")" \
     "C2② 负控：副本确实把 fleet 写回空（变异锚点有效）"
   : > "$PI_NAMES"
   run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$MUT_NEG" ensure --task NEG rd-be
   NEG_BLOB="$(printf '%s\n%s\n' "$T4_OUT_ANSI" "$(cat "$PI_NAMES" 2>/dev/null || true)" | sed -e "s|$LAB|<LAB>|g")"
-  t4_assert_eq "1" "$(printf '%s\n' "$NEG_BLOB" | grep -cxF 'rd-be-NEG' || true)" \
-    "C2② 负控：默认 tier 改回空 ⇒ pi --name = 裸名 rd-be-NEG（丢 @）"
-  t4_assert_not_contains "$NEG_BLOB" "rd-be-NEG@$LAB_SLUG" \
-    "C2② 负控：丢 @ 后新期望表断言必红（默认 tier 是名字恒带 scope 的来源）"
+  t4_assert_contains "$NEG_BLOB" "rd-be(NEG)@x" \
+    "C2② 负控：builder 变异 ⇒ 名字带 @x（新期望表断言必红）"
 else
   t4_bad "C2② 负控变异锚点未命中（用例锚点须跟随实现）"
 fi
@@ -1622,8 +1568,8 @@ t4_assert_eq "2" "$(printf '%s\n' "$RBE_LINES" | grep -c . || true)" \
   "P3-2 同场：rd-be 与 rd-be@todo **两条都显示**（旧写法只留裸名 ⇒ 本断言红）"
 t4_assert_contains "$RBE_LINES" "--name rd-be；" "P3-2 同场：裸名那条仍在（逐字格式不变）"
 t4_assert_contains "$RBE_LINES" "--name rd-be@todo；" "P3-2 同场：带 scope 那条在位（名字经 builder 生成）"
-t4_assert_contains "$RBE_LINES" "·fleet=todo" "P3-2 / D5：带 fleet 行尾有 ·fleet=<x> 字段"
-t4_assert_not_contains "$(printf '%s\n' "$RBE_LINES" | grep -F -- '·fleet=todo')" "--name rd-be；" \
+t4_assert_contains "$RBE_LINES" "·code=todo" "P3-2 / D5：带 fleet 行尾有 ·code=<x> 字段"
+t4_assert_not_contains "$(printf '%s\n' "$RBE_LINES" | grep -F -- '·code=todo')" "--name rd-be；" \
   "P3-3① ·scope 行只出现在带 scope 的那条上（不是裸名行被追加字段）"
 t4_assert_contains "$T4_OUT_ANSI" "rd-be@todo" \
   "P2-1 正控C：带 scope 常驻可在 status 定位（不整条消失）"
@@ -1845,7 +1791,7 @@ b3_close_calls() { b3_calls '^herdr .*pane close( |$)'; }
 #     git show e98ed49:.agents/scripts/nao-fleet.sh \
 #       | awk '/^prod_sock_candidates\(\) \{/{f=1;print;next} f{print} f&&/^}/{exit}' | md5sum ⇒ e4950f38…
 GOLD_RECLAIM="9549f513b7a66fbced68bc1a1fa1dc10"
-GOLD_CLEANUP="d8937134bb3ed4ceca29fb581d4acf2c"
+GOLD_CLEANUP="fd13c695605925b15dc04d4169c5b96d"
 GOLD_SOCK="e4950f3897670a97d7baaea8f54727c3"
 md5_of() { md5sum | awk '{print $1}'; }
 RECLAIM_MD5="$(awk '/^  # ---- 宿主句柄定位（跨仓）/{f=1} f{print} f&&/^}/{exit}' "$FLEET" | md5_of)"
@@ -1872,9 +1818,9 @@ for fn in pane_hosts_caller self_pane_refuse pane_busy _term_tmux_reclaim _term_
   t4_assert_eq "1" "$([ -n "$ln" ] && [ "$ln" -gt "$B3_TMUX_BEGIN" ] && [ "$ln" -lt "$B3_TMUX_END" ] && echo 1 || echo 0)" \
     "B3 ${fn} 定义在 tmux 标记区内（$ln ∈ ($B3_TMUX_BEGIN,$B3_TMUX_END)）"
 done
-t4_assert_eq "1" "$(grep -cE '^  term_reclaim "\$name" "\$repo" "\$force" "\$core" "\$scope" "\$tgt"$' "$FLEET" || true)" \
+t4_assert_eq "1" "$(grep -cE '^  term_reclaim "\$name" "\$repo" "\$force" "\$role" "\$scope" "\$\{tgt:-\$role\}"$' "$FLEET" || true)" \
   "B3 cmd_close 只调门面 term_reclaim（共用闸门层原地不动）"
-t4_assert_eq "1" "$(grep -cE '^  term_cleanup "\$\{CLEANUP_SOCK:-\}" "\$\{SESSION_ARG:-\}"$' "$FLEET" || true)" \
+t4_assert_eq "1" "$(grep -cE '^  term_cleanup "\$\{CLEANUP_SOCK:-\}" "\$\{SESSION_ARG:-\}" "\$FORCE"$' "$FLEET" || true)" \
   "B3 cmd_cleanup 只调门面 term_cleanup（后端差异在门面后）"
 
 # ============================================================================
@@ -2015,6 +1961,7 @@ b3_reset
 b3_panes "w1:p1|rd-fe|pi|$B3_LAB|w1" "w1:p2|rd-fe|pi|$B3_LAB|w1"
 b3_agents "w1:p1|idle|2|1|sess-a" "w1:p2|idle|2|1|sess-b"
 b3_run close rd-fe
+t4_info "B3dup debug rc=$T4_RC out=[$T4_OUT_ANSI] err=[$T4_ERR_ANSI]"
 t4_assert_eq "1" "$T4_RC" "B3④ 同名 label 多 pane ⇒ 拒（不猜）"
 t4_assert_contains "$(b3_oe)" "同名 label 命中 2 个 pane" "B3④ 歧义：warn 点名命中数"
 t4_assert_contains "$(b3_oe)" "w1:p1,w1:p2" "B3④ 歧义：回显全部 pane（可定位）"
@@ -2269,9 +2216,11 @@ t4_assert_eq "2" "$T4_RC" "B3⑧ herdr cleanup 缺 --session ⇒ rc=2（显式�
 t4_assert_contains "$T4_ERR_ANSI" "须显式 --session" "B3⑧ 缺参：可执行指路"
 t4_assert_eq "0" "$(b3_calls '^herdr ')" "B3⑧ 缺参：零后端调用（守卫先于一切副作用）"
 b3_run cleanup --session default
-t4_assert_eq "2" "$T4_RC" "B3⑧ cleanup --session default ⇒ rc=2（BR9：绝不碰用户会话）"
-t4_assert_contains "$T4_ERR_ANSI" "≠default" "B3⑧ default：理由点名"
-t4_assert_eq "0" "$(b3_calls '^herdr ')" "B3⑧ default：零后端调用"
+t4_assert_eq "2" "$T4_RC" "B3⑧ cleanup --session default 无 --force ⇒ rc=2（放行但零动作）"
+t4_assert_contains "$T4_ERR_ANSI" "将停止 session=default，影响" "B3⑧ default：打印影响面"
+t4_assert_contains "$T4_ERR_ANSI" "未给 --force ⇒ 零动作" "B3⑧ default：明确门槛"
+t4_assert_eq "0" "$(b3_calls '^herdr .*session (stop|delete)( |$)')" "B3⑧ default：零拆场动作"
+: > "$B3_ST/calls.log"
 b3_run cleanup -S /tmp/b3-x.sock
 t4_assert_eq "2" "$T4_RC" "B3⑧ herdr cleanup 给 -S ⇒ rc=2（-S 只属 tmux 实验场）"
 t4_assert_contains "$T4_ERR_ANSI" "用 --session" "B3⑧ -S 误用：指路 --session"

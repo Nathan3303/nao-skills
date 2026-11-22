@@ -111,6 +111,8 @@ function tokenize(cmd) {
       cur += piece; continue;
     }
     if (c === "'" || c === '"') { q = c; i++; continue; }
+    // bash `printf %q` 对括号等 meta 字符产出反斜杠转义（如 `pm2\(T554\)`）⇒ 引号外同样解析
+    if (c === '\\') { cur += (cmd[i + 1] || ''); i += 2; continue; }
     if (/\s/.test(c)) { if (cur) { toks.push(cur); cur = ''; } i++; continue; }
     cur += c; i++;
   }
