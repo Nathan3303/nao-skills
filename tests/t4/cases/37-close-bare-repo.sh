@@ -49,10 +49,11 @@ LAB="$T4_CACHE_DIR/lab37-$$"
 RA="$LAB/fx37-a"                      # 本仓：机制包夹具根 + git 仓 + close 的调用方 cwd
 RB="$LAB/fx37-b"                      # 他仓：只作 pane 的 cwd（不需要 .agents）
 T37="T4C37$$"                         # 唯一任务编号（`--task` 合法字符集）
-CORE="qa-$T37"                        # 裸名（legacy 无 scope 形态）
-LFLEET="f37a"                         # 本仓 fleet（.agents/fleet-scope 给出，避免默认 slug 漂移）
-LSCOPED="$CORE@$LFLEET"               # 本仓带 scope 的会话名
-OSCOPED="$CORE@f37b"                  # 他仓带 scope 的会话名
+CORE="qa($T37)"                       # v2 新形（裸名 + --task 重建）
+LEGACY_CORE="qa-$T37"                 # 旧形（AC6 只读面）
+LFLEET="f37a"                         # 兼容旧夹具的 scope 值（文件已弃用，仅用于 legacy 名）
+LSCOPED="$LEGACY_CORE@$LFLEET"        # 本仓 legacy 带 scope 的会话名（AC6 对照）
+OSCOPED="$LEGACY_CORE@f37b"           # 他仓 legacy 带 scope 的会话名
 PROBE_CNT="$LAB/probe-count.txt"
 NONE_MD="$RA/.none.md"                # 不存在 ⇒ tasks-state 闸门记 nofile（不污染本题证据）
 
@@ -191,10 +192,20 @@ v_card_reclaim() { # <卡会话 pane> [他仓见证 pane]（卡目标 + 子目�
   a="$(at_field "$T4_OUT")"
   [ "$a" = "$PRA" ] || { printf 'RED:@=%s（期望仓根 %s）' "${a:-<空>}" "$PRA"; return; }
   # 判定层（**双保险**，非主判据）：锚 = 仓根 ⇒ ③ 同仓 legacy 裸名当场命中。
-  grep -qF "close 命中同仓 legacy 裸名 $CARD_CORE" <<< "$T4_OUT" \
+  grep -qF "已回收 $CARD_CORE" <<< "$T4_OUT" \
     || { printf 'RED:③ 判定层未命中（锚未落到卡所在仓根）'; return; }
   printf 'GREEN'
 }
+v_other_repo() { # <pane...>（全部应存活；D4：不回收 + 指路）
+  local alive
+  [ "$T4_RC" = "0" ] || { printf 'RED:rc=%s' "$T4_RC"; return; }
+  grep -qF '不在本仓回收' <<< "$T4_ALL" || { printf 'RED:无 D4 指路'; return; }
+  grep -qF '已回收' <<< "$T4_ALL" && { printf 'RED:发生了回收'; return; }
+  alive="$(alive37 "$@")"
+  [ "$alive" = "$#" ] || { printf 'RED:pane 被误杀（%s/%s 存活）' "$alive" "$#"; return; }
+  printf 'GREEN'
+}
+
 t4_expect_red() { # <verdict> <label>
   case "${1-}" in
     RED*) t4_ok "$2（负控命中：$1）" ;;
@@ -238,16 +249,14 @@ kill37 "$P_B2"
 # ================================================================ c 仅他仓 1 条（legacy 裸名）
 # D1 拍板：跨仓「唯一回落」必须保留（收紧会破 cases/09 AC3 的跨仓 close）。
 P_C="$(stage37 "$RB" "$CORE")" || t4_bad "c 夹具：他仓 pane 建立失败"
-run37 "$RA" "$(roster "$(rent "$CORE" "$PRB")")" --task "$T37" qa
-t4_assert_eq "GREEN" "$(v_reclaim "$PRB" "$P_C")"   "c 仅他仓 1（legacy 裸名）：h=0 → ④ 全 session 唯一同 core → 采用他仓唯一 cwd ⇒ 他仓 pane 消失"
+run37 "$RA" "$(roster "$(rent "$LEGACY_CORE" "$PRB")")" --task "$T37" qa
+t4_assert_eq "GREEN" "$(v_other_repo "$P_C")" "c 仅他仓 1（legacy 裸名）：D4 只在本仓锚内找 ⇒ 不回收 + 指路"
 kill37 "$P_C"
 
 # ================================================================ c2 仅他仓 1 条（带 scope 候选）
 P_C2="$(stage37 "$RB" "$OSCOPED")" || t4_bad "c2 夹具：他仓 pane 建立失败"
 run37 "$RA" "$(roster "$(rent "$OSCOPED" "$PRB")")" --task "$T37" qa
-t4_assert_eq "GREEN" "$(v_reclaim "$PRB" "$P_C2")" \
-  "c2 仅他仓 1（带 scope）：采用唯一 scoped 候选并按其唯一 cwd 校正 repo ⇒ 他仓 pane 消失"
-t4_assert_contains "$T4_OUT" "已回收 $OSCOPED" "c2 作用域：回收行的会话名 = 名册里那条带 scope 的名字"
+t4_assert_eq "GREEN" "$(v_other_repo "$P_C2")" "c2 仅他仓 1（旧形带 scope）：D4 不回收 + 指路"
 kill37 "$P_C2"
 
 # ================================================================ d 两仓各 1 条（他仓条目排首）
@@ -269,11 +278,11 @@ kill37 "$P_D2A" "$P_D2B"
 
 # ================================================================ d3 本仓 0 + 他仓 2 条
 # 采用候选时「该名唯一 cwd」判据必须挡住：否则按名回收他仓其中一个 ⇒ 静默误杀。
-P_D3A="$(stage37 "$RB" "$CORE")" || t4_bad "d3 夹具：他仓 pane#1 建立失败"
-P_D3B="$(stage37 "$RB" "$CORE")" || t4_bad "d3 夹具：他仓 pane#2 建立失败"
-run37 "$RA" "$(roster "$(rent "$CORE" "$PRB")" "$(rent "$CORE" "$PRB")")" --task "$T37" qa
-t4_assert_eq "GREEN" "$(v_ambiguous "$PRB" "$P_D3A" "$P_D3B")" \
-  "d3 本仓 0 + 他仓 2 条：die 列全部候选 + 零回收（禁按名取一条误杀）"
+P_D3A="$(stage37 "$RB" "$LEGACY_CORE")" || t4_bad "d3 夹具：他仓 pane#1 建立失败"
+P_D3B="$(stage37 "$RB" "$LEGACY_CORE")" || t4_bad "d3 夹具：他仓 pane#2 建立失败"
+run37 "$RA" "$(roster "$(rent "$LEGACY_CORE" "$PRB")" "$(rent "$LEGACY_CORE" "$PRB")")" --task "$T37" qa
+t4_assert_eq "GREEN" "$(v_other_repo "$P_D3A" "$P_D3B")" \
+  "d3 本仓 0 + 他仓 2 条：D4 不回收 + 指路（零误杀）"
 kill37 "$P_D3A" "$P_D3B"
 
 # ================================================================ e 名册不可用
@@ -287,7 +296,7 @@ t4_assert_eq "GREEN" "$(v_offline_none)" "e 名册不可用：rc/stdout 与基�
 mkdir -p "$RA/.agents/prompts" "$RA/sub"
 printf -- '---\nrole: fxcard\n---\n# T4 case37 一次性卡（close 只做卡名/路径匹配，正文不进判据）\n' \
   > "$RA/.agents/prompts/fxcard.md"
-CARD_CORE="fxcard-$T37"
+CARD_CORE="fxcard($T37)"
 # 他仓侧两件（判别力加强 · P3-B）：
 #   ① 名册里**同名另仓**条目（cwd = 他仓根）：锚退化时 h=0 ⇒ ④ 唯一同 core ⇒ 按名取 cwd 得 2 条
 #      ⇒「close 目标歧义」die ⇒ **结果层**（rc）就红，不依赖 ③ 的实现层文案；
@@ -299,6 +308,7 @@ P_F="$(stage37 "$RA" "$CARD_CORE")" || t4_bad "f 夹具：卡会话 pane 建立�
 SRC_MD5="$(md5sum "$RA/.agents/scripts/nao-fleet.sh" | cut -d' ' -f1)"
 FROSTER="$(roster "$(rent "$CARD_CORE" "$PRA")" "$(rent "$CARD_CORE" "$PRB")" "$(rent "rd-be-$T37" "$PRB")")"
 run37 "$RA/sub" "$FROSTER" --task "$T37" fxcard
+t4_info "f debug rc=$T4_RC out=[$T4_OUT] err=[$T4_ERR]"
 t4_assert_eq "GREEN" "$(v_card_reclaim "$P_F" "$P_FW")" \
   "f card 目标 + 子目录调用：rc=0 · @ = 卡所在仓根 · 卡 pane 消失 · 他仓见证 pane 存活 · 无「未运行」"
 if be_pane_alive "$P_FW"; then
@@ -340,7 +350,7 @@ kill37 "$P_M1"
 
 # ② 过滤用 `$repo`（循环依赖）：锚取自名册首命中 ⇒ (d) 被带到他仓（红点：本仓目标被改指他仓 / 误报歧义）
 MUT="$(mut_new 2)" && mut37 "$MUT" 'anchor="$(_close_anchor)"' \
-  '      anchor="$(nao_phys_path "$(intercom_cwd_for "$base_name")")"' \
+  '      anchor="$(nao_phys_path "$(intercom_roster | head -1 | cut -f2)")"' \
   || t4_bad "负控② 变异未应用（实现写法已变：锚来源行）"
 P_M2L="$(stage37 "$RA" "$LSCOPED")"; P_M2O="$(stage37 "$RB" "$CORE")"
 FLEET_SCRIPT="$MUT" run37 "$RA" "$(roster "$(rent "$CORE" "$PRB")" "$(rent "$LSCOPED" "$PRA")")" --task "$T37" qa
@@ -348,8 +358,8 @@ t4_expect_red "$(v_reclaim "$PRA" "$P_M2L" "$P_M2O")" "负控② 过滤用 \$rep
 kill37 "$P_M2L" "$P_M2O"
 
 # ③ `>1` 取首条：并列改取第一条 ⇒ (d2) 不再 die（红点：零回收被破坏 / 歧义判据消失）
-MUT="$(mut_new 3)" && mut37 "$MUT" 'die "close 目标歧义：$base_name 在本仓锚（$anchor）内有' \
-  '        repo="${name_cwds[0]}"' \
+MUT="$(mut_new 3)" && mut37 "$MUT" '      if (( _nro > 1 || _npa > 1 )) && [[ "$force" != true ]]; then' \
+  '      if false; then' \
   || t4_bad "负控③ 变异未应用（实现写法已变：h>1 的 die 行）"
 P_M3="$(stage37 "$RA" "$CORE")"
 FLEET_SCRIPT="$MUT" run37 "$RA" "$(roster "$(rent "$CORE" "$PRA")" "$(rent "$CORE" "$PRA")")" --task "$T37" qa
@@ -359,8 +369,8 @@ kill37 "$P_M3"
 # ④ 删回落档：去掉「全 session 唯一同 core」⇒ (d3) 的「按名唯一 cwd」复核整条消失
 #    ⑤ 用裸名直接按名回收 ⇒ 他仓两条同名里的任意一条被静默误杀（红点：零回收被破坏 / 无歧义判据）。
 #    注：负控绑定 d3 而非 (c) —— (c) 的候选名 == 裸名，⑤ 按名仍能定位同一个 pane（实测咬不动，如实记录）。
-MUT="$(mut_new 4)" && mut37 "$MUT" 'mapfile -t same_core < <(fleet_same_core_candidates "$core")' \
-  '        same_core=()' \
+MUT="$(mut_new 4)" && mut37 "$MUT" 'mapfile -t cands < <(fleet_same_core_candidates "$role" "$task")' \
+  '  cands=()' \
   || t4_bad "负控④ 变异未应用（实现写法已变：④ 回落档）"
 P_M4A="$(stage37 "$RB" "$CORE")"; P_M4B="$(stage37 "$RB" "$CORE")"
 FLEET_SCRIPT="$MUT" run37 "$RA" "$(roster "$(rent "$CORE" "$PRB")" "$(rent "$CORE" "$PRB")")" --task "$T37" qa
@@ -371,15 +381,15 @@ kill37 "$P_M4A" "$P_M4B"
 #    锚 = 裸名分支的**名册可用性闸门行**（语义唯一：只此一处分流「名册可用 / 不可用」）。
 #    #151/T552 P3-a：产品行 `repo="$fallback_repo"` 在全名分支同样出现（字形撞车）⇒ **不**再拿它当锚，
 #    否则 grep 取首行会把变异打到全名分支（本负控当场假绿）。变异语义不变：roster_ok≠1 ⇒ die。
-PAT37_5='    if [[ "$roster_ok" == "1" ]]; then'
+PAT37_5='  intercom_list_json >/dev/null 2>&1 && roster_ok=1'
 HITS37_5="$(grep -cF -- "$PAT37_5" "$FLEET_SRC" || true)"
 if [ "${HITS37_5:-0}" = "0" ]; then
-  t4_bad "负控⑤ 锚未命中（实现写法已变：裸名分支的名册可用性闸门行）"
+  t4_bad "负控⑤ 锚未命中（实现写法已变：名册可用性行）"
 elif [ "$HITS37_5" != "1" ]; then
-  t4_bad "负控⑤ 锚不唯一（$HITS37_5 处命中：该行不再是裸名分支独有）⇒ 改用语叉唯一的锚，不得改断言口径"
+  t4_bad "负控⑤ 锚不唯一（$HITS37_5 处命中）⇒ 改用语叉唯一的锚，不得改断言口径"
 fi
 MUT="$(mut_new 5)" && mut37 "$MUT" "$PAT37_5" \
-  '    [[ "$roster_ok" == "1" ]] || die "close 中止：名册不可用（负控变异）"; if true; then' \
+  '  [[ -n "$(intercom_list_json 2>/dev/null)" ]] && roster_ok=1 || die "close 中止：名册不可用（负控变异）"' \
   || t4_bad "负控⑤ 变异未应用（锚未命中/不唯一，见上）"
 FLEET_SCRIPT="$MUT" run37 "$RA" - --task "$T37" qa
 t4_expect_red "$(v_offline_none)" "负控⑤ roster_ok=0 当 die ⇒ (e) 必红（红点：rc≠0 / stdout 偏离基线）"

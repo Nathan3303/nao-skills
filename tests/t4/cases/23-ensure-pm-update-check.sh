@@ -279,7 +279,7 @@ if [ "$BE_NAME" = "tmux" ]; then
   _be_tmux set-buffer -b t4-user "t4-user-sentinel" 2>/dev/null || true
   BUF_BEFORE="$(_be_tmux list-buffers -F '#{buffer_name}=#{buffer_sample}' 2>/dev/null || true)"
 fi
-run_fleet ensure "pm@$LAB"
+run_fleet ensure --task T1 "pm@$LAB"
 t4_assert_eq "0" "$T4_RC" "AC1① ensure pm rc=0（T4_ERR=$(printf '%s' "$T4_ERR" | head -1)）"
 t4_assert_eq "1" "$(launch_lines)" "AC1① 恰 1 行 [$BE_NAME] 已拉起（三态契约不变）"
 t4_assert_contains "$T4_OUT_ANSI" "（成功 1 / 跳过 0 / 失败 0）" "AC1① 摘要「成功 1」（本缺陷的正面判据）"
@@ -287,12 +287,14 @@ CMD_PM="$(new_split "$BEFORE" | head -1)"
 t4_assert_ne "" "$CMD_PM" "AC1① 捕获到 fleet 交给后端的启动命令串"
 PF_PM="$(prompt_file_of "$CMD_PM")"
 t4_assert_ne "" "$PF_PM" "AC1① 命令串含 --append-system-prompt 文件（$PF_PM）"
-diff_assert "$(expected_wrapped "pm@$BASE" "$PF_PM")" "$CMD_PM" \
+diff_assert "$(expected_wrapped "pm(T1)" "$PF_PM")" "$CMD_PM" \
   "AC3① pm 命令行 = 缺陷前基线（无「 -- 」注入段，逐字）"
 t4_assert_eq "0" "$(grep -cF -- ' -- ' <<< "$CMD_PM" || true)" "AC3① pm 命令行无「 -- 」注入段"
 
-PANE_PM="$(pane_of "pm@$BASE")"
+PANE_PM="$(pane_of "pm(T1)")"
 t4_assert_ne "" "$PANE_PM" "AC2① 定位 pm 会话 pane（$PANE_PM）"
+# tmux 桩 pi 不写标题；补写身份，令后续相位 1 的槽位判重与 herdr 同口径（否则 off/140 会落槽位 1）
+[ "$BE_NAME" = "tmux" ] && be_set_name "$PANE_PM" "pm(T1)" "$BASE" >/dev/null 2>&1 || true
 CAP_PM="$(capture_of "$PANE_PM")"
 t4_assert_eq "1" "$(anchor_count "$CAP_PM")" "AC2① 投递文案确实到达会话（回读命中固定锚，恰 1 次）"
 if [ "$BE_NAME" = "herdr" ]; then
@@ -320,7 +322,7 @@ fi
 # ============================================================ AC4 幂等：已在运行 ⇒ 不二次投递（herdr 可观测面）
 if [ "$BE_NAME" = "herdr" ]; then
   T23_SWITCH=1
-  run_fleet ensure "pm@$LAB"
+  run_fleet ensure --task T1 "pm@$LAB"
   t4_assert_eq "0" "$T4_RC" "AC4 幂等：二次 ensure pm rc=0"
   t4_assert_contains "$T4_ERR_ANSI" "已在运行" "AC4 幂等：二次 ensure 判「已在运行」跳过（不进 spawn_one）"
   t4_assert_eq "1" "$(delivered_of "$PANE_PM")" "AC4 幂等：投递次数仍为 1（无状态文件、无二次投递）"
@@ -336,8 +338,8 @@ t4_assert_eq "1" "$(launch_lines)" "AC1② 恰 1 行 [$BE_NAME] 已拉起"
 CMD_RD="$(new_split "$BEFORE" | head -1)"
 PF_RD="$(prompt_file_of "$CMD_RD")"
 t4_assert_ne "" "$PF_RD" "AC1② rd-be 命令串正常（$PF_RD）"
-diff_assert "$(expected_wrapped "rd-be@$BASE" "$PF_RD")" "$CMD_RD" "AC3② rd-be 命令行与缺陷前基线逐字一致"
-PANE_RD="$(pane_of "rd-be@$BASE")"
+diff_assert "$(expected_wrapped "rd-be" "$PF_RD")" "$CMD_RD" "AC3② rd-be 命令行与缺陷前基线逐字一致"
+PANE_RD="$(pane_of "rd-be")"
 t4_assert_ne "" "$PANE_RD" "AC1② 定位 rd-be pane（$PANE_RD）"
 t4_assert_eq "0" "$(anchor_count "$(capture_of "$PANE_RD")")" "AC2② rd-be 会话不出现自检锚（非 pm 不投递）"
 [ "$BE_NAME" = "herdr" ] && t4_assert_eq "0" "$(delivered_of "$PANE_RD")" "AC2② herdr：rd-be 无 agent prompt 投递"
@@ -372,7 +374,7 @@ CMD_PMOFF="$(new_split "$BEFORE" | head -1)"
 PF_PMOFF="$(prompt_file_of "$CMD_PMOFF")"
 t4_assert_ne "" "$PF_PMOFF" "AC1③ pm-off 命令串正常（$PF_PMOFF）"
 t4_assert_eq "0" "$(grep -cF -- ' -- ' <<< "$CMD_PMOFF" || true)" "AC1③ 开关关闭时无「 -- 」注入段"
-diff_assert "$(expected_wrapped "pm-off@$BASE" "$PF_PMOFF")" "$CMD_PMOFF" \
+diff_assert "$(expected_wrapped "pm2(off)" "$PF_PMOFF")" "$CMD_PMOFF" \
   "AC3③ NAO_UPDATE_ON_ENSURE=0 下 pm 命令行与缺陷前逐字一致"
 # AC3 硬证据：默认开 vs 关闭 ⇒ 命令行 md5 相等（唯一变量是投递，不是 argv）
 NORM_ON="$(printf '%s' "${CMD_PM//\\/}" | sed -E 's#--name [^ ]+ #--name <name> #; s#/tmp/nao-fleet-[^ ]+\.md#<prompt>#')"
@@ -381,7 +383,7 @@ t4_assert_eq "$(printf '%s' "$NORM_OFF" | md5sum | awk '{print $1}')" \
   "$(printf '%s' "$NORM_ON" | md5sum | awk '{print $1}')" \
   "AC3④ 默认开与开关关的 pi 命令行 md5 相等（自检只改投递，不改 argv）"
 # AC2 负控：开关关闭的新会话就绪后 2s 内不得出现该锚
-PANE_PMOFF="$(pane_of "pm-off@$BASE")"
+PANE_PMOFF="$(pane_of "pm2(off)")"
 t4_assert_ne "" "$PANE_PMOFF" "AC2③ 定位 pm-off pane（$PANE_PMOFF）"
 t4_assert_eq "0" "$(anchor_count "$(capture_of "$PANE_PMOFF")")" "AC2③ 开关关闭：就绪后 2s 内无自检锚（负控）"
 no_anchor_within "$PANE_PMOFF" 2 && t4_ok "AC2③ 负控窗口内（2s）持续无锚" || t4_bad "AC2③ 负控窗口内出现了自检锚"
@@ -390,7 +392,7 @@ no_anchor_within "$PANE_PMOFF" 2 && t4_ok "AC2③ 负控窗口内（2s）持续�
 # ============================================================ AC4 失败语义：rc 仍 0 + 默认可见 warn（含 pane + code）
 # herdr：替身对指定 target 返回 stdout 错误 JSON（agent_blocked）；tmux：桩 load-buffer 注入失败
 if [ "$BE_NAME" = "herdr" ]; then
-  FAIL_ENV=(T4_HERDR_FAIL_PROMPT="pm-140@$BASE")
+  FAIL_ENV=(T4_HERDR_FAIL_PROMPT="pm2(140)")
 else
   FAIL_ENV=(T4_TMUX_FAIL_BUFFER=1)
 fi
@@ -407,7 +409,7 @@ else
   t4_assert_contains "$T4_ERR_ANSI" "load-buffer" "AC4① warn 含 tmux 失败阶段（load-buffer）"
 fi
 t4_assert_contains "$T4_ERR_ANSI" "pane=" "AC4① warn 含 pane（可定位）"
-PANE_FAIL="$(pane_of "pm-140@$BASE")"
+PANE_FAIL="$(pane_of "pm2(140)")"
 t4_assert_ne "" "$PANE_FAIL" "AC4① 失败夹具 pane 仍建立（会话确实可用）"
 t4_assert_eq "0" "$(anchor_count "$(capture_of "$PANE_FAIL")")" "AC4① 失败路径无投递锚（确实没送达）"
 

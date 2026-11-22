@@ -50,7 +50,7 @@
 
 - 🔁 **交接快照（2026-11-20 · T553 合并后 / v0.26.0 发布中）**：接手者只需读本文件。要点：
   - **T553 已合并 `475b251`**（PR #154 squash · 20 文件 · main 恰 1 条）· `check` rc=0 · roles=7 · files=52 · 用例 **38**
-  - **正在发 v0.26.0 MINOR**（分支 `nao/v0.26.0-release`：`package.json` 0.26.0 + `docs/releases/v0.26.0.md` + 本台账终态）· 待 → 发布前置 dual 门禁 → RD 按显式 sha push → tag `v0.26.0` + Release → **用户** `npm publish` → 按 integrity 核验回填
+  - **v0.26.0 已发布并核验（2026-11-20）**：发布提交 `10ef3b6` · tag/Release `v0.26.0` · `dist-tags.latest` = **0.26.0** · `dist.integrity` 与本地 `npm pack` tarball（**233,165 B** / unpacked 615,443 B）**逐字节一致** · **注意**：状态行改动按 BR5 压在 `stash@{0}`，**下一任务 PR 首提交须 pop**
   - **v0.25.1 / v0.25.2 均已核验**（integrity 与本地 tarball 逐字节一致：226,330 B / 227,687 B）
   - **队列**：空（#146 / #151 / #139 均闭环）· 三档表仍 13 条（最近到期 2026-12-28）
   - **现成会话**：`arch-designer-T553` / `rd-infra-T553` / `qa-T553`（均 idle 或 done）—— 发布收尾后 `close --force --task T553 <别名>` 回收
@@ -617,6 +617,20 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **T554** | `arch-designer`（ADR）→ `rd-infra` → `qa` | **舰队模型 v2：取消 fleet，workspace 为绑定单位**（feat · 破坏性 · 用户 2026-11-20 四答）· **验收通过、待合并** | 2026-11-20 | PRD `docs/prds/2026-11-20-fleet-model-v2.md` AC1–AC10 | `feat/554-fleet-model-v2`（HEAD `ee67b43` · 6 提交） |
+
+### T554 验收记录（2026-11-22 · PM · 用户睡眠期自主决策）
+
+- **交付链**：PRD `f436ed7` → ADR + 判据 `4bfea52` → 判据 v2（括号格式）`b0982c8` → 主实现 `626a7a6` → `28` 收口 `b7784b4` → 全量回归收口 `e7e80aa` → QA 收口 `ee67b43`
+- **PM 自证（最终 HEAD）**：`check` rc=0 · roles=7 · files=52 · 用例 **39** · `--case 40` 双后端 PASS · `--case 28` **436 断言** 双后端 PASS · **`test:t4:full:dual` 两组 rc=0**（SKIP=0/DEGRADE=0/非白名单 NOTE=0）· `cleanup --session default` 实测 = 打印影响面 + rc=2 零动作
+- **PM 实测（决定可行性）**：herdr 0.9.5 **不做 label 唯一性校验**（不同 ws 同名 tab ✅ · 同一 ws 两个 `pm` ✅ · 同 label ws ✅）⇒ 唯一性必须机制自己做 ⇒ 取消 fleet 无技术障碍；`pi --name` 接受括号、herdr tab/ws label 接受括号、herdr **session 名拒绝括号**（不按角色命名 session 故不受影响）
+- **QA 一轮 = CONDITIONAL → 三轮收口**：① 全量 66 条红（`06/09/15/19/23/30/32` 未迁移 v1 断言）② `cases/28` 15 条红（预算面仍按 v1 fleet/scope 维度）③ **P1 阻塞** `cleanup --session default --force` 被 `case ""|"default") return 2` 提前拦住 ⇒ 修 + 补 S9b
+- **PM 裁定**：迁移无「删断言换绿灯」（断言 1637→1610，−27 逐条归因到 D7 反转/旧语义退休，QA 已核）· `_term_herdr_busy` 按仓收窄改动 §五禁改区一行 **接受**（未旁路忙闲闸门）· 4 条 P3 全当批修（含 `check` 文案与 AC5 冲突、manifest `slug:` warn 被 status/close 吞掉、S4 槽位耗尽未测、`28` J2② 布局迁移覆盖缺口）
+- **待办** = 建 PR → 授权 squash 合并 → 发 **v0.27.0 MINOR**（0.x 破坏性变更走 MINOR）
+- **下一批（用户已拍板，未立项）**：① **彻底移除 tmux 后端（纯 herdr）** —— QA 估 ≈700 行（7 个 `term-impl-tmux` 区间 615 行 + 门面分支）② **缩减 `nao-fleet.sh` 体量**
+
+**用户拍板（2026-11-20 · ask-me 四答）**：① **彻底取消 fleet**（重名加数字 `pm2`…）② 名字**只用角色名 + 数字后缀**，`@` 段彻底去掉 ③ **每仓一个 pm** ④ `fleet.yaml` 保留为「仓代号 → 路径」映射、去 `slug`；⑤ **default session 全放行**。
+**PM 实测（决定可行性 · 已回收探测 session）**：herdr 0.9.5 **不做任何 label 唯一性校验** —— 不同 workspace 各有 `pm` tab 允许、**同一 workspace 内两个 `pm` 也允许**、同 label workspace 也允许 ⇒ 唯一性必须由机制自己做 ⇒ 取消 fleet 无技术障碍。
 （T553 已合并归档 ⇒ 行已清空；终态见下方「已验收 / 已归档」归档墙）
 
 ### T553 验收记录（2026-11-20 · PM · 加速档）

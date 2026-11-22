@@ -147,12 +147,12 @@ t4_assert_eq "caller" "$(fld "$(obj_for "$(json_rows workspace list)" workspace_
 
 # ---- ③ ensure 2 角色（pm + rd-fe）----
 ENSURE_T0="$(date +%s%N)"
-run_fleet ensure "pm@$LAB/repo" "rd-fe@$LAB/repo"
+run_fleet ensure --task T1 "pm@$LAB/repo" "rd-fe@$LAB/repo"
 ENSURE_MS=$(( ($(date +%s%N) - ENSURE_T0) / 1000000 ))
 t4_assert_eq "0" "$T4_RC" "③ ensure rc=0（T4_ERR=$(printf '%s' "$T4_ERR_ANSI" | head -1)）"
 t4_assert_contains "$T4_OUT_ANSI" "（成功 2 / 跳过 0 / 失败 0）" "③ 摘要三类计数 = 2/0/0"
-t4_assert_contains "$T4_OUT_ANSI" "[herdr] 已拉起 pm@repo @ $LAB/repo" "③ pm 成功行在位（名字恒带 @<仓 slug>）"
-t4_assert_contains "$T4_OUT_ANSI" "[herdr] 已拉起 rd-fe@repo @ $LAB/repo" "③ rd-fe 成功行在位（名字恒带 @<仓 slug>）"
+t4_assert_contains "$T4_OUT_ANSI" "[herdr] 已拉起 pm(T1) @ $LAB/repo" "③ pm 成功行在位（名字恒带 @<仓 slug>）"
+t4_assert_contains "$T4_OUT_ANSI" "[herdr] 已拉起 rd-fe(T1) @ $LAB/repo" "③ rd-fe 成功行在位（名字恒带 @<仓 slug>）"
 t4_assert_eq "1" "$([ "$ENSURE_MS" -le 90000 ] && echo 1 || echo 0)" "③ 两角色 ensure wall clock ${ENSURE_MS}ms ≤ 90s（目标 3–6s）"
 t4_info "实测：ensure 2 角色 ${ENSURE_MS}ms（整轮含 session-start/status/close/cleanup 见末行）"
 
@@ -168,16 +168,16 @@ t4_assert_ne "$CALLER_WS" "$WS_ID" "③ 放置键：新 workspace ≠ 调用方 
 t4_assert_eq "" "$(obj_for "$WS_JSON" label "$SESS")" \
   "③ 放置键：无 label=$SESS 的 workspace（不得取会话名作放置键）"
 TABS_JSON="$(json_rows tab list --workspace "$WS_ID")"
-TAB_PM="$(obj_for "$TABS_JSON" label "pm@repo")"
-TAB_FE="$(obj_for "$TABS_JSON" label "rd-fe@repo")"
-t4_assert_ne "" "$TAB_PM" "③ 布局 A：tab label = pm@repo"
-t4_assert_ne "" "$TAB_FE" "③ 布局 A：tab label = rd-fe@repo"
+TAB_PM="$(obj_for "$TABS_JSON" label "pm(T1)")"
+TAB_FE="$(obj_for "$TABS_JSON" label "rd-fe(T1)")"
+t4_assert_ne "" "$TAB_PM" "③ 布局 A：tab label = pm(T1)"
+t4_assert_ne "" "$TAB_FE" "③ 布局 A：tab label = rd-fe(T1)"
 t4_assert_eq "1" "$(fldnum "$TAB_PM" pane_count)" "③ 布局 A：pm tab pane_count == 1（结构判据，非几何）"
 t4_assert_eq "1" "$(fldnum "$TAB_FE" pane_count)" "③ 布局 A：rd-fe tab pane_count == 1"
 t4_assert_ne "$(fld "$TAB_PM" tab_id)" "$(fld "$TAB_FE" tab_id)" "③ 布局 A：两角色各占一个 tab（tab_id 不同）"
 PANES_JSON="$(json_rows pane list)"
-PANE_PM="$(obj_for "$PANES_JSON" label "pm@repo")"
-PANE_FE="$(obj_for "$PANES_JSON" label "rd-fe@repo")"
+PANE_PM="$(obj_for "$PANES_JSON" label "pm(T1)")"
+PANE_FE="$(obj_for "$PANES_JSON" label "rd-fe(T1)")"
 P_PM="$(fld "$PANE_PM" pane_id)"; P_FE="$(fld "$PANE_FE" pane_id)"
 t4_assert_ne "" "$P_PM" "③ pane list：pm 的 pane_id 可定位（$P_PM）"
 t4_assert_ne "" "$P_FE" "③ pane list：rd-fe 的 pane_id 可定位（$P_FE）"
@@ -186,7 +186,7 @@ t4_assert_eq "$(fld "$TAB_PM" tab_id)" "$(fld "$PANE_PM" tab_id)" "③ 布局 A�
 t4_assert_eq "$(fld "$TAB_FE" tab_id)" "$(fld "$PANE_FE" tab_id)" "③ 布局 A：rd-fe pane 的 tab_id 与其角色 tab 一致"
 T_PM="$(fld "$PANE_PM" tab_id)"
 t4_info "布局 A 实测：workspace=$WS_ID · tabs=[$(split_objs <<< "$TABS_JSON" | grep -F '"tab_id"' | while IFS= read -r o; do printf '%s/%s/%s ' "$(fld "$o" tab_id)" "$(fld "$o" label)" "$(fldnum "$o" pane_count)"; done)]（tab_id/label/pane_count）"
-t4_info "布局 A 实测：panes=[$(split_objs <<< "$PANES_JSON" | grep -E '"label":"(pm|rd-fe)@repo"' | while IFS= read -r o; do printf '%s→%s(%s) ' "$(fld "$o" label)" "$(fld "$o" pane_id)" "$(fld "$o" tab_id)"; done)]（label→pane_id(tab_id)）"
+t4_info "布局 A 实测：panes=[$(split_objs <<< "$PANES_JSON" | grep -E '"label":"(pm|rd-fe)\(T1\)"' | while IFS= read -r o; do printf '%s→%s(%s) ' "$(fld "$o" label)" "$(fld "$o" pane_id)" "$(fld "$o" tab_id)"; done)]（label→pane_id(tab_id)）"
 
 # 就绪七条件（在**权威源** agent list 上逐条复核；ensure 就绪门内部已全条件与一次）
 AGENTS_JSON="$(json_rows agent list)"
@@ -203,12 +203,12 @@ done
 # ---- ④ status 双在线 ----
 run_fleet status
 t4_assert_eq "0" "$T4_RC" "④ status rc=0"
-t4_assert_contains "$T4_OUT_ANSI" "✓ pm" "④ status：pm 在线"
-t4_assert_contains "$T4_OUT_ANSI" "✓ rd-fe" "④ status：rd-fe 在线"
+t4_assert_contains "$T4_OUT_ANSI" "pm(T1)" "④ status：pm(T1) 在线"
+t4_assert_contains "$T4_OUT_ANSI" "rd-fe(T1)" "④ status：rd-fe(T1) 在线"
 
 # 幂等（同一条 ensure 连跑 2 次 ⇒ effect=0：不新建 tab/pane，全部判「已在运行」）
 TABS_BEFORE="$(json_rows tab list --workspace "$WS_ID")"
-run_fleet ensure "pm@$LAB/repo" "rd-fe@$LAB/repo"
+run_fleet ensure --task T1 "pm@$LAB/repo" "rd-fe@$LAB/repo"
 t4_assert_eq "0" "$T4_RC" "③ 幂等：重跑 ensure rc=0"
 t4_assert_contains "$T4_OUT_ANSI" "（成功 0 / 跳过 2 / 失败 0）" "③ 幂等：重跑摘要 0/2/0（不重复拉起）"
 t4_assert_eq "$TABS_BEFORE" "$(json_rows tab list --workspace "$WS_ID")" \
@@ -226,14 +226,14 @@ t4_assert_eq "" "$(obj_for "$(json_rows tab list --workspace "$WS_ID")" tab_id "
 t4_info "迁移实测：pane move ${P_PM} --tab ${SCRATCH_TAB} --split right ⇒ pane_id=${P_PM}（不变）· 源 tab ${T_PM} 已自动关闭 · tab 现=${SCRATCH_TAB}"
 run_fleet status
 t4_assert_eq "0" "$T4_RC" "⑤ 迁移后 status rc=0"
-t4_assert_contains "$T4_OUT_ANSI" "✓ pm" "⑤ 迁移后 status 仍判 pm 在线（会话未受影响）"
+t4_assert_contains "$T4_OUT_ANSI" "pm(T1)" "⑤ 迁移后 status 仍判 pm(T1) 在线（会话未受影响）"
 
 # ---- ⑥ close 一个 + cleanup 拆场 ----
 _r32_no_residue() {
   [ -z "$(residue_procs "XDG_CONFIG_HOME=$XDG_CONFIG_HOME" | head -1)" ] \
     && [ -z "$(residue_procs "PI_CODING_AGENT_DIR=$PI_CODING_AGENT_DIR" | head -1)" ]
 }
-run_fleet close rd-fe
+run_fleet close --task T1 rd-fe
 t4_assert_eq "0" "$T4_RC" "⑥ close rd-fe rc=0（T4_ERR=$(printf '%s' "$T4_ERR_ANSI" | head -1)）"
 t4_assert_eq "" "$(obj_for "$(json_rows pane list)" pane_id "$P_FE")" \
   "⑥ close 后 rd-fe 的 pane 已消失（effect 判据）"

@@ -401,14 +401,14 @@ if only_match AC6; then
   new_server 152 34 || bad "AC6：隔离 server 创建失败"
   FAKE_ROSTER='[]'
   # ① 首次 ensure（名册空 ⇒ 不判重）：2 角色 → W1 1→3（rc=0）
-  run_fleet "$TMUX_ENV" "$CALLER" ensure pm arch-designer
+  run_fleet "$TMUX_ENV" "$CALLER" ensure --task T1 pm2 arch-designer2
   if [[ "$RC" == 0 && "$(np "$W1")" == 3 ]]; then ok "AC6 ① 首次 ensure：W1 1→3（rc=0）"; else bad "AC6 ① 首次 ensure（rc=$RC W1=$(np "$W1")；$(oneline "$OUT")）"; fi
   # 模拟 pi 上线注册（等价真实：名册 cwd=本仓 + tmuxPane=实际 pane，按创建序映射角色）
   newp="$(comm -13 <(printf '%s\n' "$CALLER") <(TX list-panes -t "$W1" -F '#{pane_id}' | sort) | grep . || true)"
-  FAKE_ROSTER='[{"name":"pm","id":"pm","status":"idle","cwd":"'"$LAB"'","tmuxPane":"'"$(printf '%s\n' "$newp" | sed -n 1p)"'"},{"name":"arch-designer","id":"arch-designer","status":"idle","cwd":"'"$LAB"'","tmuxPane":"'"$(printf '%s\n' "$newp" | sed -n 2p)"'"}]'
+  FAKE_ROSTER='[{"name":"pm2(T1)","id":"pm2(T1)","status":"idle","cwd":"'"$LAB"'","tmuxPane":"'"$(printf '%s\n' "$newp" | sed -n 1p)"'"},{"name":"arch-designer2(T1)","id":"arch-designer2(T1)","status":"idle","cwd":"'"$LAB"'","tmuxPane":"'"$(printf '%s\n' "$newp" | sed -n 2p)"'"}]'
   # ② 第 2 次 ensure（名册在线 ⇒ 命中 running 跳过）：pane 数不变、2 处「已在运行」
   N2="$(np "$W1")"
-  run_fleet "$TMUX_ENV" "$CALLER" ensure pm arch-designer
+  run_fleet "$TMUX_ENV" "$CALLER" ensure --task T1 pm2 arch-designer2
   if [[ "$RC" == 0 && "$(np "$W1")" == "$N2" ]]; then ok "AC6 ② 第 2 次 ensure：命中 running 跳过（pane 不变 $N2，rc=0）"; else bad "AC6 ② 第 2 次未跳过（$N2→$(np "$W1")；$(oneline "$OUT")）"; fi
   nskip="$(strip_ansi <<< "$OUT" | grep -c '已在运行' || true)"
   if [[ "$nskip" == 2 ]]; then ok "AC6 ② 恰 2 处「已在运行」跳过诊断"; else bad "AC6 ②「已在运行」=$nskip（期望 2）"; fi

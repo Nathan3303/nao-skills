@@ -115,11 +115,11 @@ t4_assert_eq "0" "$T4_RC" "AC1 成功路径 rc=0（T4_ERR=$(printf '%s' "$T4_ERR
 t4_assert_eq "1" "$(launch_lines)" "AC1 成功 ⇒ 恰 1 行 [$BE_NAME] 已拉起"
 if [ "$BE_NAME" = "tmux" ]; then
   t4_assert_contains "$T4_OUT_ANSI" \
-    "[tmux] 已拉起 arch-designer@$FLEET @ $LAB（layout=main-row2）" \
+    "[tmux] 已拉起 arch-designer @ $LAB（layout=main-row2）" \
     "AC1 成功行：name（core@fleet）@ repo（layout=…）"
 else
   # herdr 结果行形态（BR1 只钉 tmux 逐字）：name @ repo（+ pane=…），**没有** layout 段
-  t4_assert_contains "$T4_OUT_ANSI" "[herdr] 已拉起 arch-designer@$FLEET @ $LAB" \
+  t4_assert_contains "$T4_OUT_ANSI" "[herdr] 已拉起 arch-designer @ $LAB" \
     "AC1 herdr 成功行形态：name（core@fleet）@ repo（无 layout 段）"
   t4_assert_not_contains "$T4_OUT_ANSI" "layout=" "AC1 herdr 成功行不含 tmux layout 字段"
 fi
@@ -131,10 +131,14 @@ t4_assert_eq "1" "$(printf '%s\n' "$NEWS" | grep -c .)" "AC1 真创建 1 个 pan
 P_ARCH="$(printf '%s\n' "$NEWS" | head -1)"
 
 # ============================================================ AC2 跳过：零假行
-# 两后端都有「已在运行 ⇒ 跳过」出口：tmux = 标题命中；herdr = pane label + 结构化事实命中。
-[ "$BE_NAME" = "tmux" ] && set_title "$P_ARCH" "arch-designer@$FLEET"
+# v2：常驻重复 ensure 会递增槽位（S3）⇒ 「跳过」出口 = **同 role+task 的派生**再次 ensure。
 BEFORE="$(pane_ids)"
-run_fleet ensure "arch@$LAB"
+run_fleet ensure --task T1 "arch@$LAB"
+t4_assert_eq "0" "$T4_RC" "AC2 夹具：先拉起 arch-designer2(T1)（槽位 2；槽位 1 已被 AC1 占用）"
+P_DER="$(new_panes "$BEFORE" | head -1)"
+[ "$BE_NAME" = "tmux" ] && set_title "$P_DER" "arch-designer2(T1)"
+BEFORE="$(pane_ids)"
+run_fleet ensure --task T1 "arch@$LAB"
 t4_assert_eq "0" "$T4_RC" "AC2 跳过路径 rc=0"
 t4_assert_eq "0" "$(launch_lines)" "AC2 跳过 ⇒ 0 行 [$BE_NAME] 已拉起（零假行，BR2）"
 t4_assert_contains "$T4_ERR_ANSI" "已在运行" "AC2 既有跳过 warn 保留（已在运行）"
@@ -145,9 +149,9 @@ t4_assert_contains "$(summary_text)" "（成功 0 / 跳过 1 / 失败 0）" \
 t4_assert_eq "$BEFORE" "$(pane_ids)" "AC2 跳过不新增 pane（零副作用）"
 
 # ============================================================ AC3 失败：零假行 + 桩 + rc 仍 0
-T539_FAIL_NAME="qa@$FLEET"
+T539_FAIL_NAME="qa(T2)"
 BEFORE="$(pane_ids)"
-run_fleet ensure "qa@$LAB"
+run_fleet ensure --task T2 "qa@$LAB"
 T539_FAIL_NAME=""
 t4_assert_eq "0" "$T4_RC" "AC3 失败路径 rc 仍为 0（BR4）"
 t4_assert_eq "0" "$(launch_lines)" "AC3 失败 ⇒ 0 行 [tmux] 已拉起（零假行，BR2）"
@@ -174,28 +178,27 @@ fi
 
 # ============================================================ AC4 混合：1 成功 + 1 跳过 + 1 失败
 # 跳过来源分后端：tmux 靠标题预置（把 arch pane 改名为 rd-fe）；herdr 靠 label 命中（arch 仍在场）。
-if [ "$BE_NAME" = "tmux" ]; then set_title "$P_ARCH" "rd-fe@$FLEET"; fi
-T539_FAIL_NAME="rd-be@$FLEET"
+T539_FAIL_NAME="rd-be(T1)"
 BEFORE="$(pane_ids)"
-run_fleet ensure "arch@$LAB" "rd-fe@$LAB" "rd-be@$LAB"
+run_fleet ensure --task T1 "arch@$LAB" "rd-fe@$LAB" "rd-be@$LAB"
 T539_FAIL_NAME=""
 t4_assert_eq "0" "$T4_RC" "AC4 混合批次 rc=0（含失败目标，BR4）"
 t4_assert_eq "1" "$(launch_lines)" "AC4 混合 ⇒ 结果行恰 1 条（仅成功目标）"
 if [ "$BE_NAME" = "tmux" ]; then
-  t4_assert_contains "$T4_OUT_ANSI" "[tmux] 已拉起 arch-designer@$FLEET @ $LAB" "AC4 成功行归 arch-designer"
+  t4_assert_contains "$T4_OUT_ANSI" "[tmux] 已拉起 rd-fe(T1) @ $LAB" "AC4 成功行归 rd-fe(T1)"
   t4_assert_not_contains "$T4_OUT_ANSI" "[tmux] 已拉起 rd-be" "AC4 失败目标 rd-be 无假成功行"
-  t4_assert_not_contains "$T4_OUT_ANSI" "[tmux] 已拉起 rd-fe" "AC4 跳过目标 rd-fe 无假成功行"
+  t4_assert_not_contains "$T4_OUT_ANSI" "[tmux] 已拉起 arch-designer" "AC4 跳过目标 arch 无假成功行"
   t4_assert_contains "$T4_ERR_ANSI" "pane 创建失败" "AC4 失败目标走既有诊断 warn（tmux）"
 else
-  t4_assert_contains "$T4_OUT_ANSI" "[herdr] 已拉起 rd-fe@$FLEET @ $LAB" "AC4 成功行归 rd-fe（arch 已在场 ⇒ 跳过）"
+  t4_assert_contains "$T4_OUT_ANSI" "[herdr] 已拉起 rd-fe(T1) @ $LAB" "AC4 成功行归 rd-fe(T1)（arch 派生已在场 ⇒ 跳过）"
   t4_assert_not_contains "$T4_OUT_ANSI" "已拉起 rd-be" "AC4 失败目标 rd-be 无假成功行"
   t4_assert_not_contains "$T4_OUT_ANSI" "已拉起 arch-designer" "AC4 跳过目标 arch 无假成功行"
   t4_assert_contains "$T4_ERR_ANSI" "pane run 失败" "AC4 失败目标走既有诊断 warn（herdr）"
 fi
 if [ "$BE_NAME" = "tmux" ]; then
-  t4_assert_contains "$T4_ERR_ANSI" "rd-fe@$FLEET 已在运行" "AC4 跳过目标走既有跳过 warn（tmux：rd-fe 标题命中）"
+  t4_assert_contains "$T4_ERR_ANSI" "arch-designer2(T1) 已在运行" "AC4 跳过目标走既有跳过 warn（同 role+task 已在）"
 else
-  t4_assert_contains "$T4_ERR_ANSI" "arch-designer@$FLEET 已在运行" "AC4 跳过目标走既有跳过 warn（herdr：arch 在场）"
+  t4_assert_contains "$T4_ERR_ANSI" "arch-designer2(T1) 已在运行" "AC4 跳过目标走既有跳过 warn（herdr：同 role+task 已在）"
 fi
 t4_assert_eq "1" "$(summary_lines)" "AC4 摘要恰一行（BR5）"
 SUM="$(summary_text)"
@@ -230,7 +233,7 @@ fs.writeFileSync(p,JSON.stringify(st));' "$SPACE_STATE" "$1" "$2"
   be_ensure_scene || t4_bad "J1 夹具重置失败"
   t4_assert_file "$SPACE_STATE" "J1 替身状态文件存在（$SPACE_STATE）"
   set_rect 40 8
-  run_fleet ensure "qa@$LAB"
+  run_fleet ensure --task T2 "qa@$LAB"
   t4_assert_eq "0" "$T4_RC" "J1 小空间：ensure rc 仍 0（只 warn 不 die）"
   t4_assert_contains "$T4_ERR_ANSI" "空间不足" "J1 小空间：warn「空间不足」在位"
   t4_assert_contains "$T4_ERR_ANSI" "列=40" "J1 小空间：点名实际列数（量测真发生）"

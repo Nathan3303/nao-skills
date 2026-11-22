@@ -192,8 +192,8 @@ else
 fi
 t4_assert_eq "$LAB" "$(be_pane_cwd "${P_CR:-$CALLER}")" \
   "AC1① 新 pane 工作区 = --card 所属仓（$BASE）"
-t4_assert_eq "code-reviewer-T537@$BASE" "$(name_of "$P_CR")" \
-  "AC1② --name 为 <卡 role>-<task>@<fleet>（pi 侧据此设标题 π - code-reviewer-T537@$BASE - $BASE）"
+t4_assert_eq "code-reviewer(T537)" "$(name_of "$P_CR")" \
+  "AC1② --name = <卡 role>(<task>)（v2 派生形；不含位置）"
 t4_assert_contains "$T4_OUT" "已拉起 1 个会话" "AC1 就绪提示恰一行（T536 口径不变）"
 
 # AC1③ 系统提示 = 卡正文逐字节 + 锚点行；锚点行与常驻角色逐字相同
@@ -219,7 +219,7 @@ t4_assert_eq "2" "$(printf '%s\n' "$NEWS" | grep -c .)" "AC3④ 混合批次拉�
 NAMES="$(while IFS= read -r p; do [ -n "$p" ] && name_of "$p"; done <<< "$NEWS" | sort | tr '\n' ' ')"
 t4_assert_contains "$NAMES" "data-reviewer" "AC3④ 卡目标默认名 = 卡 role（data-reviewer）"
 t4_assert_contains "$NAMES" "qa" "AC3④ 同批 qa 仍走清单常驻（不与卡互相污染）"
-P_QA="$(while IFS= read -r p; do [ -n "$p" ] || continue; [ "$(name_of "$p")" = "qa@$BASE" ] && { printf '%s' "$p"; break; }; done <<< "$NEWS")"
+P_QA="$(while IFS= read -r p; do [ -n "$p" ] || continue; [ "$(name_of "$p")" = "qa" ] && { printf '%s' "$p"; break; }; done <<< "$NEWS")"
 ANCHOR_QA="$(grep -F -- 'NAO_SKILLS=' "$(prompt_of "$P_QA")" 2>/dev/null | tail -1)"
 t4_assert_eq "$ANCHOR_CR" "$ANCHOR_QA" "AC1③ 卡会话与常驻角色的锚点行**逐字相同**（cross-assert）"
 
@@ -233,18 +233,18 @@ reset_lab
 BEFORE="$(pane_ids)"
 run_fleet ensure --card .agents/prompts/code-reviewer.md --task T537
 P_CR="$(new_panes "$BEFORE" | head -1)"
-set_title "$P_CR" "code-reviewer-T537@$BASE"
+set_title "$P_CR" "code-reviewer(T537)"
 if [ "$TSX_OK" = "1" ]; then
-  ROSTER_JSON="$(mk_roster code-reviewer-T537@$BASE)"
+  ROSTER_JSON="$(mk_roster "code-reviewer(T537)")"
   run_fleet status
 else
   t4_degrade "缺 tsx/node（$PI_AGENT_DIR/npm/node_modules/tsx）⇒ 名册 cwd 不可镜像，AC4①/AC4④ 归属断言降级"
   run_fleet status
 fi
 t4_assert_eq "0" "$T4_RC" "AC4① status rc=0"
-L_CR="$(last_status_line "code-reviewer-T537@$BASE")"
+L_CR="$(last_status_line "code-reviewer(T537)")"
 if [ "$TSX_OK" = "1" ]; then
-  t4_assert_match "$L_CR" "^  · code-reviewer-T537@$BASE" "AC4① 卡会话列在派生/一次性节（行首 ·）"
+  t4_assert_match "$L_CR" "^  · code-reviewer\(T537\)" "AC4① 卡会话列在派生/一次性节（行首 ·）"
   t4_assert_contains "$L_CR" "一次性会话" "AC4① 该行标注「一次性会话」"
   t4_assert_contains "$L_CR" "下游卡 code-reviewer" "AC4① 该行点名下游卡 role"
   t4_assert_not_contains "$L_CR" "他仓" "AC4① 本仓卡会话无「他仓」标注"
@@ -256,20 +256,20 @@ P_RES="$(be_new_pane "$LAB")"
 t4_assert_ne "" "$P_RES" "AC4④ 夹具：残留会话 pane 建立"
 # 身份用 be_fixture_session（而不是只改标题）：herdr 的「列出」要求在线证据链完整
 #   （label ∧ 前台 pi ∧ argv --name）；只改 label 的 pane 是 ghost，status 按设计不列成会话。
-be_fixture_session "$P_RES" "code-reviewer-T9001@$BASE" "$BASE" || t4_bad "AC4④ 夹具：残留会话身份写入失败"
-if [ "$TSX_OK" = "1" ]; then ROSTER_JSON="$(mk_roster code-reviewer-T537@$BASE code-reviewer-T9001@$BASE)"; fi
+be_fixture_session "$P_RES" "code-reviewer(T9001)" "$BASE" || t4_bad "AC4④ 夹具：残留会话身份写入失败"
+if [ "$TSX_OK" = "1" ]; then ROSTER_JSON="$(mk_roster "code-reviewer(T537)" code-reviewer-T9001@$BASE)"; fi
 run_fleet status
-L_RES="$(last_status_line "code-reviewer-T9001@$BASE")"
+L_RES="$(last_status_line "code-reviewer(T9001)")"
 if [ "$TSX_OK" = "1" ]; then
   t4_assert_contains "$L_RES" "残留" "AC4④ 已归档 task 的卡会话行标「残留」"
   t4_assert_contains "$L_RES" "close --task T9001 code-reviewer" "AC4④ 该行给出可执行 close 命令"
 fi
 
 # ============================================================ AC4③B 一次性会话不弹常驻警告 + AC4② 回收
-ROSTER_JSON="$(mk_roster code-reviewer-T537@$BASE)"
+ROSTER_JSON="$(mk_roster "code-reviewer(T537)")"
 run_fleet close --task T537 code-reviewer
 t4_assert_eq "0" "$T4_RC" "AC4② close（卡会话）rc=0"
-t4_assert_contains "$T4_ERR" "一次性会话 code-reviewer-T537@$BASE（下游卡）" "AC4③B stderr 含新固定前缀「一次性会话 …（下游卡）」"
+t4_assert_contains "$T4_ERR" "一次性会话 code-reviewer(T537)（下游卡）" "AC4③B stderr 含新固定前缀「一次性会话 …（下游卡）」"
 if printf '%s\n' "$T4_ERR" | grep -qE '常驻会话 .*ensure --force'; then
   t4_bad "AC4③B 卡会话不应出现常驻警告（stderr 命中「常驻会话 .*ensure --force」）"
 else
@@ -280,21 +280,21 @@ if be_pane_alive "$P_CR"; then
 else
   t4_ok "AC4② 回收后 pane $P_CR 已消失"
 fi
-ROSTER_JSON="$(mk_roster code-reviewer-T9001@$BASE)"
+ROSTER_JSON="$(mk_roster "code-reviewer(T9001)")"
 run_fleet status
-t4_assert_eq "" "$(last_status_line "code-reviewer-T537@$BASE")" "AC4⑤ 回收后 status 不再列出该卡会话"
+t4_assert_eq "" "$(last_status_line "code-reviewer(T537)")" "AC4⑤ 回收后 status 不再列出该卡会话"
 
 # ============================================================ AC4③A 常驻仍须警告（正向）
 reset_lab
 BEFORE="$(pane_ids)"
 run_fleet ensure qa
 P_QA="$(new_panes "$BEFORE" | head -1)"
-set_title "$P_QA" "qa@$BASE"
+set_title "$P_QA" "qa"
 run_fleet close qa
 t4_assert_eq "0" "$T4_RC" "AC4③A close qa rc=0"
-t4_assert_contains "$T4_ERR_ANSI" "[fleet] 常驻会话 qa@$BASE：" \
+t4_assert_contains "$T4_ERR_ANSI" "[fleet] 常驻会话 qa：" \
   "AC4③A 常驻会话仍弹固定前缀警告（未被整体静音）"
-t4_assert_contains "$T4_ERR_ANSI" "先 close 该角色再 ensure 重开" \
+t4_assert_contains "$T4_ERR_ANSI" "本批不再需要该角色时才回收；回收后可用 ensure 重开" \
   "AC4③A 警告与新语义一致（先 close 再 ensure；pane 仍在场时 --force 会 fail loud）"
 t4_assert_not_contains "$T4_ERR_ANSI" "应 ensure --force 重开" \
   "AC4③A 旧文案（「应 ensure --force 重开」）已退场（P1 收紧后该命令在 pane 在场时必失败）"
@@ -304,18 +304,18 @@ reset_lab
 BEFORE="$(pane_ids)"
 run_fleet ensure --card .agents/prompts/code-reviewer.md
 P_CR2="$(new_panes "$BEFORE" | head -1)"
-set_title "$P_CR2" "code-reviewer@$BASE"
+set_title "$P_CR2" "code-reviewer"
 run_fleet close code-reviewer
 t4_assert_eq "0" "$T4_RC" "AC4③C （B 路径：裸名卡会话）close rc=0"
-t4_assert_contains "$T4_ERR" "一次性会话 code-reviewer@$BASE（下游卡）" "AC4③C B 路径含一次性标识"
+t4_assert_contains "$T4_ERR" "一次性会话 code-reviewer（下游卡）" "AC4③C B 路径含一次性标识"
 BEFORE="$(pane_ids)"
 run_fleet ensure qa
 P_QA="$(new_panes "$BEFORE" | head -1)"
-set_title "$P_QA" "qa@$BASE"
+set_title "$P_QA" "qa"
 run_fleet close qa
-t4_assert_contains "$T4_ERR_ANSI" "[fleet] 常驻会话 qa@$BASE：" \
+t4_assert_contains "$T4_ERR_ANSI" "[fleet] 常驻会话 qa：" \
   "AC4③C B 之后 A 的常驻警告仍出现（禁整体静音蒙过 B）"
-t4_assert_contains "$T4_ERR_ANSI" "先 close 该角色再 ensure 重开" \
+t4_assert_contains "$T4_ERR_ANSI" "本批不再需要该角色时才回收；回收后可用 ensure 重开" \
   "AC4③C 警告与新语义一致（同 AC4③A 的稳定片段）"
 
 # ============================================================ AC4③D 闸门分叉不外溢
@@ -323,15 +323,15 @@ reset_lab
 BEFORE="$(pane_ids)"
 run_fleet ensure --card .agents/prompts/code-reviewer.md --task T537
 P_CR3="$(new_panes "$BEFORE" | head -1)"
-set_title "$P_CR3" "code-reviewer-T537@$BASE"
+set_title "$P_CR3" "code-reviewer(T537)"
 run_fleet close --task T537 code-reviewer
 t4_assert_eq "0" "$T4_RC" "AC4③D 卡会话在 task active 时仍可回收（跳过 tasks-state 闸门）"
 BEFORE="$(pane_ids)"
 run_fleet ensure qa --task T537
 P_QA="$(new_panes "$BEFORE" | head -1)"
-set_title "$P_QA" "qa-T537@$BASE"
+set_title "$P_QA" "qa(T537)"
 run_fleet close --task T537 qa
-t4_assert_ne "0" "$T4_RC" "AC4③D 反例：常驻派生 qa-T537 仍被 active 闸门拒绝（放宽只对卡生效）"
+t4_assert_ne "0" "$T4_RC" "AC4③D 反例：常驻派生 qa(T537) 仍被 active 闸门拒绝（放宽只对卡生效）"
 t4_assert_contains "$T4_ERR" "tasks-state 中 T537 仍在进行态" "AC4③D 反例拒绝理由为 tasks-state active 闸门"
 be_kill_pane "$P_QA"
 be_kill_pane "$P_RES"
@@ -394,18 +394,18 @@ before="$(pane_ids)"
 run_fleet ensure --card .agents/prompts/code-reviewer.md --as code-reviewer-notes
 t4_assert_eq "0" "$T4_RC" "AC3⑤ 正控：--as code-reviewer-notes ⇒ 接受（rc=0）"
 P_NOTE="$(new_panes "$before" | head -1)"
-t4_assert_eq "code-reviewer-notes@$BASE" "$(name_of "$P_NOTE")" "AC3⑤ 正控 ⇒ 会话名 = --as 值"
-set_title "$P_NOTE" "code-reviewer-notes@$BASE"
-if [ "$TSX_OK" = "1" ]; then ROSTER_JSON="$(mk_roster code-reviewer-notes@$BASE)"; fi
+t4_assert_eq "code-reviewer-notes" "$(name_of "$P_NOTE")" "AC3⑤ 正控 ⇒ 会话名 = --as 值"
+set_title "$P_NOTE" "code-reviewer-notes"
+if [ "$TSX_OK" = "1" ]; then ROSTER_JSON="$(mk_roster code-reviewer-notes)"; fi
 run_fleet status
-L_NOTE="$(last_status_line "code-reviewer-notes@$BASE")"
+L_NOTE="$(last_status_line "code-reviewer-notes")"
 if [ "$TSX_OK" = "1" ]; then
-  t4_assert_match "$L_NOTE" "^  · code-reviewer-notes@$BASE" "AC3⑤ 正控 ⇒ status 按该名解析到卡会话"
+  t4_assert_match "$L_NOTE" "^  · code-reviewer-notes" "AC3⑤ 正控 ⇒ status 按该名解析到卡会话"
   t4_assert_contains "$L_NOTE" "下游卡 code-reviewer" "AC3⑤ 正控 ⇒ 该行仍归到卡 role（前缀识别）"
 fi
 run_fleet close code-reviewer-notes
 t4_assert_eq "0" "$T4_RC" "AC3⑤ 正控 ⇒ close 按该名回收（闭环）"
-t4_assert_contains "$T4_ERR_ANSI" "一次性会话 code-reviewer-notes@$BASE（下游卡）" "AC3⑤ 正控 ⇒ close 走一次性语义"
+t4_assert_contains "$T4_ERR_ANSI" "一次性会话 code-reviewer-notes（下游卡）" "AC3⑤ 正控 ⇒ close 走一次性语义"
 if be_pane_alive "${P_NOTE:-none}"; then
   t4_bad "AC3⑤ 正控 ⇒ 回收后 pane 仍存在"
 else

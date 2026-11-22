@@ -59,3 +59,4 @@
 37  shared  —  后端无关（#146 裸名 close 的仓来源：假名册（pretty-print）+ 两仓 pane 经 be_*；断言面 = rc / 输出文案与候选 cwd 列表 / @ 字段 / pane 存活 / 探针调用计数，不建真 server、零网络）
 38  shared  —  后端无关（#151 全名 close 的仓来源：假名册 pretty-print + 三仓 pane 经 be_*；断言面 = rc / 输出文案与候选 cwd 列表 / @ 字段 / pane 存活 / 探针调用计数；后端结构性无判别力的判别力条用 NOTE backend-gate 点名）
 39  shared  —  后端无关（#139 联动仓 manifest：临时主仓 + 联动仓夹具；断言面 = rc / 会话名 / pane cwd / workspace.label / tab label（herdr 专有面按 NOTE backend-gate 点名）/ close 回收行 @ 字段；夹具不建真 server 之外的真机）
+40  own     2027-06-30  舰队模型 v2 13 态（T554）：workspace=仓 / 槽位名 / default 放行 / 弃用 warn / status ego；结构面只在 herdr 有信号（tmux 侧由 28/33/37/38 共享断言覆盖）。到期复核：纯 herdr 后的状态面是否需独立 golden

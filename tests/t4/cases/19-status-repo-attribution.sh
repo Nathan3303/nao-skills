@@ -388,11 +388,12 @@ if [ "$MUTATION_CHILD" != "1" ]; then
   #   与上面的单行谓词变异互补：谓词没坏，坏的是「键口径」，若只被谓词变异覆盖则本缺陷仍可静默复发。
   KEY_MUT="$MUT_DIR/key-pane-id.sh"
   if cp "$SUBJECT" "$KEY_MUT"; then
-    sed -i 's/read -r pname pn pcwd/read -r pn pname pcwd/' "$KEY_MUT"
-    t4_assert_eq "1" "$(grep -cF 'read -r pn pname pcwd' "$KEY_MUT" || true)" \
+    # 锚改到**语义唯一行**（建键赋值只在 status 出现；close 也有同名 read 行，不能拿读序当锚）
+    sed -i 's/pane_cwds\["\$pname"\]/pane_cwds["$pn"]/' "$KEY_MUT"
+    t4_assert_eq "1" "$(grep -cF 'pane_cwds["$pn"]' "$KEY_MUT" || true)" \
       "AC5② 变异已写入副本（键口径回退为 pane_id，单处）"
-    t4_assert_eq "0" "$(grep -cF 'read -r pname pn pcwd' "$KEY_MUT" || true)" \
-      "AC5② 副本已无修复后的读序（变异确实生效）"
+    t4_assert_eq "0" "$(grep -cF 'pane_cwds["$pname"]' "$KEY_MUT" || true)" \
+      "AC5② 副本已无修复后的键口径（变异确实生效）"
     t4_assert_ne "$MD5_BEFORE" "$(md5sum "$KEY_MUT" | awk '{print $1}')" \
       "AC5② 副本 md5 ≠ 真仓库（确在副本上变异）"
     run_child "$KEY_MUT"

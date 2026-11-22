@@ -1,6 +1,6 @@
 # ADR：联动仓 manifest（`fleet.yaml` · 1 fleet = 1 workspace · 放置键与身份键不同源）
 
-- 状态：已接受（待落地）
+- 状态：已废弃（被 2026-11-20-workspace-as-binding-unit 取代）
 - 更新：2026-11-19
 - Owner：arch-designer
 - 指针：Issue [#139](https://github.com/Nathan3303/nao-skills/issues/139) · PRD `docs/prds/2026-11-19-fleet-manifest.md` · 判据 `docs/reports/139-lite-spec.md` · 前序 `docs/adr/2026-11-17-fleet-identity-source.md` · `docs/adr/2026-11-13-herdr-workspace-scope-key.md`
@@ -52,6 +52,7 @@
 - `status` 的 `fleet=` 事实只在 manifest 可读时可判定；不可读印 `?`（显式不可知，禁空值）。
 - AC9③ 辖域边界：事实源 = 各仓 `.agents/fleet.yaml`；`AGENTS.md` 一行指针 + PM 卡指针由 PM 落（`.agents/**` 属架构师禁改区，本批不动）。
 - 不做：跨 herdr session、`fleet-scope` 迁移/deprecate、联动仓依赖编排、自动发现。
+  **已被 `docs/adr/2026-11-20-workspace-as-binding-unit.md` 取代（2026-11-20）**：本篇「1 fleet = 1 workspace」与「tab 前缀 `<code>/` 分组」不再成立（1 ws = 1 仓）；manifest 降级为 `code → path`（去 `slug`），`fleet-scope`/`--fleet` 改为 warn + 忽略一版。
 
 ## 相关指针
 
