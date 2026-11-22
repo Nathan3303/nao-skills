@@ -499,19 +499,98 @@ t4_scan_tmux_residue() { # <script>
     lnno="${ln%%:*}"; body="${ln#*:}"
     trim="${body#"${body%%[![:space:]]*}"}"
     case "$trim" in \#*) continue;; esac
-    grep -qE -- "$allow" <<< "$ln" && continue
-    if grep -qE -- "$re" <<< "$ln" || grep -qE -- "$re_assign" <<< "$ln" \
-       || grep -qE -- "$re_cmp" <<< "$ln"; then
+    grep -qE -- "$allow" <<< "$body" && continue
+    if grep -qE -- "$re" <<< "$body" || grep -qE -- "$re_assign" <<< "$body" \
+       || grep -qE -- "$re_cmp" <<< "$body"; then
       printf '%s:%s\n' "$lnno" "$trim"; continue
     fi
-    if grep -qE -- "$re_arm" <<< "$ln"; then
+    if grep -qE -- "$re_arm" <<< "$body"; then
       # 守卫臂白名单（d）：臂体到首个 `;;`（≤9 行）含「已移除」⇒ 放行
       if sed -n "${lnno},$((lnno + 8))p" "$script" | sed -n '1,/;;/p' | grep -q '已移除'; then
         continue
       fi
       printf '%s:%s\n' "$lnno" "$trim"; continue
     fi
-  done < <(grep -nE -- "$re"\|"$re_assign"\|"$re_cmp"\|"$re_arm" "$script" || true)
+  # 预筛（ERE 交替）——注意：`-E` 下 `\|` 是**字面竖线**，必须用裸 `|` 连接四个判据
+  done < <(grep -nE -- "${re}|${re_assign}|${re_cmp}|${re_arm}" "$script" || true)
+}
+
+# 台账校验（B1）：① 每行可验（函数真实存在 + 函数体仍含裸后端调用）② 去重 ③ 行数只允许下降（文件头 baseline）
+#   ④ 渲染层函数禁入台账（cmd_status / visible_session_names / pane_cwd_snapshot / running / term_*）。
+#   T555：台账对象（旧 tmux 迁移）已随后端删除 ⇒ baseline = 0、条目 0；机制保留以守「不回暖」。
+t4_verify_term_ledger() { # <script> <台账文件>
+  local script="$1" ledger="$2" base n=0 f owner why body herdr_r
+  local funcs; funcs="$(_t4_term_func_ranges "$script")"
+  herdr_r="$(_t4_term_ranges "$script" term-facade-herdr)"
+  [ -f "$ledger" ] || { printf '台账缺失: %s\n' "$ledger"; return 0; }
+  base="$(sed -n 's/^#[[:space:]]*baseline:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$ledger" | head -1)"
+  [ -n "$base" ] || printf '台账缺 baseline 头（# baseline: N）\n'
+  local -A seen=()
+  while IFS=$'\t' read -r f owner why; do
+    [ -n "$f" ] || continue
+    n=$((n + 1))
+    case "$f" in cmd_status|visible_session_names|pane_cwd_snapshot|running|term_*) printf '台账不得收录渲染层/门面函数: %s\n' "$f" ;; esac
+    if [ -n "${seen[$f]:-}" ]; then printf '台账重复条目: %s\n' "$f"; fi
+    seen["$f"]=1
+    if [ -z "$owner" ] || [ -z "$why" ]; then printf '台账条目缺 owner/理由: %s\n' "$f"; fi
+    body="$(awk -F'\t' -v n="$f" '$1 == n { print $2 "\t" $3; exit }' <<< "$funcs")"
+    if [ -z "$body" ]; then printf '台账条目函数不存在（typo）: %s\n' "$f"; continue; fi
+    if _t4_in_ranges "${body%%$'\t'*}" "$herdr_r"; then
+      printf '台账多余（该函数已在标记区内，应删条目）: %s\n' "$f"
+    fi
+    if ! sed -n "${body%%$'\t'*},${body##*$'\t'}p" "$script" \
+         | grep -qE '(^|[|;&(]|\$\(|\{)[[:space:]]*(exec[[:space:]]+)?(setsid[[:space:]]+)?(tmux|herdr)([[:space:]]|$)'; then
+      printf '台账 stale（该函数已无裸后端调用，应删条目）: %s\n' "$f"
+    fi
+  done < <(grep -vE '^[[:space:]]*(#|$)' "$ledger")
+  if [ -n "$base" ] && [ "$n" -gt "$base" ]; then printf '台账行数 %d 超过 baseline %s（只允许下降）\n' "$n" "$base"; fi
+  return 0
+}
+
+# herdr 实现区禁字（BR2/BR6 机械兜 + 三期 P1 的 J3 静态证明）：
+#   宿主句柄名、标题字段名，以及 tmux 的**布局算式 symbols**（最小列宽闸门 / main-row2 列差 /
+#   长度常量 137/184）都不得出现在 herdr 实现里 —— 后者是 herdr 布局 = tab 拓扑（结构判据）的反证：
+#   T555 已把 tmux 布局函数整组删除，本判据防它们被顺手搬进 herdr 区复活（AC8 同族）。
+t4_scan_term_herdr_forbidden() { # <script>
+  local script="$1" rs s e off lnno body
+  local re='TMUX|terminal_title|pane_title|TMUX_MIN_PANE_WIDTH|main_row2_min_col|137|184'
+  rs="$(_t4_term_ranges "$script" term-facade-herdr)"
+  [ -n "$rs" ] || { printf 'herdr 实现区标记缺失（# >>> term-facade-herdr BEGIN）\n'; return 0; }
+  while IFS=$'\t' read -r s e; do
+    [ -n "$s" ] || continue
+    while IFS= read -r off; do
+      [ -n "$off" ] || continue
+      lnno=$((s + off - 1))
+      body="$(sed -n "${lnno}p" "$script")"
+      printf '%s:%s\n' "$lnno" "$body"
+    done < <(sed -n "${s},${e}p" "$script" | grep -nE "$re" | cut -d: -f1)
+  done <<< "$rs"
+}
+
+# 三期 P2（默认翻 herdr）静态面：**用例不得依赖生产默认值**。
+#   默认已 = herdr ⇒ 靠「未设」搭车的用例会在不同机器/不同默认下走不同后端（不可复现）。基线由
+#   `run.sh` 按 `NAO_TEST_TERMINAL` **显式导出** `NAO_TERMINAL`；允许 unset/清空的**唯一**位置 =
+#   「验默认值」段，且必须包在 `# >>> default-value-probe BEGIN` / END 标记块内。
+#   本函数逐行扫全部用例：标记块外的 `unset NAO_TERMINAL` / `env -u NAO_TERMINAL` / 空串赋值 = 违规输出。
+t4_scan_nao_terminal_default_probe() { # <目录（其下 *.sh）>
+  local target="$1"
+  local -a files=()
+  if [ -d "$target" ]; then files=("$target"/*.sh)
+  elif [ -f "$target" ]; then files=("$target")
+  else printf '路径不存在: %s\n' "$target"; return 0; fi
+  awk '
+    FNR == 1 { inblk = 0 }
+    /^[[:space:]]*# >>> default-value-probe BEGIN/ { inblk = 1; next }
+    /^[[:space:]]*# >>> default-value-probe END/   { inblk = 0; next }
+    inblk { next }
+    /^[[:space:]]*#/ { next }
+    /(^|[^A-Za-z0-9_])unset[[:space:]]+(-v[[:space:]]+)?NAO_TERMINAL([[:space:]]|;|$)/ {
+      printf "%s:%d [unset] %s\n", FILENAME, FNR, $0; next }
+    /-u[[:space:]]+NAO_TERMINAL([[:space:]]|$)/ {
+      printf "%s:%d [env -u] %s\n", FILENAME, FNR, $0; next }
+    /NAO_TERMINAL=(["]{0,2})([[:space:]]|$)/ {
+      printf "%s:%d [空串] %s\n", FILENAME, FNR, $0; next }
+  ' "${files[@]}"
 }
 
 t4_fixture() { # 输出一个 git 初始化过的临时项目目录

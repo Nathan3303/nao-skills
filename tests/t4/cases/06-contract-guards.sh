@@ -703,6 +703,12 @@ rm -rf "$E2_LAB" "$E2_LAB-b" "$E2_LAB-c" "$E2_LAB-d"
 FLEET_B1="$T4_ROOT/.agents/scripts/nao-fleet.sh"
 LEDGER_B1="$T4_ROOT/tests/t4/fixtures/term-legacy-allowlist.txt"
 t4_assert_file "$FLEET_B1" "B1: 被测脚本存在"
+# T555 QA 轮实测踩到的失败模式：lint helper 本身被误删 ⇒ 调用点 rc=127 + 空输出 ⇒ 「负控必红」
+#   这类断言反被掏空（假绿）。此处把「helper 存在」钉成前置（少一个就红）。
+t4_assert_eq "5" "$(for _f in t4_scan_term_bare_calls t4_verify_term_ledger t4_scan_term_herdr_forbidden \
+    t4_scan_nao_terminal_default_probe t4_scan_tmux_residue; do
+      declare -F "$_f" >/dev/null 2>&1 && echo x; done | grep -c .)" \
+  "B1: 5 个 lint helper 均已定义（缺任一 ⇒ 其负控断言会因 127/空输出假绿）"
 t4_assert_file "$LEDGER_B1" "B1: 门面台账存在（tests/t4/fixtures/term-legacy-allowlist.txt）"
 
 # ---- ① 默认值唯一（#96 三期 P2：默认已翻 herdr；B1 立的 lint 就是为这一步准备的）----
@@ -1228,18 +1234,18 @@ d2_handwritten() { grep -rnE -- '-u HERD[R]_' "$T4_ROOT/tests" 2>/dev/null | wc 
 
 t4_assert_eq "1" "$(grep -c '^T4_HERDR_ENV_VARS=(' "$D2_LIB" || true)" "D2① 单源定义处恰 1 处（tests/t4/lib.sh）"
 t4_assert_eq "$D2_GOLD" "$(d2_vars_str "$D2_LIB")" "D2② 单源集合 == 收敛前各点清理变量的**并集**（8 个，只增不减）"
-t4_assert_eq "0" "$(d2_handwritten)" "D2③ 调用点零手写（tests/ 下 `env -u <HERDR 变量>` 直写 = 0 行）"
+t4_assert_eq "0" "$(d2_handwritten)" "D2③ 调用点零手写（tests/ 下 「env -u <HERDR 变量>」 直写 = 0 行）"
 t4_assert_ge 2 "$(d2_refs "$T4_ROOT/tests/t4/lib-backend.sh")" "D2④ lib-backend 夹具经单源清（引用 + 缺失时 fail loud 的守卫）"
 t4_assert_eq "1" "$(grep -cE '^B3_CLEAN_ENV=\(env .*T4_HERDR_UNSET_ARG[S]' "$T4_ROOT/tests/t4/cases/06-contract-guards.sh" || true)" \
-  "D2④ cases/06 `B3_CLEAN_ENV` 改为引用单源"
+  "D2④ cases/06 「B3_CLEAN_ENV」 改为引用单源"
 grep -qE '^B2_ENV=\(env "\$\{T4_HERDR_UNSET_ARGS\[@\]\}"' "$T4_ROOT/tests/t4/cases/28-naming-contract.sh"   && t4_ok "D2④ cases/28 \`B2_ENV\` 改为引用单源（T555：原 TMUX_FIELD_ENV 随 tmux 夹具退役）"   || t4_bad "D2④ cases/28 \`B2_ENV\` 应引用单源"
 t4_assert_eq "4" "$(grep -cE '^t4_run_in_dir .*env .*T4_HERDR_UNSET_ARG[S]' "$T4_ROOT/tests/t4/cases/28-naming-contract.sh" || true)" \
   "D2④ cases/28 四处直连（herdr 场负控 ×2 + B3 桩场 ×2）改为引用单源"
-t4_assert_eq "16" "$(d2_args_n "$D2_LIB")" "D2⑤ 派生参数数 = 2×8（`env -u <名>` 成对；形态可运行）"
+t4_assert_eq "16" "$(d2_args_n "$D2_LIB")" "D2⑤ 派生参数数 = 2×8（「env -u <名>」 成对；形态可运行）"
 # 变异 A（枚举减少 ⇒ 必红）：从副本的单源里删掉 `HERDR_SOCKET_FILE`
 D2_MUT="$T4_CACHE_DIR/d2-lib-mut-$$.sh"
 sed 's/ HERDR_SOCKET_FILE//' "$D2_LIB" > "$D2_MUT"
-t4_assert_eq "7" "$(d2_vars "$D2_MUT" | grep -c .)" "D2⑥ 变异锚点：副本单源只剩 7 个（`HERDR_SOCKET_FILE` 已删）"
+t4_assert_eq "7" "$(d2_vars "$D2_MUT" | grep -c .)" "D2⑥ 变异锚点：副本单源只剩 7 个（「HERDR_SOCKET_FILE」 已删）"
 t4_assert_ne "$D2_GOLD" "$(d2_vars_str "$D2_MUT")" "D2⑥ 变异自证：删一个变量 ⇒ D2② 必红（枚举收紧蒙混不过）"
 # 变异 B（新增只改一处）：往副本单源加一个 HERDR_*，派生参数自动 +2，**调用点零改动**
 D2_ADD="$T4_CACHE_DIR/d2-lib-add-$$.sh"
@@ -1441,9 +1447,9 @@ t4_assert_eq "$(( $(e2_warn_n "$E2_BE_BASE") + 1 ))" "$(e2_warn_n "$E2_BE_BAD")"
 t4_assert_eq "1" "$(grep -c 'env -u NAO_STASH_ROOT' "$T4_ROOT/tests/t4/lib.sh" || true)" \
   "E2-2⑤ 单点①：t4_run_shim 带 \`env -u NAO_STASH_ROOT\` 恰 1 处"
 t4_assert_eq "1" "$(grep -c '^be_clean_env() {' "$T4_ROOT/tests/t4/lib-backend.sh" || true)" \
-  "E2-2⑤ 单点②：净化入口定义恰 1 处（`be_clean_env`，Q7）"
+  "E2-2⑤ 单点②：净化入口定义恰 1 处（「be_clean_env」，Q7）"
 t4_assert_eq "1" "$(grep -cF 'clean=($(be_clean_env))' "$T4_ROOT/tests/t4/lib-backend.sh" || true)" \
-  "E2-2⑤ 单点②：净化入口的调用点恰 1 处（be_run_fleet；调用点不再手写 `-u`）"
+  "E2-2⑤ 单点②：净化入口的调用点恰 1 处（be_run_fleet；调用点不再手写 「-u」）"
 E2_BE_ARGS="$( T4_CACHE_DIR="$T4_CACHE_DIR" NAO_STASH_ROOT=/x NAO_SKILLS=/x \
   bash -c 'source "$1/tests/t4/lib.sh" >/dev/null 2>&1; source "$1/tests/t4/lib-backend.sh" >/dev/null 2>&1; be_clean_unset_args' \
   _ "$T4_ROOT" 2>/dev/null || true )"

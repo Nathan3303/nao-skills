@@ -50,11 +50,11 @@
 ## 四、门禁与证据
 
 - `bash .agents/scripts/nao-fleet.sh check` —— rc=0；连跑 2 次输出 `diff` 空（effect=0）。
-- `bash tests/t4/run.sh`（单后端全量）—— **38 例 · PASS / FAIL 数见 §七（最终 HEAD 实测回填）**。
-- `npm test`（`test:agents` + `test:t4`）—— rc=0（§七 同源数字）。
+- `bash tests/t4/run.sh`（单后端全量）—— **38 例 · 2413 PASS / 0 FAIL · `RESULT: PASS（SKIP=0 · DEGRADE=0 · NOTE=17）`**（HEAD 见修订行；`--fast` 未用于替代）。
+- `npm test`（`test:agents` + `test:t4`）—— rc=0 · **2413 PASS / 0 FAIL** · stderr「未找到命令」噪声 **0**（QA 轮顺手清掉 7 处断言文案里的裸反引号）。
 - `npm run test:fast` —— rc=0（白名单 14 例 · NOTE=2 白名单）。
 - `npm run test:t4:full`（最终 HEAD）—— rc=0 · `RESULT: PASS（SKIP=0 · DEGRADE=0 · NOTE=17 · NOTE白名单=17）`。
-- 幂等：`tests/t4/run.sh --case 41` 连跑 2 次均 rc=0（PASS 数见 §七）。
+- 幂等：`tests/t4/run.sh --case 41` 连跑 2 次均 rc=0（PASS 数 = 该例当前断言数）。
 - 零敏感值：`grep -rnE '/home/[a-z]+|/Users/|ghp_|sk-|PRIVATE KEY|npm_[A-Za-z0-9]{20,}'` 在改动文件上 0 命中。
 - 静态 lint：`t4_scan_tmux_residue` 对 `.agents/scripts/*.sh` + `tests/t4/run.sh` 全 0；**四形态**正控（命令位 / 原样 `tmux)` 臂 / 比较式 / 单行 case 臂）+ 守卫臂白名单双向 + 五类负控均在 `cases/41` 固化（T555/QA P2-2 扩形态后仍 0 命中）。
 
