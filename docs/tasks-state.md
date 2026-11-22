@@ -610,6 +610,7 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 | M20261102-F2 | 观察 · 2026-12-31 | **`test:t4:full` 用例 02 真 `pi` 动态注册超时 flake**：RD 一次 5 跑中 2 次 `rc=124`（`timeout 120`，stdout 已出 82,900 B，非无凭据）；同批 QA 7 次运行（full ×3 + `--case 02` ×3 + `npm test` ×1）全 PASS、单跑 8–15 s ⇒ 量级差约 10× = 既有 O-1 类网络/负载抖动，非代码引入。候选处置：超时上调 /「真 pi 慢」与「无凭据」分开计数，独立任务做 | RD 转办（M20261102 报告 §四）· **复现率 ≈20 跑 3 次 ≈15%**（RD 5 跑 2 · QA 7 跑 0 + 本轮 2 跑 1 · PM 2 跑 0）⇒ 升级待派发候选 |
 | M20261109-install-scripts | 已接受 · 2027-05-09 | **`pi update --extensions` 报 3 条 install-scripts 未授权**（`protobufjs@1.6.6`/`1.6.5` postinstall 生成代码、`@google/genai@1.52.0` preinstall 为 no-op）：均为上游依赖脚本，`pi-subagents` 功能实测正常 ⇒ **不 approve**（维持默认安全姿态），到期动作 = 若 pi-subagents 出异常再回看 | PM 裁决（2026-11-09，用户报障输出） |
 | T552-asym | 接受 · 2027-05-09 | **`close` 两条入口对「名册同 cwd 重复条目」非对称**（T552 明示设计）：全名分支去重后**采用**（用户显式键）；裸名分支去重后**仍 die**（只修文案）。理由 = 裸名多一层「本仓同名多 pane」风险，采用会走到句柄层而 tmux 按标题取首条 = 猜（T551 要堵的形态）。判定要点：到期回看是否已把「同名多 pane」在 fleet 层做成显式拒绝（若已做 ⇒ 两分支可统一为采用）| T552 判据 v3 · `docs/reports/151-lite-spec.md` §二 |
+| T555-legacy-lint | 接受 · 2026-12-31 | **`t4_scan_term_bare_calls` 第 2 参与 `fixtures/term-legacy-allowlist.txt`（baseline 0 条）单后端后已成壳**：本批不删（避免同批既删后端又删 lint 的连带面）。到期动作 = 若 allowlist 仍 0 条 ⇒ 删该参数与夹具 + `cases/06` 对应 4 条负控 | T555 实施回执 · `docs/reports/555-impl-rd-infra.md` |
 | T552-nits | 观察 · 2027-05-09 | **`cases/38` 两处弱耦合**（QA 终检 P3，均自曝不假绿）：① m 态「不说『N 个仓』」是对**全输出**的子串扫描，日后别的路径打印「个仓」会假红；② 负控⑦ 锚落在 `_term_herdr_reclaim` 文案上，该文案合法改写会让 38 红（自检点名「锚未命中」）。判定要点：到期回看 38 是否已改用结构化判据（如 JSON 字段）而非子串 | T552 QA 报告 §追加二 |
 | T551-R2R6 | 接受 · 2027-05-09 | **`close` 裸名归属的两个既有边界**（T551/#146 三态决策留下的，非回归）：① **R2** 名册条目缺 `cwd` 时该条目对仓过滤不可见（`intercom_roster` 逐行 awk 需 name/cwd 成对）；② **R6** herdr 后端 + 名册缺该名 `cwd` ⇒ 采用候选后 repo 无法校正，仍可能报「未运行（无需回收）」rc=0。**明示不修**：R2 只能靠 pane cwd 兜底，而 arch 否定条件明禁「pane cwd 充当名册唯一判据」（第二事实源）；R6 只能把 0 命中改 die ⇒ 破 D1/⑤ 兼容面（旧会话将不可回收）。判定要点：到期回看 herdr 名册是否已稳定给出 `cwd`（有 ⇒ 两条同时失效）| T551 QA 报告 §八 · v0.25.1 |
 | T545-O1 | 接受 · 2027-01-31 | **卡会话跨仓同 core 不判重**（旧行为延续、非回归）；到期重评是否加 `@scope` 强制。判定命令：`grep -n "fleet_scope_slug" .agents/scripts/nao-fleet.sh` —— 若结果只出现在放置键/显示名、未参与**判重**，则本条仍成立 | #96 全链路终态行 |
@@ -622,12 +623,23 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **T555** | `arch-designer`（ADR）→ `rd-infra` → `qa` | **纯 herdr 化 + 脚本减重**（Issue [#156](https://github.com/Nathan3303/nao-skills/issues/156) · feat · 破坏性） | 2026-11-22 | PRD `docs/prds/2026-11-22-herdr-only.md` AC1–AC10 | `feat/555-herdr-only`（PRD 已落，待 ADR） |
+| **T555** | `arch-designer`（ADR）→ `rd-infra` → `qa` | **纯 herdr 化 + 脚本减重**（Issue [#156](https://github.com/Nathan3303/nao-skills/issues/156) · feat · 破坏性） | 2026-11-22 | PRD `docs/prds/2026-11-22-herdr-only.md` AC1–AC10 | `feat/555-herdr-only`（实现 `done(full)` @ `a887d47` + PM 文档面 `03ec142`，待 QA 一轮） |
 
 **用户拍板（2026-11-21）**：① **不再支持 tmux，纯 herdr** ② **缩减 `nao-fleet.sh` 体量** ③ 一步一步来（T554 已合并 `f962813` 后再做）④ 睡眠期授权：需决策的事 PM 自行决定，拿不准派 arch 合议。
 （T554 已合并归档 ⇒ 行已清空；终态见下方「已验收 / 已归档」归档墙）
 
-### T554 验收记录（2026-11-22 · PM · 用户睡眠期自主决策）
+### T555 交付记录（2026-11-22 · 接任 PM · 实施 `done(full)`）
+
+- **交付链**：PRD `f436ed7` → ADR + 判据 `b03c548` → 脚本删 tmux 后端 `7569929` → 测试侧单后端化 `99ba447` → 用例迁移 + `cases/41` `3ebf065` → 收尾 `d122cc1` → `.agents` 文档去 tmux `49dfc7f` → 报告回填 `a887d47`（RD，HEAD `a887d47`）· **PM 文档面** `df8bc51`（v0.27.0 npm 核验回填）+ `03ec142`（README/INSTALL/AGENTS 单后端化 + 迁移逐条 + `docs/releases/v0.28.0.md` 先「待核验」）
+- **PM 自证（不采信回执）**：`wc -l` **5482 → 4531**（−951 · **−17.35%**，目标 ≤4933）· 函数 **163 → 131**（目标 ≤136）· `check` rc=0 · roles=7 · files=52 · **warn=0** · `NAO_TERMINAL=tmux check` ⇒ **rc=2** + 恰一行「已移除 tmux 后端…」· `cleanup -S /tmp/x` ⇒ **rc=2** + 指路 `--session` · HEAD == `origin/feat/555-herdr-only` · 未推送 0 · 工作区静默
+- **RD 回执 `done(full)`**：`npm test` rc=0（**2403 PASS / 0 FAIL** · SKIP=0 / DEGRADE=0 / NOTE=17 全白名单）· `test:t4:full` rc=0 · `--case 41` 2 次 49/49 · 断言 2170 → 2086（−84 逐条归因到 tmux-only 分支）+ 新增 `41` 45 条 · 零敏感值 grep 0 · `t4_scan_tmux_residue` 对脚本 + `run.sh` 全 0
+- **PM 裁定（RD 上报的 1 处偏离）= 接受**：`term-facade-herdr` 区间 9 行**纯文案**改动（`或 NAO_TERMINAL=tmux 回退` → `旧版 tmux 后端已移除 / pin 回 ≤0.27.x`，含 J1/J5 空间告警第三动作）。我抽区间做 old/new 全文 diff：**1140 → 1140 行，逻辑零 diff**；回退会让 fail loud 文案指向不存在的后端 ⇒ 按 D5「tmux 专有行属已声明退役面」接受
+- **判据订正（关闭项）**：`docs/reports/555-lite-spec.md` §1「27 个函数」→ **实测 32**（七区间 25 + `require_tmux`/`_term_tmux_snapshot` + D3 连带删的布局几何 5），并注明是 D3 预期后果
+- **三出口**：① **关闭** 判据函数数订正 ② **接受至 2026-12-31** `t4_scan_term_bare_calls` 第 2 参 + `fixtures/term-legacy-allowlist.txt`（baseline 0）到期无条目即删（连 `cases/06` 4 条负控）③ **转办我** docs 面 = 已落 `03ec142`
+- **待办** = QA 一轮（只读）→ PM 合并前门禁（`check` + `test:t4:full` 单组）→ 授权 RD squash → 发 **v0.28.0 MINOR**
+- **诚实交代（写进 release notes）**：上一版文档承诺「tmux 回退保留 ≥2 MINOR 且 ≥90 天」，本版**未做到**（v0.27.0 → v0.28.0 仅 1 个 MINOR / 0 天）—— 仓主 2026-11-21 明确拍板直接移除；补偿 = fail loud + 一行迁移指路 + 可 pin 回 0.27.x
+
+
 
 - **交付链**：PRD `f436ed7` → ADR + 判据 `4bfea52` → 判据 v2（括号格式）`b0982c8` → 主实现 `626a7a6` → `28` 收口 `b7784b4` → 全量回归收口 `e7e80aa` → QA 收口 `ee67b43`
 - **PM 自证（最终 HEAD）**：`check` rc=0 · roles=7 · files=52 · 用例 **39** · `--case 40` 双后端 PASS · `--case 28` **436 断言** 双后端 PASS · **`test:t4:full:dual` 两组 rc=0**（SKIP=0/DEGRADE=0/非白名单 NOTE=0）· `cleanup --session default` 实测 = 打印影响面 + rc=2 零动作
