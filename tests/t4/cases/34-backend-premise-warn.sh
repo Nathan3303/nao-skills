@@ -64,6 +64,16 @@ run_check() { # 参数透传（如 -v）；$FX = 夹具包根
   rm -f "$of" "$ef"
 }
 premise_warns() { printf '%s\n' "$C34_OUT" | grep -c '^  ! 端前提' || true; }
+# 变异 helper（T555/QA P1 加固）：把某行的**后端声明**改成 tmux —— 锚 = 「默认后端」+ 其后的后端名，
+#   不绑「等号/空格」写法（`默认后端 = herdr` / `默认后端 herdr` / `默认herdr` 都认）。
+#   为什么：上一版硬编码 `s/默认 herdr/默认 tmux/`，PM 把 AGENTS.md 改写成「默认后端 = herdr」后
+#   变异静默失配（0 命中 ⇒ 下方自证断言才红）—— 自证断言是最后一道闸，锚本身要更稳。
+mut_decl_tmux() { # <file> <line>
+  sed -i "${2}s/默认后端[[:space:]]*\(=[[:space:]]*\)\?herdr/默认后端\1tmux/" "$1"
+}
+decl_is_tmux() { # <line 文本> → 0/1
+  grep -qE '默认后端[[:space:]]*(=[[:space:]]*)?tmux' <<< "$1"
+}
 restore() { cp "$BAK/intercom-protocol.md" "$PROTO"; cp "$BAK/AGENTS.md" "$AGENTS"; }
 
 # ============================================================ A 一致（基座原样）
@@ -133,9 +143,9 @@ t4_assert_eq "0" "$(printf '%s\n' "$C34_OUT" | grep -c "AGENTS\.md:${L33}" || tr
 restore
 
 # C2 仅 :33 声明改成 tmux（:18 仍 herdr）
-sed -i "${L33}s/默认 herdr/默认 tmux/" "$AGENTS"
-t4_assert_eq "1" "$(sed -n "${L33}p" "$AGENTS" | grep -c '默认 tmux' || true)" \
-  "C2a 变异自证：仅 :${L33} 改成 tmux"
+mut_decl_tmux "$AGENTS" "$L33"
+t4_assert_eq "1" "$(decl_is_tmux "$(sed -n "${L33}p" "$AGENTS")" && echo 1 || echo 0)" \
+  "C2a 变异自证：仅 :${L33} 改成 tmux（锚按「默认后端」定位，不绑等号写法）"
 run_check -v
 t4_assert_eq "0" "$C34_RC" "C2b 仅 :${L33} 改 tmux：warn 不改 rc（仍 0）"
 t4_assert_eq "1" "$(premise_warns)" "C2c 仅 :${L33} 改 tmux：恰 1 条端前提 warn"
@@ -147,7 +157,7 @@ restore
 
 # C3 两行都改 ⇒ 条数 = 声明行数（各 1 条，不重复刷屏、不合并吞行号）
 sed -i "${L18}s/.*/- **仅 pi 宿主（唯一，无第二宿主）**：机制只支持 **pi ≥1.4.0 + tmux**。/" "$AGENTS"
-sed -i "${L33}s/默认 herdr/默认 tmux/" "$AGENTS"
+mut_decl_tmux "$AGENTS" "$L33"
 run_check -v
 t4_assert_eq "0" "$C34_RC" "C3a 两行都改：warn 不改 rc（仍 0）"
 t4_assert_eq "2" "$(premise_warns)" "C3b 两行都改：恰 2 条（= 声明行数；不重复刷屏）"
