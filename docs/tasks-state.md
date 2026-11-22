@@ -49,7 +49,7 @@
 ## PM 接续快照（会话重开后**先读本区**）
 
 - 🔁 **交接快照（2026-11-22 下午 · T555 已立项 + 判据已拍板，等待实现派单）**：接手者只需读本文件。要点：
-  - **v0.27.0 已发布并打 tag/Release**（发布提交 `c68cfcb` · tag `v0.27.0`）· **npm publish 待用户**（发布后按 `dist-tags.latest` + `dist.integrity` 与本地 `npm pack` 逐字节核验并回填状态行；改动按 BR5 压 stash 供下一批首提交）
+  - **v0.27.0 全闭环**（发布提交 `c68cfcb` · tag/Release `v0.27.0` · 标题裸版本号）· **npm 已核验（2026-11-22 · 接任 PM 独立复验）**：`dist-tags.latest` = **0.27.0** · `dist.integrity` = `sha512-b/N2+OBs0qq5S3cPlaXpYUdJtJ9mrAPGqZ1Lf786IVbyaja8ZwjsGG0NyJ3q0T2KqDYJx4tOHIQyr7Qm3vX5sg==` 与本地 `git archive c68cfcb` + `npm pack` tarball（**233,464 B**）**逐字节一致**；`docs/releases/v0.27.0.md` 状态行与 `gh release view` 正文同值（双载体无分叉）
   - **T554 已合并 `f962813`**（PR #155 · 26 文件）· `check` rc=0 · roles=7 · files=52 · 用例 39
   - **T555 已立项**（Issue #156 · 分支 `feat/555-herdr-only` · HEAD `327a0ce`）：PRD `docs/prds/2026-11-22-herdr-only.md` · ADR `docs/adr/2026-11-22-herdr-only.md`（supersede `2026-10-27-strict-tmux-pi`）· 判据 `docs/reports/555-lite-spec.md`
   - **PM 已拍 D1–D5**（写进判据 §7）：**D1=A**（行数 ≥−10% 且函数数 163→≤136；−15% 不可达标，禁为凑数动 herdr 或降断言）· **D2=rc 2** · **D3=整组删** tmux 布局死配置 + `cases/25` 退役 · **D4=删** `backends/` 登记集 · **D5=接受** AC1 收敛为「除 tmux 专有行与已声明退役面外逐字一致」
