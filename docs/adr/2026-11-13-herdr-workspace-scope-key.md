@@ -1,6 +1,6 @@
 # ADR：herdr workspace 放置键与 scope 分离（label = 声明 scope 否则仓 slug）
 
-- 状态：已废弃（被 2026-11-20-workspace-as-binding-unit 取代）
+- 状态：已废弃（被 2026-11-20-workspace-as-binding-unit 取代）· 注记 2026-11-22：tmux 回退面已删除（`2026-11-22-herdr-only`），本文的 herdr 放置口径为唯一路径
 - 更新：2026-11-17
 - Owner：arch-designer
 - 指针：Issue [#112](https://github.com/Nathan3303/nao-skills/issues/112) · 评审 `docs/reports/T545-scope-isolation-arch.md` · 上游 `docs/prds/2026-11-10-herdr-base.md`（AC3.1）· 既有放置口径 `docs/reports/96p3-layout-p1.md:22` · **后续演进** `docs/adr/2026-11-17-fleet-identity-source.md`（Issue #138）

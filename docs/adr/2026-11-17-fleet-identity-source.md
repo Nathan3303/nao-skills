@@ -1,6 +1,6 @@
 # ADR：舰队身份单一来源（`--fleet` 同时定会话名 scope 与 workspace 放置键）
 
-- 状态：已废弃（被 2026-11-20-workspace-as-binding-unit 取代）
+- 状态：已废弃（被 2026-11-20-workspace-as-binding-unit 取代）· 注记 2026-11-22：tmux 回退面已删除（`2026-11-22-herdr-only`），fleet 参数线相关表述以 herdr 为唯一后端
 - 更新：2026-11-17
 - Owner：arch-designer
 - 指针：Issue [#138](https://github.com/Nathan3303/nao-skills/issues/138) · PRD `docs/prds/2026-11-17-fleet-param.md` · 评审 `docs/reports/138-arch-review.md` · 前序 `docs/adr/2026-11-13-herdr-workspace-scope-key.md` · 批次二占位 [#139](https://github.com/Nathan3303/nao-skills/issues/139)
