@@ -44,14 +44,14 @@ SH
 chmod +x "$LAB/bin/herdr" "$LAB/bin/tmux"
 
 c41() { # <env 前缀…> -- 由调用方内联；这里只做「干净环境 + PATH 桩」的统一入口
-  ( cd "$T4_ROOT" && env -u HERDR_ENV -u HERDR_SESSION -u HERDR_SOCKET_PATH \
+  ( cd "$T4_ROOT" && env "${T4_HERDR_UNSET_ARGS[@]}" \
       PATH="$LAB/bin:$PATH" PI_CODING_AGENT_DIR="$T4_CACHE_DIR/c41-pi" "$@" )
 }
 
 # ---------------------------------------------------------------- ①②③ 旧后端变量 ⇒ rc=2（D2）
 mkdir -p "$T4_CACHE_DIR/c41-pi"
 : > "$CALL_LOG"
-t4_run_in_dir "$T4_ROOT" env -u HERDR_ENV -u HERDR_SESSION NAO_TERMINAL=tmux PATH="$LAB/bin:$PATH" \
+t4_run_in_dir "$T4_ROOT" env "${T4_HERDR_UNSET_ARGS[@]}" NAO_TERMINAL=tmux PATH="$LAB/bin:$PATH" \
   PI_CODING_AGENT_DIR="$T4_CACHE_DIR/c41-pi" timeout 60 bash "$FLEET" ensure pm
 t4_assert_eq "2" "$T4_RC" "① 旧后端变量 ensure ⇒ rc=2（D2：用法守卫，命令未执行）"
 t4_assert_eq "" "$T4_OUT" "① stdout 为空（提示只走 stderr，不谎报结果）"
@@ -59,7 +59,7 @@ t4_assert_eq "1" "$(printf '%s\n' "$T4_ERR" | grep -c .)" "② stderr **恰 1 �
 t4_assert_match "$T4_ERR" '已移除 tmux 后端' "② stderr 点名「已移除 tmux 后端」"
 t4_assert_match "$T4_ERR" 'herdr' "② stderr 指路唯一后端 herdr"
 t4_assert_eq "0" "$(grep -c . "$CALL_LOG" || true)" "③ 零副作用：PATH 桩（herdr/tmux）0 命中"
-t4_run_in_dir "$T4_ROOT" env -u HERDR_ENV -u HERDR_SESSION NAO_TERMINAL=tmux PATH="$LAB/bin:$PATH" \
+t4_run_in_dir "$T4_ROOT" env "${T4_HERDR_UNSET_ARGS[@]}" NAO_TERMINAL=tmux PATH="$LAB/bin:$PATH" \
   PI_CODING_AGENT_DIR="$T4_CACHE_DIR/c41-pi" timeout 60 bash "$FLEET" check
 t4_assert_eq "2" "$T4_RC" "① 旧后端变量 check ⇒ rc=2（与 ensure 同口径，不做「体检照跑」例外）"
 t4_run_in_dir "$T4_ROOT" env NAO_TERMINAL=bogus PATH="$LAB/bin:$PATH" timeout 60 bash "$FLEET" status

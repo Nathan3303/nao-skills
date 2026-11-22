@@ -395,9 +395,9 @@ be_start_server() { # [cols rows]
 }
 
 be_session_exists() {
-    local js
-    js="$(be_herdr "$BE_SESSION" session list --json 2>/dev/null)" || return 1
-    grep -qF "\"name\":\"$BE_SESSION\"" <<< "$js"
+  local js
+  js="$(be_herdr "$BE_SESSION" session list --json 2>/dev/null)" || return 1
+  grep -qF "\"name\":\"$BE_SESSION\"" <<< "$js"
 }
 
 # herdr 会话目录（零残留断言用：sessions/ 空 ⇒ 无残留场）
@@ -431,9 +431,9 @@ let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
 }
 
 be_panes() { # 打印 `<pane_id>\t<terminal_id>`
-    local js
-    js="$(be_herdr "$BE_SESSION" pane list 2>/dev/null)" || return 1
-    printf '%s' "$js" | _be_json_lines '(r.panes||[]).map(p=>[p.pane_id,p.terminal_id].join("\t"))'
+  local js
+  js="$(be_herdr "$BE_SESSION" pane list 2>/dev/null)" || return 1
+  printf '%s' "$js" | _be_json_lines '(r.panes||[]).map(p=>[p.pane_id,p.terminal_id].join("\t"))'
 }
 
 be_pane_pid() { # <pane_id>
@@ -549,15 +549,15 @@ be_pane_label() { # <pane_id> → 身份面（pane.label）
 be_kill_pane() { # <pane_id> —— 关 pane（收尾/隔离用；判据看 effect 不看 rc）
   local p="${1:-}"
   [ -n "$p" ] || return 1
-be_herdr "$BE_SESSION" pane close "$p" >/dev/null 2>&1 || true 
+  be_herdr "$BE_SESSION" pane close "$p" >/dev/null 2>&1 || true
   return 0
 }
 
 be_scene_signature() { # 现场签名（排序后逐行）：pane + 会话/workspace —— 「零副作用」断言用
-    { be_panes 2>/dev/null | awk -F'\t' 'NF { print "pane " $1 }'
-      be_herdr "$BE_SESSION" workspace list 2>/dev/null \
-        | _be_json_lines '(r.workspaces||[]).map(w=>"ws "+w.workspace_id)' || true
-    } | sort 
+  { be_panes 2>/dev/null | awk -F'\t' 'NF { print "pane " $1 }'
+    be_herdr "$BE_SESSION" workspace list 2>/dev/null \
+      | _be_json_lines '(r.workspaces||[]).map(w=>"ws "+w.workspace_id)' || true
+  } | sort
 }
 
 be_fleet_handles() { # 打印运行生产脚本所需的后端句柄（每行 VAR=VAL），供 `env` 直接展开
@@ -725,9 +725,9 @@ be_fixture_session() { # <pane_id> <会话名> [仓标签]
   [ -n "$p" ] && [ -n "$n" ] || { be_guard_fail "be_fixture_session 缺 pane/name"; return 1; }
   [ -n "$repo" ] || repo="$(basename "${BE_LAB:-.}")"
   local want i
-want="$n"
-         be_set_name "$p" "$n" "$repo" || return 1
-         be_run "$p" "exec pi --name $n" || return 1 
+  want="$n"
+  be_set_name "$p" "$n" "$repo" || return 1
+  be_run "$p" "exec pi --name $n" || return 1
   # 有界确认（禁固定 sleep）：send-keys / pane run 都是 fire-and-forget ⇒ 必须等身份面**真的**就位，
   #   否则紧随其后的 status 会读到「还没命名」的 pane（实测：AC3 冲突夹具若不等标题就位会假红）。
   for i in $(seq 1 "${BE_POLL_MAX:-50}"); do

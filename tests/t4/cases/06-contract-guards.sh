@@ -1232,10 +1232,9 @@ t4_assert_eq "0" "$(d2_handwritten)" "D2③ 调用点零手写（tests/ 下 `env
 t4_assert_ge 2 "$(d2_refs "$T4_ROOT/tests/t4/lib-backend.sh")" "D2④ lib-backend 夹具经单源清（引用 + 缺失时 fail loud 的守卫）"
 t4_assert_eq "1" "$(grep -cE '^B3_CLEAN_ENV=\(env .*T4_HERDR_UNSET_ARG[S]' "$T4_ROOT/tests/t4/cases/06-contract-guards.sh" || true)" \
   "D2④ cases/06 `B3_CLEAN_ENV` 改为引用单源"
-t4_assert_eq "1" "$(grep -cE '^TMUX_FIELD_ENV=\(env .*T4_HERDR_UNSET_ARG[S]' "$T4_ROOT/tests/t4/cases/28-naming-contract.sh" || true)" \
-  "D2④ cases/28 `TMUX_FIELD_ENV` 改为引用单源"
-t4_assert_eq "2" "$(grep -cE '^t4_run_in_dir .*env .*T4_HERDR_UNSET_ARG[S]' "$T4_ROOT/tests/t4/cases/28-naming-contract.sh" || true)" \
-  "D2④ cases/28 两条直连（B3⑧ tmux 守卫）改为引用单源"
+grep -qE '^B2_ENV=\(env "\$\{T4_HERDR_UNSET_ARGS\[@\]\}"' "$T4_ROOT/tests/t4/cases/28-naming-contract.sh"   && t4_ok "D2④ cases/28 \`B2_ENV\` 改为引用单源（T555：原 TMUX_FIELD_ENV 随 tmux 夹具退役）"   || t4_bad "D2④ cases/28 \`B2_ENV\` 应引用单源"
+t4_assert_eq "4" "$(grep -cE '^t4_run_in_dir .*env .*T4_HERDR_UNSET_ARG[S]' "$T4_ROOT/tests/t4/cases/28-naming-contract.sh" || true)" \
+  "D2④ cases/28 四处直连（herdr 场负控 ×2 + B3 桩场 ×2）改为引用单源"
 t4_assert_eq "16" "$(d2_args_n "$D2_LIB")" "D2⑤ 派生参数数 = 2×8（`env -u <名>` 成对；形态可运行）"
 # 变异 A（枚举减少 ⇒ 必红）：从副本的单源里删掉 `HERDR_SOCKET_FILE`
 D2_MUT="$T4_CACHE_DIR/d2-lib-mut-$$.sh"
