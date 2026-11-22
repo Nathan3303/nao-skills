@@ -526,11 +526,12 @@ t4_verify_term_ledger() { # <script> <台账文件>
 }
 
 # herdr 实现区禁字（BR2/BR6 机械兜 + 三期 P1 的 J3 静态证明）：
-#   宿主句柄名与标题字段名都不得出现在 herdr 实现里（T555：tmux 布局算式 symbols 随后端删除 ⇒
-#   TMUX_MIN_PANE_WIDTH / main_row2_min_col / 137 / 184 已无对象，判据收回句柄与标题两项）。
+#   宿主句柄名、标题字段名，以及 tmux 的**布局算式 symbols**（最小列宽闸门 / main-row2 列差 /
+#   长度常量 137/184）都不得出现在 herdr 实现里 —— 后者是 herdr 布局 = tab 拓扑（结构判据）的反证：
+#   T555 已把 tmux 布局函数整组删除，本判据防它们被顺手搬进 herdr 区复活（AC8 同族）。
 t4_scan_term_herdr_forbidden() { # <script>
   local script="$1" rs s e off lnno body
-  local re='TMUX|terminal_title|pane_title'
+  local re='TMUX|terminal_title|pane_title|TMUX_MIN_PANE_WIDTH|main_row2_min_col|137|184'
   rs="$(_t4_term_ranges "$script" term-facade-herdr)"
   [ -n "$rs" ] || { printf 'herdr 实现区标记缺失（# >>> term-facade-herdr BEGIN）\n'; return 0; }
   while IFS=$'\t' read -r s e; do

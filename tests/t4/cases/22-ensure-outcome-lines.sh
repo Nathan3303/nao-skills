@@ -205,7 +205,8 @@ fs.writeFileSync(p,JSON.stringify(st));' "$SPACE_STATE" "$1" "$2"
   t4_assert_contains "$(summary_text)" "（成功 1 / 跳过 0 / 失败 0）" \
     "J1 小空间：摘要仍计成功（warn 不改三态）"
   # J5 文案三件套：三个可执行动作 + 文档指针
-  for act in "[server] headless_cols/headless_rows" "attach 后重排" "NAO_TERMINAL=tmux"; do
+  # T555：第三动作原为「切布局：export NAO_TERMINAL=tmux（回退）」——tmux 后端已删 ⇒ 改为放大窗口/显示器后 attach
+  for act in "[server] headless_cols/headless_rows" "attach 后重排" "换更大窗口/显示器后 attach"; do
     t4_assert_contains "$T4_ERR_ANSI" "$act" "J5 指路动作在位：$act"
   done
   t4_assert_contains "$T4_ERR_ANSI" "docs/INSTALL.md" "J5 文档指针在位（docs/INSTALL.md）"

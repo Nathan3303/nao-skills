@@ -239,14 +239,11 @@ t4_assert_ge "1" "$(grep -cF -- 'agent prompt "$pane" "$msg"' "$FLEET" || true)"
   "AC2 静态：herdr 通道 = agent prompt（自带提交 + bracketed-paste 包裹）"
 t4_assert_eq "0" "$(grep -cE 'agent[[:space:]]+prompt.*--wait' "$FLEET" || true)" \
   "AC2 静态：herdr 投递不带 --wait（不把「已投递」耦合到「自检 turn 跑完」）"
-t4_assert_ge "1" "$(grep -cF -- 'paste-buffer -p -d -b "$buf" -t "$pane"' "$FLEET" || true)" \
-  "AC2 静态：tmux 通道 = paste-buffer -p + 独立 buffer + -d（不动用户粘贴板）"
-t4_assert_ge "1" "$(grep -cF -- 'send-keys -t "$pane" Enter' "$FLEET" || true)" \
-  "AC2 静态：tmux 通道末尾恰一次键名 Enter"
-t4_assert_ge "1" "$(grep -cF -- 'bracket_paste_flag' "$FLEET" || true)" \
-  "AC2 静态：tmux bracketed-paste 退化判定面存在（#{bracket_paste_flag}）"
-t4_assert_ge "1" "$(grep -cF "\${msg//\$'\\n'/ }" "$FLEET" || true)" \
-  "AC2 静态：退化时投递前做形态归一（换行 → 空格；文案单一源不变）"
+# T555 退役（4 条）：tmux 投递通道（paste-buffer / send-keys / bracket_paste_flag / 换行归一）
+#   随 tmux 后端整组删除（ADR 2026-11-22-herdr-only）⇒ 断言对象不存在，不计入断言强度下降
+#   （herdr 通道的三条静态断言在上方逐字保留；投递行为由本用例 ①②③ 的动态断言覆盖）。
+t4_assert_eq "0" "$(grep -cE 'paste-buffer|send-keys|bracket_paste_flag' "$FLEET" || true)" \
+  "AC2 静态（T555 反向）：tmux 投递通道字样 0 处（旧面不复活，ADR herdr-only）"
 t4_assert_contains "$(grep -F '版本自检投递失败' "$FLEET" || true)" "不计失败" \
   "AC4 静态：投递失败不计 SPAWN_FAIL（失败语义 = rc 0 + warn）"
 t4_assert_eq "0" "$(grep -cE 'agent[[:space:]]+wait' <(grep -vE '^[[:space:]]*#' "$FLEET") || true)" \
