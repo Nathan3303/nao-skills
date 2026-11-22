@@ -10,7 +10,8 @@
 > **模型可选，但有推荐**：舰队推荐配合 **`deepseek-v4.1-flash`**（7 个常驻会话 + 长链路交接，长上下文稳定性与单轮成本更省心）。这不是硬依赖——换成别的模型也能跑，差异在纪律遵守与回执质量。
 
 - **pi（≥ 1.4.0）**：唯一的运行宿主。本机制**只支持 pi**，不为其他编程 Agent（Claude Code / Codex / Cursor 等）提供适配或支持承诺。
-- **终端后端 = herdr（≥ 0.9.1，唯一后端）**：7 个会话落在 herdr 的专用 session 里，每个角色一个 tab。装法见 [herdr.dev](https://herdr.dev)；装完还要 **`herdr integration install pi`**（舰队靠它判「会话是否就绪」）。**v0.28.0 起旧 tmux 后端已移除**（`NAO_TERMINAL=tmux` ⇒ `rc=2` + 一行指路，不静默回退）。
+- **终端后端 = herdr（≥ 0.9.1，唯一后端）**：7 个会话落在 herdr 的专用 session 里，每个角色一个 tab。装法见 [herdr.dev](https://herdr.dev)；装完还要 **`herdr integration install pi`**（舰队靠它判「会话是否就绪」）。
+- **旧 tmux 后端已在 v0.28.0 移除**：`NAO_TERMINAL=tmux` ⇒ `rc=2` + 一行指路，不静默回退（迁移逐条见下方「herdr 后端」一节，退路 = pin 回 `0.27.x`）。
 - **Node.js（≥ 18）**：`nao-skill` CLI 与 `nao-fleet.sh` 的转发入口都是 Node 脚本。
 - **git**：任务分支、提交、PR 全靠它；装了 **GitHub CLI（`gh`）** 则额外支持自动开 Issue / PR / Release，没有 `gh` 也能跑，只是这些步骤降级为本地操作。
 
@@ -223,7 +224,7 @@ NAO_TERMINAL=herdr .agents/scripts/nao-fleet.sh status
 - `NAO_TERMINAL=tmux` ⇒ **`rc=2`** + 一行指路（不会静默改用 herdr）。**还需要 tmux 就 pin 回 `@nathan33/nao-skill@≤0.27.x`**（`pi install -l npm:@nathan33/nao-skill@0.27.0`）。
 - `NAO_TMUX_LAYOUT` / `NAO_TMUX_MAIN_WIDTH` / `NAO_TMUX_MIN_PANE_WIDTH` 三个变量与 `check` 的「tmux 布局」节**整组删除**（布局改由 herdr 的 tab 拓扑决定，不再有几何算式与窄列回退）。
 - `cleanup -S <socket>` **已移除**（`-S` 是 tmux 调用面）⇒ 改用 `cleanup --session <名>`；`-S` 现在是 `rc=2` + 指路。
-- 环境自检里 `herdr --version || tmux -V` 改为只查 `herdr --version`。
+- 自检命令统一为 `herdr --version`（旧的 `herdr --version || tmux -V` 写法随回退面一起作废，见上节自检）。
 - **CI / 自动化**：不要再固定 `NAO_TERMINAL=tmux`；显式 `NAO_TERMINAL=herdr` 或直接不设。
 - **能力边界（已声明退役面）**：tmux 专有用例 12 / 25 退役（宿主窗口显式寻址、列宽算式）；herdr 侧的放置 / 隔离 / 回收由用例 28–33、37–41 覆盖。
 

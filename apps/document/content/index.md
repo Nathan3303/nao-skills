@@ -97,9 +97,9 @@ home:
   steps:
     - num: '01'
       title: 装前置
-      body: pi ≥1.4.0、终端后端（herdr 默认 / tmux 回退）、Node ≥18、git 都齐了才装得起来。一条命令自检：
+      body: pi ≥1.4.0、herdr ≥0.9.1（唯一终端后端）、Node ≥18、git 都齐了才装得起来。一条命令自检：
       code:
-        - pi --version && node -v && git --version && (herdr --version || tmux -V)
+        - pi --version && node -v && git --version && herdr --version
     - num: '02'
       title: 把机制装进你的项目
       body: 项目级安装：pin 写进 `.pi/settings.json` 进仓库，团队 clone 即得同款。
@@ -126,7 +126,7 @@ home:
     - q: 跑完的会话要留着吗？
       a: 派生会话验收完就回收，常驻角色留着复用。`nao-fleet.sh status` 会提示哪些是残留，目标在别的项目里也能回收。
     - q: 为什么需要终端后端？
-      a: 舰队要把 7 个角色会话放进终端里，还要能可靠地找回与收掉。默认 herdr：每个角色一个 tab，身份靠结构化事实判定；tmux 是回退方案，在当前窗口分屏，SSH 下同样可用。
+      a: 舰队要把 7 个角色会话放进终端里，还要能可靠地找回与收掉。后端只有 herdr：每个角色一个 tab，身份靠结构化事实判定。旧的 tmux 后端已移除——给 `NAO_TERMINAL=tmux` 会直接报错并告诉你怎么办，不会悄悄换后端。
   footer:
     title: 现在就把小队拉起来
     lead: 装完只要一句话：在 PM 会话里说需求，剩下的它自己流转。
