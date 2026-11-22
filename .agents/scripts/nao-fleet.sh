@@ -912,8 +912,8 @@ _term_herdr_cleanup() {  # <session> [force]
     return 2
   }
   case "$s" in
-    ""|"default")
-      printf '需要 herdr 会话名：%s 不可用（cleanup 必填 --session 且 ≠default —— default 是用户会话，BR9）\n' "${s:-<空>}" >&2
+    "")
+      printf '需要 herdr 会话名：%s 不可用（cleanup 必填 --session；default 已放行，但需 --force）\n' "${s:-<空>}" >&2
       return 2 ;;
   esac
   if [[ ! "$s" =~ ^[A-Za-z0-9._-]+$ ]]; then
@@ -2223,6 +2223,7 @@ fleet_name_parse() {
 #   项键只 code / path；缩进用空格（整行 `#` 注释）、值单双引号可省可留；
 #   锚点/别名/流式/多文档/制表符/未知键 ⇒ 非法。
 # ===========================================================================
+FLEET_MANIFEST_SLUG_SEEN=0; FLEET_MANIFEST_WARNED=0
 fleet_manifest_root() {  # <dir> → 仓根物理路径（git toplevel；非 git 仓 = 该目录物理路径）
   local d="${1-}" top=""
   [[ -n "$d" ]] || d="$PWD"
@@ -2270,8 +2271,10 @@ fleet_manifest_load() {  # <repo_phys> → 记录流（见上）· rc=1 非法�
       fi
       case "$key" in
         slug)
-          # D7：弃用键 —— 本版**不校验、不 fail、不影响放置**，恰一行 warn 后忽略。
-          if (( ! slug_seen )); then _fleet_deprecated_warn slug; slug_seen=1; fi
+          # D7：弃用键 —— 本版**不校验、不 fail、不影响放置**；warn 由调用方统一触发（见下函数），
+          #   避免 status/close 的 `2>/dev/null` 把单源告警吞掉。
+          FLEET_MANIFEST_SLUG_SEEN=1
+          (( ! slug_seen )) && slug_seen=1
           sec=""
           ;;
         repos)
@@ -2350,10 +2353,22 @@ fleet_manifest_load() {  # <repo_phys> → 记录流（见上）· rc=1 非法�
     [[ -d "$pp" ]] || { printf '%s:%d path 不是目录（%s → %s）\n' "$f" "${plits[$i]}" "${cpaths[$i]}" "$pp" >&2; return 1; }
   done
 
+  (( slug_seen )) && printf 'DEPRECATED\tslug\n'
   printf 'ROOT\t%s\n' "$repo"
   for i in "${!codes[@]}"; do
     printf 'REPO\t%s\t%s\n' "${codes[$i]}" "$(_fleet_phys "$repo/${cpaths[$i]}")"
   done
+  return 0
+}
+
+# manifest 弃用键的单源告警（**所有读入口**调用；同一命令只打一次）。
+#   为什么不在 load 内直接 warn：status/close 用 `2>/dev/null` 捕获记录流，会连告警一起吞掉。
+fleet_manifest_warn_deprecated() {  # <记录流>：含 DEPRECATED 行 ⇒ 恰一行 warn（同一命令只打一次）
+  local stream="${1-}"
+  [[ "$stream" == *$'DEPRECATED\tslug'* ]] || return 0
+  [[ "${FLEET_MANIFEST_WARNED:-0}" == "1" ]] && return 0
+  FLEET_MANIFEST_WARNED=1
+  _fleet_deprecated_warn slug
   return 0
 }
 
@@ -3802,7 +3817,7 @@ cmd_check() {
           printf '  · herdr api schema 不可用（status 将 exit 3）—— 核对 herdr ≥0.9.1 / server 状态后重试，或 export NAO_TERMINAL=tmux 回退\n'
         fi
       else
-        echo '  · 未在 herdr pane 内（HERDR_SESSION 空/default）：status 将 exit 3；纯静态体检可照跑（回退：export NAO_TERMINAL=tmux）'
+        echo '  · 未在 herdr pane 内（HERDR_SESSION 空）：status 将 exit 3；default 已放行（仅破坏性动作需 --force）；纯静态体检可照跑（回退：export NAO_TERMINAL=tmux）'
       fi
     else
       printf '  ✗ herdr 缺失（status 将 exit 3）—— 装 herdr ≥0.9.1，或 export NAO_TERMINAL=tmux 回退\n'; rc=1
@@ -4237,7 +4252,9 @@ cmd_status() {
   STATUS_MN_OK=0; STATUS_MN_ROOT=""; STATUS_MN_CODES=""; STATUS_MN_PATHS=()
   local st_root="" st_mn="" _snk="" _sncode="" _snpath=""
   st_root="$(fleet_manifest_root "$PWD")"
-  if st_mn="$(fleet_manifest_load "$st_root" 2>/dev/null)"; then
+  st_mn="$(fleet_manifest_load "$st_root" 2>/dev/null)" || true
+  fleet_manifest_warn_deprecated "$st_mn"
+  if [[ -n "$st_mn" ]]; then
     if [[ -n "$st_mn" && "$st_mn" != "NONE" ]]; then
       STATUS_MN_OK=1
       while IFS=$'\t' read -r _snk _sncode _snpath; do
@@ -4577,6 +4594,11 @@ cmd_close() {
   local -A close_pw=()
   intercom_list_json >/dev/null 2>&1 || true   # 预热名册缓存
   fleet_roles_init --cards                     # BR8：parse 的角色事实表（常驻 + 卡 role）
+  # D7：manifest `slug:` 弃用告警在 close 读入口也要出现（即使本命令不需要 manifest 做仓回退）
+  local _mnr_w="" _mnj_w=""
+  _mnr_w="$(fleet_manifest_root "$PWD")"
+  _mnj_w="$(fleet_manifest_load "$_mnr_w" 2>/dev/null)" || true
+  fleet_manifest_warn_deprecated "$_mnj_w"
 
   # ---- 目标解析（T554）：新形精确名 / 旧形只读（LEGACY）/ 未识别（别名·卡集）----
   pout="$(fleet_name_parse "$target")"
@@ -4786,7 +4808,9 @@ cmd_close() {
     local mnr="" mnstream="" mnkind="" mna="" mnb=""
     if [[ -n "$scope" ]]; then
       mnr="$(fleet_manifest_root "$anchor")"
-      if mnstream="$(fleet_manifest_load "$mnr" 2>/dev/null)" && [[ -n "$mnstream" && "$mnstream" != "NONE" ]]; then
+      mnstream="$(fleet_manifest_load "$mnr" 2>/dev/null)" || true
+      fleet_manifest_warn_deprecated "$mnstream"
+      if [[ -n "$mnstream" && "$mnstream" != "NONE" ]]; then
         while IFS=$'\t' read -r mnkind mna mnb; do
           [[ "$mnkind" == "REPO" && "$mna" == "$scope" ]] && { fallback_repo="$mnb"; break; }
         done <<< "$mnstream"
@@ -5082,6 +5106,7 @@ cmd_ensure() {
   MANIFEST_ROOT="$(fleet_manifest_root "$PWD")"
   MN="$(fleet_manifest_load "$MANIFEST_ROOT")" \
     || die "ensure 中止：$MANIFEST_ROOT/.agents/fleet.yaml 非法（见上；该怎么改：按报错的文件:行号修字段，或删掉该文件回到无 manifest 语义）"
+  fleet_manifest_warn_deprecated "$MN"
   if [[ "$MN" == "NONE" ]]; then
     MN=""
   else

@@ -72,6 +72,17 @@ for bad in pm1 pm0 pm10 pm2x "arch-designer(T554" "arch-designerT554)" "arch-des
   t4_assert_ne "0" "$BE_RC" "S4 非法名 $bad ⇒ rc≠0"
 done
 
+# S4b 槽位耗尽：2..9 全占 ⇒ fail loud 指路 close、零 pane（S4 的字面非法之外的结构面）
+SLOT_REPO="$LAB/fx40-slots"; mkdir -p "$SLOT_REPO"
+for _i in $(seq 1 9); do fin "$SLOT_REPO" ensure pm >/dev/null 2>&1; done
+t4_assert_eq "0" "$(be_pane_by_name pm9 >/dev/null 2>&1; echo $?)" "S4b 槽位夹具：pm9 已拉起（2..9 全占）"
+_s4_before="$(be_pane_count)"
+fin "$SLOT_REPO" ensure pm
+t4_assert_ne "0" "$BE_RC" "S4b 2..9 全占后再 ensure ⇒ rc≠0"
+t4_assert_contains "$BE_ERR_ANSI" "先 close" "S4b fail loud 指路 close"
+t4_assert_contains "$BE_ERR_ANSI" "槽位已满" "S4b 点名槽位耗尽"
+t4_assert_eq "$_s4_before" "$(be_pane_count)" "S4b 零 pane 副作用"
+
 # S5 基键冲突（两个同名目录）
 mkdir -p "$LAB/a/fx40-dup" "$LAB/b/fx40-dup"
 fin "$LAB/a/fx40-dup" ensure qa
@@ -107,6 +118,14 @@ t4_run_in_dir "$RC" "${T40_ENV[@]}" timeout 60 bash "$LAB/.agents/scripts/nao-fl
 t4_assert_eq "2" "$T4_RC" "S9 cleanup default 无 --force ⇒ rc=2"
 t4_assert_contains "$T4_ERR" "将停止 session=default，影响" "S9 打印影响面（workspace/pane 数）"
 t4_assert_contains "$T4_ERR" "未给 --force ⇒ 零动作" "S9 明确零动作"
+
+# S9b default + --force：真执行（stop+delete），并点名当前 pane 将被终止
+t4_run_in_dir "$RC" "${T40_ENV[@]}" timeout 60 bash "$LAB/.agents/scripts/nao-fleet.sh" cleanup --session default --force
+t4_assert_eq "0" "$T4_RC" "S9b cleanup default --force ⇒ rc=0（真执行）"
+t4_assert_contains "$T4_OUT$T4_ERR" "已终结 herdr session=default" "S9b 执行结果点名已终结 default"
+t4_assert_contains "$T4_ERR" "--force：当前 pane 若属于 session=default 将被终止" "S9b 点名当前 pane 风险"
+t4_assert_eq "1" "$([ ! -e "$BE_CFGROOT/herdr/sessions/default" ] && echo 1 || echo 0)" \
+  "S9b effect：default session 目录已删除"
 
 # S10 护栏：由 30/31/37/38 覆盖（此处只做静态指针，不重复造桩）
 t4_note backend-gate "S10 三条护栏（自面板 / 归属不可判定 / 忙闲）由 cases/30/31/37/38 逐条覆盖；本用例不重复造桩"

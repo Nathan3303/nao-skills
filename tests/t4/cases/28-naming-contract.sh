@@ -1270,12 +1270,25 @@ t4_assert_eq "0" "$(grep -c '^herdr .*pane split' "$B2ST_ST/calls.log" || true)"
 t4_assert_contains "$(cat "$B2ST_ST/tabs")" "|$B2_RD_FE" "J2① tab label = 角色名（结构判据）"
 t4_assert_eq "1" "$(awk -F'|' -v n="$B2_RD_FE" '$3==n{print $1}' "$B2ST_ST/tabs" | while read -r t; do awk -F'|' -v t="$t" '$5==t' "$B2ST_ST/panes" | wc -l; done)" \
   "J2① 该角色 tab 恰 1 个 pane（pane_count == 1）"
-# ② 同仓第二个角色：仍落同一 workspace、各自独立 tab（每 tab 恰 1 pane）
-t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-x' \
-  NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 rd-be2
-t4_assert_eq "0" "$T4_RC" "J2② 同仓第二角色 ensure rc=0"
-t4_assert_eq "1" "$(grep -c "^w1|$B2_WS_LABEL$" "$B2ST_ST/ws" || true)" \
-  "J2② 同仓仍恰 1 个 workspace（不按角色新开）"
+# ② 旧布局迁移（v2 新名）：两个 ghost 共处共享 tab ⇒ 各自 ensure 后 pane move --new-tab，pane_id 不变；
+#    再给一个「独占但 label 旧」的 tab ⇒ 只 tab rename（零 pane 搬动，更小 effect）。
+b2_reset
+printf 'w1|%s\n' "$B2_WS_LABEL" > "$B2ST_ST/ws"
+printf 'w1:p1|%s|bash|w1|w1:t1\nw1:p2|%s|bash|w1|w1:t1\n' "$B2_RD_FE" "$B2_RD_BE" > "$B2ST_ST/panes"
+printf 'w1:t1|w1|1\n' > "$B2ST_ST/tabs"
+: > "$B2ST_ST/agents"
+for _r in rd-fe2 rd-be2; do
+  t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-x' \
+    NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 "$_r"
+  t4_assert_eq "0" "$T4_RC" "J2② 迁移 $_r：ensure rc=0"
+done
+t4_assert_eq "2" "$(grep -c '^herdr .*pane move' "$B2ST_ST/calls.log" || true)" \
+  "J2② 共享 tab 的两个 ghost 都用 pane move 迁移（各 1 次）"
+t4_assert_eq "2" "$(grep -cE '^herdr .*pane move .* --new-tab' "$B2ST_ST/calls.log" || true)" \
+  "J2② 迁移走 --new-tab（把 pane 搬进独立 tab）"
+t4_assert_contains "$(cat "$B2ST_ST/panes")" "w1:p1|$B2_RD_FE" "J2② 迁移后 pane_id 不变（$B2_RD_FE 仍 w1:p1）"
+t4_assert_contains "$(cat "$B2ST_ST/panes")" "w1:p2|$B2_RD_BE" "J2② 迁移后 pane_id 不变（$B2_RD_BE 仍 w1:p2）"
+t4_assert_eq "0" "$(grep -c '|1$' "$B2ST_ST/tabs" || true)" "J2② 无 label=1 的旧 tab 残留（迁移已收敛）"
 for _lbl in "$B2_RD_FE" "$B2_RD_BE"; do
   t4_assert_eq "1" "$(grep -cF -- "|$_lbl" "$B2ST_ST/tabs" || true)" \
     "J2② tab label = 角色名（$_lbl）"
@@ -1283,8 +1296,9 @@ for _lbl in "$B2_RD_FE" "$B2_RD_BE"; do
   t4_assert_eq "1" "$([ -n "$_tid" ] && awk -F'|' -v t="$_tid" '$5==t' "$B2ST_ST/panes" | grep -c . || true)" \
     "J2② 该角色 tab 恰 1 个 pane（$_lbl）"
 done
-t4_assert_eq "0" "$(grep -cE '^herdr .*pane split' "$B2ST_ST/calls.log" || true)" \
-  "J2② 全程零 pane split（布局不靠分屏算式）"
+# 迁移分支同时覆盖 `tab rename`（每个 --new-tab 之后都把新 tab 标成角色名）
+t4_assert_eq "2" "$(grep -c '^herdr .*tab rename' "$B2ST_ST/calls.log" || true)" \
+  "J2② 迁移后新 tab 均被改名为角色名（rename 分支随迁移执行）"
 
 # ---- P2-1（第二轮 QA）：文案与新语义一致（P1 把「角色 tab 被占 + --force」收紧成 fail loud）----
 #   旧文案说「--force ⇒ 新建 pane（随后同名 label 会有 2 个）」，但实际紧接着就 fail loud、根本不新建
