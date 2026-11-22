@@ -142,7 +142,7 @@ c09_names=("pm:pm" "arch:arch-designer" "arch-designer:arch-designer" "uiux:uiux
 for pair in "${c09_names[@]}"; do
   n="${pair%%:*}"; want="${pair#*:}"
   fx_fleet "$FX_N" close --task NAOQA9 "$n"
-  if [ "$T4_RC" = "0" ] && printf '%s' "$T4_OUT" | grep -qF "$want-NAOQA9" \
+  if [ "$T4_RC" = "0" ] && printf '%s' "$T4_OUT" | grep -qF "$want(NAOQA9)" \
      && ! printf '%s' "$T4_OUT" | grep -qF "未知角色"; then
     t4_ok "AC1: \`$n\` → $want"
   else
@@ -156,7 +156,7 @@ ROSS="[{\"name\":\"qa-T508\",\"id\":\"qa-T508\",\"status\":\"idle\",\"cwd\":\"$O
 
 # 名册报在线（cwd=另一仓）但无存活 pane ⇒ 必须非静默（非 0 且不报「未运行（无需回收）」）
 T4_OUT=""; T4_ERR=""; T4_RC=0
-NAO_QA_FAKE_ROSTER="$ROSS" fx_fleet "$FX_N" close --task T508 qa
+NAO_QA_FAKE_ROSTER="$ROSS" fx_fleet "$FX_N" close qa-T508
 t4_assert_ne "0" "$T4_RC" "AC3: 跨仓 qa-T508 未定位到句柄 ⇒ 非 0"
 t4_assert_not_contains "$T4_OUT" "未运行（无需回收）" "AC3: 不得报「未运行（无需回收）」而 pane 未回收"
 
@@ -182,7 +182,7 @@ if [ "$BE_NAME" = "herdr" ]; then
   t4_assert_ne "" "$H_PANE" "AC3h 夹具：跨仓目标 pane 建立（$OTHER）"
   be_fixture_session "$H_PANE" "qa-T509R" "$(basename "$OTHER")" || t4_bad "AC3h 夹具：身份写入失败"
   NAO_QA_FAKE_ROSTER="[{\"name\":\"qa-T509R\",\"id\":\"qa-T509R\",\"status\":\"idle\",\"cwd\":\"$OTHER\"}]" \
-    fx_fleet "$FX_N" close --task T509R qa
+    fx_fleet "$FX_N" close qa-T509R
   t4_assert_eq "0" "$T4_RC" "AC3h①: 真回收 rc=0（跨仓 label）"
   t4_assert_not_contains "$T4_OUT" "未运行（无需回收）" "AC3h①: 不得静默报「未运行」"
   if be_pane_alive "$H_PANE"; then
@@ -202,7 +202,7 @@ if [ "$BE_NAME" = "herdr" ]; then
   #   否则被单源清理一起磨掉（那会把「自 pane 保守拒」测成「目标被回收」—— 假红/假绿都失真）。
   BE_HERDR_KEEP="HERDR_PANE_ID" \
     NAO_QA_FAKE_ROSTER="[{\"name\":\"qa-T509T\",\"id\":\"qa-T509T\",\"status\":\"idle\",\"cwd\":\"$OTHER\"}]" \
-    HERDR_PANE_ID="$H_PANE2" fx_fleet "$FX_N" close --task T509T qa
+    HERDR_PANE_ID="$H_PANE2" fx_fleet "$FX_N" close qa-T509T
   PATH="$PATH_SAVE"
   t4_assert_ne "0" "$T4_RC" "AC3h③: 目标 pane == HERDR_PANE_ID（调用者自身）⇒ 必须拒（rc≠0）"
   t4_assert_contains "$T4_OUT$T4_ERR" "拒绝回收" "AC3h③: 输出「拒绝回收」"
@@ -286,7 +286,7 @@ if ! C09_P1="$(stage_pane "$C09_NAME1" "$C09_SESS")"; then
 fi
 C09_R1="[{\"name\":\"$C09_NAME1\",\"id\":\"$C09_NAME1\",\"status\":\"idle\",\"cwd\":\"$OTHER\",\"tmuxPane\":\"$C09_P1\"}]"
 T4_OUT=""; T4_ERR=""; T4_RC=0
-t4_run_in_dir "$FX_N" env -u TMUX_PANE NAO_TERMINAL=tmux TMUX="$C09_TMUX_REAL" NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$C09_R1" \
+t4_run_in_dir "$OTHER" env -u TMUX_PANE NAO_TERMINAL=tmux TMUX="$C09_TMUX_REAL" NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$C09_R1" \
   bash "$FX_N/.agents/scripts/nao-fleet.sh" close --task T509R qa
 t4_assert_eq "0" "$T4_RC" "AC3①: 真回收 rc=0（跨仓 pane $C09_P1）"
 if c09_reclaimed "$C09_P1"; then
@@ -305,7 +305,7 @@ fi
 C09_R2="[{\"name\":\"$C09_NAME2\",\"id\":\"$C09_NAME2\",\"status\":\"idle\",\"cwd\":\"$OTHER\",\"tmuxPane\":\"$C09_P2\"}]"
 t4_info "撞号负控：\$TMUX_PANE=$C09_P2（与实际调用者 pane 无关的陈旧句柄） vs 目标 pane $C09_P2"
 T4_OUT=""; T4_ERR=""; T4_RC=0
-t4_run_in_dir "$FX_N" env NAO_TERMINAL=tmux TMUX="$C09_TMUX_REAL" TMUX_PANE="$C09_P2" NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$C09_R2" \
+t4_run_in_dir "$OTHER" env NAO_TERMINAL=tmux TMUX="$C09_TMUX_REAL" TMUX_PANE="$C09_P2" NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$C09_R2" \
   bash "$FX_N/.agents/scripts/nao-fleet.sh" close --task T509S qa
 t4_assert_eq "0" "$T4_RC" "AC3②: pane id 与 \$TMUX_PANE 撞号不得误拒回收（rc=0）"
 t4_assert_not_contains "$T4_OUT$T4_ERR" "拒绝回收" "AC3②: 不得报「拒绝回收」（撞号不是「调用者自己的 pane」）"
@@ -319,14 +319,17 @@ c09_assert_witness "②"
 # ---- ③ 自 pane 不变量（fail-closed）：在目标 pane **内部**真跑 close ⇒ 必须拒 ----
 # 两跑同一断言：③ 真 ps（祖先链可读 ⇒ 确定是自己）；③b 伪造 ps（祖先链**不可读** ⇒ 不可判定）。
 # ③b 是 QA 的 SELF_KILLED 场景：判不了就放行 = fail-open ⇒ 自身 pane 被回收。此处必须红变绿。
+C09_OTHER="$OTHER"; export C09_OTHER
 C09_SELF_DRIVER="$T4_CACHE_DIR/c09-self.sh"
 cat > "$C09_SELF_DRIVER" <<'EOS'
 #!/usr/bin/env bash
 # F1 自 pane 负控驱动：在目标 pane **内部**执行 close（调用者进程树挂在 pane_pid 下）
 exec >"$C09_SELF_OUT" 2>&1
-cd "$C09_FX" || exit 9
+cd "${C09_OTHER:-$C09_FX}" || exit 9
 NAO_TERMINAL=tmux NAO_QA_FAKE_ROSTER="$(cat "$C09_ROSTER_FILE")" NAO_SKILLS="$C09_FX" NAO_TASKS_STATE="$C09_FX/.none.md" \
-  bash "$C09_FX/.agents/scripts/nao-fleet.sh" close --task "$C09_TASK" qa
+  TGT="${C09_TARGET:-qa-$C09_TASK@todo}"
+  command -v tmux >/dev/null 2>&1 && tmux select-pane -t "${TMUX_PANE:-}" -T "π - $TGT - $(basename "$PWD")" >/dev/null 2>&1 || true
+  bash "$C09_FX/.agents/scripts/nao-fleet.sh" close "$TGT"
 printf '\n__RC__=%s\n' "$?"
 EOS
 chmod +x "$C09_SELF_DRIVER"
@@ -344,7 +347,7 @@ chmod +x "$C09_FAKEBIN/ps"
 
 c09_self_drill() {  # $1=标签(③/③b) $2=任务号后缀 $3=PATH 前缀（空=真 ps）
   local label="$1" task="$2" pathpfx="$3"
-  local name="qa-$task" p roster out rc sendenv
+  local name="qa-$task@todo" p roster out rc sendenv
   c09_next_sess
   if ! p="$(stage_pane "$name" "$C09_SESS")"; then
     t4_bad "AC3$label: 隔离 server 内建 pane 失败（环境限制）"
@@ -354,7 +357,7 @@ c09_self_drill() {  # $1=标签(③/③b) $2=任务号后缀 $3=PATH 前缀（�
   printf '[{"name":"%s","id":"%s","status":"idle","cwd":"%s","tmuxPane":"%s"}]' \
     "$name" "$name" "$OTHER" "$p" > "$roster"
   out="$T4_CACHE_DIR/c09-self-$task.out"; rm -f "$out"
-  sendenv="C09_SELF_OUT='$out' C09_FX='$FX_N' C09_ROSTER_FILE='$roster' C09_TASK=$task"
+  sendenv="TMUX='$C09_TMUX_REAL' TMUX_PANE='$p' C09_SELF_OUT='$out' C09_FX='$FX_N' C09_ROSTER_FILE='$roster' C09_TASK=$task C09_TARGET='$name'"
   [ -n "$pathpfx" ] && sendenv="PATH='$pathpfx':\$PATH $sendenv"
   t09 send-keys -t "$p" "$sendenv bash '$C09_SELF_DRIVER'" Enter >/dev/null 2>&1 || true
   rc=""
@@ -396,7 +399,7 @@ else
   C09_R4="[{\"name\":\"$C09_NAME4\",\"id\":\"$C09_NAME4\",\"status\":\"idle\",\"cwd\":\"$OTHER\",\"tmuxPane\":\"$C09_P4\"}]"
   t4_info "不可判定负控：ps 不可读 + \$TMUX_PANE=%9（与目标 $C09_P4 不撞号）⇒ 必须放行"
   T4_OUT=""; T4_ERR=""; T4_RC=0
-  t4_run_in_dir "$FX_N" env PATH="$C09_FAKEBIN:$PATH" NAO_TERMINAL=tmux TMUX="$C09_TMUX_REAL" TMUX_PANE="%9" \
+  t4_run_in_dir "$OTHER" env PATH="$C09_FAKEBIN:$PATH" NAO_TERMINAL=tmux TMUX="$C09_TMUX_REAL" TMUX_PANE="%9" \
     NAO_SKILLS="$FX_N" NAO_TASKS_STATE="$FX_N/.none.md" NAO_QA_FAKE_ROSTER="$C09_R4" \
     bash "$FX_N/.agents/scripts/nao-fleet.sh" close --task T509V qa
   t4_assert_eq "0" "$T4_RC" "AC3④: 不可判定且不撞号 ⇒ close 放行（rc=0）"

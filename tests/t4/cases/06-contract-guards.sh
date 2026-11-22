@@ -944,10 +944,15 @@ for b3guard in "" "default"; do
     t4_assert_contains "$err" "须显式 --session" "B3④ 缺参给可执行指路"
   else
     err="$(cd "$T4_ROOT" && "${B3_CLEAN_ENV[@]}" bash .agents/scripts/nao-fleet.sh cleanup --session "$b3guard" 2>&1 >/dev/null)"; rc=$?
-    t4_assert_eq "2" "$rc" "B3④ herdr cleanup --session default ⇒ rc=2（BR9）"
-    t4_assert_contains "$err" "≠default" "B3④ default 拒绝点名原因"
+    # T554 反转：default 由「拒绝」改为「放行 + 破坏性门槛」——无 --force ⇒ 打印影响面 + rc=2 零动作
+    t4_assert_eq "2" "$rc" "B3④ herdr cleanup --session default 无 --force ⇒ rc=2（放行但零动作）"
+    t4_assert_contains "$err" "将停止 session=default，影响" "B3④ default 打印影响面"
+    t4_assert_not_contains "$err" "≠default" "B3④ 旧「≠default」拒绝文案已退场"
+    t4_assert_eq "0" "$(grep -cE '^(herdr|tmux) .*session (stop|delete)( |$)' "$B1_LOG" || true)" "B3④ default 零拆场动作"
   fi
-  t4_assert_eq "0" "$(grep -cE '^(herdr|tmux) ' "$B1_LOG" || true)" "B3④ herdr cleanup 守卫先于一切后端调用（桩 0 命中）"
+  if [ -z "$b3guard" ]; then
+    t4_assert_eq "0" "$(grep -cE '^(herdr|tmux) ' "$B1_LOG" || true)" "B3④ 缺参守卫先于一切后端调用（桩 0 命中）"
+  fi
 done
 
 # ---- B2（#96 二期）：session-start —— tmux 幂等无操作 / herdr 守卫（--session 必填 · ≠default）----
@@ -1073,7 +1078,7 @@ t4_assert_eq "2" "$(grep -cE "printf 'NAO_TERMINAL=(tmux|herdr)" "$T4_ROOT/tests
   "P2③ 测试基座：be_fleet_handles 两后端都显式给 NAO_TERMINAL（不靠默认值）"
 t4_assert_eq "" "$(t4_scan_nao_terminal_default_probe "$CASES_DIR")" \
   "P2③ 全部用例：默认值探针块外 0 处 unset / env -u / 空串 NAO_TERMINAL ⇒ 无任何用例在 unset 下跑生产路径"
-t4_assert_eq "38" "$(ls -1 "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" "P2③ 扫描面 = 全部 38 个用例文件（不是子集；T545 增 cases/33 · #124 增 cases/34 · #126 增 cases/35 · Q8 增 cases/36 · #146 增 cases/37 · #151 增 cases/38 · #139 增 cases/39）"
+t4_assert_eq "39" "$(ls -1 "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" "P2③ 扫描面 = 全部 39 个用例文件（编号到 40，11 号为空；T554 增 cases/40；T545/33 · #124/34 · #126/35 · Q8/36 · #146/37 · #151/38 · #139/39）"
 t4_assert_eq "2" "$(grep -l 'default-value-probe BEGIN' "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" \
   "P2③ 默认值探针块白名单 = 2 个文件（cases/06 默认值段 · cases/28 B1① 反向断言）"
 # 负控：块外注入 unset ⇒ 必被扫到（并点名行号与形态）

@@ -23,16 +23,18 @@ fi
 LAB="$T4_CACHE_DIR/lab30-$$"; mkdir -p "$LAB"
 cp -r "$T4_ROOT/.agents" "$LAB/.agents" || { t4_bad "夹具复制 .agents 失败"; t4_exit; }
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
-NAME="rd-fe@$(basename "$LAB")"
+NAME="rd-fe(T1)"
 
 BE_CACHE_ROOT="$T4_CACHE_DIR"
 be_init "$LAB" "lab" || { t4_bad "be_init 失败"; t4_exit; }
 be_ensure_scene || { t4_bad "be_ensure_scene 失败"; t4_exit; }
 
-# ---- ① 幽灵 pane：label 在、前台是 shell（无 agent 条目）----
-GHOST="$(be_new_pane "$LAB")"
+# ---- ① 幽灵 pane：先在目标 ws 拉起（v2 同名判重只看目标 ws），再把前台换成交互 shell ----
+be_run_fleet "$LAB" ensure --task T1 rd-fe
+t4_assert_eq "0" "$BE_RC" "夹具：ensure 拉起 $NAME"
+GHOST="$(be_pane_by_name "$NAME")"
 t4_assert_ne "" "$GHOST" "夹具：幽灵 pane 建立（$GHOST）"
-be_set_name "$GHOST" "$NAME" "$(basename "$LAB")" || t4_bad "夹具：幽灵 pane label 写入失败"
+be_run "$GHOST" "bash"
 t4_assert_eq "$NAME" "$(be_pane_label "$GHOST")" "夹具：label 命中 $NAME（幽灵态的前提）"
 
 be_run_fleet "$LAB" status
@@ -42,7 +44,7 @@ t4_assert_not_contains "$BE_OUT" "✓ rd-fe" "① status 不得把幽灵 pane �
 t4_assert_contains "$BE_OUT" "不可投递" "① 幽灵 pane 判不可投递（BR7 无条目 ⇒ 保守拒）"
 
 # ---- ② ensure：不得静默跳过（不判「已在运行」）----
-be_run_fleet "$LAB" ensure "rd-fe@$LAB"
+be_run_fleet "$LAB" ensure --task T1 rd-fe
 t4_assert_eq "0" "$BE_RC" "② ensure rc=0（失败只进计数，D3）"
 # 设计（B2）：幽灵 pane **可寻址**时复用并重跑 agent（而不是新建）；关键是**不得**走「已在运行 ⇒ 跳过」。
 t4_assert_contains "$BE_ERR_ANSI" "幽灵 pane / stale" "② 显式点名幽灵/stale（label 命中 ≠ 在线）"
@@ -51,18 +53,18 @@ t4_assert_not_contains "$BE_OUT" "已在运行（pane label + 结构化事实命
   "② 不得走「已在运行 ⇒ 跳过」分支（那会把没起过的会话当已起）"
 t4_assert_contains "$BE_OUT" "（成功 1 / 跳过 0 / 失败 0）" "② 摘要计成功 1（复用该 pane 重跑，不是跳过）"
 be_run_fleet "$LAB" status
-t4_assert_contains "$BE_OUT" "--name $NAME" "② 复用重跑后 status 判在线（--name 证据；幽灵已被修好）"
+t4_assert_contains "$BE_OUT" "$NAME" "② 复用重跑后 status 判在线（幽灵已被修好）"
 
 # ---- ③ 反向对照：同一 label 换成 pi（agent 齐备）⇒ 在线 ----
 be_teardown >/dev/null 2>&1 || true
 be_ensure_scene || { t4_bad "③ 重置场失败"; t4_exit; }
-LIVE="$(be_new_pane "$LAB")"
-be_fixture_session "$LIVE" "$NAME" "$(basename "$LAB")" || t4_bad "③ 夹具：在线 pane 身份写入失败"
+be_run_fleet "$LAB" ensure --task T1 rd-fe
+t4_assert_eq "0" "$BE_RC" "③ 夹具：ensure 拉起在线 $NAME"
 be_run_fleet "$LAB" status
 t4_assert_eq "0" "$BE_RC" "③ status rc=0"
-t4_assert_contains "$BE_OUT" "--name $NAME" "③ 在线 pane 判「--name $NAME」（对照成立）"
+t4_assert_contains "$BE_OUT" "$NAME" "③ 在线 pane 判「$NAME 在线」（对照成立）"
 t4_assert_not_contains "$BE_OUT" "幽灵 pane" "③ 在线 pane 不得被误判幽灵"
-be_run_fleet "$LAB" ensure "rd-fe@$LAB"
+be_run_fleet "$LAB" ensure --task T1 rd-fe
 t4_assert_contains "$BE_ERR_ANSI" "已在运行" "③ 在线时 ensure 判「已在运行」（与②形成反向对照）"
 
 # ---- ④ 静态：身份交叉校验（label ∧ argv --name）----

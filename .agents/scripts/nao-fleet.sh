@@ -4570,7 +4570,7 @@ cmd_close() {
   if [[ "$target" == subagent-* ]]; then
     die "拒绝回收 $target：这是 pi-subagents 子代理会话（subagent-*），其生命周期不归 nao 回收（请用 pi-subagents 的 stop / retention 管理）"
   fi
-  local name repo cls bus pane pids st tgt a best="" bestc="" is_resident=1 card_role="" card_path="" cr cp croot k
+  local name repo cls bus pane pids st tgt="" a best="" bestc="" is_resident=1 card_role="" card_path="" cr cp croot k
   local pout="" p_kind="" p_role="" p_task="" p_scope="" p_num="" parsed=0 legacy=0 exact="" role="" kindc=""
   local anchor="" roster_ok=0 fallback_repo="" scope="" base_name=""
   local -a name_cwds=() scoped_cwds=() cands=() cands_in=() cw_uniq=()
