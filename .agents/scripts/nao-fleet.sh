@@ -1630,8 +1630,8 @@ check_backend_premise() {
         printf '  ! 端前提行未给出可比对的后端声明：%s:%s（若该行与终端后端无关，可忽略；或在 AGENTS.md 中删去该行的「运行前提」字样以免被纳入比对）—— 实现默认 = %s（%s 的唯一赋值点）\n' \
           "$rel" "$n" "$actual" "nao-fleet.sh"
       elif [[ "$decl" == "tmux" ]]; then
-        printf '  ! 端前提声明残留 tmux：%s:%s 声明默认后端 = tmux，但本版**已移除 tmux 后端**（唯一后端 = %s）—— 改声明为「运行前提（仅 pi · 默认 herdr）」\n' \
-          "$rel" "$n" "$actual"
+        printf '  ! 端前提声明不一致：%s:%s 声明默认后端 = tmux，而本版**已移除 tmux 后端**（唯一后端 = %s，见 %s 的唯一赋值点）—— 改声明为「运行前提（仅 pi · 默认 herdr）」\n' \
+          "$rel" "$n" "$actual" "nao-fleet.sh"
       else
         printf '  ! 端前提声明不一致：%s:%s 声明默认后端 = %s，而实现默认 = %s（%s 的唯一赋值点）—— 改声明或改实现，同一事实勿双源\n' \
           "$rel" "$n" "$decl" "$actual" "nao-fleet.sh"
@@ -3639,6 +3639,7 @@ cmd_status() {
   nsub="$(subagent_in_field)"
   (( nsub > 0 )) && printf '  · 另有 %d 个子代理会话（subagent-*）· 生命周期由 pi-subagents 管理，nao 不回收\n' "$nsub"
   # 无标签 pi pane：**不列**（herdr 无标题契约、pane 可无 label 且可属用户自己的 agent；幽灵 pane 已单列）
+  return 0
 }
 
 # ---------------------------------------------------------------------------

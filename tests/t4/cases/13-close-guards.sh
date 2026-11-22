@@ -1,51 +1,46 @@
 #!/usr/bin/env bash
-# 用例 13 —— close 的前提闸门与末段判定（T529 收窄后）
+# 用例 13 —— close 的前提闸门与末段判定（T555 纯 herdr 化后）
 #
-# PRD：docs/prds/2026-10-27-strict-tmux-pi.md（§七 AC1/AC4）· ADR `docs/adr/2026-10-27-strict-tmux-pi.md`
+# PRD：docs/prds/2026-11-22-herdr-only.md（AC3/AC4）· ADR `docs/adr/2026-11-22-herdr-only.md`
 # 被测对象：.agents/scripts/nao-fleet.sh
-#   · 入口 require_tmux：非 tmux ⇒ rc=3 单行提示（含 `tmux new -s nao`），无副作用（不建 session/pane/lock）
-#   · cmd_close 末段：tmux 内 + 名册可用且为空 + 无任何句柄 ⇒ 「未运行（无需回收）」rc=0
+#   · 旧调用面 fail loud：`NAO_TERMINAL=tmux` ⇒ rc=2 + 单行 stderr（点名「已移除」+ herdr 指路），
+#     命令未执行（不建 session/pane/lock，零副作用）
+#   · herdr 前提：`HERDR_ENV`/`HERDR_SESSION` 缺 ⇒ exit 3 单行提示（命令未执行）
+#   · cmd_close 末段：herdr 内 + pane list 空 + 名册空 + 无任何句柄 ⇒ 「未运行（无需回收）」rc=0
 #   · --force 不改变末段判定；「无法确认在线状态」分支已随 T529 退役（静态 grep 归零）
 #
 # 断言编号 ↔ 依据：
-#   ① AC1 非 tmux 跑 close ⇒ rc=3（前提不满足 ⇒ 命令未执行）
-#   ② AC1 同场景 stdout 无输出（提示走 stderr）、且不含「未运行（无需回收）」（无副作用谎报）
-#   ③ AC1 提示 = 单行且含 `tmux new -s nao`
+#   ① AC3 旧后端变量跑 close ⇒ rc=2（用法守卫 ⇒ 命令未执行）
+#   ② AC3 同场景 stdout 无输出（提示走 stderr）、且不含「未运行（无需回收）」（不谎报结果）
+#   ③ AC3 提示 = 单行且点名「已移除」+ 唯一后端 herdr（可断言文案）
 #   ④ AC4 静态：`nao-fleet.sh` 内 `grep -c '无法确认在线'` = 0（T523 分支已删）
 #   ⑤ AC2 静态：宿主阶梯删除面 grep = 0（xdg-terminal-exec/hyprctl/swaymsg/xdotool/wmctrl/screen_*）
-#      **2026-11-10 #96 二期 B1 订正**：`NAO_TERMINAL` 已由 PM 设计**改作终端后端开关**
-#      （tmux|herdr，三期 P2 起**默认 herdr**），不再是「终端模拟器选择」⇒ 从本判据的交替式中移出，
-#      另加一条「旧宿主阶梯取值域（screen/xdg/hypr/…）仍为 0」把原语义钉住。
-#   ⑥ AC4 tmux 内 + 名册可用且为空 + 无句柄 ⇒ rc=0 + 「未运行（无需回收）」（不过度矫正为恒失败）
+#      （#96 B1 起 `NAO_TERMINAL` 是后端开关；T555 起只用于拒绝旧值）
+#   ⑥ herdr 前提：无 `HERDR_ENV`/`HERDR_SESSION`（BE_FLEET_NO_HANDLES=1）⇒ rc=3（命令未执行）
+#   ⑥ AC4 herdr 内 + pane list 空 + 名册空 + 无句柄 ⇒ rc=0 + 「未运行（无需回收）」（不过度矫正为恒失败）
 #   ⑦ AC4 --force 不改变末段：rc 与 ⑥ 逐值一致、仍含「未运行（无需回收）」
 #
 # BR6 hermetic：一律派生名 `close --task <唯一号> qa`（禁裸 `close qa` —— 本机测试进程自身标题即
 #   `π - qa - <repo>`，裸名会命中调用者自身 pane 而落到 F1「拒绝回收」分支，rc=1 但**原因不同**）。
 #   唯一号含 $$ 保证隔离。夹具全部落 $T4_CACHE_DIR；只读仓库、不写工作区、不实拉 / 不实回收任何进程。
-#   tmux 句柄用**不存在的假 socket**（`/tmp/nao-t4-c13-*`）：所有 tmux 调用由机制自身 2>/dev/null 兜底，
-#   不接触调用者的真 server（T516 血训：不裸 tmux）。
+#   后端场用 `tests/t4/fixtures/herdr-double`（确定性替身 + 私有 XDG 根），不碰真 herdr/用户 default。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
+source "$T4_ROOT/tests/t4/lib-backend.sh"
 
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
 C13_T="T4C13$$"                                      # 唯一任务编号（--task 合法字符集）
-C13_TMUX="/tmp/nao-t4-c13-$$,1,0"                    # 假 $TMUX：过入口闸门，但无 server 可连
 TASKS_NONE="$T4_CACHE_DIR/c13-none.md"               # 不存在 ⇒ 跳过 tasks-state 闸门（不污染本题证据）
 EMPTY_PI="$(mktemp -d "$T4_CACHE_DIR/c13-pi.XXXXXX")"  # 空 PI dir ⇒ intercom_list_json 失败
 MARK="未运行（无需回收）"
 
-# ---- 前置探测：⑥⑦ 能力门（tsx 名册探针）；缺失 ⇒ t4_degrade（BR7）----
-PI_AGENT_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
-tsx_ok=""
-if [ -f "$PI_AGENT_DIR/npm/node_modules/tsx/dist/cli.mjs" ] && command -v node >/dev/null 2>&1; then tsx_ok=1; fi
-
-# ---------------------------------------------------------------- ①②③ 非 tmux ⇒ exit 3
-t4_run_in_dir "$T4_ROOT" env -u TMUX NAO_TERMINAL=tmux \
+# ---------------------------------------------------------------- ①②③ 旧后端变量 ⇒ exit 2
+t4_run_in_dir "$T4_ROOT" env NAO_TERMINAL=tmux \
   PI_CODING_AGENT_DIR="$EMPTY_PI" NAO_TASKS_STATE="$TASKS_NONE" \
   timeout 60 bash "$FLEET" close --task "$C13_T" qa
-t4_assert_eq "3" "$T4_RC" "① 非 tmux 跑 close ⇒ rc=3（前提不满足，命令未执行）"
+t4_assert_eq "2" "$T4_RC" "① 旧后端变量跑 close ⇒ rc=2（用法守卫，命令未执行）"
 t4_assert_eq "" "$T4_OUT" "② 同场景 stdout 为空（提示只走 stderr，不谎报结果）"
 t4_assert_not_contains "$T4_OUT" "$MARK" "② 同场景不得报「$MARK」"
-t4_assert_contains "$T4_ERR" "tmux new -s nao" "③ stderr 含可操作提示「tmux new -s nao」"
+t4_assert_match "$T4_ERR" '已移除 tmux 后端.*herdr' "③ stderr 点名「已移除 tmux 后端」并指路 herdr（唯一后端）"
 t4_assert_eq "1" "$(printf '%s\n' "$T4_ERR" | grep -c .)" "③ 提示恰为单行（可复制，不刷屏）"
 
 # ---------------------------------------------------------------- ④⑤ 静态归零
@@ -66,30 +61,32 @@ for _v in ghostty ptyxis; do
   rm -f "$_fx"
 done
 
-# ---------------------------------------------------------------- ⑥⑦ tmux 内末段（名册可用且为空）
-if [ "$tsx_ok" = "1" ]; then
-  C13_FX="$T4_CACHE_DIR/fx13-$$"
-  rm -rf "$C13_FX"; mkdir -p "$C13_FX"
-  cp -r "$T4_ROOT/.agents" "$C13_FX/.agents" || t4_blocked "用例 13 夹具复制 .agents 失败"
-  cat > "$C13_FX/.agents/scripts/intercom-probe.mts" <<'JS'
-// T4 case13 hermetic roster fixture（只读 env；不接触真实 pi-intercom 名册）
-const raw = process.env.NAO_QA_FAKE_ROSTER || "[]";
-process.stdout.write(JSON.stringify({ ok: true, sessions: JSON.parse(raw) }));
-JS
-  c13_close() { # 透传额外 fleet 参数（如 --force），恒以派生名收尾
-    t4_run_in_dir "$C13_FX" env NAO_TERMINAL=tmux TMUX="$C13_TMUX" NAO_SKILLS="$C13_FX" \
-      NAO_TASKS_STATE="$TASKS_NONE" NAO_QA_FAKE_ROSTER='[]' \
-      timeout 60 bash "$C13_FX/.agents/scripts/nao-fleet.sh" close "$@" --task "$C13_T" qa
-  }
-  c13_close
-  t4_assert_eq "0" "$T4_RC" "⑥ tmux 内 + 名册可用且为空 + 无句柄 ⇒ rc=0（真离线不误判）"
-  t4_assert_contains "$T4_OUT" "$MARK" "⑥ 同场景 stdout 含「$MARK」"
-  C13_RC_PLAIN="$T4_RC"
-  c13_close --force
-  t4_assert_eq "$C13_RC_PLAIN" "$T4_RC" "⑦ --force 不改变末段判定（rc 逐值一致 = $C13_RC_PLAIN）"
-  t4_assert_contains "$T4_OUT" "$MARK" "⑦ --force 下 stdout 仍含「$MARK」"
-else
-  t4_degrade "缺 tsx / node（$PI_AGENT_DIR/npm/node_modules/tsx）⇒ ⑥⑦ 能力降级（默认豁免、full 计分；BR7）"
-fi
+# ---------------------------------------------------------------- ⑥⑦ herdr 前提与末段（空场 = 真离线）
+PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
+LAB="$T4_CACHE_DIR/fx13-$$"
+rm -rf "$LAB"; mkdir -p "$LAB"
+cp -r "$T4_ROOT/.agents" "$LAB/.agents" || t4_blocked "用例 13 夹具复制 .agents 失败"
+BE_CACHE_ROOT="$T4_CACHE_DIR"
+be_init "$LAB" "lab" || { t4_bad "be_init 失败"; t4_exit; }
+be_ensure_scene || { t4_bad "be_ensure_scene 失败"; t4_exit; }
 
+c13_close() { # 透传额外 fleet 参数（如 --force），恒以派生名收尾
+  NAO_QA_FAKE_ROSTER='[]' be_run_fleet "$LAB" close "$@" --task "$C13_T" qa
+}
+
+# ⑥a 前提：不注入后端句柄 ⇒ HERDR_ENV/HERDR_SESSION 缺 ⇒ exit 3（命令未执行，单行提示）
+BE_FLEET_NO_HANDLES=1 be_run_fleet "$LAB" close --task "$C13_T" qa
+t4_assert_eq "3" "$BE_RC" "⑥ herdr 前提：缺 HERDR_ENV/HERDR_SESSION ⇒ rc=3（命令未执行）"
+t4_assert_contains "$BE_ERR_ANSI" "需要 herdr pane" "⑥ 前提提示点名「需要 herdr pane」（可操作，不静默）"
+
+# ⑥b 末段：pane list 空 + 名册空 + 无任何句柄 ⇒ 「未运行（无需回收）」rc=0
+c13_close
+t4_assert_eq "0" "$T4_RC" "⑥ herdr 内 + pane list 空 + 名册空 ⇒ rc=0（真离线不误判）"
+t4_assert_contains "$T4_OUT" "$MARK" "⑥ 同场景 stdout 含「$MARK」"
+C13_RC_PLAIN="$T4_RC"
+c13_close --force
+t4_assert_eq "$C13_RC_PLAIN" "$T4_RC" "⑦ --force 不改变末段判定（rc 逐值一致 = $C13_RC_PLAIN）"
+t4_assert_contains "$T4_OUT" "$MARK" "⑦ --force 下 stdout 仍含「$MARK」"
+
+be_teardown >/dev/null 2>&1 || true
 t4_exit

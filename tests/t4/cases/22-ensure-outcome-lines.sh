@@ -18,11 +18,7 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
 
-BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
-if [ "$BE_NAME" = "tmux" ]; then
-  command -v tmux >/dev/null 2>&1 \
-    || t4_skip "环境缺少 tmux（tmux 后端需真隔离 socket 构造成功/跳过夹具）"
-fi
+BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
 BASH_BIN="$(command -v bash)"
 REAL_TMUX="${NAO_T22_REAL_TMUX:-$(command -v tmux || true)}"
 LAB="$T4_CACHE_DIR/lab22-$$"
@@ -113,16 +109,10 @@ BEFORE="$(pane_ids)"
 run_fleet ensure "arch@$LAB"
 t4_assert_eq "0" "$T4_RC" "AC1 成功路径 rc=0（T4_ERR=$(printf '%s' "$T4_ERR" | head -1)）"
 t4_assert_eq "1" "$(launch_lines)" "AC1 成功 ⇒ 恰 1 行 [$BE_NAME] 已拉起"
-if [ "$BE_NAME" = "tmux" ]; then
-  t4_assert_contains "$T4_OUT_ANSI" \
-    "[tmux] 已拉起 arch-designer @ $LAB（layout=main-row2）" \
-    "AC1 成功行：name（core@fleet）@ repo（layout=…）"
-else
   # herdr 结果行形态（BR1 只钉 tmux 逐字）：name @ repo（+ pane=…），**没有** layout 段
   t4_assert_contains "$T4_OUT_ANSI" "[herdr] 已拉起 arch-designer @ $LAB" \
     "AC1 herdr 成功行形态：name（core@fleet）@ repo（无 layout 段）"
   t4_assert_not_contains "$T4_OUT_ANSI" "layout=" "AC1 herdr 成功行不含 tmux layout 字段"
-fi
 t4_assert_eq "1" "$(summary_lines)" "AC1 摘要恰一行（BR5）"
 t4_assert_contains "$(summary_text)" "（成功 1 / 跳过 0 / 失败 0）" \
   "AC1 摘要三类计数 = 1/0/0"
@@ -155,26 +145,15 @@ run_fleet ensure --task T2 "qa@$LAB"
 T539_FAIL_NAME=""
 t4_assert_eq "0" "$T4_RC" "AC3 失败路径 rc 仍为 0（BR4）"
 t4_assert_eq "0" "$(launch_lines)" "AC3 失败 ⇒ 0 行 [tmux] 已拉起（零假行，BR2）"
-if [ "$BE_NAME" = "tmux" ]; then
-  t4_assert_contains "$T4_ERR_ANSI" "pane 创建失败" "AC3 失败诊断 warn ①在位（pane 创建失败）"
-  t4_assert_contains "$T4_ERR_ANSI" "已跳过该 pane" "AC3 失败诊断 warn ②在位（不合并）"
-  t4_assert_eq "1" "$(grep -cF -- 'pane 创建失败' <<< "$T4_ERR_ANSI" || true)" \
-    "AC3 失败诊断 warn 恰 1 条（不是每个目标重复）"
-else
   t4_assert_contains "$T4_ERR_ANSI" "pane run 失败" "AC3 herdr 失败诊断 warn 在位（pane run 失败，指名 pane/name）"
   t4_assert_eq "1" "$(grep -cF -- 'pane run 失败' <<< "$T4_ERR_ANSI" || true)" \
     "AC3 herdr 失败诊断 warn 恰 1 条（不是每个目标重复）"
-fi
 t4_assert_eq "1" "$(summary_lines)" "AC3 摘要恰一行（BR5）"
 t4_assert_contains "$(summary_text)" "（成功 0 / 跳过 0 / 失败 1）" \
   "AC3 摘要三类计数 = 0/0/1"
-if [ "$BE_NAME" = "tmux" ]; then
-  t4_assert_eq "$BEFORE" "$(pane_ids)" "AC3 失败不新增 pane"
-else
   # herdr：pane 先建后注入，run 失败时**保留**该 pane（fail loud 不自动 kill，见 B2 报告）⇒ 恰 +1
   t4_assert_eq "$(( $(printf '%s\n' "$BEFORE" | grep -c .) + 1 ))" \
     "$(pane_ids | grep -c .)" "AC3 herdr 失败保留 pane（先建后注入；+1 且不计成功）"
-fi
 
 # ============================================================ AC4 混合：1 成功 + 1 跳过 + 1 失败
 # 跳过来源分后端：tmux 靠标题预置（把 arch pane 改名为 rd-fe）；herdr 靠 label 命中（arch 仍在场）。
@@ -184,22 +163,11 @@ run_fleet ensure --task T1 "arch@$LAB" "rd-fe@$LAB" "rd-be@$LAB"
 T539_FAIL_NAME=""
 t4_assert_eq "0" "$T4_RC" "AC4 混合批次 rc=0（含失败目标，BR4）"
 t4_assert_eq "1" "$(launch_lines)" "AC4 混合 ⇒ 结果行恰 1 条（仅成功目标）"
-if [ "$BE_NAME" = "tmux" ]; then
-  t4_assert_contains "$T4_OUT_ANSI" "[tmux] 已拉起 rd-fe(T1) @ $LAB" "AC4 成功行归 rd-fe(T1)"
-  t4_assert_not_contains "$T4_OUT_ANSI" "[tmux] 已拉起 rd-be" "AC4 失败目标 rd-be 无假成功行"
-  t4_assert_not_contains "$T4_OUT_ANSI" "[tmux] 已拉起 arch-designer" "AC4 跳过目标 arch 无假成功行"
-  t4_assert_contains "$T4_ERR_ANSI" "pane 创建失败" "AC4 失败目标走既有诊断 warn（tmux）"
-else
   t4_assert_contains "$T4_OUT_ANSI" "[herdr] 已拉起 rd-fe(T1) @ $LAB" "AC4 成功行归 rd-fe(T1)（arch 派生已在场 ⇒ 跳过）"
   t4_assert_not_contains "$T4_OUT_ANSI" "已拉起 rd-be" "AC4 失败目标 rd-be 无假成功行"
   t4_assert_not_contains "$T4_OUT_ANSI" "已拉起 arch-designer" "AC4 跳过目标 arch 无假成功行"
   t4_assert_contains "$T4_ERR_ANSI" "pane run 失败" "AC4 失败目标走既有诊断 warn（herdr）"
-fi
-if [ "$BE_NAME" = "tmux" ]; then
-  t4_assert_contains "$T4_ERR_ANSI" "arch-designer2(T1) 已在运行" "AC4 跳过目标走既有跳过 warn（同 role+task 已在）"
-else
   t4_assert_contains "$T4_ERR_ANSI" "arch-designer2(T1) 已在运行" "AC4 跳过目标走既有跳过 warn（herdr：同 role+task 已在）"
-fi
 t4_assert_eq "1" "$(summary_lines)" "AC4 摘要恰一行（BR5）"
 SUM="$(summary_text)"
 t4_assert_contains "$SUM" "（成功 1 / 跳过 1 / 失败 1）" "AC4 三类计数 = 1/1/1"
@@ -207,20 +175,15 @@ read -r _n_s _n_k _n_f <<< "$(sed -nE 's/.*（成功 ([0-9]+) \/ 跳过 ([0-9]+)
 t4_assert_eq "3" "$(( ${_n_s:-0} + ${_n_k:-0} + ${_n_f:-0} ))" \
   "AC4 计数守恒：三类之和 = 目标数 3（BR3）"
 NEWS="$(new_panes "$BEFORE")"
-if [ "$BE_NAME" = "tmux" ]; then
-  t4_assert_eq "1" "$(printf '%s\n' "$NEWS" | grep -c .)" "AC4 混合批次真创建 1 个 pane（只有成功目标）"
-else
   # herdr：成功目标 1 + 失败目标保留 pane 1（跳过目标不建）= 2
   t4_assert_eq "2" "$(printf '%s\n' "$NEWS" | grep -c .)" \
     "AC4h 混合批次 pane 增量 = 2（成功 1 + 失败保留 1；跳过 0）"
-fi
 
 # ============================================================ AC5（三期 P1 · J1/J3/J5）
 #   herdr **不报**空间不足（split 从不失败、pane 可被压到 0 行、resize 静默无效）⇒ rc 不可作判据：
 #   ① J1 小空间（替身 rect ⇒ 40×8）：只 warn（rc 仍 0）+ 摘要计成功；
 #   ② 0 尺寸 pane（rect 高=0，读不了内容）：计 SPAWN_FAIL（不半启动：无成功行 + 摘要失败 1）；
 #   ③ J3 静态：herdr 实现区不出现 tmux 布局算式字样（带变异负控证明判据不空转）。
-if [ "$BE_NAME" = "herdr" ]; then
   SPACE_STATE="$BE_CFGROOT/herdr/sessions/$BE_SESSION/double-state.json"
   set_rect() { # <cols> <rows>
     node -e '
@@ -274,9 +237,6 @@ fs.writeFileSync(p,JSON.stringify(st));' "$SPACE_STATE" "$1" "$2"
   sed -i '/^# >>> term-facade-herdr BEGIN/a x=184  # 变异：tmux 布局容量常量混入 herdr 区' "$LAB/mut-herdr-region2.sh"
   t4_assert_contains "$(t4_scan_term_herdr_forbidden "$LAB/mut-herdr-region2.sh")" "184" \
     "J3 变异负控：184（tmux 容量常量）混入 herdr 区必被点名"
-else
-  t4_note backend-gate "J1/J3/J5 空间判据是 herdr 专有面（tmux 侧 split-window 自带失败信号，见用例 25 的宽度算式）"
-fi
 
 # ============================================================ P2-2（第二轮 QA）：J5 文档指针静态核
 #   缺陷类：warn 指向「docs/INSTALL.md 的某节」，但那一节根本不存在 ⇒ 用户照指路找不到东西（形式绿）。

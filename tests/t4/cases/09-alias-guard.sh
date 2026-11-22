@@ -19,7 +19,7 @@ source "$T4_ROOT/tests/t4/lib-backend.sh"
 
 t4_require_cmd node
 
-BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
+BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
 PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
 LAB="$T4_CACHE_DIR/lab09-$$"; mkdir -p "$LAB"
 BE_CACHE_ROOT="$T4_CACHE_DIR"
@@ -176,7 +176,6 @@ t4_assert_contains "$T4_OUT" "未运行（无需回收）" "AC3 回归: 输出�
 # tmux：撞号负控/自 pane 双驱动建立在一_pane id server 局部命名空间_上 —— 该缺陷类在 herdr 侧
 #   **结构上不存在**（key 恒为 (session, pane_id)，无裸 id 比较）⇒ 该组 tmux 专有；
 #   herdr 侧按同一语义给出等价组（见下），不是静默跳过。
-if [ "$BE_NAME" = "herdr" ]; then
   t4_note backend-gate "AC3 撞号负控/自 pane 大量 tmux 专有夹具（pane id server 局部命名空间）；herdr 侧用 (session,pane) 语义的等价组覆盖"
   H_PANE="$(be_new_pane "$OTHER")"
   t4_assert_ne "" "$H_PANE" "AC3h 夹具：跨仓目标 pane 建立（$OTHER）"
@@ -213,7 +212,6 @@ if [ "$BE_NAME" = "herdr" ]; then
   fi
   be_kill_pane "$H_PANE2"
   t4_exit
-fi
 
 # ---------------------------------------------------------------- AC3 真回收 + 撞号负控（T530 · tmux）
 # pane id 是 server 局部命名空间（不同 server 首块 pane 都叫 %0）⇒ 任何裸 id 比较都会跨 server 撞号。

@@ -29,11 +29,8 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
 
-BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
-if [ "$BE_NAME" != "herdr" ]; then
-  t4_note backend-gate "真 herdr 整轮（session-start/ensure/status/close/cleanup）在 tmux 后端无对应物；tmux 侧由用例 01/20/22 的隔离 socket 覆盖"
-  t4_exit
-fi
+BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
+  t4_note backend-gate "tmux 面已删除（T555 / ADR 2026-11-22-herdr-only）：唯一后端 = herdr，本组原为 tmux 专有夹具/语义，随后端整组退役；等价覆盖见 herdr 侧断言"
 
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
 BASH_BIN="$(command -v bash)"

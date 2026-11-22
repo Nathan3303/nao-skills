@@ -14,7 +14,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
 
 t4_require_cmd node
-BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
+BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
 PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
 HAS_TABS=0
 [ "$BE_NAME" = "herdr" ] && HAS_TABS=1

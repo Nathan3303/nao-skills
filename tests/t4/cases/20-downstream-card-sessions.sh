@@ -26,11 +26,7 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
 
-BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
-if [ "$BE_NAME" = "tmux" ]; then
-  command -v tmux >/dev/null 2>&1 \
-    || t4_skip "环境缺少 tmux（tmux 后端需真隔离 socket 构造 pane/托管夹具）"
-fi
+BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
 BASH_BIN="$(command -v bash)"
 LAB="$T4_CACHE_DIR/lab20-$$"
 CARDS="$LAB/.agents/prompts"
@@ -180,16 +176,11 @@ run_fleet ensure --card .agents/prompts/code-reviewer.md --task T537
 t4_assert_eq "0" "$T4_RC" "AC1 ensure --card rc=0（T4_ERR=$(printf '%s' "$T4_ERR" | head -1)）"
 P_CR="$(new_panes "$BEFORE" | head -1)"
 t4_assert_ne "" "$P_CR" "AC1① 新 pane 起于调用者宿主窗口（同一 window 内分屏）"
-if [ "$BE_NAME" = "tmux" ]; then
-  t4_assert_eq "$(_be_tmux display-message -p -t "$CALLER" '#{window_id}')" \
-    "$(_be_tmux display-message -p -t "${P_CR:-$CALLER}" '#{window_id}')" "AC1① 新 pane 与调用者同窗口"
-else
   # herdr（二期只做最小放置）：spawn 落在按 scope/会话名命名的 workspace 里，workspace/tab 拓扑归三期
   #   ⇒「与调用者同窗口」本后端不可达；等价判据 = pane 落在本场（同一 herdr session）且 cwd 正确。
   t4_note backend-gate "AC1①「新 pane 与调用者同窗口」是 tmux 布局语义（herdr 二期最小放置：workspace/tab 拓扑归 AC3.1）"
   t4_assert_eq "1" "$(be_panes 2>/dev/null | awk -F'\t' -v p="${P_CR:-none}" '$1==p{n++} END{print n+0}')" \
     "AC1① herdr 侧等价判据：新 pane 属于本场（同一 session）"
-fi
 t4_assert_eq "$LAB" "$(be_pane_cwd "${P_CR:-$CALLER}")" \
   "AC1① 新 pane 工作区 = --card 所属仓（$BASE）"
 t4_assert_eq "code-reviewer(T537)" "$(name_of "$P_CR")" \

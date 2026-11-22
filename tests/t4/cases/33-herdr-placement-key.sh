@@ -15,12 +15,9 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
 
-BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
+BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
 PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
-if [ "$BE_NAME" != "herdr" ]; then
-  t4_note backend-gate "放置键（workspace label）是 herdr 结构面：tmux 无 workspace 概念（落点由宿主窗口/split-window 决定）；命名契约由用例 28 覆盖"
-  t4_exit
-fi
+  t4_note backend-gate "tmux 面已删除（T555 / ADR 2026-11-22-herdr-only）：唯一后端 = herdr，本组原为 tmux 专有夹具/语义，随后端整组退役；等价覆盖见 herdr 侧断言"
 
 FLEET_MAIN="$T4_ROOT/.agents/scripts/nao-fleet.sh"
 LAB="$T4_CACHE_DIR/lab33-$$"

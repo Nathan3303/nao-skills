@@ -35,11 +35,7 @@ REAL_AGENT_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
 # ---- 能力门（B4：后端无关）----
 # tmux 后端需真隔离 socket；herdr 后端用 `tests/t4/fixtures/herdr-double`（确定性替身）。
 source "$T4_ROOT/tests/t4/lib-backend.sh"
-BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
-if [ "$BE_NAME" = "tmux" ]; then
-  command -v tmux >/dev/null 2>&1 \
-    || t4_skip "环境缺少 tmux（tmux 后端需真隔离 socket 证明父 pane 存活 + E2 孤儿 pane）"
-fi
+BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
 PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
 
 # ---- 夹具路径（后端场由 be_init 单点决定）----
@@ -126,35 +122,24 @@ if [ "$TSX_OK" = "1" ]; then
 
   # ---------------------------------------------------------------- T1 汇总行
   R_SUB="$(roster "$(mk_session "$SUB1" "$LAB" "" idle)" "$(mk_session "$SUB2" "$LAB" "" idle)")"
-  if [ "$BE_NAME" = "herdr" ]; then
     # herdr 身份 = pane.label（名册非身份权威，BR3）⇒ 子代理计数夹具改用**带 label 的 pane**。
     A_SUB1="$(be_new_pane "$LAB")"; be_set_name "$A_SUB1" "$SUB1"
     A_SUB2="$(be_new_pane "$LAB")"; be_set_name "$A_SUB2" "$SUB2"
     t4_assert_ne "" "$A_SUB1$A_SUB2" "T1 夹具：两个 subagent-* label pane 建立"
-  fi
   run_fleet "$R_SUB" status
   t4_assert_eq "0" "$RC" "T1 status rc=0"
   t4_assert_contains "$OUT" "另有 2 个子代理会话（subagent-*）· 生命周期由 pi-subagents 管理，nao 不回收" \
     "T1 汇总行逐字措辞 + 计数=2"
-  if [ "$BE_NAME" = "tmux" ]; then
-    t4_assert_not_contains "$OUT" "$SUB1" "T1 不列具体子代理名（subagent-qa-<id>）"
-    t4_assert_not_contains "$OUT" "$SUB2" "T1 不列具体子代理名（subagent-chat-<id18>）"
-  else
     # herdr 的「终端证据异常」按 label 点名（非静默设计）；子代理计数仍走汇总行、不进派生区。
     t4_note backend-gate "T1「子代理名不落任何行」是 tmux 名册隐藏口径；herdr 侧 label 即身份，异常/投递表按 label 点名（非静默）"
     t4_assert_contains "$OUT" "终端证据异常" "T1 herdr 侧子代理 label 归入「终端证据异常」节（点名而非静默）"
-  fi
   t4_assert_match "$OUT" '· qa +未运行' "T1 角色区 qa 不误报在线"
   t4_assert_not_contains "$OUT" "✓ qa" "T1 角色区无「✓ qa」"
 
   # ---------------------------------------------------------------- T7 ensure 前提负控
   # 前提不满足 ⇒ 入口闸门直接 exit 3（不建 pane/lock、不写状态）；子代理在场也绝不构成「已在运行」假成功。
   #   后端各自的「不在终端内」形态：tmux = $TMUX 空；herdr = $HERDR_SESSION 空。
-  if [ "$BE_NAME" = "tmux" ]; then
     BE_FLEET_NO_HANDLES=1 run_fleet "$R_SUB" ensure qa
-  else
-    BE_FLEET_NO_HANDLES=1 run_fleet "$R_SUB" ensure qa
-  fi
   t4_assert_eq "3" "$RC" "T7 负向：不在终端内 ⇒ ensure exit 3（前提不满足，不假成功）"
   t4_assert_not_contains "$OUT" "已在运行" "T7 负向：不得判「已在运行」"
   t4_assert_not_contains "$OUT" "已拉起" "T7 负向：不得报「已拉起」"
@@ -190,29 +175,10 @@ if [ "$TSX_OK" = "1" ]; then
   assert_pane_dead "$P" "T6 父 pane 已被回收"
 
   # ---------------------------------------------------------------- T8 E2 孤儿 pane 非静默（tmux 专有面）
-  if [ "$BE_NAME" != "tmux" ]; then
     t4_note backend-gate "T8「仅被子代理 tmuxPane 认领的孤儿 pi pane」是 tmux 的未归属启发式；herdr 身份 = pane.label（无标题契约面），该态不可达"
-  else
-  ORA="$(be_new_pane "$LAB")"
-  t4_assert_ne "" "$ORA" "T8 夹具：孤儿 pane 建立"
-  be_run "$ORA" "exec \"$STUBBIN/pi\" 600"
-  # 标题刻意设为非契约形态（π - <名> - <仓> 之外）⇒ 归属启发式无法把它映射到会话名
-  _be_tmux set-option -g automatic-rename off >/dev/null 2>&1 || true
-  _be_tmux select-pane -t "$ORA" -T "t8-orphan" >/dev/null 2>&1 || true
-  be_wait_until 50 0.1 bash -c "[ \"\$(_be_tmux display-message -p -t '$ORA' '#{pane_current_command}' 2>/dev/null)\" = pi ]" || true
-  t4_assert_eq "pi" "$(_be_tmux display-message -p -t "$ORA" '#{pane_current_command}' 2>/dev/null)" \
-    "T8 夹具：pane 当前命令为 pi（复制二进制保 comm=pi）"
-  SUB8="subagent-qa-zzz$$"
-  R_E2="$(roster "$(mk_session "$SUB8" "$LAB" "$ORA" idle)")"
-  run_fleet "$R_E2" status
-  t4_assert_contains "$OUT" "无法归属会话名" "T8 E2：仅被子代理 tmuxPane 认领的孤儿 pi pane 仍告警（非静默）"
-  t4_assert_contains "$OUT" "$ORA" "T8 告警点名孤儿 pane"
-  t4_assert_contains "$OUT" "另有 1 个子代理会话" "T8 汇总计数=1"
-  fi
 
   # ---------------------------------------------------------------- T9 前缀边界
   SUBFOO="subagentfoo"; MYSUB="mysubagent-x"; QASUB="qa-subagent-x"
-  if [ "$BE_NAME" = "herdr" ]; then
     t4_note backend-gate "T9 的 roster 前缀边界夹具在 herdr 非身份权威（BR3）⇒ 改用 label 夹具同一组判据（见下）"
     A_FOO="$(be_new_pane "$LAB")"; be_set_name "$A_FOO" "$SUBFOO"
     A_MY="$(be_new_pane "$LAB")";  be_set_name "$A_MY" "$MYSUB"
@@ -231,24 +197,6 @@ if [ "$TSX_OK" = "1" ]; then
     t4_assert_not_contains "$OUT" "pi-subagents" "T9 herdr close --task subagent-x qa 不得命中 subagent- 拒绝面"
     for q in "$A_FOO" "$A_MY" "$A_QA"; do be_kill_pane "$q"; done
     for q in "$A_SUB1" "$A_SUB2"; do be_kill_pane "$q"; done
-  else
-  R_T9="$(roster "$(mk_session "$SUBFOO" "$LAB" "" idle)" \
-                  "$(mk_session "$MYSUB" "$LAB" "" idle)" \
-                  "$(mk_session "$QASUB" "$LAB" "" idle)")"
-  run_fleet "$R_T9" status
-  t4_assert_not_contains "$OUT" "另有" "T9 前缀边界：subagentfoo/mysubagent-x 不入排除面（无汇总行）"
-  t4_assert_contains "$OUT" "$QASUB" "T9 正控：qa-subagent-x 仍列入派生区"
-  run_fleet "$R_T9" close "$SUBFOO"
-  t4_assert_ne "0" "$RC" "T9 close subagentfoo ⇒ rc≠0"
-  t4_assert_contains "$OUT" "未知角色或会话名" "T9 subagentfoo 走通用未知名文案"
-  t4_assert_not_contains "$OUT" "pi-subagents" "T9 subagentfoo 不得被归类为 subagent-*"
-  run_fleet "$R_T9" close "$MYSUB"
-  t4_assert_ne "0" "$RC" "T9 close mysubagent-x ⇒ rc≠0"
-  t4_assert_not_contains "$OUT" "pi-subagents" "T9 mysubagent-x 不得被归类为 subagent-*"
-  run_fleet "$R_T9" close --task subagent-x qa
-  t4_assert_not_contains "$OUT" "pi-subagents" "T9 close --task subagent-x qa 不得命中 subagent- 拒绝面"
-  t4_assert_not_contains "$OUT" "以 subagent- 开头" "T9 同上（check 守卫形态也不得出现）"
-  fi
 else
   t4_degrade "缺 tsx/node（$REAL_AGENT_DIR/npm/node_modules/tsx）⇒ T1–T9 名册注入组能力降级（默认豁免、full 计分）；T10 纯 bash 断言照跑"
 fi

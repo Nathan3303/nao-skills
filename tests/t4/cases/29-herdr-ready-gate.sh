@@ -17,7 +17,7 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
 
-BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
+BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
 PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
 LAB="$T4_CACHE_DIR/lab29-$$"; mkdir -p "$LAB"
 cp -r "$T4_ROOT/.agents" "$LAB/.agents" || { t4_bad "夹具复制 .agents 失败"; t4_exit; }
@@ -27,9 +27,6 @@ nyi() { t4_note backend-gate "$1"; t4_exit; }
 
 # 本用例是 herdr 专有面：tmux 侧没有「agent 状态 / state_change_seq」语义（那里是 5s 标题轮询）。
 #   登记在 `tests/t4/backends/herdr.txt` 的 own 表；tmux 后端跑到它时按后端门控（NOTE 点名，不静默 SKIP）。
-if [ "$BE_NAME" != "herdr" ]; then
-  nyi "就绪门的 state_change_seq / agent 会话证据是 herdr 专有语义；tmux 侧由用例 19 的 5s 标题轮询覆盖"
-fi
 
 BE_CACHE_ROOT="$T4_CACHE_DIR"
 be_init "$LAB" "lab" || { t4_bad "be_init 失败"; t4_exit; }

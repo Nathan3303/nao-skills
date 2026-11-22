@@ -418,16 +418,13 @@ t4_scan_all_server_tail1() { # $1=用例目录
   done
 }
 
-# #96 二期 B1 门面 lint（静态）：业务区**禁**裸后端调用，后端差异只允许出现在两个标记区。
-#   标记区（脚本内注释标记，可多对）：
-#     `# >>> term-impl-tmux BEGIN` … `# <<< term-impl-tmux END`  —— tmux 证据层内部
-#     `# >>> term-facade-herdr BEGIN` … `# <<< term-facade-herdr END` —— herdr 实现内部
-#   另外允许**显式台账**（`<函数名><TAB><B2|B3|B4><TAB>理由`）里的函数：它们仍是 tmux 直调（spawn/close/
-#   布局/check 终端前提），迁移归 B2/B3/B4；台账随批次**只减不增**（t4_verify_term_ledger 断言）。
-#   判据：命令行位 `tmux|herdr`（与 t4_scan_host_pane_refs / t4_scan_herdr_bare_calls 同一前缀集，不另造正则）；
-#   `command -v tmux|herdr` / `t4_require_cmd` 豁免。herdr 额外要求：命中行必须在 herdr 标记区内**且**在唯一入口
-#   `_term_herdr_exec` 函数体内（或整行恰为 `herdr --version` 白名单 —— 纯元数据、不触会话）。
-#   输出 `行号:内容 [标签]`（一行一个）。
+# #96 二期 B1 门面 lint（静态 · T555 收窄）：业务区**禁**裸后端调用。
+#   唯一后端 = herdr（ADR 2026-11-22-herdr-only）：tmux 侧区间/台账分支已随后端删除，
+#   本函数只剩 herdr 判据 —— 命中行必须既在 `# >>> term-facade-herdr` 标记区内、又在唯一入口
+#   `_term_herdr_exec` 函数体内（或整行恰为 `herdr --version` 白名单：纯元数据、不触会话）。
+#   判据：命令行位 `herdr`（前缀集：行首 / `|` / `;` / `&` / `(` / `$(` / `{`）；
+#   `command -v herdr` / `t4_require_cmd herdr` 豁免。输出 `行号:内容 [标签]`（一行一个）。
+#   注：第 2 参（旧 tmux 台账）已无对象，签名保留以兼容调用方（T555 · 台账 baseline = 0）。
 _t4_term_ranges() { # <script> <标记种类> → start<TAB>end
   awk -v k="$2" '
     $0 ~ ("^# >>> " k " BEGIN") { s = NR; next }
@@ -450,46 +447,58 @@ _t4_in_ranges() { # <行号> <ranges> → 0/1
   done <<< "$rs"
   return 1
 }
-t4_scan_term_bare_calls() { # <script> [台账文件]
-  local script="$1" ledger="${2:-}" lnno body trim fname
-  local re='(^|[|;&(]|\$\(|\{)[[:space:]]*(exec[[:space:]]+)?(setsid[[:space:]]+)?(tmux|herdr)([[:space:]]|$)'
-  local allow='(command -v (tmux|herdr)|t4_require_cmd (tmux|herdr))'
+t4_scan_term_bare_calls() { # <script> [旧台账（T555 起不再使用）]
+  local script="$1" lnno body trim
+  local re='(^|[|;&(]|\$\(|\{)[[:space:]]*(exec[[:space:]]+)?(setsid[[:space:]]+)?herdr([[:space:]]|$)'
+  local allow='(command -v herdr|t4_require_cmd herdr)'
   local wl='^[[:space:]]*(exec[[:space:]]+|setsid[[:space:]]+)?herdr[[:space:]]+--version[[:space:]]*$'
-  local tmux_r herdr_r funcs ledger_fns="" herdr_exec
-  tmux_r="$(_t4_term_ranges "$script" term-impl-tmux)"
+  local herdr_r funcs herdr_exec
   herdr_r="$(_t4_term_ranges "$script" term-facade-herdr)"
   funcs="$(_t4_term_func_ranges "$script")"
   herdr_exec="$(awk -F'\t' '$1 == "_term_herdr_exec" { print $2 "\t" $3; exit }' <<< "$funcs")"
-  if [ -n "$ledger" ] && [ -f "$ledger" ]; then
-    ledger_fns="$(grep -vE '^[[:space:]]*(#|$)' "$ledger" | cut -f1)"
-  fi
   while IFS= read -r ln; do
     lnno="${ln%%:*}"; body="${ln#*:}"
     trim="${body#"${body%%[![:space:]]*}"}"
     case "$trim" in \#*) continue;; esac
     grep -qE -- "$allow" <<< "$ln" && continue
-    fname="$(awk -F'\t' -v n="$lnno" '$2 <= n && n <= $3 { print $1; exit }' <<< "$funcs")"
-    if grep -qE '(^|[^A-Za-z0-9_])(herdr)([[:space:]]|$)' <<< "$body"; then
-      # herdr：唯一入口 + 白名单（双重判据）
-      if ! _t4_in_ranges "$lnno" "$herdr_r"; then
-        printf '%s:%s [herdr-区外]\n' "$lnno" "$trim"; continue
-      fi
-      if grep -qE -- "$wl" <<< "$trim"; then continue; fi
-      if [ -n "$herdr_exec" ] && _t4_in_ranges "$lnno" "$herdr_exec"; then continue; fi
-      printf '%s:%s [herdr-旁路唯一入口]\n' "$lnno" "$trim"; continue
+    if ! _t4_in_ranges "$lnno" "$herdr_r"; then
+      printf '%s:%s [herdr-区外]\n' "$lnno" "$trim"; continue
     fi
-    _t4_in_ranges "$lnno" "$tmux_r" && continue
-    if [ -n "$fname" ] && [ -n "$ledger_fns" ] && grep -qxF "$fname" <<< "$ledger_fns"; then continue; fi
-    printf '%s:%s [tmux-门面外]\n' "$lnno" "$trim"
+    if grep -qE -- "$wl" <<< "$trim"; then continue; fi
+    if [ -n "$herdr_exec" ] && _t4_in_ranges "$lnno" "$herdr_exec"; then continue; fi
+    printf '%s:%s [herdr-旁路唯一入口]\n' "$lnno" "$trim"
   done < <(grep -nE -- "$re" "$script")
+}
+
+# T555 / AC8 静态 lint：**禁旧 tmux 面复活**（与 t4_scan_term_herdr_forbidden 反向写法）。
+#   命中条件（行级，任一即红）：
+#     ① 命令位 `tmux`：`(^|[|;&(]|\$\()[[:space:]]*(exec )?tmux([[:space:]]|$)`
+#     ② 旧后端赋值字面量：`NAO_TERMINAL=<空白?>=?<空白?>["']?tmux`
+#   白名单（逐条注释，缺任一条即误伤）：
+#     a) 注释行（首个非空字符 `#`）—— 迁移指路「已移除 tmux 后端」只允许写在这里；
+#     b) 名册字段 `"tmuxPane"`（外部 JSON 契约：pi-intercom 探针字段名，不可改）；
+#     c) 宿主句柄名表 `_TERM_HOST_HANDLE_VARS=(TMUX TMUX_PANE TMUX_TMPDIR)`（起 herdr server 前必须清）。
+#   作用域：`.agents/scripts/*.sh` + `tests/t4/run.sh`（**不扫 docs/**：文档必须保留迁移指路）。
+#   输出 `行号:内容`（一行一个）；空输出 = 干净。
+t4_scan_tmux_residue() { # <script>
+  local script="$1" lnno body trim
+  local re='(^|[|;&(]|\$\()[[:space:]]*(exec[[:space:]]+)?tmux([[:space:]]|$)|NAO_TERMINAL[[:space:]]*=[[:space:]]*["'"'"']?tmux'
+  local allow='(tmuxPane|_TERM_HOST_HANDLE_VARS=)'
+  while IFS= read -r ln; do
+    lnno="${ln%%:*}"; body="${ln#*:}"
+    trim="${body#"${body%%[![:space:]]*}"}"
+    case "$trim" in \#*) continue;; esac
+    grep -qE -- "$allow" <<< "$ln" && continue
+    printf '%s:%s\n' "$lnno" "$trim"
+  done < <(grep -nE -- "$re" "$script" || true)
 }
 
 # 台账校验（B1）：① 每行可验（函数真实存在 + 函数体仍含裸后端调用）② 去重 ③ 行数只允许下降（文件头 baseline）
 #   ④ 渲染层函数禁入台账（cmd_status / visible_session_names / pane_cwd_snapshot / running / term_*）。
+#   T555：台账对象（旧 tmux 迁移）已随后端删除 ⇒ baseline = 0、条目 0；机制保留以守「不回暖」。
 t4_verify_term_ledger() { # <script> <台账文件>
-  local script="$1" ledger="$2" base n=0 f owner why body tmux_r herdr_r
+  local script="$1" ledger="$2" base n=0 f owner why body herdr_r
   local funcs; funcs="$(_t4_term_func_ranges "$script")"
-  tmux_r="$(_t4_term_ranges "$script" term-impl-tmux)"
   herdr_r="$(_t4_term_ranges "$script" term-facade-herdr)"
   [ -f "$ledger" ] || { printf '台账缺失: %s\n' "$ledger"; return 0; }
   base="$(sed -n 's/^#[[:space:]]*baseline:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$ledger" | head -1)"
@@ -504,7 +513,7 @@ t4_verify_term_ledger() { # <script> <台账文件>
     if [ -z "$owner" ] || [ -z "$why" ]; then printf '台账条目缺 owner/理由: %s\n' "$f"; fi
     body="$(awk -F'\t' -v n="$f" '$1 == n { print $2 "\t" $3; exit }' <<< "$funcs")"
     if [ -z "$body" ]; then printf '台账条目函数不存在（typo）: %s\n' "$f"; continue; fi
-    if _t4_in_ranges "${body%%$'\t'*}" "$tmux_r" || _t4_in_ranges "${body%%$'\t'*}" "$herdr_r"; then
+    if _t4_in_ranges "${body%%$'\t'*}" "$herdr_r"; then
       printf '台账多余（该函数已在标记区内，应删条目）: %s\n' "$f"
     fi
     if ! sed -n "${body%%$'\t'*},${body##*$'\t'}p" "$script" \
@@ -517,11 +526,11 @@ t4_verify_term_ledger() { # <script> <台账文件>
 }
 
 # herdr 实现区禁字（BR2/BR6 机械兜 + 三期 P1 的 J3 静态证明）：
-#   tmux 句柄与标题字段名都不得出现在 herdr 实现里；tmux 侧的**布局算式**（最小列宽闸门 / main-row2 列差 /
-#   长度常量 137/184）同样不得出现 —— herdr 布局 = tab 拓扑（结构判据），不靠列宽计算（AC3.2 J3）。
+#   宿主句柄名与标题字段名都不得出现在 herdr 实现里（T555：tmux 布局算式 symbols 随后端删除 ⇒
+#   TMUX_MIN_PANE_WIDTH / main_row2_min_col / 137 / 184 已无对象，判据收回句柄与标题两项）。
 t4_scan_term_herdr_forbidden() { # <script>
   local script="$1" rs s e off lnno body
-  local re='TMUX|terminal_title|pane_title|TMUX_MIN_PANE_WIDTH|main_row2_min_col|137|184'
+  local re='TMUX|terminal_title|pane_title'
   rs="$(_t4_term_ranges "$script" term-facade-herdr)"
   [ -n "$rs" ] || { printf 'herdr 实现区标记缺失（# >>> term-facade-herdr BEGIN）\n'; return 0; }
   while IFS=$'\t' read -r s e; do

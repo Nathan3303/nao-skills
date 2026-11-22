@@ -79,17 +79,13 @@ if [ "$GUARD_ONLY" = "1" ]; then
 fi
 
 # ---------------------------------------------------------------- 依赖门槛（AC1.5 第一类 ⇒ SKIP）
-BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法（期望 tmux|herdr|auto）"; t4_exit; }
-case "$BE_NAME" in
-  tmux)  command -v tmux >/dev/null 2>&1 || t4_skip "环境缺少 tmux（后端自检需真 tmux 隔离 socket）" ;;
-  herdr) command -v herdr >/dev/null 2>&1 || t4_skip "环境缺少 herdr（AC1.5 第一类：能力/版本缺失 ⇒ SKIP 并给原因）" ;;
-esac
+BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
+command -v herdr >/dev/null 2>&1 || t4_skip "环境缺少 herdr（AC1.5 第一类：能力/版本缺失 ⇒ SKIP 并给原因）" 
 
 LAB="$T4_CACHE_DIR/be27-$$"
 mkdir -p "$LAB"
 
 # 依赖门槛细节（herdr）：版本 + 协议——不兼容 ⇒ SKIP 并给原因（不静默降级）
-if [ "$BE_NAME" = "herdr" ]; then
   # 最小上下文（仅探元数据，不起 server）：be_guard_session 要求实验根已在 cache 下
   BE_CFGROOT="$LAB/config"; BE_CACHE_ROOT="$T4_CACHE_DIR"
   # 版本探针也走**唯一入口**（#96 步 2b · P3-3：白名单是整行等值，不容忍「捕获写法」）：
@@ -103,7 +99,6 @@ if [ "$BE_NAME" = "herdr" ]; then
   t4_assert_eq "0" "$(printf '%s\n%s\n' "$H_VER" "0.9.1" | sort -V | head -1 | grep -qx '0.9.1' && echo 0 || echo 1)" \
     "依赖门槛①：herdr 版本 ${H_VER} ≥ 0.9.1（依赖边界）"
   t4_assert_eq "22" "$H_PROTO" "依赖门槛②：herdr api schema protocol == 22"
-fi
 
 # ---------------------------------------------------------------- 变异自证：护栏改松 ⇒ 必红并点名
 MUT_LIB="$LAB/mut-lib-backend.sh"
@@ -186,52 +181,31 @@ SOCK_B="${BE_SOCK:-}"; ROOT_B="${BE_CFGROOT:-}"
 #     `$XDG_CONFIG_HOME/herdr/sessions/<会话>/herdr.sock`）；由 `HERDR_SESSION` 反推是**猜目录布局**，
 #     只在 socket 缺失时降级派生。两者都不可判定 ⇒ 红（静默跳过正是本仓反复打的假绿类型）。
 PROD_SOCK=""; PROD_HERDR_SOCK=""
-case "$BE_NAME" in
-  tmux)
-    PROD_SOCK="${TMUX:-}"; PROD_SOCK="${PROD_SOCK%%,*}"
-    [ -n "$PROD_SOCK" ] || PROD_SOCK="/tmp/tmux-$(id -u)/default" ;;
-  herdr)
-    PROD_HERDR_SOCK="${HERDR_SOCKET_PATH:-}"
-    if [ -z "$PROD_HERDR_SOCK" ] && [ -n "${HERDR_SESSION:-}" ]; then
-      PROD_HERDR_SOCK="${XDG_CONFIG_HOME:-$HOME/.config}/herdr/sessions/$HERDR_SESSION/herdr.sock"
-    fi ;;
-esac
+  PROD_HERDR_SOCK="${HERDR_SOCKET_PATH:-}"
+  if [ -z "$PROD_HERDR_SOCK" ] && [ -n "${HERDR_SESSION:-}" ]; then
+    PROD_HERDR_SOCK="${XDG_CONFIG_HOME:-$HOME/.config}/herdr/sessions/$HERDR_SESSION/herdr.sock"
+  fi 
 # 独立判据（**不依赖上面分支是否命中**）：herdr 后端必须拿到非空且真实存在的生产端点
-if [ "$BE_NAME" = "herdr" ]; then
   [ -n "${PROD_HERDR_SOCK:-}" ] || { t4_bad "生产端点不可判定：herdr 后端需要 HERDR_SOCKET_PATH（或可派生的 HERDR_SESSION），实际均空 —— fail loud，不静默跳过"; t4_exit; }
   [ -e "$PROD_HERDR_SOCK" ] || { t4_bad "生产端点不可判定：$PROD_HERDR_SOCK 不存在（stale env？）—— fail loud"; t4_exit; }
   case "$PROD_HERDR_SOCK" in
     "$ROOT_A"/*|"$ROOT_B"/*|"$T4_CACHE_DIR"/*)
       t4_bad "生产端点锚落在实验根内（$PROD_HERDR_SOCK）—— 渗透检查会拿隔离端点自证"; t4_exit ;;
   esac
-fi
-case "$BE_NAME" in
-  tmux) t4_assert_ne "$SOCK_A" "$PROD_SOCK" "锚点：生产 socket ≠ 实验 socket A（未拿隔离端点自证）";
-        t4_assert_ne "$SOCK_B" "$PROD_SOCK" "锚点：生产 socket ≠ 实验 socket B" ;;
-  herdr) t4_assert_ne "$(dirname "$PROD_HERDR_SOCK")" "$ROOT_A/herdr/sessions/$SESS_A" "锚点：生产端点目录 ≠ 实验会话 A 目录（未拿隔离端点自证）" ;;
-esac
+t4_assert_ne "$(dirname "$PROD_HERDR_SOCK")" "$ROOT_A/herdr/sessions/$SESS_A" "锚点：生产端点目录 ≠ 实验会话 A 目录（未拿隔离端点自证）" 
 # 生产端点快照（只读；不连 server）：
 #   tmux  = 生产 server 的 pane 清单（原语义）
 #   herdr = socket 文件的 inode/size + 会话目录条目名（停/删/重建会话都会变；**连接**既有 server
 #           不改 inode ⇒ 不误报。不纳入会话日志 mtime：本 run 自身 pane 就在写它）
 prod_anchor_snapshot() {
-  case "$BE_NAME" in
-    tmux) tmux -S "$PROD_SOCK" list-panes -a -F '#{session_name}:#{pane_id}' 2>/dev/null || true ;;
-    herdr) { stat -c '%i %s' "$PROD_HERDR_SOCK" 2>/dev/null
-             ls -A "$(dirname "$PROD_HERDR_SOCK")" 2>/dev/null | sort; } || true ;;
-  esac
+{ stat -c '%i %s' "$PROD_HERDR_SOCK" 2>/dev/null
+           ls -A "$(dirname "$PROD_HERDR_SOCK")" 2>/dev/null | sort; } || true 
 }
 before_prod="$(prod_anchor_snapshot)"
 
 t4_assert_ne "$SESS_A" "$SESS_B" "隔离：两会话名唯一且不同（含 \$\$ 唯一化）"
 t4_assert_match "$SESS_A" '^nao-t4-27-a-[0-9]+$' "隔离：会话名带 \$\$（跨次/并发不撞名）"
-case "$BE_NAME" in
-  tmux)
-    t4_assert_contains "$SOCK_A" "$LAB/a/" "隔离：实验 socket 在实验根内（不存在裸打生产 server 的写法）"
-    t4_assert_ne "/tmp/tmux-$(id -u)/default" "$SOCK_A" "隔离：实验 socket ≠ 生产默认候选" ;;
-  herdr)
-    t4_assert_ne "$ROOT_A" "$ROOT_B" "隔离：两实验场各自私有 XDG_CONFIG_HOME 根（互不可见）" ;;
-esac
+  t4_assert_ne "$ROOT_A" "$ROOT_B" "隔离：两实验场各自私有 XDG_CONFIG_HOME 根（互不可见）" 
 
 be_ctx a "$SESS_A" || { t4_bad "be_init A 复入失败"; t4_exit; }
 be_start_server >/dev/null || { t4_bad "A server 起不来（$BE_NAME）"; t4_exit; }
@@ -262,57 +236,40 @@ be_ctx a "$SESS_A" >/dev/null || true
 ENVF="$LAB/pane-env-a.txt"
 be_run "$PANE_A" "env > $ENVF" || { t4_bad "A pane 内 env 落盘失败"; t4_exit; }
 be_wait_until 50 0.1 test -s "$ENVF" || { t4_bad "A pane 内 env 未在 5s 内落盘"; t4_exit; }
-case "$BE_NAME" in
-  herdr)
-    t4_assert_eq "0" "$(grep -c '^TMUX' "$ENVF" || true)" \
-      "零渗透①：pane 内 env | grep -c '^TMUX' == 0（TMUX/TMUX_PANE/TMUX_TMPDIR 全清）"
-    t4_assert_eq "$SESS_A" "$(sed -nE 's/^HERDR_SESSION=(.*)$/\1/p' "$ENVF")" \
-      "零渗透②：pane 内 HERDR_SESSION == 期望会话名（未读到别的会话）"
-    t4_assert_eq "$ROOT_A/herdr/sessions/$SESS_A/herdr.sock" \
-      "$(sed -nE 's/^HERDR_SOCKET_PATH=(.*)$/\1/p' "$ENVF")" \
-      "零渗透③：pane 内 HERDR_SOCKET_PATH == 实验根下该会话目录（验收口径：前缀在根内）"
-    t4_assert_eq "$ROOT_A" "$(sed -nE 's/^XDG_CONFIG_HOME=(.*)$/\1/p' "$ENVF")" \
-      "零渗透④：pane 内 XDG_CONFIG_HOME == 私有实验根（唯一被隔离的 XDG 变量）"
-    st="$({ sed -nE 's/^XDG_STATE_HOME=(.*)$/\1/p' "$ENVF"; } || true)"
-    if [ -n "${XDG_STATE_HOME:-}" ]; then
-      t4_assert_eq "$XDG_STATE_HOME" "$st" "零渗透④反向：XDG_STATE_HOME 透传未改（== 调用方值；不得指向实验根，mise 等会写它）"
-    else
-      t4_assert_ne "$ROOT_A" "${st%/}" "零渗透④反向：XDG_STATE_HOME 未被指向实验根（mise 等工具会写它）"
-    fi
-    sockpath="$(sed -nE 's/^HERDR_SOCKET_PATH=(.*)$/\1/p' "$ENVF")"
-    case "$sockpath" in
-      "$ROOT_A/herdr/sessions/$SESS_A/"*) t4_ok "零渗透③：HERDR_SOCKET_PATH 前缀在实验根内（实验根下该会话目录）" ;;
-      *) t4_bad "零渗透③：HERDR_SOCKET_PATH 前缀不在实验根内（实际=$sockpath 期望前缀=$ROOT_A/herdr/sessions/$SESS_A/）" ;;
-    esac
-    ;;
-  tmux)
-    t4_assert_eq "$SOCK_A" "$(sed -nE 's/^TMUX=(.*)$/\1/p' "$ENVF" | cut -d, -f1)" \
-      "零渗透（tmux 对偶）：pane 内 TMUX socket == 隔离 socket（未打用户 server）"
-    ;;
-esac
+  t4_assert_eq "0" "$(grep -c '^TMUX' "$ENVF" || true)" \
+    "零渗透①：pane 内 env | grep -c '^TMUX' == 0（TMUX/TMUX_PANE/TMUX_TMPDIR 全清）"
+  t4_assert_eq "$SESS_A" "$(sed -nE 's/^HERDR_SESSION=(.*)$/\1/p' "$ENVF")" \
+    "零渗透②：pane 内 HERDR_SESSION == 期望会话名（未读到别的会话）"
+  t4_assert_eq "$ROOT_A/herdr/sessions/$SESS_A/herdr.sock" \
+    "$(sed -nE 's/^HERDR_SOCKET_PATH=(.*)$/\1/p' "$ENVF")" \
+    "零渗透③：pane 内 HERDR_SOCKET_PATH == 实验根下该会话目录（验收口径：前缀在根内）"
+  t4_assert_eq "$ROOT_A" "$(sed -nE 's/^XDG_CONFIG_HOME=(.*)$/\1/p' "$ENVF")" \
+    "零渗透④：pane 内 XDG_CONFIG_HOME == 私有实验根（唯一被隔离的 XDG 变量）"
+  st="$({ sed -nE 's/^XDG_STATE_HOME=(.*)$/\1/p' "$ENVF"; } || true)"
+  if [ -n "${XDG_STATE_HOME:-}" ]; then
+    t4_assert_eq "$XDG_STATE_HOME" "$st" "零渗透④反向：XDG_STATE_HOME 透传未改（== 调用方值；不得指向实验根，mise 等会写它）"
+  else
+    t4_assert_ne "$ROOT_A" "${st%/}" "零渗透④反向：XDG_STATE_HOME 未被指向实验根（mise 等工具会写它）"
+  fi
+  sockpath="$(sed -nE 's/^HERDR_SOCKET_PATH=(.*)$/\1/p' "$ENVF")"
+  case "$sockpath" in
+    "$ROOT_A/herdr/sessions/$SESS_A/"*) t4_ok "零渗透③：HERDR_SOCKET_PATH 前缀在实验根内（实验根下该会话目录）" ;;
+    *) t4_bad "零渗透③：HERDR_SOCKET_PATH 前缀不在实验根内（实际=$sockpath 期望前缀=$ROOT_A/herdr/sessions/$SESS_A/）" ;;
+  esac
 
 # ---------------------------------------------------------------- default 不可达（BR9）
-case "$BE_NAME" in
-  herdr)
-    JS_A="$(be_herdr "$SESS_A" session list --json 2>/dev/null)"
-    def_state="$(JS="$JS_A" EXPR='sessions.find(s=>s.default)?.running' json_probe 2>/dev/null)"
-    def_dir="$(JS="$JS_A" EXPR='sessions.find(s=>s.default)?.session_dir' json_probe 2>/dev/null)"
-    t4_assert_eq "false" "$def_state" "default 不可达：私有根下 default == stopped（用户 default 本次视角不可见）"
-    t4_assert_eq "$ROOT_A/herdr" "$def_dir" "default 不可达：私有根的 default 目录在实验根内（结构上碰不到用户会话）"
-    t4_assert_ne "" "$(printf '%s' "$JS_A" | grep -o "$SESS_A" | head -1)" \
-      "default 不可达：私有根会话表里只有自己的会话（无用户会话条目）"
-    ;;
-  tmux)
-    t4_assert_contains "$(tmux -S "$SOCK_A" list-sessions -F '#{session_name}' 2>/dev/null)" "$SESS_A" \
-      "default 不可达：实验 server 内只有本实验会话（隔离 socket 自带）"
-    ;;
-esac
+  JS_A="$(be_herdr "$SESS_A" session list --json 2>/dev/null)"
+  def_state="$(JS="$JS_A" EXPR='sessions.find(s=>s.default)?.running' json_probe 2>/dev/null)"
+  def_dir="$(JS="$JS_A" EXPR='sessions.find(s=>s.default)?.session_dir' json_probe 2>/dev/null)"
+  t4_assert_eq "false" "$def_state" "default 不可达：私有根下 default == stopped（用户 default 本次视角不可见）"
+  t4_assert_eq "$ROOT_A/herdr" "$def_dir" "default 不可达：私有根的 default 目录在实验根内（结构上碰不到用户会话）"
+  t4_assert_ne "" "$(printf '%s' "$JS_A" | grep -o "$SESS_A" | head -1)" \
+    "default 不可达：私有根会话表里只有自己的会话（无用户会话条目）"
 
 # ---------------------------------------------------------------- 孤儿 sweep（P2 缺陷修复）
 # 缺陷现场（PM 实测）：server 用 `setsid` 脱离进程组 ⇒ 用例被中断/失败时 EXIT 钩子杀不掉它，
 #   而 T524 口径「失败保留 cache」⇒ 每次失败留一个常驻 server（比目录泄漏更重）。
 # 三层防护：① 起跑前扫孤儿 ② 失败/中断 EXIT 兜底 ③ 正常拆场。本组按 **effect** 断言，不看 rc。
-if [ "$BE_NAME" = "herdr" ]; then
   t4_assert_eq "no" "$(_be_is_lab_root "$HOME/.config/herdr" && echo yes || echo no)" \
     "孤儿 sweep①：用户 herdr 根结构上不算实验根（判据里根本选不中它）"
   user_before="$(_be_scan_herdr_servers | awk -F'\t' '$3 !~ /nao-t4\./ {print $1}' | sort -u)"
@@ -351,7 +308,6 @@ if [ "$BE_NAME" = "herdr" ]; then
   BE_CACHE_ROOT="$T4_CACHE_DIR"
   be_ctx a "$SESS_A" >/dev/null 2>&1 || true
   be_arm_cleanup
-fi
 
 # ---------------------------------------------------------------- 零残留前置：pane 内长驻进程（拆场应带走）
 printf 'sleep 600\n' > "$LAB/marker-a.sh"
@@ -386,14 +342,8 @@ ok_a=0; kill -0 "$PID_A" 2>/dev/null && ok_a=1
 ok_b=0; kill -0 "$PID_B" 2>/dev/null && ok_b=1
 t4_assert_eq "0" "$ok_a" "零残留③：A pane shell pid 已退出"
 t4_assert_eq "0" "$ok_b" "零残留④：B pane shell pid 已退出"
-case "$BE_NAME" in
-  herdr)
-    t4_assert_eq "0" "$(ls -A "$(be_sessions_dir)" 2>/dev/null | grep -c . || true)" \
-      "零残留⑤：实验根 sessions/ 为空（BR4：stop+delete 后无残留会话场）" ;;
-  tmux)
-    if tmux -S "$SOCK_A" list-sessions >/dev/null 2>&1; then t4_bad "零残留⑤：隔离 socket 上仍有 server"; else t4_ok "零残留⑤：隔离 socket 上无 server 存活"; fi
-    if tmux -S "$SOCK_B" list-sessions >/dev/null 2>&1; then t4_bad "零残留⑤：B 隔离 socket 上仍有 server"; else t4_ok "零残留⑤：B 隔离 socket 上无 server 存活"; fi ;;
-esac
+  t4_assert_eq "0" "$(ls -A "$(be_sessions_dir)" 2>/dev/null | grep -c . || true)" \
+    "零残留⑤：实验根 sessions/ 为空（BR4：stop+delete 后无残留会话场）" 
 after_prod="$(prod_anchor_snapshot)"
 t4_assert_eq "$before_prod" "$after_prod" "default 不可达：生产端点快照 diff 空（tmux=pane 清单 / herdr=socket inode+目录条目；全程未触及生产端点）"
 

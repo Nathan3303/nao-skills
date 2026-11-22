@@ -42,11 +42,7 @@ MUTATION_CHILD="${T519_MUTATION_CHILD:-0}"
 # tmux 后端需真隔离 socket；herdr 后端用 `tests/t4/fixtures/herdr-double`（确定性替身，见其文件头），
 # 不依赖真 herdr/真 pi ⇒ 两种后端都零真会话、零网络。
 source "$T4_ROOT/tests/t4/lib-backend.sh"
-BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
-if [ "$BE_NAME" = "tmux" ]; then
-  command -v tmux >/dev/null 2>&1 \
-    || t4_skip "环境缺少 tmux（tmux 后端需真隔离 socket 构造 pane 归属三态）"
-fi
+BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
 PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
 
 # ---- 夹具路径（后端场由 be_init 单点决定：tmux 隔离 socket / herdr 私有根）----
@@ -159,37 +155,8 @@ t4_assert_ne "" "$P_OTHER" "夹具：他仓派生 pane 建立且身份就绪（p
 # ③ 不可判定归属（两路 cwd 皆无）：**tmux 专有**夹具 —— legacy `nao-*` detached 会话（无标题契约
 #   ⇒ 无 pane cwd）+ 名册无 cwd。herdr 侧该态**结构上不可达**：身份 = pane.label，归属 = pane.cwd，
 #   每个在线 pane 必有 cwd（本仓/他仓两态穷尽）⇒ 该组按后端门控，绝不伪造 third state。
-if [ "$BE_NAME" = "tmux" ]; then
-  t4_note backend-gate "③ 不可判定归属是 tmux 专有夹具（herdr 的 label+cwd 把归属穷尽为本仓/他仓两态）"
-  # 仅 tmux 分支用：隔离 socket 的直连（`-S` 是 #84 采样纪律；herdr 侧不出现该函数）
-  TX() { tmux -S "$BE_SOCK" "$@"; }
-  PANE_LAUNCH="$LAB/pane-title.sh"
-  cat > "$PANE_LAUNCH" <<'SH'
-#!/usr/bin/env bash
-# #90 P3-①：标题只经 argv 传入；进程自己输出 OSC 0 后 exec sleep（不再有 shell prompt 改标题）
-printf '\033]0;%s\007' "$1"
-exec sleep 1800
-SH
-  chmod +x "$PANE_LAUNCH"
-  wait_title() { # <pane_id> <expected> → 0 就绪 / 1 超时（50×0.1s 有界）
-    local p="$1" want="$2" i got
-    for i in $(seq 1 50); do
-      got="$(TX display-message -p -t "$p" '#{pane_title}' 2>/dev/null)"
-      [ "$got" = "$want" ] && return 0
-      sleep 0.1
-    done
-    return 1
-  }
-  TX new-session -d -s "nao-$UNK_NAME" -x 200 -y 50 -c "$LAB" "$PANE_LAUNCH" "legacy-detached" >/dev/null 2>&1 || true
-  P_UNK="$(TX list-panes -t "nao-$UNK_NAME" -F '#{pane_id}' 2>/dev/null | head -1)"
-  t4_assert_ne "" "${P_UNK:-}" "夹具：不可判定会话 pane 建立"
-  wait_title "${P_UNK:-%0}" "legacy-detached" \
-    && t4_ok "夹具：不可判定会话标题 = legacy-detached（非契约，确定性）" \
-    || t4_bad "夹具：不可判定会话标题未在 5s 内就绪（等不到 ⇒ 红）"
-else
   P_UNK=""
   t4_ok "夹具：herdr 侧不建「不可判定归属」pane（该态结构上不可达，见上）"
-fi
 
 if [ "$TSX_OK" = "1" ]; then
   # ② 名册 cwd 与 pane 同为他仓目录；③ 名册条目在但 cwd 为空（pane/名册均无 cwd ⇒ unknown）
@@ -212,21 +179,11 @@ t4_assert_match "$L_OTHER" "^  ~ $OTHER_NAME" "② 他仓会话行走 ~"
 t4_assert_contains "$L_OTHER" "他仓" "② 他仓会话行含「他仓」"
 t4_assert_contains "$L_OTHER" "$OTHER_BASE" "② 他仓会话行点名他仓仓名（$OTHER_BASE）"
 t4_assert_not_contains "$L_OTHER" "close --task" "② 他仓会话整行不含可执行 close --task"
-if [ "$BE_NAME" = "tmux" ]; then
-  L_UNK="$(line_of "$UNK_NAME")"
-  t4_assert_match "$L_UNK" "^  \? $UNK_NAME" "③ 归属不可判定会话行走 ?"
-  t4_assert_contains "$L_UNK" "归属不可判定" "③ 归属不可判定行含「归属不可判定」"
-  t4_assert_not_contains "$L_UNK" "close --task" "③ 归属不可判定整行不含可执行 close --task"
-  # 单仓断言在混合场景的对照（~/? 行只应来自他仓/不可判定两态，恰 2 行）
-  t4_assert_eq "2" "$(printf '%s\n' "$OUT" | grep -cE '^  [~?] ' || true)" \
-    "②③ 混合场景恰有 2 条 ~/? 行（他仓 + 不可判定，各 1）"
-else
   # herdr：归属只有本仓/他仓两态 ⇒ 混合场景恰 1 条 ~ 行、零 ? 行
   t4_assert_eq "1" "$(printf '%s\n' "$OUT" | grep -cE '^  ~ ' || true)" \
     "② 混合场景恰有 1 条 ~ 行（他仓；herdr 无第三态）"
   t4_assert_eq "0" "$(printf '%s\n' "$OUT" | grep -cE '^  \? ' || true)" \
     "③ herdr 侧零 ? 行（归属两态穷尽，不伪造第三态）"
-fi
 OUT_MIXED="$OUT"   # AC5① 基线对照（此时夹具仅 3 个 pane，旧版/新版应逐字一致）
 
 # ============================================================ AC1/AC2/AC4 pane-only（名册不可用）
@@ -246,14 +203,7 @@ L_OTHER_NO="$(line_of "$OTHER_NAME")"
 t4_assert_match "$L_OTHER_NO" "^  ~ $OTHER_NAME" "AC2 名册不可用 pane cwd 在他仓 ⇒ 仍判他仓"
 t4_assert_contains "$L_OTHER_NO" "$OTHER_BASE" "AC2 他仓行点名他仓仓名（$OTHER_BASE）"
 t4_assert_not_contains "$L_OTHER_NO" "close --task" "AC2 他仓 pane 整行不含可执行 close --task"
-if [ "$BE_NAME" = "tmux" ]; then
-  L_UNK_NO="$(line_of "$UNK_NAME")"
-  t4_assert_match "$L_UNK_NO" "^  \? $UNK_NAME" "AC4 两路 cwd 皆无 ⇒ 仍走 ?（fail-closed 未退化）"
-  t4_assert_contains "$L_UNK_NO" "归属不可判定" "AC4 不可判定行含「归属不可判定」"
-  t4_assert_not_contains "$L_UNK_NO" "close --task" "AC4 不可判定整行不给可执行 close --task"
-else
   t4_ok "AC4 herdr 侧无「两路 cwd 皆无」态可构造（pane.cwd 为结构化必有字段；tmux 侧已覆盖 fail-closed）"
-fi
 
 # ============================================================ AC5① 名册正常路径零回归（对固定基线 fixture 逐字等价）
 # 只比**名册可用且 pane/名册一致**的场景（冲突/无名册场景正是 M20261101 要改的行为，不入零回归对照）。
@@ -289,34 +239,9 @@ SUBJ_MD5="$(md5sum < "$SUBJECT" | awk '{print $1}')"
 FIXTURE_HDR_LINES=10
 FIX_BODY_MD5="$(tail -n +$((FIXTURE_HDR_LINES + 1)) "$BASELINE_FIXTURE" 2>/dev/null | md5sum | awk '{print $1}')"
 SUBJ_BODY_MD5="$(tail -n +2 "$SUBJECT" | md5sum | awk '{print $1}')"
-if [ "$TSX_OK" = "1" ] && [ "$BE_NAME" = "tmux" ]; then
-  run_status "$R_MULTI" "$PI_AGENT_DIR" "$BASE_SCRIPT"
-  t4_assert_eq "0" "$RC" "AC5① 基线（fixture $BASELINE_SHA）status rc=0"
-  # P3-2（QA）：FAIL 文案要能直接指导「怎么办」+ 给出定位差异的行，不只两个 md5
-  AC51_MSG="AC5① 名册正常路径：新版 status 输出与 fixture 基线（$BASELINE_SHA）逐字等价（md5 相同）"
-  AC51_HINT="若为有意改动 \`status\` 输出 ⇒ 更新 tests/t4/fixtures/nao-fleet-baseline-<sha>.sh（用**改动前**那一版脚本、新 \`<sha>\` 文件名）并在 PR 说明；见 tests/README.md「用例 19」"
-  if [ "$(printf '%s' "$OUT_MIXED" | md5sum | awk '{print $1}')" = "$(printf '%s' "$OUT" | md5sum | awk '{print $1}')" ]; then
-    t4_ok "$AC51_MSG"
-  else
-    AC51_BASE_OUT="$T4_CACHE_DIR/case19-ac51-baseline.out"
-    AC51_CUR_OUT="$T4_CACHE_DIR/case19-ac51-current.out"
-    printf '%s\n' "$OUT_MIXED" > "$AC51_BASE_OUT" 2>/dev/null || true
-    printf '%s\n' "$OUT" > "$AC51_CUR_OUT" 2>/dev/null || true
-    t4_bad "$AC51_MSG（期望=$(printf '%s' "$OUT_MIXED" | md5sum | awk '{print $1}') 实际=$(printf '%s' "$OUT" | md5sum | awk '{print $1}')）· $AC51_HINT · 两份输出已落 $AC51_BASE_OUT 与 $AC51_CUR_OUT"
-    printf '%s\n' "--- diff -u（前 20 行；左=基线 fixture / 右=当前被测）---"
-    diff -u "$AC51_BASE_OUT" "$AC51_CUR_OUT" 2>/dev/null | head -20 | sed 's/^/    /'
-  fi
-  t4_info "AC5① 对照口径：fixture 整文件 md5=$BASE_MD5 · 正文 md5=$FIX_BODY_MD5 · 被测整文件 md5=$SUBJ_MD5 · 被测正文 md5=$SUBJ_BODY_MD5"
-  if [ "$FIX_BODY_MD5" = "$SUBJ_BODY_MD5" ]; then
-    t4_note baseline-selfequiv "AC5① 本轮为自等价（护栏触发：fixture 正文 == 被测脚本正文）⇒ 该组对照是恒绿同义反复，不得当零回归证据；更新 fixture 请保留旧基线文件并用新 <sha> 文件名"
-  fi
-elif [ "$BE_NAME" != "tmux" ]; then
   # 基线 fixture 是 **tmux 时代**的整脚本（`require_tmux`），herdr 侧无法执行 ⇒ 按后端门控；
   # fixture 存在/非空/来源头三条断言已在上面跑过（后端无关）。
   t4_note backend-gate "AC5① 基线逐字对照以 tmux 为对照载体（fixture = tmux 时代整脚本）；herdr 的零回归由用例 28 的双拼写 md5 + 用例 28 B3 段承担"
-else
-  t4_degrade "缺 tsx/node（$PI_AGENT_DIR/npm/node_modules/tsx）⇒ AC5① 名册正常路径逐字等价对照降级（fixture 存在/非空/来源头三条断言已跑）"
-fi
 
 # ============================================================ AC3 冲突优先级（pane 优先于名册）
 CONFLICT_NAME="qa-T9004"

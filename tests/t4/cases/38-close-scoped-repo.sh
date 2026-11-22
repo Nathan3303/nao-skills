@@ -42,7 +42,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
 
 t4_require_cmd node
-BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
+BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
 PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
 
 if command -v git >/dev/null 2>&1; then
@@ -243,12 +243,8 @@ P_B3="$(stage38 "$RB" "$N_B")" || t4_bad "b3 夹具：他仓 pane 建立失败"
 run38 "$RA" "$(roster "$(rent "$N_B" "$PRB" working)")" "$N_B"
 t4_assert_eq "GREEN" "$(v_busy_refuse "$P_B3")" \
   "b3 不退化（结果层）：忙闲按**他仓**命中 ⇒ rc≠0 +「拒绝回收」+ pane 存活（退化成回落 ⇒ rc=0 且误杀）"
-if [ "$BE_NAME" = "herdr" ]; then
   t4_assert_contains "$T4_ALL" '名册状态=working' \
     "b3 作用域（文案）：拒绝理由指名册状态=working（herdr 第二信号）"
-else
-  t4_note backend-gate "b3 的**判别力**在 tmux 结构上不可达：忙闲闸门按名不按仓（无按仓过滤的忙闲信号）⇒ 本态 tamx 侧只是同结论正控，不退化向由 b3-herdr / a2 承担"
-fi
 kill38 "$P_B3"
 
 # ================================================================ a2 唯一·本仓 + 名册在线但无 pane（不退化断言）
@@ -256,12 +252,7 @@ kill38 "$P_B3"
 run38 "$RA" "$(roster "$(rent "$N_A" "$PRA")")" "$N_A"
 t4_assert_eq "GREEN" "$(v_online_no_pane)" \
   "a2 不退化（结果层·主）：名册在线无句柄 ⇒ rc≠0 且不谎报「未运行」（独立成立）"
-if [ "$BE_NAME" = "tmux" ]; then
-  t4_assert_contains "$T4_ALL" "cwd=$PRA" \
-    "a2 不退化（辅助条 · tmux）：warn 的 cwd 字段 = 采用的本仓 cwd（退化成回落 ⇒ cwd=.）"
-else
   t4_note backend-gate "a2 辅助条在 herdr 结构上不可达：herdr 回收 warning 无 cwd 字段（后端无该信号）⇒ 不退化向由 b3-herdr（结果层）+ tmux 辅助条承担"
-fi
 
 # ================================================================ c 多命中·都在他仓
 # 两条同名同 fleet、cwd 不同（他仓 #2/#3），各配一个 pane ⇒ 必须 die 且**零回收**。
@@ -319,15 +310,9 @@ P_G2A="$(stage38 "$RA" "$N_A")" || t4_bad "g2 夹具：pane#1 建立失败"
 P_G2B="$(stage38 "$RA" "$N_A")" || t4_bad "g2 夹具：pane#2 建立失败"
 N_TGT="$N_A"
 run38 "$RA" "$(roster "$(rent "$N_A" "$PRA")" "$(rent "$N_A" "$PRA")")" "$N_A"
-if [ "$BE_NAME" = "tmux" ]; then
-  t4_assert_eq "0" "$T4_RC" "g2 作用域（rc）：tmux 按标题定位到 1 个 pane ⇒ rc=0"
-  grep -qF '目标歧义' <<< "$T4_ALL" && t4_bad "g2：同仓重复条目不得报「目标歧义」" || t4_ok "g2：同仓重复条目不报「目标歧义」（去重生效）"
-  t4_assert_eq "1" "$((2 - $(alive38 "$P_G2A" "$P_G2B")))" "g2 作用域（pane 存活）：恰回收 1 条（另一条存活）"
-else
   t4_assert_eq "GREEN" "$(v_dup_label_refuse "$P_G2A" "$P_G2B")" \
     "g2 作用域（herdr）：同名 label 2 个 pane ⇒ 不猜（rc≠0 + 零回收 + **理由文本绑定**）"
   t4_note backend-gate "g2 在 herdr 不可判定：同 name 同 cwd 的两个 pane 在 label 层不可区分（后端无 pane-cwd 级歧义消解）⇒ 断言取「不猜」，与 tmux 的「收 1 条」非同形，故分后端写明"
-fi
 kill38 "$P_G2A" "$P_G2B"
 
 
@@ -398,18 +383,9 @@ MUT="$(mut_new 3)" && mut38 "$MUT" '  _TERM_BUSY_WHY="$why"' '  _TERM_BUSY_WHY="
   || t4_bad "负控③ 变异未应用（实现写法已变：忙闲闸门返回行）"
 P_M3="$(stage38 "$RB" "$N_B")"
 mut_run "$MUT" "$(roster "$(rent "$N_B" "$PRB" working)")" "$N_B"
-if [ "$BE_NAME" = "herdr" ]; then
   t4_expect_red "$(v_busy_refuse "$P_M3")" \
     "负控③ h=1 不采用 cwd ⇒ b3 不退化向必红（红点：rc=0 / 他仓 pane 被误杀）"
-else
-  t4_note backend-gate "负控③ 在 tmux 无判别力（忙闲按名不按仓 ⇒ 同一变异仍拒）⇒ 该向的红点只在 herdr；tmux 侧改由 a2 辅助条咬住"
-fi
 kill38 "$P_M3"
-if [ "$BE_NAME" = "tmux" ]; then
-  mut_run "$MUT" "$(roster "$(rent "$N_A" "$PRA")")" "$N_A"
-  t4_assert_eq "GREEN" "$(v_online_no_pane)" \
-    "负控③ a2 结果层与忙闲闸门无关（变异后仍 rc≠0；该向判别力在 herdr b3）"
-fi
 
 # ④ h=0 改 die（无同名记录时派死）⇒ (e) 破坏幂等基线
 MUT="$(mut_new 4)" && mut38 "$MUT" 'mapfile -t name_cwds < <(intercom_cwds_for "$name")' \
@@ -446,7 +422,6 @@ kill38 "$P_M6"
 # ⑦ g2-herdr 的拒绝理由文本被改写（判定不变：仍拒、仍零回收）⇒ g2 必红
 #   为什么必须：g2 旧判据只查「拒绝回收」⇒ 任何拒绝都吃绿（理由换了也绿 = 空转）。
 #   变异只换理由字样，不碰「拒/不拒」的分支，红点只能来自「理由绑不住」。
-if [ "$BE_NAME" = "herdr" ]; then
   PAT38_7='拒绝回收 $name：同名 label 命中 $nrows 个 pane'
   HITS38_7="$(grep -cF -- "$PAT38_7" "$FLEET_SRC" || true)"
   if [ "${HITS38_7:-0}" = "0" ]; then
@@ -463,9 +438,6 @@ if [ "$BE_NAME" = "herdr" ]; then
   t4_expect_red "$(v_dup_label_refuse "$P_M7A" "$P_M7B")" \
     "负控⑦ 拒绝理由文本被改写 ⇒ g2-herdr 必红（断言绑的是理由，不是「任何拒绝」）"
   kill38 "$P_M7A" "$P_M7B"
-else
-  t4_note backend-gate "负控⑦（g2 理由绑定）在 tmux 不可达：tmux 无「同名 label 拒绝」路径（按标题定位到 1 个 pane ⇒ 收 1 条）⇒ 该向只在 herdr 跑"
-fi
 
 t4_assert_eq "$SRC_MD5" "$(md5sum "$FLEET_SRC" | cut -d' ' -f1)" \
   "变异只动副本：夹具脚本 md5 与用例开始时逐字节一致（无残留改写）"
