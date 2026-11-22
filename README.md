@@ -26,20 +26,17 @@ nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，�
 除 pi 之外还需要：
 
 - **pi ≥ 1.4.0** —— 舰队依赖它的多会话能力，版本低了体检直接报红。
-- **终端后端（二选一）** —— 7 个角色会话需要落在终端里：
-  - **herdr ≥ 0.9.1（默认后端）** —— 会话落在 herdr 的专用 session 里，每个角色一个 tab。还需装 pi 集成：`herdr integration install pi`。
-  - **tmux（回退后端）** —— 在**当前窗口**里分屏跑，用法与 0.23 之前完全一致；`export NAO_TERMINAL=tmux` 即可切回。
-  - 两者的完整前提链、空间判据与回退说明见 [docs/INSTALL.md](docs/INSTALL.md) 的「herdr 后端」一节。
+- **herdr ≥ 0.9.1（唯一终端后端）** —— 7 个角色会话落在 herdr 的专用 session 里，每个角色一个 tab。还需装 pi 集成：`herdr integration install pi`。前提链、空间判据与 pin 回旧版的说明见 [docs/INSTALL.md](docs/INSTALL.md) 的「herdr 后端」一节。
 - **Node.js ≥ 18** —— 命令入口是 Node 脚本。
 - **git**（建议顺手装 **GitHub CLI `gh`**）—— 分支、PR、发版都走它；没有 `gh` 时这些步骤降级成手动/本地操作，流程不变。
 
 30 秒自检：
 
 ```bash
-pi --version && node -v && git --version && (herdr --version || tmux -V)
+pi --version && node -v && git --version && herdr --version
 ```
 
-缺了什么都能在第一步装：pi 见 [pi.dev](https://pi.dev)，**herdr** 见 [herdr.dev](https://herdr.dev)（装完还要 `herdr integration install pi`），**tmux**（回退用）走系统包管理器（`brew install tmux` / `apt install tmux`），Node 用 [nvm](https://github.com/nvm-sh/nvm) 或系统包管理器。
+缺了什么都能在第一步装：pi 见 [pi.dev](https://pi.dev)，**herdr** 见 [herdr.dev](https://herdr.dev)（装完还要 `herdr integration install pi`），Node 用 [nvm](https://github.com/nvm-sh/nvm) 或系统包管理器。
 
 ## 它解决什么问题
 
@@ -53,7 +50,7 @@ pi --version && node -v && git --version && (herdr --version || tmux -V)
 
 ## 三步装好
 
-1. **装好上面的前置**（pi / Node / 终端后端：herdr 默认 或 tmux 回退）。
+1. **装好上面的前置**（pi / Node / herdr）。
 
 2. **把机制装进你的项目**（项目级；版本 pin 在仓库里，团队 clone 即得同款）：
 
@@ -78,7 +75,7 @@ pi --version && node -v && git --version && (herdr --version || tmux -V)
 ```bash
 cd 你的项目
 .agents/scripts/nao-fleet.sh check                                    # 体检：exit 0 就能开工（有提示行时加 -v 看明细）
-.agents/scripts/nao-fleet.sh ensure pm arch rd-fe rd-be qa rd-infra uiux    # 拉起 7 个会话（后端见「前置环境」：herdr 默认 / tmux 回退）
+.agents/scripts/nao-fleet.sh ensure pm arch rd-fe rd-be qa rd-infra uiux    # 拉起 7 个会话（终端后端 = herdr，见「前置环境」）
 ```
 
 角色名可以写**别名**或**规范名**（两者等价）：`arch` = `arch-designer`、`infra` = `rd-infra`；上例混用也照常拉起。完整别名见 `.agents/roles.yaml` 或 `nao-fleet.sh --help`。
@@ -125,10 +122,10 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 
 **为什么需要终端后端？** 舰队要把 7 个角色会话放进终端里，且要能可靠地「找回来」与「收掉」。
 
-- **默认（herdr）**：每个角色一个 tab，身份靠结构化事实（pane label + agent 状态）判定，不依赖终端标题；需要 `herdr integration install pi`。
-- **回退（tmux）**：`export NAO_TERMINAL=tmux` 即回到旧行为——分屏布局、靠会话名册与 pane 标题定位、SSH 下同样可用。
+- **唯一后端 = herdr**：每个角色一个 tab，身份靠结构化事实（pane label + agent 状态）判定，不依赖终端标题；需要 `herdr integration install pi` 且命令要在 herdr 的 pane 内执行。
+- **旧的 tmux 后端已在 v0.28.0 移除**：`NAO_TERMINAL=tmux` 会 **rc=2 并给一行指路**（不会静默按 herdr 跑）。还需要 tmux 的话请把 `@nathan33/nao-skill` pin 回 `≤0.27.x`。
 
-两者都要求能 attach 到同一个终端会话；**不能自动回落**（静默换后端会让同一命令在不同机器上跑出不同结果）。
+**不能自动回落**（静默换后端会让同一命令在不同机器上跑出不同结果）—— 所以移除时也选了 fail loud，而不是悄悄换掉。
 
 **它会自己上网查吗？** 会，但有分工：产品经理查同类功能的**产品形态**（功能点、属性、视图、协作方式），架构师对照**业界成熟的架构模式**。两者都必须把来源和「适不适用于本项目」落成文件（`docs/research/`），抓来的网页内容不进聊天记录；技术选型仍只由架构师定。
 
@@ -156,7 +153,7 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 
 | 想看什么 | 去哪看 |
 | --- | --- |
-| 完整安装手册：CodeGraph 资源口径、按需角色 `--card`、tmux 布局、老项目迁移、CI / 离线、完整性判据 | [docs/INSTALL.md](docs/INSTALL.md) |
+| 完整安装手册：CodeGraph 资源口径、按需角色 `--card`、herdr 后端与从 tmux 迁移、老项目迁移、CI / 离线、完整性判据 | [docs/INSTALL.md](docs/INSTALL.md) |
 | 整体架构、分层与设计取舍 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | 派活 / 回执 / 忙闲与回收规矩 | `$NAO_SKILLS/.agents/common/intercom-protocol.md` |
 | 输出格式与回执红线 | `$NAO_SKILLS/.agents/common/output-format.md`、`$NAO_SKILLS/.agents/checklists/comm-templates.md` |

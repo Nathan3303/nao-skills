@@ -10,9 +10,7 @@
 > **模型可选，但有推荐**：舰队推荐配合 **`deepseek-v4.1-flash`**（7 个常驻会话 + 长链路交接，长上下文稳定性与单轮成本更省心）。这不是硬依赖——换成别的模型也能跑，差异在纪律遵守与回执质量。
 
 - **pi（≥ 1.4.0）**：唯一的运行宿主。本机制**只支持 pi**，不为其他编程 Agent（Claude Code / Codex / Cursor 等）提供适配或支持承诺。
-- **终端后端（二选一）**：
-  - **herdr（≥ 0.9.1，0.23 起默认）**：7 个会话落在 herdr 的专用 session 里，每个角色一个 tab。装法见 [herdr.dev](https://herdr.dev)；装完还要 **`herdr integration install pi`**（舰队靠它判「会话是否就绪」）。
-  - **tmux（任意版本，回退）**：7 个会话作为 tmux pane 在当前窗口里分屏拉起；`export NAO_TERMINAL=tmux` 切回。
+- **终端后端 = herdr（≥ 0.9.1，唯一后端）**：7 个会话落在 herdr 的专用 session 里，每个角色一个 tab。装法见 [herdr.dev](https://herdr.dev)；装完还要 **`herdr integration install pi`**（舰队靠它判「会话是否就绪」）。**v0.28.0 起旧 tmux 后端已移除**（`NAO_TERMINAL=tmux` ⇒ `rc=2` + 一行指路，不静默回退）。
 - **Node.js（≥ 18）**：`nao-skill` CLI 与 `nao-fleet.sh` 的转发入口都是 Node 脚本。
 - **git**：任务分支、提交、PR 全靠它；装了 **GitHub CLI（`gh`）** 则额外支持自动开 Issue / PR / Release，没有 `gh` 也能跑，只是这些步骤降级为本地操作。
 
@@ -20,7 +18,7 @@
 
 ```bash
 pi --version                          # 需 ≥ 1.4.0
-herdr --version || tmux -V            # 二选一：herdr ≥ 0.9.1（默认）或 tmux
+herdr --version                       # 需 ≥ 0.9.1（唯一后端）
 node -v                               # 需 ≥ 18
 git --version
 gh --version                          # 可选
@@ -28,9 +26,10 @@ gh --version                          # 可选
 
 不满足时的表现（都是 fail loud，不静默回落）：
 
-- 默认 herdr 但**没装 herdr** ⇒ `check` 打红 `rc=1`（给「装 herdr」与「`export NAO_TERMINAL=tmux` 回退」两条命令）；`ensure` / `status` / `close` ⇒ `exit 3`。
-- 默认 herdr 但**不在 herdr pane 内**（例如你在 tmux 里跑，且 `HERDR_ENV` 未被继承时）⇒ `exit 3` + 一行提示（去 herdr 会话的 pane 内重试，或 `export NAO_TERMINAL=tmux` 回退）。
-- 选了 tmux 后端但不在 tmux 里 ⇒ `exit 3` + 一行提示 `tmux new -s nao`（不建任何窗口、不留副作用）。
+- 没装 herdr ⇒ `check` 打红 `rc=1`（给「装 herdr」一条命令）；`ensure` / `status` / `close` ⇒ `exit 3`。
+- **不在 herdr pane 内**（例如你在 tmux 里跑，且 `HERDR_ENV` 未被继承时）⇒ `exit 3` + 一行提示（去 herdr 会话的 pane 内重试）。
+- **给了已移除的旧后端**（`NAO_TERMINAL=tmux` 或其他值）⇒ `check` / `ensure` / `status` / `close` / `cleanup` 均 **`rc=2`** + 恰一行 stderr（点名「已移除 tmux 后端」+ 迁移指路），PATH 为 `herdr` 桩时 0 命中（零副作用）。
+- `cleanup -S <socket>` ⇒ **`rc=2`** + 指路 `cleanup --session <名>`（`-S` 随 tmux 后端一起移除）。
 - pi 版本低于 1.4.0 ⇒ `check` 该项打红并 `rc=1`。
 
 ## 安装（项目级）
@@ -69,7 +68,7 @@ npx @nathan33/nao-skill plugins install-all         # 装协作插件（多会�
 - **机制包 / 包根**：npm 包 `@nathan33/nao-skill` 的安装目录，会话里用环境变量 `NAO_SKILLS` 指向它。凡是文档里出现 `$NAO_SKILLS/.agents/...` 的路径，都相对包根解析。
 - **shim（转发入口）**：项目里那一个 `.agents/scripts/nao-fleet.sh`，不含机制，只负责找到包内的真脚本并转发。
 - **物化**：`pi install` 把 npm 包内容落盘到 `.pi/npm/` 的过程。这一步需要 pi 与网络，是有意为之的显式动作。
-- **派生会话**：由 `ensure` 在 tmux 里新拉起的会话（例如 `ensure --task T1 rd-be`），任务结束即可回收。
+- **派生会话**：由 `ensure` 在 herdr 里新拉起的会话（例如 `ensure --task T1 rd-be`），任务结束即可回收。
 - **回执**：worker 做完任务后必须发回的结构化结果（`[编号] done(lite|full)`），PM 按它验收。
 
 ## 可选增强：CodeGraph
@@ -192,7 +191,7 @@ repos:
 - 源 = **调用方仓根**的 `.agents/fleet.yaml`：不做向上查找、不自动发现联动仓；在联动仓里 `ensure` 无 manifest 语义（= 单仓行为，已知边界）。
 - 每次命令重新读文件（**无落盘缓存**）：运行期改坏 manifest ⇒ 下一次调用即 fail loud。
 - `status` 对 code scope 同时显示 `·fleet=<slug> ·code=<code>`（manifest 不可读时 `·fleet=?`，显式不可知）；`close <core>@<code>` 的期望仓回落 = manifest 的 code → path（候选 >1 仍拒绝、零回收）。
-- tmux 后端没有 tab 模型 ⇒ 分组只是标签命名空间，**不**追求 tab 物理相邻（herdr 0.9.x 也没有 tab 重排）。
+- herdr 没有 tab 重排 API ⇒ 分组只是 tab label 前缀命名空间，**不**追求 tab 物理相邻。
 
 ## 体检（`check`）的提示面
 
@@ -202,9 +201,9 @@ repos:
 - **暂存改动滞留**：仓库里有超过 `NAO_STASH_WARN_HOURS`（默认 **6**）小时的 `git stash` 时提示 —— 合并后的事实不该长期压在暂存里。当天存取的不会打扰。
 - **卡预算基线**（`-v` 与失败时的完整报告可见）：常驻角色卡最大行数与阈值占比（阈值 `CARD_MAX_LINES`，默认 200）；超阈值只打 `!`，不改 rc。
 
-## herdr 后端（0.23 起为默认后端）
+## herdr 后端（v0.28.0 起为唯一后端）
 
-舰队支持两种终端后端：**`herdr`（0.23 起默认）** 与 `tmux`（回退）。用 `NAO_TERMINAL` 切换：
+`herdr` 是**唯一**终端后端。`NAO_TERMINAL` 仍可显式赋 `herdr`（未设/空串也是 herdr）；给**其他任何值**（包括已移除的 `tmux`）⇒ `rc=2` + 恰一行 stderr 指路。
 
 ```bash
 NAO_TERMINAL=herdr .agents/scripts/nao-fleet.sh status
@@ -217,21 +216,20 @@ NAO_TERMINAL=herdr .agents/scripts/nao-fleet.sh status
 3. 起专用会话：`nao-fleet.sh session-start --session <名>`（清宿主终端句柄 + 起 server + 轮询就绪）。
 4. **在该会话的 pane 内**跑 `ensure`：herdr 后端只在其 pane 内运行（外部调用会 `exit 3`，这是有意的隔离）。
 
-**空间判据**：herdr 不报「空间不足」，所以舰队放置后会量测每个 pane 的 `rect`；小于 `60×10` 会 **warn + 给可执行指路**（调 herdr 的 `[server] headless_cols/headless_rows`、attach 后重排、或切回 tmux），**不中断拉起**；但出现 **0 行/0 列 pane**（实际读不了）会**计入失败**而不是报成功。
+**空间判据**：herdr 不报「空间不足」，所以舰队放置后会量测每个 pane 的 `rect`；小于 `60×10` 会 **warn + 给可执行指路**（调 herdr 的 `[server] headless_cols/headless_rows`、attach 后重排、或换更大窗口后 attach），**不中断拉起**；但出现 **0 行/0 列 pane**（实际读不了）会**计入失败**而不是报成功。
 
-**回退**：`export NAO_TERMINAL=tmux` 一条命令即可回到 tmux 后端（**不删任何文件**）。回退开关会保留**至少 2 个 MINOR 且 ≥90 天**；真要移除时会先发一个 MINOR 的弃用说明，不静默删。
+**从 tmux 迁过来（v0.28.0 破坏性变更）**：
 
-**CI / 自动化固定后端**：在流水线里显式 `export NAO_TERMINAL=tmux`（或 `herdr`），不要依赖默认值 —— 默认值会随版本演进。
+- `NAO_TERMINAL=tmux` ⇒ **`rc=2`** + 一行指路（不会静默改用 herdr）。**还需要 tmux 就 pin 回 `@nathan33/nao-skill@≤0.27.x`**（`pi install -l npm:@nathan33/nao-skill@0.27.0`）。
+- `NAO_TMUX_LAYOUT` / `NAO_TMUX_MAIN_WIDTH` / `NAO_TMUX_MIN_PANE_WIDTH` 三个变量与 `check` 的「tmux 布局」节**整组删除**（布局改由 herdr 的 tab 拓扑决定，不再有几何算式与窄列回退）。
+- `cleanup -S <socket>` **已移除**（`-S` 是 tmux 调用面）⇒ 改用 `cleanup --session <名>`；`-S` 现在是 `rc=2` + 指路。
+- 环境自检里 `herdr --version || tmux -V` 改为只查 `herdr --version`。
+- **CI / 自动化**：不要再固定 `NAO_TERMINAL=tmux`；显式 `NAO_TERMINAL=herdr` 或直接不设。
+- **能力边界（已声明退役面）**：tmux 专有用例 12 / 25 退役（宿主窗口显式寻址、列宽算式）；herdr 侧的放置 / 隔离 / 回收由用例 28–33、37–41 覆盖。
 
-## tmux 布局
+## 旧 tmux 布局去哪了
 
-舰队在你当前窗口内分屏，三种布局：
-
-- **main-row2**（默认）：主会话占左，其余往右分列。
-- **main-col**：其余在右列竖排。
-- **grid**：等大网格。
-
-窗口太窄时 `main-row2` 会**自动回退** `main-col`、仍不够再退 `grid`，并打印带数字的提示（不中断拉起）。用 `NAO_TMUX_LAYOUT` / `NAO_TMUX_MAIN_WIDTH` / `NAO_TMUX_MIN_PANE_WIDTH` 调整，完整参数见 `bash .agents/scripts/nao-fleet.sh --help`。
+`main-row2` / `main-col` / `grid` 三布局、窄列回退与对应三个变量随 tmux 后端一起删除（v0.28.0）。herdr 下没有「在同一窗口里分屏」这个概念：1 仓 = 1 workspace、1 角色 = 1 tab，窗口太窄时该做的是**把窗口/显示器换大**或调 herdr 的 `[server] headless_cols/headless_rows`，而不是切布局。迁移逐条见上一节。
 
 ## 老项目迁移（曾在项目里铺开整套 `.agents/`）
 
