@@ -31,10 +31,8 @@ description: pi-intercom 多会话协作协议（常驻引用）
 - **按需角色会话（`ensure --card`，T537）不入上表**：卡来自**下游项目仓** `.agents/prompts/<role>.md`，会话名 `<role>@<fleet>` / `<role>-<编号>@<fleet>`，属**派生/一次性**语义 —— `status` 在派生节标注「一次性会话 · 下游卡」，`close` 回收时**不弹常驻警告**、且跳过 `tasks-state` active 闸门（在跑 turn 闸门不放宽）。它们不登记 `roles.yaml`，故**不在本表内**；卡即系统提示（完全可信输入），命名与目录约束见 `nao-fleet.sh --help` 与 `README.md`「按需角色会话」一节。
 - **子代理会话不属舰队会话身份模型**：由 pi-subagents 拉起的子代理会话以 `subagent-<agent>-<id>`（无名时 `subagent-chat-<id>`）进入 intercom 名册，但**不属**舰队会话 —— `status` 只对其汇总计数（不列名、不参与在线/turn 判重），`close subagent-*` 显式拒绝（生命周期归 pi-subagents 的 stop/retention，nao 不接管）。
 
-- **判重 / 在线判定**：脚本按 pi 自设的**终端标题**（`π - <会话名> - <仓库名>`）+ `pi-intercom` 名册判在线（**不用 `pgrep --name`**：pi 启动后 argv 被改写为 `pi`，会恒失配）；已运行则跳过并 warn。确需重开加 `--force`。
-- **标题被改写时的 pane 定位**（v0.9.4）：终端标题可被外部改写（实测变为 `pi:c`），此时 `status`/`close`/`ensure` 按三层后备定位 pane：① 标题契约 → ② pi-intercom 名册 `tmuxPane`（注册时读 `$TMUX_PANE`，与标题改名无关，权威）→ ③ 本仓「未被认领 pi pane」唯一兜底。三层均未命中 ⇒ 视为无句柄：`close` 走「未运行（无需回收）」或（名册报在线但无句柄）exit 非 0。`close` 的在跑 turn 判定叠加名册活动状态（thinking / tool:* 等）与 pane 末 12 行状态行双重信号。
-- **运行前提（默认后端 herdr · 回退 tmux；ADR `2026-10-27-strict-tmux-pi` 的「tmux 唯一」部分已被 herdr 默认取代，pi ≥ 1.4.0 与 `exit 3` 语义不变）**：`NAO_TERMINAL` 未设/空串 ⇒ **默认 herdr**（须在 herdr pane 内、`HERDR_SESSION` 有效且 ≠ `default`、protocol 22）；回退 = `export NAO_TERMINAL=tmux`（须在 tmux 会话内：`$TMUX` 非空且 `tmux` 命令可用）。任一端都要求 `pi ≥ 1.4.0`。前提不满足 ⇒ `exit 3`（命令未执行）+ 单行提示（含回退指路，**不自动回落**），**不建 session/pane/lock、不写状态**。`cleanup` 豁免（其正常场景就是非 pane 的隔离实验场）。拉起落点按后端：herdr = 1 workspace/仓 + 1 tab/角色（放置键与 fleet 规则见 ADR `2026-11-17-fleet-identity-source`（前序 `2026-11-13-herdr-workspace-scope-key` 的双键分离原则不变））；tmux = 派生宿主窗口（调用者 pane 所在 window）分屏、显式 `-t @<window_id>`，**失败不假成功**（打印「已拉起」前必先校验 pane 句柄）。两端的完整前提链 / 安装 / 空间判据 / 回退细节见 `README.md`「前置环境」与 `docs/INSTALL.md`「herdr 后端」「tmux 布局」，**此处不复制**。
-- **tmux 布局**：宿主三选一（`NAO_TMUX_LAYOUT`）：默认 `main-row2`（首 pane 全高占左，后续每角色往右开列、每列上下 2 个）；`main-col`（其余在右列竖排）；`grid`（等大网格）。**窄列守卫**：`main-row2` 最窄非主 pane < `NAO_TMUX_MIN_PANE_WIDTH`（默认 30）时自动回退 `main-col`，仍不足再退 `grid`（打印带数字的 warn，**不中断拉起**）。
+- **判重 / 在线判定**：全部取 herdr **结构化事实** —— 身份 = `pane.label`（+ argv `--name` 交叉校验）、归属 = `pane.cwd` / `foreground_cwd`、忙闲 = `agent_status` + `state_change_seq`（权威源 `pane list` / `agent list`）。**不读终端标题**，也**不把宿主终端句柄当证据**（从 tmux shell 起的 herdr server 会把外层句柄渗进 pane）。名册（`intercom-probe.mts`，含 `tmuxPane` 字段）只作 `status -v` 的诊断差异信号。已运行 ⇒ 跳过并 warn；确需重开加 `--force`。`close` 的在跑 turn 判定叠加名册活动状态（thinking / tool:* 等）。
+- **运行前提（仅 pi · 默认后端 = herdr，且 herdr 是唯一后端；ADR `2026-11-22-herdr-only` supersede `2026-10-27-strict-tmux-pi`，pi ≥ 1.4.0 与 `exit 3` 语义不变）**：`NAO_TERMINAL` 未设/空串 ⇒ **herdr**（须在 herdr pane 内、`HERDR_SESSION` 有效、protocol 22）；**其他任何值（含旧回退值 tmux）⇒ stderr 1 行 + `exit 2`（命令未执行）**。前提不满足 ⇒ `exit 3`（命令未执行）+ 单行提示，**不建 session/pane/lock、不写状态**。`cleanup` 豁免（拆场是外部动作，`cleanup --session <名>`；旧 `-S` ⇒ `exit 2` 指路）。拉起落点 = 1 workspace/仓 + 1 tab/角色（放置键与 fleet 规则见 ADR `2026-11-17-fleet-identity-source`），**失败不假成功**（打印「已拉起」前必先校验 pane 句柄）。完整前提链 / 安装 / 空间判据见 `README.md`「前置环境」与 `docs/INSTALL.md`「herdr 后端」，**此处不复制**。
 - **模型规则**：用户未指定则**禁止传 `--model`**，也禁止继承 PM 自身模型。
   显式指定时由 `NAO_MODEL_WHITELIST` 在**命令行入口解析阶段**即校验，
   不命中直接 `die`，无部分拉起；PM 只需如实转达用户 `-m` 指定。
@@ -163,6 +161,6 @@ bash .agents/scripts/nao-fleet.sh check
 - Issue 与 `docs/` 双源（正文抄进 Issue / 状态只留平台）。
 - 未过验收就打 tag / release，或 tag 指向非 main 合并提交。
 - `check` 非 0 仍强行派发。
-- 在 tmux 内拉起前未评估宿主窗口被重排的影响。
+- 拉起舰队前未评估宿主窗口尺寸的影响（herdr 只 warn，不中断；0 尺寸 pane 计失败）。
 - 派发后静默消失（无终态回执）。
 - 改卡不 bump `version` / 不广播变更。

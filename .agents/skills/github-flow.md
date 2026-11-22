@@ -103,7 +103,7 @@ PM 在**受理 / 立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 P
 
 - 版本号：SemVer，PM 按批次范围定（feat→MINOR / fix→PATCH / 破坏性→MAJOR）；项目 `AGENTS.md` 有约定则从之。
 - 门禁：AC 全过 + 验收闭环 + main 门禁全绿 + 工作区干净 + PR 已合并。
-- **发布前置（严格闸门 · 双环境）**：若仓库提供 `test:t4:full:dual` 脚本，发布前须先 `npm run test:t4:full:dual` **rc=0**（**两组**= `$TMUX_PANE` 已设 / `env -u TMUX_PANE`；判据 = **两组 SKIP 计数与 DEGRADE 计数均为 0，且非白名单 NOTE 计数为 0**，`SKIP`/`DEGRADE`/非白名单 `NOTE` 即 FAIL）。仅有 `test:t4:full`（单环境）的仓库退用 `npm run test:t4:full` rc=0；双环境 gate 误红时可临时回落单环境并记台账。
+- **发布前置（严格闸门 · 单后端）**：发布前须 `npm run test:t4:full` **rc=0**（判据 = **SKIP 与 DEGRADE 计数均为 0，且非白名单 NOTE 计数为 0**，任一非零即 FAIL）。T555 起后端唯一（herdr），旧 `test:t4:full:dual` 双环境闸随 tmux 后端删除，**不得**再按「双环境」要求复跑。
 - **优先 `gh`**：`gh release create <tag> --title "vX.Y.Z" --notes-file docs/releases/<version>.md`（**标题口径（强约束）：@.agents/common/release-notes.md** —— 标题仅裸版本号，描述进正文首段）。
 - **`gh release create <tag> --target <短 sha>` 不可用（两次实测：v0.21.0 / v0.21.1）**：会报 `tag_name is not a valid tag` / `target_commitish is invalid`。正确路径 = 先 `git tag -a <tag> -m "<说明>"` → `git push origin <tag>` → `gh release create <tag> --title <裸版本号> --notes-file <file> --verify-tag`（**不要**用 `--target` 指向未 push 的短 sha）。
 - 探测：`gh auth status` 按 **exit code** 判定（`keyring` 警告但 exit 0 **仍可用**，可 `gh api user` 复核）；**不自动 `gh auth login`**（涉用户凭证）。

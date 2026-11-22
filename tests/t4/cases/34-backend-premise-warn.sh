@@ -83,11 +83,11 @@ t4_assert_eq "0" "$(premise_warns)" "A5 一致 + -v：报告里也零端前提 w
 t4_assert_eq "0" "$C34_RC" "A6 一致 + -v：rc=0"
 
 # ============================================================ B 负控①（AC6）：协议改回 tmux 唯一
-# 复刻 v0.23.0 前的旧口径：把声明里的「默认（后端）herdr」改写成「唯一路径」、回退指路改成 tmux-only 措辞。
-#   （两条 sed 都覆盖：`默认后端 herdr` = 协议措辞，`默认 herdr` = AGENTS.md/技能措辞）
-sed -i -e 's/默认后端 herdr/唯一路径/g' -e 's/默认 herdr/唯一路径/g' -e 's/回退 tmux/仅 tmux 会话内/g' "$PROTO"
-t4_assert_eq "1" "$(grep -c '唯一路径.*tmux' "$PROTO" || true)" \
-  "B0 变异自证：夹具协议已含旧口径「唯一路径 … tmux」（判据非空转）"
+# T555：协议已改为「唯一后端 = herdr」⇒ 本组改为**直接注入旧后端声明**（`默认后端 = tmux`），
+#   判据对象 = 「声明 tmux ⇒ warn 点名『已移除』+ 实现来源」。
+sed -i -e 's/默认后端 = herdr/默认后端 = tmux/g' -e 's/默认后端 herdr/默认后端 = tmux/g' "$PROTO"
+t4_assert_eq "1" "$(grep -c '默认后端 = tmux' "$PROTO" || true)" \
+  "B0 变异自证：夹具协议已含旧后端声明「默认后端 = tmux」（判据非空转）"
 t4_assert_eq "0" "$(grep -c '默认\(后端 \)\?herdr' "$PROTO" || true)" \
   "B0b 变异自证：夹具协议已无「默认 … herdr」声明"
 run_check -v
