@@ -46,8 +46,10 @@
 ## 四、门禁与证据
 
 - `bash .agents/scripts/nao-fleet.sh check` —— rc=0；连跑 2 次输出 `diff` 空（effect=0）。
-- `bash tests/t4/run.sh`（单后端全量）—— **39 例 · RESULT: PASS（SKIP=0 · DEGRADE=0 · NOTE=17 全白名单）**。
-- `npm test`（`test:agents` + `test:t4`）—— rc=0（数字见交付回执）。
+- `bash tests/t4/run.sh`（单后端全量）—— **39 例 · 2403 PASS / 0 FAIL · RESULT: PASS（SKIP=0 · DEGRADE=0 · NOTE=17 全白名单）**。
+- `npm test`（`test:agents` + `test:t4`）—— rc=0（同上 2403 PASS / 0 FAIL）。
+- `npm run test:fast` —— rc=0（白名单 14 例 · NOTE=2 白名单）。
+- `npm run test:t4:full`（最终 HEAD）—— rc=0 · `RESULT: PASS（SKIP=0 · DEGRADE=0 · NOTE=17 · NOTE白名单=17）`。
 - 幂等：`tests/t4/run.sh --case 41` 连跑 2 次均 rc=0、PASS 数 49/49。
 - 零敏感值：`grep -rnE '/home/[a-z]+|/Users/|ghp_|sk-|PRIVATE KEY|npm_[A-Za-z0-9]{20,}'` 在改动文件上 0 命中。
 - 静态 lint：`t4_scan_tmux_residue` 对 `.agents/scripts/*.sh` + `tests/t4/run.sh` 全 0；正控（注入 `tmux list-panes` / `NAO_TERMINAL=tmux)` 各命中）与负控（注释迁移提示、`tmuxPane`、宿主句柄名表不红）均在 cases/41 固化。
@@ -68,4 +70,4 @@
 
 ---
 
-- 修订：2026-11-22 首版（T555 实施完成，待 PM 验收）
+- 修订：2026-11-22 终版（含 .agents 文档单后端化 + cases/34 变异锚点订正；HEAD `49dfc7f`）
