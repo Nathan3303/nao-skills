@@ -1328,9 +1328,19 @@ t4_assert_eq "1" "$(printf '%s\n' "$(cat "$B2ST_ST/panes")" | grep -c . || true)
 t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=herdr timeout 60 \
   "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" close "rd-fe2(T1)"
 B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
-t4_assert_eq "0" "$T4_RC" "P2-1② close rd-fe rc=0"
-t4_assert_contains "$B2_ERR" "[fleet] 常驻会话 $B2_RD_FE：" "P2-1② close 提示固定前缀在位（v2 名）"
-t4_assert_contains "$B2_ERR" "本批不再需要该角色时才回收；回收后可用 ensure 重开" "P2-1② close 提示改成「先 close 再 ensure」"
+t4_assert_eq "0" "$T4_RC" "P2-1② close rd-fe2(T1) rc=0（派生）"
+# 常驻 close 的提示语义：另起一个 resident 名（派生名带 task，走 tasks-state 分支，不弹常驻提示）
+b2_reset
+printf 'w1|%s\n' "$B2_WS_LABEL" > "$B2ST_ST/ws"
+printf 'w1:t1|w1|rd-fe2\n' > "$B2ST_ST/tabs"
+printf 'w1:p1|rd-fe2|pi|w1|w1:t1\n' > "$B2ST_ST/panes"
+printf 'w1:p1|idle|3|1|sess-r\n' > "$B2ST_ST/agents"
+t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=herdr timeout 60 \
+  "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" close rd-fe2
+B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+t4_assert_eq "0" "$T4_RC" "P2-1② close 常驻 rd-fe2 rc=0"
+t4_assert_contains "$B2_ERR" "[fleet] 常驻会话 rd-fe2：" "P2-1② close 提示固定前缀在位（v2 名）"
+t4_assert_contains "$B2_ERR" "本批不再需要该角色时才回收；回收后可用 ensure 重开" "P2-1② close 提示与新语义一致"
 t4_assert_not_contains "$B2_ERR" "应 ensure --force 重开" "P2-1② 旧提示「应 ensure --force 重开」已退场"
 # close 后（pane 与空 tab 均已消失）⇒ --force 成功新建（证明上一条提示可执行）
 t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN='idle|1|1|sess-b' \
@@ -1472,14 +1482,15 @@ t4_info "C2② 新期望表：fleet=$LAB_SLUG · 已拉起 $LAUNCH_N_B 条 · bl
 
 # 负控（arch D2 点名）：把默认 tier 改回空 ⇒ 名字丢 @ ⇒ 新期望表必红（证明判据不是同义反复）
 MUT_NEG="$T4_CACHE_DIR/c2-neg-empty-fleet.sh"
-if mutate_file "$LAB/.agents/scripts/nao-fleet.sh" "$MUT_NEG" '    printf '"'"'%s%s\n'"'"' "$role" "$num"' '    printf '"'"'%s%s@x\n'"'"' "$role" "$num"'; then
+if mutate_file "$LAB/.agents/scripts/nao-fleet.sh" "$MUT_NEG" '    printf '"'"'%s%s(%s)\n'"'"' "$role" "$num" "$task"' '    printf '"'"'%s%s(%s)@x\n'"'"' "$role" "$num" "$task"'; then
   t4_assert_ne "$(md5sum < "$LAB/.agents/scripts/nao-fleet.sh")" "$(md5sum < "$MUT_NEG")" \
     "C2② 负控：副本确实把 fleet 写回空（变异锚点有效）"
   : > "$PI_NAMES"
   run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$MUT_NEG" ensure --task NEG rd-be
+  NEG_RC="$T4_RC"
   NEG_BLOB="$(printf '%s\n%s\n' "$T4_OUT_ANSI" "$(cat "$PI_NAMES" 2>/dev/null || true)" | sed -e "s|$LAB|<LAB>|g")"
-  t4_assert_contains "$NEG_BLOB" "rd-be(NEG)@x" \
-    "C2② 负控：builder 变异 ⇒ 名字带 @x（新期望表断言必红）"
+  t4_assert_ne "0" "$NEG_RC" "C2② 负控：builder 变异 ⇒ 名字非法形态 ⇒ ensure rc≠0（新期望表必红）"
+  t4_assert_not_contains "$NEG_BLOB" "rd-be(NEG)" "C2② 负控：变异后不再产出合法新名（判据非空转）"
 else
   t4_bad "C2② 负控变异锚点未命中（用例锚点须跟随实现）"
 fi
@@ -1491,51 +1502,46 @@ fi
 #   修法：相位 1 用 parse 复核 builder 输出，非 OK 即 die（建 pane 之前 ⇒ BR6 零副作用）；
 #   builder 不 die（close/status 也调它）。
 # ============================================================================
-T42="$(printf 'T%.0s' $(seq 1 42))"        # rd-be- + 42 = 48 字符（上限内，必须能起 + 必须可见）
-T43="$(printf 'T%.0s' $(seq 1 43))"        # 49 字符（必须被拒）
-CARD32="$(printf 'c%.0s' $(seq 1 32))"     # 卡 core 恰好 32（卡校验上限）
-SCOPE15="$(printf 's%.0s' $(seq 1 15))"    # 32 + 1 + 15 = 48（合法边界）
-BUD48="$CARD32@$SCOPE15"                   # 32 + '@' + 15 = 48（恒带 fleet 后的合法边界）
-SCOPE16="$(printf 's%.0s' $(seq 1 16))"    # 32 + 1 + 16 = 49（超限）
+T42="$(printf 'T%.0s' $(seq 1 42))"        # rd-be + 42 → name 50（>48，必拒）
+T43="$T42"
+T14="$(printf 'T%.0s' $(seq 1 14))"        # 32 字卡 role + (14) = 48（合法边界）
+T15="$(printf 'T%.0s' $(seq 1 15))"        # 32 + (15) = 49（>48，必拒）
+T16="$(printf 'T%.0s' $(seq 1 16))"        # 32 + (16) = 50（>48，必拒）
+CARD32="$(printf 'c%.0s' $(seq 1 32))"     # 卡 role 恰好 32（role 段上限）
+BUD48="$CARD32($T14)"                      # v2 合法边界：role 32 + (task) = 48
 printf -- '---\nrole: %s\n---\n# 32 字符卡（P2-1 预算边界夹具）\n' "$CARD32" > "$LAB/.agents/prompts/$CARD32.md"
 
 pane_count_b() { "$REAL_TMUX" -S "$SOCK_B" list-panes -a -F '#{pane_id}' 2>/dev/null | wc -l | tr -d ' '; }
 
-# ---- 负控：core 48 + 默认 fleet ⇒ 无法落在 48 内；die + 指路；零副作用 ----
-#   新口径（ADR 2026-11-17 D-4）：名字恒带 @<fleet>，core 48 已无 1 字符给 fleet ⇒ 默认 tier 也救不回。
+# ---- 负控 A：常驻 role+task 使 name > 48 ⇒ fail loud；零副作用 ----
 BEFORE_N="$(pane_count_b)"
-run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task "$T43" rd-be
-t4_assert_ne "0" "$T4_RC" "P2-1 负控A：core 48 + '@' + fleet ⇒ 拒绝（rc≠0）"
-t4_assert_contains "$T4_ERR_ANSI" "默认 tier 名字仍超预算" "P2-1 负控A：die 点名默认 tier 仍超预算（不静默截断到非法）"
-t4_assert_contains "$T4_ERR_ANSI" "core + '@' + fleet 已无法落在 48 内" "P2-1 负控A：die 说明预算关系（core 48 已无 fleet 空间）"
+run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task "$T42" rd-be
+t4_assert_ne "0" "$T4_RC" "P2-1 负控A：rd-be(T×42) = 50 > 48 ⇒ 拒绝（rc≠0）"
+t4_assert_contains "$T4_ERR_ANSI" "name ≤48" "P2-1 负控A：die 点名总长预算（name ≤48）"
 t4_assert_contains "$T4_ERR_ANSI" "该怎么办" "P2-1 负控A：die 给改法（缩短 --task 编号）"
-t4_assert_eq "$BEFORE_N" "$(pane_count_b)" "P2-1 负控A：零副作用（建 pane 之前就 die，pane 数不变）"
+t4_assert_eq "$BEFORE_N" "$(pane_count_b)" "P2-1 负控A：零副作用（建 pane 之前就 die）"
 
-# ---- 负控：卡 core 32 + scope 16 = 49 ⇒ die（两者各自合法，合起来超限）----
+# ---- 负控 B：32 字卡 role + (T×16) = 50 ⇒ 超 role 段/名长；不自动截短 ----
 BEFORE_N="$(pane_count_b)"
 run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" \
-  ensure --card ".agents/prompts/$CARD32.md" --scope "$SCOPE16"
-t4_assert_ne "0" "$T4_RC" "P2-1 负控B：卡 core 32 + scope 16（总名 49）⇒ 拒绝（rc≠0）"
-t4_assert_contains "$T4_ERR_ANSI" "49 字符 > 48" "P2-1 负控B：die 回显当前长度（32+1+16=49）"
-t4_assert_contains "$T4_ERR_ANSI" "显式 fleet" "P2-1 负控B：点明显式 tier（不自动截短）"
+  ensure --card ".agents/prompts/$CARD32.md" --task "$T16"
+t4_assert_ne "0" "$T4_RC" "P2-1 负控B：卡 role 32 + (T×16) = 50 ⇒ 拒绝（rc≠0）"
+t4_assert_contains "$T4_ERR_ANSI" "目标名不可解析" "P2-1 负控B：fail loud 点名目标名不可解析（原因分支）"
+t4_assert_contains "$T4_ERR_ANSI" "role 段含槽位 ≤32（卡）" "P2-1 负控B：回显卡 role 段上限（≤32）"
 t4_assert_eq "$BEFORE_N" "$(pane_count_b)" "P2-1 负控B：零副作用（pane 数不变）"
 
-# ---- 负控C（P3-b）：卡 core 32 + `--task T1` ⇒ core 35 > **32**（卡 core 上限）----
-#   拒绝是正确的，但文案若说成「35 字符 > 48」就是**事实错**（35 并不 > 48），且「缩 scope」是死路
-#   （scope 只占 '@' 之后那段）⇒ 必须按原因分支给文案。
+# ---- 负控 C：32 字卡 role + (T×15) = 49（恰越 1 字符）⇒ 同原因、不同长度 ----
 BEFORE_N="$(pane_count_b)"
 run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" \
-  ensure --card ".agents/prompts/$CARD32.md" --task T1
-t4_assert_ne "0" "$T4_RC" "P2-1 负控C（P3-b）：卡 core 32 + --task T1（core 35）⇒ 拒绝（rc≠0）"
-t4_assert_contains "$T4_ERR_ANSI" "卡会话 core 超上限" "P3-b 负控C：die 点名原因是**卡 core 上限**（不是总长）"
-t4_assert_contains "$T4_ERR_ANSI" "35 字符 > 32" "P3-b 负控C：die 回显 core 长度与正确上限（35 > 32）"
-t4_assert_not_contains "$T4_ERR_ANSI" "35 字符 > 48" "P3-b 负控C：不得把 35 说成「35 字符 > 48」（事实错）"
-t4_assert_not_contains "$T4_ERR_ANSI" "缩短 --fleet/文件值" "P3-b 负控C：不提示缩 fleet（死路：fleet 只占 @ 之后那段）"
+  ensure --card ".agents/prompts/$CARD32.md" --task "$T15"
+t4_assert_ne "0" "$T4_RC" "P2-1 负控C（P3-b）：卡 role 32 + (T×15) = 49 ⇒ 拒绝（rc≠0）"
+t4_assert_contains "$T4_ERR_ANSI" "name ≤48" "P3-b 负控C：回显总长预算（name ≤48）"
+t4_assert_contains "$T4_ERR_ANSI" "role 段含槽位 ≤32（卡）" "P3-b 负控C：同时点名卡 role 段上限（按原因分支）"
 t4_assert_eq "$BEFORE_N" "$(pane_count_b)" "P3-b 负控C：零副作用（pane 数不变）"
 
-# ---- 正控：48 字符边界仍能起（卡 core 32 + 显式 fleet 15）----
+# ---- 正控 A：role 32 + (T×14) = 48 边界 ⇒ 能起 ----
 run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" \
-  ensure --card ".agents/prompts/$CARD32.md" --fleet "$SCOPE15"
+  ensure --card ".agents/prompts/$CARD32.md" --task "$T14"
 t4_assert_eq "0" "$T4_RC" "P2-1 正控A：总名恰 48 字符 ⇒ rc=0（边界不被误拒）"
 t4_assert_contains "$T4_OUT_ANSI" "已拉起" "P2-1 正控A：确实拉起（已拉起行在位）"
 t4_assert_eq "48" "$(printf '%s' "$BUD48" | wc -c | tr -d ' ')" "P2-1 正控A：夹具名字长度确认 = 48"
@@ -1549,10 +1555,11 @@ t4_assert_contains "$T4_OUT_ANSI" "  · $BUD48" \
 
 # ---- 正控 B：同名重复 ensure ⇒ 判 same（名字逐字 = <32 卡 role>@<15 fleet>，不新建）----
 run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" \
-  ensure --card ".agents/prompts/$CARD32.md" --scope "$SCOPE15"
-t4_assert_eq "0" "$T4_RC" "P2-1 正控B：同名重复 ensure rc=0（幂等）"
-t4_assert_contains "$T4_ERR_ANSI" "$CARD32@$SCOPE15 已在运行" \
-  "P2-1 正控B：名字逐字 = <32 卡 role>@<15 fleet>（builder 追加；--scope 弃用别名同档）"
+  ensure --card ".agents/prompts/$CARD32.md" --task "$T14"
+t4_info "P21B rc=$T4_RC err=[$T4_ERR_ANSI]"
+t4_assert_eq "0" "$T4_RC" "P2-1 正控B：同 role+task 重复 ensure rc=0（same 跳过）"
+t4_assert_contains "$T4_ERR_ANSI" "$BUD48 已在运行" \
+  "P2-1 正控B：名字逐字 = <32 role>(<14 字 task>)（v2 边界形态）"
 
 # ============================================================================
 # P3-2 / P3-3①：常驻「裸名 + 带 scope」同场 ⇒ **两条都显示**；显示名走 builder

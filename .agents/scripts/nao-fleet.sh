@@ -5137,9 +5137,20 @@ cmd_ensure() {
       slot=""
       if [[ -z "$card_as" ]]; then
         wsid="${_TERM_PLACE_WS_BY_LABEL[$place]:-}"
-        slot="$(_ensure_pick_num "$wsid" "$CARD_ROLE" "$task" "card")" \
-          || die "ensure 中止：角色槽位已满（$CARD_ROLE 的 2..9 全占；该怎么办：先 close 无用会话再重试）"
-        disp="$(fleet_name_build card "$CARD_ROLE" "$slot" "$task")"
+        # 卡会话同 role+task 已在 ⇒ same（复用名字；相位 2 判重跳过）；否则取空闲槽位
+        if [[ -n "$task" ]]; then
+          disp="$(_ensure_task_name_in_ws "$wsid" "$CARD_ROLE" "$task")"
+        else
+          disp=""
+        fi
+        if [[ -n "$disp" ]]; then
+          slot=""; pout_tmp="$(fleet_name_parse "$disp")"
+          case "$pout_tmp" in "OK "*) IFS=',' read -r _p_kind _p_role _p_task slot <<< "${pout_tmp#OK }" ;; esac
+        else
+          slot="$(_ensure_pick_num "$wsid" "$CARD_ROLE" "$task" "card")" \
+            || die "ensure 中止：角色槽位已满（$CARD_ROLE 的 2..9 全占；该怎么办：先 close 无用会话再重试）"
+          disp="$(fleet_name_build card "$CARD_ROLE" "$slot" "$task")"
+        fi
       fi
       t_names+=("$CARD_ROLE"); t_repos+=("$CARD_REPO"); t_cards+=("$CARD_PATH"); t_roles+=("${CARD_ROLE:-}")
       t_nums+=("$slot"); t_kinds+=("card"); t_labels+=("$place"); t_disps+=("$disp")
