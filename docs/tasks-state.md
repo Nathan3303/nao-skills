@@ -618,6 +618,9 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **T555** | `arch-designer`（ADR）→ `rd-infra` → `qa` | **纯 herdr 化 + 脚本减重**（Issue [#156](https://github.com/Nathan3303/nao-skills/issues/156) · feat · 破坏性） | 2026-11-22 | PRD `docs/prds/2026-11-22-herdr-only.md` AC1–AC10 | `feat/555-herdr-only`（PRD 已落，待 ADR） |
+
+**用户拍板（2026-11-21）**：① **不再支持 tmux，纯 herdr** ② **缩减 `nao-fleet.sh` 体量** ③ 一步一步来（T554 已合并 `f962813` 后再做）④ 睡眠期授权：需决策的事 PM 自行决定，拿不准派 arch 合议。
 （T554 已合并归档 ⇒ 行已清空；终态见下方「已验收 / 已归档」归档墙）
 
 ### T554 验收记录（2026-11-22 · PM · 用户睡眠期自主决策）
