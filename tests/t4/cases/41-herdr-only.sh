@@ -15,9 +15,12 @@
 #   ⑨   退役编号：`--case 12` ⇒ rc=1 + 「用例不存在」（**不得**退化为 PENDING/SKIP）
 #   ⑩   退役面不存在（AC5/AC6）：`tests/t4/backends/`、`run-dual.sh`、`package.json:test:t4:full:dual`、
 #       脚本内 `term-impl-tmux` 区间、run.sh 的 `PENDING|TMUX-ONLY` 概念
-#   ⑪   AC8 静态 lint 正控（必红）：命令位调用 / 原样 `tmux)` 臂 / 比较式 / 单行 case 臂 四形态均命中并给行号
-#   ⑫   AC8 守卫臂白名单双向：真守卫（含「已移除」）放行；改赋值式或摘掉文案 ⇒ 必红
-#   ⑬   AC8 静态 lint 负控（不红）：注释迁移提示 / `command -v tmux` / 注释旧命令 / 名册字段+宿主句柄 / 非 tmux case 臂
+#   ⑪   AC8 静态 lint 正控（必红）：命令位 / 原样 `tmux)` 臂 / 比较式 / 单行 case 臂 / `herdr|tmux)` / `tmux*)` /
+#        声明边界（`case "$TERM" in tmux)` —— P3-2 取「声明」方案，见 lib.sh 注释）
+#   ⑫   AC8 守卫臂白名单（P3-1 双重条件）双向：真守卫（「已移除」+ `exit 2`）放行；
+#        `;; esac # 已移除`（注释穿透）/ 只有文案无 `exit|return 2` / 改赋值式 ⇒ 必红
+#   ⑬   AC8 静态 lint 负控（不红）：注释迁移提示 / `command -v tmux` / 注释旧命令 / 名册字段+宿主句柄 /
+#        非 tmux case 臂（screen）/ `(herdr|tmux)` 正则字面量（`|` 臂判据的边界自证）
 #   ⑭   AC8 正控（真件）：真脚本 + run.sh + 其余 `.agents/scripts/*.sh` 全部 0 命中
 #   ⑮   D3 删除面：脚本无 `NAO_TMUX_LAYOUT|MAIN_WIDTH|MIN_PANE_WIDTH`，check 无「== tmux 布局 ==」节
 #
@@ -146,7 +149,17 @@ t4_assert_ne "" "$(t4_scan_tmux_residue "$NEG41")" "⑪-b2 正控（必红）：
 printf 'case "$BE" in tmux) exec tmux new -s nao ;; esac\n' > "$NEG41"
 t4_assert_ne "" "$(t4_scan_tmux_residue "$NEG41")" "⑪-c 正控（必红）：单行 \`case … in tmux) exec tmux …\` ⇒ 命中"
 
-# ⑫ 守卫臂白名单双向：真守卫（带「已移除」）⇒ 放行；摘掉文案 ⇒ 必红（白名单不是恒放行）
+# ⑪-d 臂前缀带 `|` 且处于 `case … in` 形态 ⇒ 必红（QA P3-1 漏判形态之一）
+printf 'case "$BE" in herdr|tmux) printf x ;; esac\n' > "$NEG41"
+t4_assert_ne "" "$(t4_scan_tmux_residue "$NEG41")" "⑪-d 正控（必红）：\`case … in herdr|tmux)\` ⇒ 命中"
+# ⑪-e glob 臂 `tmux*)` ⇒ 必红（QA P3-1 漏判形态之二）
+printf 'case "$NAO_TERMINAL" in tmux*) printf x ;; esac\n' > "$NEG41"
+t4_assert_ne "" "$(t4_scan_tmux_residue "$NEG41")" "⑪-e 正控（必红）：\`tmux*)\` glob 臂 ⇒ 命中"
+# ⑪-f 声明边界（P3-2 取「声明」方案）：`case "$TERM" in tmux)` 同样红 —— 它本身就是按 tmux 分支
+printf 'case "$TERM" in tmux) : ;; esac\n' > "$NEG41"
+t4_assert_ne "" "$(t4_scan_tmux_residue "$NEG41")" '⑪-f 已声明边界（必红）：`case "$TERM" in tmux)` ⇒ 命中（迁移建议：`command -v tmux`）'
+
+# ⑫ 守卫臂白名单（P3-1：文案 + 真出口 exit/return 2，且先剥注释、截到 `;;`）
 NEG41B="$T4_CACHE_DIR/c41-neg-b.sh"
 sed 's/^    tmux)$/    NAO_TERMINAL=tmux) :/' "$FLEET" > "$NEG41B"
 out="$(t4_scan_tmux_residue "$NEG41B")"
@@ -158,6 +171,23 @@ sed "s/已移除 tmux 后端/旧后端/" "$FLEET" > "$NEG41D"
 out="$(t4_scan_tmux_residue "$NEG41D")"
 t4_assert_ne "" "$out" "⑫-b 正控（必红）：守卫臂摘掉「已移除」文案 ⇒ \`tmux)\` 臂立刻命中（白名单非恒放行）"
 t4_assert_match "$out" '^[0-9]+:tmux\)' "⑫-b 命中点正是守卫臂（行号 + 原文）"
+# ⑫-c 注释穿透回归（QA P3-1 实测假绿）：`;; esac # 已移除` ⇒ 必红
+printf 'case "$BE" in tmux) printf x ;; esac  # 已移除\n' > "$NEG41"
+t4_assert_ne "" "$(t4_scan_tmux_residue "$NEG41")" "⑫-c 正控（必红）：\`;; esac  # 已移除\` 不得穿透白名单（先剥注释再截 \`;;\`）"
+# ⑫-d 只有文案、没有 fail loud 出口 ⇒ 必红（`return 0` 不是守卫）
+cat > "$NEG41" <<'SH'
+case "$NAO_TERMINAL" in
+  tmux) printf '已移除 tmux 后端\n' >&2; return 0 ;;
+esac
+SH
+t4_assert_ne "" "$(t4_scan_tmux_residue "$NEG41")" "⑫-d 正控（必红）：臂体含「已移除」但出口是 \`return 0\` ⇒ 仍红（白名单要求 \`exit|return 2\`）"
+# ⑫-e 真守卫形态（文案 + exit 2）⇒ 放行（白名单做活：防做死导致真件误报）
+cat > "$NEG41" <<'SH'
+case "${NAO_TERMINAL:-}" in
+  tmux) printf '已移除 tmux 后端：唯一后端 = herdr\n' >&2; exit 2 ;;
+esac
+SH
+t4_assert_eq "" "$(t4_scan_tmux_residue "$NEG41")" "⑫-e 负控（不红）：真守卫（「已移除」+ \`exit 2\`）⇒ 白名单放行"
 
 # --- ⑬ 负控（不红）---
 printf '# 迁移提示：旧版可 `command -v tmux` 判断是否装过 tmux（本版已不调用）\n' > "$NEG41"
@@ -170,6 +200,9 @@ printf 'X=1  # 名册字段 "tmuxPane" 是外部契约\n_TERM_HOST_HANDLE_VARS=(
 t4_assert_eq "" "$(t4_scan_tmux_residue "$NEG41")" "⑬-d 负控（不红）：名册字段与宿主句柄名表在白名单内"
 printf 'case "$TERM" in screen) : ;; esac\n' > "$NEG41"
 t4_assert_eq "" "$(t4_scan_tmux_residue "$NEG41")" "⑬-e 负控（不红）：非 tmux 的 case 臂（screen）不误伤"
+# ⑬-f `|` 臂判据的边界自证：`(herdr|tmux)` 正则字面量（不在 case 形态）不红
+printf 'decl="$(printf %%s "$line" | grep -oE "\''默认(后端)?(herdr|tmux)\''" | head -1)"\n' > "$NEG41"
+t4_assert_eq "" "$(t4_scan_tmux_residue "$NEG41")" '⑬-f 负控（不红）：`(herdr|tmux)` 正则字面量不误伤（`|` 只在 `case … in` 形态算臂）'
 rm -f "$NEG41"
 
 # ---------------------------------------------------------------- ⑮ D3 删除面

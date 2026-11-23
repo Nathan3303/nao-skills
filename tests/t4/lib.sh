@@ -471,30 +471,57 @@ t4_scan_term_bare_calls() { # <script> [旧台账（T555 起不再使用）]
 }
 
 # T555 / AC8 静态 lint：**禁旧 tmux 面复活**（与 t4_scan_term_herdr_forbidden 反向写法）。
-#   判据（行级，任一即红 —— T555/QA P2-2 扩形态：旧实现只认「命令位 tmux」与「赋值字面量」，
-#   于是 `tmux)` 臂（其后是 `)` 不匹配命令位）与比较式/单行 case 臂全部漏判 ⇒ 正控自证被架空）：
+#   判据（行级，任一即红；T555/QA P2-2 + P3-1 扩形态）：
 #     ① 命令位 `tmux`：`(^|[|;&(]|$\()[[:space:]]*(exec|setsid)?[[:space:]]*tmux([[:space:]]|$)`
 #     ② 旧后端赋值字面量：`NAO_TERMINAL[ ]*=[ ]*["']?tmux`
-#     ③ 旧后端比较式：`$NAO_TERMINAL`/`${NAO_TERMINAL…}` 与 `tmux` 做 `=`/`==`/`!=` 比较
-#     ④ 旧后端 case 臂：`tmux)`（行首或空白/;/&/|/( 之后）
+#     ③ 旧后端比较式：`$NAO_TERMINAL` / `${NAO_TERMINAL:-…}` 与 `tmux` 做 `=`/`==`/`!=`
+#     ④ 旧后端 case 臂：`tmux)` / `tmux*)`（前缀 = 行首 / 空白 / `;` / `&`）；
+#        **`|` 前缀只在 `case … in …` 形态里算臂**（判据 = 同行出现 `case … in`）——
+#        这样 `case … in herdr|tmux)` 会红，而 `grep -E '…(herdr|tmux)…'` 这类**正则字面量**不会误伤。
+#        代价：单行 `case` 里若把臂写在引号/注释中也会红（可接受：宁可误红不可假绿）。
 #   白名单（逐条注释，缺任一条即误伤）：
 #     a) 注释行（首个非空字符 `#`）—— 迁移指路「已移除 tmux 后端」只允许写在这里；
 #     b) 名册字段 `"tmuxPane"`（外部 JSON 契约：pi-intercom 探针字段名，不可改）；
 #     c) 宿主句柄名表 `_TERM_HOST_HANDLE_VARS=(TMUX TMUX_PANE TMUX_TMPDIR)`（起 herdr server 前必须清）；
-#     d) 守卫臂（④ 命中时）：臂体（至该行起 ≤9 行内首个 `;;`）含「已移除」⇒ 迁移指路。
-#        这是**唯一**允许出现的 `tmux)` 臂形态（term_backend 的拒绝分支）；去掉该文案即视为旧面复活。
+#     d) 守卫臂（④ 命中时）—— 必须**同时**满足三件事，否则视为旧面复活：
+#        ① 臂体（该行起 ≤9 行内、**先剥 `#` 注释**、再取到首个 `;;` 之前）含「已移除」文案；
+#        ② 该臂体含真正的 fail loud 出口 `exit 2` / `return 2`（**只有文案不算守卫**：文案能被顺手
+#           写进任何臂，`tmux) printf '已移除…'; return 0` 仍必须红）；
+#        ③ 该行本身不命中 ①②③（守卫臂不是「顺手把调用写进臂里」）。
+#        **注释穿透回归（QA P3-1）**：`case … in tmux) exec … ;; esac  # 已移除` 曾因「整段含已移除」
+#        被放行 ⇒ 现在先剥注释再截到 `;;`，该形态必红。
+#   边界声明（P3-2，二选一取 ①）：`case "$TERM" in tmux) …`（检测「自己是否在 tmux 里」以便提示迁移）
+#   同样会红 —— 仓内 0 处使用，且它本身就是「按 tmux 分支」的旧面。**需要判断是否装过 tmux 请用
+#   `command -v tmux`（不红）；需要提示迁移请写在注释里（不红）。** 未采取「把臂规则限定到 NAO_TERMINAL
+#   上下文」的替代方案：那会让 `case "$BE" in tmux)` 这类改名变量（BE=`${NAO_TERMINAL}`）漏判。
 #   作用域：`.agents/scripts/*.sh` + `tests/t4/run.sh`（**不扫 docs/**：文档必须保留迁移指路）。
 #   输出 `行号:内容`（一行一个）；空输出 = 干净。
 t4_scan_tmux_residue() { # <script>
   local script="$1" lnno body trim
   local re='(^|[|;&(]|\$\()[[:space:]]*(exec[[:space:]]+)?(setsid[[:space:]]+)?tmux([[:space:]]|$)'
   local re_assign='NAO_TERMINAL[[:space:]]*=[[:space:]]*["'"'"']?tmux'
-  # ③ 比较式：`$NAO_TERMINAL` / `${NAO_TERMINAL:-herdr}` 与 tmux 做 =/==/!= 比较
   local re_cmp='NAO_TERMINAL[^[:space:]]*["'"'"']?[[:space:]]*(=|==|!=)[[:space:]]*["'"'"']?tmux'
-  # ④ case 臂 `tmux)`：前缀只认行首 / 空白 / `/`;`/`&`（**不含 `|`**：`(herdr|tmux)` 这类
-  #    正则字面量里的 `|tmux)` 不是 case 臂，cases/41 负控与真脚本静态面均依赖这条边界）
-  local re_arm='(^|[[:space:];&])tmux\)'
   local allow='(tmuxPane|_TERM_HOST_HANDLE_VARS=)'
+  # ④ 臂命中：行首/空白/;/& 前缀，或 `case … in …|tmux)`（`|` 只在 case 形态里算臂）
+  _tmux_arm_hit() {
+    grep -qE '(^|[[:space:];&])(tmux\)|tmux\*\))' <<< "$1" && return 0
+    grep -qE '(^|[[:space:]])case[[:space:]].*[[:space:]]in[[:space:]]' <<< "$1" \
+      && grep -qE '\|(tmux\)|tmux\*\))' <<< "$1" && return 0
+    return 1
+  }
+  # 臂体规范化（剥 # 注释 → 截到首个 `;;`）—— 白名单判定只认规范化后的文本
+  _tmux_arm_text() {
+    sed -n "${1},$(( $1 + 8 ))p" "$script" \
+      | sed -E 's/[[:space:]]#.*$//' \
+      | awk '{ i = index($0, ";;"); if (i) { print substr($0, 1, i - 1); exit } print }'
+  }
+  # 白名单 d：文案（已移除）**且** 真出口（exit 2 / return 2）
+  _tmux_guard_arm() {
+    local t; t="$(_tmux_arm_text "$1")"
+    grep -q '已移除' <<< "$t" || return 1
+    grep -qE '(exit|return)[[:space:]]+2([^0-9]|$)' <<< "$t" || return 1
+    return 0
+  }
   while IFS= read -r ln; do
     lnno="${ln%%:*}"; body="${ln#*:}"
     trim="${body#"${body%%[![:space:]]*}"}"
@@ -504,15 +531,12 @@ t4_scan_tmux_residue() { # <script>
        || grep -qE -- "$re_cmp" <<< "$body"; then
       printf '%s:%s\n' "$lnno" "$trim"; continue
     fi
-    if grep -qE -- "$re_arm" <<< "$body"; then
-      # 守卫臂白名单（d）：臂体到首个 `;;`（≤9 行）含「已移除」⇒ 放行
-      if sed -n "${lnno},$((lnno + 8))p" "$script" | sed -n '1,/;;/p' | grep -q '已移除'; then
-        continue
-      fi
+    if _tmux_arm_hit "$body"; then
+      _tmux_guard_arm "$lnno" && continue
       printf '%s:%s\n' "$lnno" "$trim"; continue
     fi
-  # 预筛（ERE 交替）——注意：`-E` 下 `\|` 是**字面竖线**，必须用裸 `|` 连接四个判据
-  done < <(grep -nE -- "${re}|${re_assign}|${re_cmp}|${re_arm}" "$script" || true)
+  # 预筛：四条判据都必然含小写字面量 `tmux`（大写 TMUX/TMUX_PANE 不在覆盖面）
+  done < <(grep -n 'tmux' "$script" || true)
 }
 
 # 台账校验（B1）：① 每行可验（函数真实存在 + 函数体仍含裸后端调用）② 去重 ③ 行数只允许下降（文件头 baseline）

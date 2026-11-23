@@ -65,7 +65,9 @@ run_check() { # 参数透传（如 -v）；$FX = 夹具包根
 }
 premise_warns() { printf '%s\n' "$C34_OUT" | grep -c '^  ! 端前提' || true; }
 # 变异 helper（T555/QA P1 加固）：把某行的**后端声明**改成 tmux —— 锚 = 「默认后端」+ 其后的后端名，
-#   不绑「等号/空格」写法（`默认后端 = herdr` / `默认后端 herdr` / `默认herdr` 都认）。
+#   锚的**硬前缀**是「默认后端」（与实现 `premise_declared_backend` 的解析式一致）；其后等号/空格可有可无：
+#   `默认后端 = herdr` / `默认后端 herdr` 都认，**`默认herdr`（无「后端」二字）不认** —— 与实现同步，
+#   不再声称超出实现的覆盖面（QA P3-5：注释曾写「`默认herdr` 也认」，实测不认）。
 #   为什么：上一版硬编码 `s/默认 herdr/默认 tmux/`，PM 把 AGENTS.md 改写成「默认后端 = herdr」后
 #   变异静默失配（0 命中 ⇒ 下方自证断言才红）—— 自证断言是最后一道闸，锚本身要更稳。
 mut_decl_tmux() { # <file> <line>
