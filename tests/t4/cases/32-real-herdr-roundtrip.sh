@@ -29,11 +29,8 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
 
-BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
-if [ "$BE_NAME" != "herdr" ]; then
-  t4_note backend-gate "真 herdr 整轮（session-start/ensure/status/close/cleanup）在 tmux 后端无对应物；tmux 侧由用例 01/20/22 的隔离 socket 覆盖"
-  t4_exit
-fi
+BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
+  t4_note backend-gate "tmux 面已删除（T555 / ADR 2026-11-22-herdr-only）：唯一后端 = herdr，本组原为 tmux 专有夹具/语义，随后端整组退役；等价覆盖见 herdr 侧断言"
 
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
 BASH_BIN="$(command -v bash)"
@@ -307,7 +304,7 @@ t4_assert_contains "$T4_ERR_ANSI" "列=40" "⑦ J1 40×8：点名实际列数（
 t4_assert_contains "$T4_ERR_ANSI" "行=8" "⑦ J1 40×8：点名实际行数"
 t4_assert_contains "$T4_ERR_ANSI" "headless_cols/headless_rows" "⑦ J5 40×8：指路「调 [server] headless_*」"
 t4_assert_contains "$T4_ERR_ANSI" "attach 后重排" "⑦ J5 40×8：指路「attach 后重排」"
-t4_assert_contains "$T4_ERR_ANSI" "NAO_TERMINAL=tmux" "⑦ J5 40×8：指路「切布局（回退 tmux）」"
+t4_assert_contains "$T4_ERR_ANSI" "换更大窗口/显示器后 attach" "⑦ J5 40×8：指路「换更大窗口/显示器后 attach」（T555：tmux 回退已删）"
 t4_assert_contains "$T4_OUT_ANSI" "（成功 1 / 跳过 0 / 失败 0）" "⑦ 40×8 场：warn 不改三态（仍计成功）"
 t4_assert_eq "0" "$(printf '%s' "$T4_ERR_ANSI" | grep -cE '列=0|行=0' || true)" \
   "⑦ J4 40×8：无 0 尺寸 pane（0 行只在多 pane 挤压下出现；布局 A 每 tab 1 pane 结构上不可达）"

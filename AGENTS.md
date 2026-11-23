@@ -15,7 +15,7 @@
 
 ## 项目约束（红线）
 
-- **仅 pi 宿主（唯一，无第二宿主）**：机制只支持 **pi ≥1.4.0**；终端后端**默认 herdr**（`export NAO_TERMINAL=tmux` 回退，两端前提链见 `README.md`「前置环境」与 `docs/INSTALL.md`「herdr 后端」）。**不为其他编程 Agent（Claude Code / Codex / Cursor 等）做适配、shim 或兼容承诺**，文档 / `description` / `keywords` 一律不得暗示可互换；需要那类能力时按「新增宿主」立项，不夹带。用户可见边界写在 `README.md`「前置环境」。
+- **仅 pi 宿主（唯一，无第二宿主）**：机制只支持 **pi ≥1.4.0**；终端后端**默认后端 = herdr ≥0.9.1（唯一后端）**（`NAO_TERMINAL` 给其他任何值含 `tmux` ⇒ `rc=2` fail loud，旧 tmux 后端 v0.28.0 已移除；前提链见 `README.md`「前置环境」与 `docs/INSTALL.md`「herdr 后端」）。**不为其他编程 Agent（Claude Code / Codex / Cursor 等）做适配、shim 或兼容承诺**，文档 / `description` / `keywords` 一律不得暗示可互换；需要那类能力时按「新增宿主」立项，不夹带。用户可见边界写在 `README.md`「前置环境」。
 - **全范围门禁口径（本项目）**：`bash .agents/scripts/nao-fleet.sh check` rc=0 + `npm test` rc=0（tests/ 全目录，非子目录）；改任何机制文件/角色卡后必跑 `check`。**日常迭代用快档** `npm run test:fast`（白名单 14 例 · 实测 ≈95s · 显式打印跳过例与未覆盖清单）；**PR CI / 合并前 / 发布前仍跑全量** `npm test`（34 例）与 `test:t4:full`（快档绿 ≠ 全绿，白名单与判据见 `tests/t4/run.sh` 的 `FAST_CASES` + `docs/reports/143-profile.md`）。
 - **零敏感值**：仓库内禁 token/私钥/绝对家目录路径；grep 复核是 rd-infra 红线的硬门禁。
 - **幂等**：脚本/迁移/安装器连跑 2 次 effect = 0 且 rc = 0；守卫改动带失败演练。
@@ -31,6 +31,6 @@
 - 角色清单与别名：`.agents/roles.yaml`（唯一事实；卡片 frontmatter 与其一致，`check` 校验）。
 - 「一支舰队能派到哪些仓」的事实源 = 各仓 `.agents/fleet.yaml`（本文件/角色卡只给指针，不复制清单）；写法与边界见 `docs/INSTALL.md`「联动仓 manifest」。
 - 本文档构建与机制：本仓不复制任一机制条款到本文件——需要时引用 `.agents/` 内文件，勿双写。
-- 布局/宿主/句柄语义：`.agents/scripts/nao-fleet.sh` + `.agents/common/intercom-protocol.md`（运行前提 = 终端后端**默认 herdr**（`NAO_TERMINAL=tmux` 回退）+ pi ≥1.4.0；布局：herdr = 1 workspace/仓 + 1 tab/角色，tmux 三选一、窄列回退 `main-col → grid`）。
+- 布局/宿主/句柄语义：`.agents/scripts/nao-fleet.sh` + `.agents/common/intercom-protocol.md`（运行前提 = 终端后端**默认后端 = herdr（唯一，≥0.9.1）**，须在 herdr pane 内 + pi ≥1.4.0；布局：1 workspace/仓 + 1 tab/角色，无几何布局与窄列回退）。
 - 文档规范：`.agents/checklists/deliverable-docs.md`（PRD/ADR/报告/调研统一骨架；默认不用表格）。
-- 面向用户的两份文档分工（防双源）：`README.md` = 一句话定位 / 前置环境（仅 pi）/ 三步安装 / 首个需求 / 角色 / 常见问题；`docs/INSTALL.md` = 进阶与维护者口径（CodeGraph、`--card`、tmux 布局、迁移、CI 离线、完整性判据）。细节只写一处，另一处给指针。
+- 面向用户的两份文档分工（防双源）：`README.md` = 一句话定位 / 前置环境（仅 pi）/ 三步安装 / 首个需求 / 角色 / 常见问题；`docs/INSTALL.md` = 进阶与维护者口径（CodeGraph、`--card`、herdr 后端与从 tmux 迁移、迁移、CI 离线、完整性判据）。细节只写一处，另一处给指针。

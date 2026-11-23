@@ -23,11 +23,7 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
 
-BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
-if [ "$BE_NAME" = "tmux" ]; then
-  command -v tmux >/dev/null 2>&1 \
-    || t4_skip "环境缺少 tmux（tmux 后端需真隔离 socket 断言 pane/session 零副作用）"
-fi
+BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
 BASH_BIN="$(command -v bash)"
 LAB="$T4_CACHE_DIR/lab21-$$"
 

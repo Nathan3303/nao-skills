@@ -24,11 +24,7 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
 
-BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
-if [ "$BE_NAME" = "tmux" ]; then
-  command -v tmux >/dev/null 2>&1 \
-    || t4_skip "环境缺少 tmux（tmux 后端需真隔离 socket 观察 ensure 命令行与投递）"
-fi
+BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
 BASH_BIN="$(command -v bash)"
 REAL_TMUX="${NAO_T23_REAL_TMUX:-$(command -v tmux || true)}"
@@ -117,8 +113,7 @@ expected_inner() { # <name> <prompt_file>
     "$(printf %q "$LAB")" "$(printf %q "$1")" "$(printf %q "$2")"
 }
 expected_wrapped() {
-  if [ "$BE_NAME" = "tmux" ]; then printf 'bash -lc %s' "$(printf %q "$(expected_inner "$1" "$2")")"
-  else printf '%s' "$(expected_inner "$1" "$2")"; fi
+  printf '%s' "$(expected_inner "$1" "$2")"
 }
 prompt_file_of() {
   local flat; flat="$(printf '%s' "$1" | tr -d '\\')"
@@ -132,7 +127,7 @@ diff_assert() {
 
 # ---- 投递取证面（两后端同锚 / 同判据）----
 pane_of() { # <name> → pane_id（tmux：pane_start_command 去掉 %q 转义后按 `--name <名>` 定位）
-  if [ "$BE_NAME" = "herdr" ]; then be_pane_by_name "$1"; return 0; fi
+  be_pane_by_name "$1"; return 0
   local want="$1" p _ c flat
   while IFS=$'\t' read -r p _; do
     [ -n "$p" ] || continue
@@ -145,12 +140,8 @@ pane_of() { # <name> → pane_id（tmux：pane_start_command 去掉 %q 转义后
   return 0
 }
 capture_of() { # <pane> → 屏幕文本（tmux capture-pane -p -J / herdr agent read recent-unwrapped）
-  if [ "$BE_NAME" = "tmux" ]; then
-    _be_tmux capture-pane -p -J -t "$1" -S -200 2>/dev/null
-  else
     # T548 复核 P2-1：AC2 内容面只用 `--source visible`（working 期可读；**禁** `--lines`：真机 working 时直接报 agent_not_idle）
     LC_ALL=C be_herdr "$BE_SESSION" agent read "$1" --source visible 2>/dev/null
-  fi
 }
 anchor_count() { grep -oF -- "$ANCHOR" <<< "$1" | wc -l | tr -d ' '; }
 STATE=""
@@ -248,14 +239,11 @@ t4_assert_ge "1" "$(grep -cF -- 'agent prompt "$pane" "$msg"' "$FLEET" || true)"
   "AC2 静态：herdr 通道 = agent prompt（自带提交 + bracketed-paste 包裹）"
 t4_assert_eq "0" "$(grep -cE 'agent[[:space:]]+prompt.*--wait' "$FLEET" || true)" \
   "AC2 静态：herdr 投递不带 --wait（不把「已投递」耦合到「自检 turn 跑完」）"
-t4_assert_ge "1" "$(grep -cF -- 'paste-buffer -p -d -b "$buf" -t "$pane"' "$FLEET" || true)" \
-  "AC2 静态：tmux 通道 = paste-buffer -p + 独立 buffer + -d（不动用户粘贴板）"
-t4_assert_ge "1" "$(grep -cF -- 'send-keys -t "$pane" Enter' "$FLEET" || true)" \
-  "AC2 静态：tmux 通道末尾恰一次键名 Enter"
-t4_assert_ge "1" "$(grep -cF -- 'bracket_paste_flag' "$FLEET" || true)" \
-  "AC2 静态：tmux bracketed-paste 退化判定面存在（#{bracket_paste_flag}）"
-t4_assert_ge "1" "$(grep -cF "\${msg//\$'\\n'/ }" "$FLEET" || true)" \
-  "AC2 静态：退化时投递前做形态归一（换行 → 空格；文案单一源不变）"
+# T555 退役（4 条）：tmux 投递通道（paste-buffer / send-keys / bracket_paste_flag / 换行归一）
+#   随 tmux 后端整组删除（ADR 2026-11-22-herdr-only）⇒ 断言对象不存在，不计入断言强度下降
+#   （herdr 通道的三条静态断言在上方逐字保留；投递行为由本用例 ①②③ 的动态断言覆盖）。
+t4_assert_eq "0" "$(grep -cE 'paste-buffer|send-keys|bracket_paste_flag' "$FLEET" || true)" \
+  "AC2 静态（T555 反向）：tmux 投递通道字样 0 处（旧面不复活，ADR herdr-only）"
 t4_assert_contains "$(grep -F '版本自检投递失败' "$FLEET" || true)" "不计失败" \
   "AC4 静态：投递失败不计 SPAWN_FAIL（失败语义 = rc 0 + warn）"
 t4_assert_eq "0" "$(grep -cE 'agent[[:space:]]+wait' <(grep -vE '^[[:space:]]*#' "$FLEET") || true)" \
@@ -275,10 +263,6 @@ t4_assert_contains "$READY_BODY" '_TR_SKIP" == "1" ]' \
 BASE_SEQ="$(seq_of)"   # 投递前基线（就绪门只要求 seq≥1；AC2 判 `>` 不判 `==+1`）
 BEFORE="$(split_count)"
 T23_SWITCH=1
-if [ "$BE_NAME" = "tmux" ]; then
-  _be_tmux set-buffer -b t4-user "t4-user-sentinel" 2>/dev/null || true
-  BUF_BEFORE="$(_be_tmux list-buffers -F '#{buffer_name}=#{buffer_sample}' 2>/dev/null || true)"
-fi
 run_fleet ensure --task T1 "pm@$LAB"
 t4_assert_eq "0" "$T4_RC" "AC1① ensure pm rc=0（T4_ERR=$(printf '%s' "$T4_ERR" | head -1)）"
 t4_assert_eq "1" "$(launch_lines)" "AC1① 恰 1 行 [$BE_NAME] 已拉起（三态契约不变）"
@@ -297,7 +281,6 @@ t4_assert_ne "" "$PANE_PM" "AC2① 定位 pm 会话 pane（$PANE_PM）"
 [ "$BE_NAME" = "tmux" ] && be_set_name "$PANE_PM" "pm(T1)" "$BASE" >/dev/null 2>&1 || true
 CAP_PM="$(capture_of "$PANE_PM")"
 t4_assert_eq "1" "$(anchor_count "$CAP_PM")" "AC2① 投递文案确实到达会话（回读命中固定锚，恰 1 次）"
-if [ "$BE_NAME" = "herdr" ]; then
   # 层① 投递面：替身记录 delivered=1 且 seq 已 +1（= agent prompt rc=0 且无 error）；
   # 层② 执行面：投递后 ≤10×100ms 观察 working 或 seq > 基线；
   # 层③ 内容面（辅助）：`agent read --source visible` 命中常量首行（上面 CAP_PM）。
@@ -308,26 +291,14 @@ if [ "$BE_NAME" = "herdr" ]; then
   SEQ_AFTER="$(seq_of)"
   t4_assert_ge "$(( ${BASE_SEQ:-0} + 1 ))" "${SEQ_AFTER:-0}" \
     "AC2① 层② seq 差分：投递后 seq(${SEQ_AFTER:-?}) > 基线($BASE_SEQ)（不判 == 基线+1：turn 结束会再 +1）"
-else
-  FLAG="$(_be_tmux display-message -p -t "$PANE_PM" '#{bracket_paste_flag}' 2>/dev/null || true)"
-  t4_info "本机 tmux bracket_paste_flag（贴到 sleep 桩 pane）= ${FLAG:-<不可读>}"
-  t4_assert_eq "0" "${FLAG:-0}" "AC2① tmux：实测该 pane 未协商 bracketed paste（退化为 0）"
-  CAP_LINE="$(grep -F -- "$ANCHOR" <<< "$CAP_PM" | head -1)"
-  t4_assert_contains "$CAP_LINE" "7) 我未表态" \
-    "AC2① tmux：形态归一已生效（锚与「7)」在同一逻辑行 ⇒ 换行被替换为空格，非逐行提交）"
-  BUF_AFTER="$(_be_tmux list-buffers -F '#{buffer_name}=#{buffer_sample}' 2>/dev/null || true)"
-  t4_assert_eq "$BUF_BEFORE" "$BUF_AFTER" "AC2① tmux：投递不动用户粘贴板（独立 buffer + -d）"
-fi
 
 # ============================================================ AC4 幂等：已在运行 ⇒ 不二次投递（herdr 可观测面）
-if [ "$BE_NAME" = "herdr" ]; then
   T23_SWITCH=1
   run_fleet ensure --task T1 "pm@$LAB"
   t4_assert_eq "0" "$T4_RC" "AC4 幂等：二次 ensure pm rc=0"
   t4_assert_contains "$T4_ERR_ANSI" "已在运行" "AC4 幂等：二次 ensure 判「已在运行」跳过（不进 spawn_one）"
   t4_assert_eq "1" "$(delivered_of "$PANE_PM")" "AC4 幂等：投递次数仍为 1（无状态文件、无二次投递）"
   t4_assert_eq "${SEQ_AFTER:-2}" "$(seq_of)" "AC4 幂等：seq 未再前进（未再起自检 turn）"
-fi
 
 # ============================================================ AC1② ensure rd-be ⇒ 不投递
 BEFORE="$(split_count)"
@@ -345,7 +316,6 @@ t4_assert_eq "0" "$(anchor_count "$(capture_of "$PANE_RD")")" "AC2② rd-be 会�
 [ "$BE_NAME" = "herdr" ] && t4_assert_eq "0" "$(delivered_of "$PANE_RD")" "AC2② herdr：rd-be 无 agent prompt 投递"
 
 # ============================================================ P2-2 替身保真（真机语义不得被替身放宽）
-if [ "$BE_NAME" = "herdr" ]; then
   # ① working 时带 `--lines` ⇒ 真机 rc=1 agent_not_idle（禁再用 --lines 做 AC2）
   OUT_LINES="$(LC_ALL=C be_herdr "$BE_SESSION" agent read "$PANE_PM" --lines 80 2>&1)"; RC_LINES=$?
   t4_assert_ne "0" "$RC_LINES" "P2-2① 替身保真：working 时「--lines 80」⇒ rc≠0（真机 agent_not_idle）"
@@ -362,7 +332,6 @@ if [ "$BE_NAME" = "herdr" ]; then
   OUT_VIS="$(LC_ALL=C be_herdr "$BE_SESSION" agent read "$PANE_PM" --source visible 2>&1)"; RC_VIS=$?
   t4_assert_eq "0" "$RC_VIS" "P2-2④ 正面对照：working 期「--source visible」rc=0（内容面可用）"
   t4_assert_eq "1" "$(anchor_count "$OUT_VIS")" "P2-2④「--source visible」命中常量首行（working 期可读）"
-fi
 
 # ============================================================ AC1③/AC3③ 开关关闭 ⇒ 命令行逐字不变 + 不投递
 BEFORE="$(split_count)"
@@ -391,11 +360,7 @@ no_anchor_within "$PANE_PMOFF" 2 && t4_ok "AC2③ 负控窗口内（2s）持续�
 
 # ============================================================ AC4 失败语义：rc 仍 0 + 默认可见 warn（含 pane + code）
 # herdr：替身对指定 target 返回 stdout 错误 JSON（agent_blocked）；tmux：桩 load-buffer 注入失败
-if [ "$BE_NAME" = "herdr" ]; then
   FAIL_ENV=(T4_HERDR_FAIL_PROMPT="pm2(140)")
-else
-  FAIL_ENV=(T4_TMUX_FAIL_BUFFER=1)
-fi
 T23_SWITCH=1
 export "${FAIL_ENV[@]}"
 run_fleet ensure --task 140 "pm@$LAB"
@@ -403,11 +368,7 @@ unset T4_HERDR_FAIL_PROMPT T4_TMUX_FAIL_BUFFER
 t4_assert_eq "0" "$T4_RC" "AC4① 投递失败不改 rc（会话可用 ⇒ rc=0）"
 t4_assert_contains "$T4_OUT_ANSI" "（成功 1 / 跳过 0 / 失败 0）" "AC4① 投递失败不计 SPAWN_FAIL（摘要仍 成功 1）"
 t4_assert_contains "$T4_ERR_ANSI" "版本自检投递失败" "AC4① 投递失败有默认可见 warn（不静默）"
-if [ "$BE_NAME" = "herdr" ]; then
   t4_assert_contains "$T4_ERR_ANSI" "agent_blocked" "AC4① warn 含 herdr error code（agent_blocked，取自 stdout）"
-else
-  t4_assert_contains "$T4_ERR_ANSI" "load-buffer" "AC4① warn 含 tmux 失败阶段（load-buffer）"
-fi
 t4_assert_contains "$T4_ERR_ANSI" "pane=" "AC4① warn 含 pane（可定位）"
 PANE_FAIL="$(pane_of "pm2(140)")"
 t4_assert_ne "" "$PANE_FAIL" "AC4① 失败夹具 pane 仍建立（会话确实可用）"
@@ -417,9 +378,6 @@ t4_assert_eq "0" "$(anchor_count "$(capture_of "$PANE_FAIL")")" "AC4① 失败�
 # 为什么必须在用例里跑：QA 实测「删掉 AND 里的 agent_status == idle」时 case 23/29 全绿 —— 只有
 #   warn 文案 grep，没有机械负控。这里对三条关键条件分别造「只差这一条」的现场：每条都必须
 #   超时 + 0 成功行 + 摘要失败 1。若产品代码删掉对应条件，这三组立刻翻红（不是文案能兜的）。
-if [ "$BE_NAME" != "herdr" ]; then
-  t4_note backend-gate "七条件就绪门是 herdr 专有语义（tmux 侧为 5s 标题轮询）；负控由 herdr 腿承担"
-else
   export TERM_READY_TIMEOUT_MS=600 TERM_READY_POLL_MAX=5 TERM_READY_POLL_INT=0.1
   # ① 只差 idle：已 idle 才是就绪（本组 = working）
   set_knob pi_status '"working"'; set_knob pi_seq 1; set_knob pi_skip true; set_knob pi_session true
@@ -446,6 +404,5 @@ else
   t4_assert_contains "$T4_OUT_ANSI" "（成功 0 / 跳过 0 / 失败 1）" "P2-3③ 违反 skip ⇒ 摘要计失败 1"
   t4_assert_contains "$T4_ERR_ANSI" "screen_detection_skipped" "P2-3③ 逐条点名缺 skip（删掉该条件 ⇒ 本组翻红）"
   unset TERM_READY_TIMEOUT_MS TERM_READY_POLL_MAX TERM_READY_POLL_INT
-fi
 
 t4_exit

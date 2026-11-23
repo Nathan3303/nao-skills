@@ -2,17 +2,15 @@
 # =============================================================================
 # nao-fleet.sh — 按角色一键拉起 pi 会话窗口（nao 团队工具箱）
 #
-# 运行前提（端前提 = 后端 pane 内 + pi ≥ MIN_PI_VERSION；ADR 2026-10-27-strict-tmux-pi 的「tmux 唯一」
-#   部分**已被 herdr 默认取代**，见 docs/adr 同名 ADR 状态注记；pi 阈值与 exit 3 语义仍现行）
-#   **默认后端 = herdr（#96 三期 P2 · 2026-11-11）**：`NAO_TERMINAL` 未设/空串 ⇒ herdr；回退用 `NAO_TERMINAL=tmux`
-#     （保留 ≥2 MINOR 且 ≥90 天；退役另立项并先发弃用说明）。**不自动回落**（PM 裁定 D2）。
-#   两侧前提：herdr 侧见下段「herdr 后端」；tmux 侧 = $TMUX 非空且 tmux 可用（降为回退通道）。
-#   任一端不满足 ⇒ ensure/status/close 一律 fail loud exit 3 + 一行提示（各条文案都带回退指路），
-#     不建 session/pane/lock、不写状态。
-#   cleanup 豁免本前提：其正常场景就是「非 tmux 的隔离实验场」（env -u TMUX ... -S <socket>）
-#   herdr 后端（NAO_TERMINAL=herdr · #96 二期 B1/B2/B3 · 三期 P1 布局 A）：前提改为「herdr pane 内 + HERDR_SESSION
-#     有效 + protocol 22」；B1 判定面（status）· B2 放置/就绪面（ensure）· B3 回收面（close/cleanup）—— 全部走门面，
-#     不静默回退 tmux。**布局 A（AC3.1）**：1 workspace/仓（label=fleet —— 默认目标仓 slug，可用
+# 运行前提（端前提 = herdr pane 内 + pi ≥ MIN_PI_VERSION；ADR 2026-11-22-herdr-only
+#   supersede 2026-10-27-strict-tmux-pi：**herdr 是唯一后端**，旧 tmux 后端与 -S 调用面已删除，见 §退出码）
+#   **唯一后端 = herdr**：`NAO_TERMINAL` 只用于**拒绝**旧值（非空且非 herdr ⇒ stderr 1 行 + exit 2，命令未执行）；
+#     未设/空串/herdr 均放行。**不自动回落、不静默降级**（ADR 决策 3）。
+#   前提 = 「herdr pane 内 + HERDR_SESSION 有效 + protocol 22」；ensure/status/close 任一项不满足 ⇒
+#     fail loud exit 3 + 一行提示，不建 session/pane/lock、不写状态。
+#   cleanup 豁免本前提：拆场是外部动作（`cleanup --session <名>`）。
+#   herdr 后端（#96 二期 B1/B2/B3 · 三期 P1 布局 A）：判定面（status）· 放置/就绪面（ensure）· 回收面（close/cleanup）
+#     —— 全部走门面。**布局 A（AC3.1）**：1 workspace/仓（label=fleet —— 默认目标仓 slug，可用
 #     `--fleet`/`.agents/fleet-scope` 覆盖；ADR 2026-11-17-fleet-identity-source：放置键与身份键**同源**
 #     但仍是两个变量，**不得**取会话名）+ 1 tab/角色（label=角色名）+ 每 tab 恰 1 pane；
 #     放置后自测空间（HERDR 不报空间不足 ⇒ rc 不可作判据，见 TERM_MIN_COLS/ROWS 与 J1/J5）。
@@ -20,14 +18,14 @@
 #     拆场由姊妹入口 `cleanup --session <名>` 负责（stop+delete，判 effect 不看 rc）。
 #
 # 退出码
-#   0 = 成功 · 1 = 已执行但失败 · 2 = 用法守卫（cleanup 的 -S / session-start 的 --session 守卫等）
-#   3 = 前提不满足（命令未执行；tmux 不在会话内 / herdr 缺会话或 protocol 不兼容）
+#   0 = 成功 · 1 = 已执行但失败 · 2 = 用法守卫（非 herdr 的 NAO_TERMINAL / cleanup -S / --session 守卫等）
+#   3 = 前提不满足（命令未执行；缺 HERDR_ENV/HERDR_SESSION 或 protocol 不兼容）
 #   4 = 本后端未实现该子命令（命令未执行；B3 后**无**此类子命令，取值保留以维持 rc 语义稳定）
 #
 # 用法
-#   nao-fleet.sh check [--strict] [-v]            静态体检：roles.yaml/缩进/EOL/角色卡/交叉引用/PR 模板/白名单/布局/tmux+pi 前提
+#   nao-fleet.sh check [--strict] [-v]            静态体检：roles.yaml/缩进/EOL/角色卡/交叉引用/PR 模板/白名单/herdr+pi 前提
 #                                                 默认摘要 2–3 行：摘要行 + codegraph 状态行（四态之一）+ herdr 的生效后端行；-v 展开完整报告；失败始终展开
-#   nao-fleet.sh status                           角色会话在线状态（tmux：终端标题/名册；herdr：pane label + agent 状态
+#   nao-fleet.sh status                           角色会话在线状态（pane label + agent 状态
 #                                                 （结构化事实，权威源 pane list/agent list）；非在线证据单列）
 #   nao-fleet.sh ensure <别名>[@<repo>] [更多...]  拉起角色窗口（默认工作区=roles.yaml workspace）
 #   nao-fleet.sh ensure -m <model> <别名>...       显式指定模型（须命中白名单）
@@ -49,7 +47,7 @@
 #   nao-fleet.sh session-start --session <名>     起专用 herdr session 的 server（herdr 后端）。
 #                                                 --session 必填、≠default；起 server 前**清宿主终端句柄**
 #                                                 （TMUX/TMUX_PANE/TMUX_TMPDIR）+ **枚举清 HERDR_***（BR6），
-#                                                 50×100ms / 5s 轮询就绪，超时 fail loud。tmux 后端无需此步（rc=0）
+#                                                 50×100ms / 5s 轮询就绪，超时 fail loud
 #   nao-fleet.sh ensure --force <别名>...          忽略"已在运行"判重
 #                                                 （目标解析为 pm 时，**就绪后**投递一条固定用户消息：机制包版本自检，
 #                                                  仅提示不自动升级；关闭用 NAO_UPDATE_ON_ENSURE=0）
@@ -64,28 +62,18 @@
 #                                                 unknown / 无 agent 条目 / 集成缺失 / 进程不可判 ⇒ 拒（fail-closed）
 #   nao-fleet.sh cleanup --session <名>           （herdr 后端）拆专用 session：session stop + delete，
 #                                                 判 **effect** 不看 rc（stop 非幂等）；--session 必填且 ≠default（BR9）
-#   nao-fleet.sh cleanup -S <socket>              终结实验场 tmux server（**强制**显式 -S socket；不看 $TMUX）
-#                                                 不带 -S / 命中生产默认 socket ⇒ exit 2 + 单行拒绝（真 server 不受影响）
-#                                                 ⚠ 生产默认 socket 判定 = $TMUX 句柄 + /tmp/tmux-<uid>/default（+$TMPDIR 变体），
-#                                                 **与 TMUX_TMPDIR 无关**（T516 事故：夹具设 TMUX_TMPDIR 曾令真默认 socket 被放行而连坐自灭）
-#                                                 ⚠ 实验纪律：一律 `env -u TMUX` + `-S <隔离 socket>`（T515 血训：
-#                                                 tmux 客户端在 $TMUX 已设时无视 TMUX_TMPDIR，裸 tmux/kill-server 会连坐真 server）；
-#                                                 验证脚本勿在承载自己会话的 tmux 内执行（F1 自 pane 闸门已改为
-#                                                 进程归属判定 pane_hosts_caller，不再依赖 $TMUX_PANE——T530）
+#   nao-fleet.sh cleanup -S <socket>              **已随 tmux 后端移除**（ADR 2026-11-22-herdr-only）：
+#                                                 任一子命令带 -S ⇒ exit 2 + 单行指路 `--session <名>`（fail loud，不静默吞参）
 #
 # 角色别名 → 角色卡：见 .agents/roles.yaml（单一事实来源）
 #   当前：pm / arch-designer(arch) / uiux-designer(uiux, ui-designer) / rd-fe / rd-be / qa / rd-infra(infra)
 #
 # 环境变量
-#   NAO_TMUX_LAYOUT=main-row2|main-col|grid   tmux 布局（默认 main-row2）
-#   NAO_TMUX_MAIN_WIDTH=<10..90>             主 pane 宽度百分比（默认 35；main-row2/main-col 共用）
-#   NAO_TMUX_MIN_PANE_WIDTH=<10..80>         最小非主 pane 列宽守卫（默认 30；低于则回退）
-#   NAO_TMUX_HOST_WINDOW=<window>            显式指定派生宿主窗口（默认自动：$TMUX_PANE→名册；允许跨 session，建议 @id 形式）
 #   NAO_SKILLS=<dir>                          nao 机制包根目录（默认 <脚本>/../..；项目内 shim 会显式指向包根）
 #   NAO_MODEL_WHITELIST=<glob,...>            -m 白名单（默认空=不校验，支持 glob）
 #   NAO_CLOSE_BUSY_PATTERN=<ERE>             close 的在跑 turn 判定正则（默认内置 pi 状态行标记）
-#   NAO_TERMINAL=tmux|herdr                  终端后端（**默认 herdr**；未设/空串 = herdr）。tmux = 回退通道（≥2 MINOR/≥90 天）：
-#                                            `NAO_TERMINAL=tmux`。herdr 侧 status/ensure/close/cleanup 走门面，
+#   NAO_TERMINAL=<值>                        唯一后端 = herdr（未设/空串 = herdr）；给**其他任何值**（含已移除的 tmux）
+#                                            ⇒ stderr 1 行 + exit 2（命令未执行）。status/ensure/close/cleanup 走门面，
 #                                            ensure 须先 `session-start` 起专用 session 并在其 pane 内运行
 #   NAO_HERDR_READY_TIMEOUT_MS=<ms>          herdr 就绪门 wall-clock 上限（默认 5000；只对 herdr 后端生效）
 #   NAO_TERM_MIN_COLS=<n>                     herdr 放置后空间判据最小列宽（默认 60；不足只 warn 不中断）
@@ -94,31 +82,13 @@
 #   NAO_UPDATE_ON_ENSURE=0|false             ensure pm 就绪后的下游版本自检**投递**开关（默认开；0/false ⇒ 不投递）
 #
 # 在线判定与 pane 定位（status / close / ensure 判重共用）
-#   ⚠️ pane id（%N）是 **server 局部**命名空间（每个 server 首块 pane 都是 %0）⇒ 任何「跨 server 比较
-#     pane id」的判据都是错的（T530 误拒根因）；「解析句柄」与「执行 kill」必须同 server（同 $TMUX）。
-#   pi 启动后用 OSC 0 把终端标题设为 "π - <会话名> - <cwd basename>" 并改写 argv
-#   （/proc/<pid>/cmdline 只剩 "pi"）⇒ 不使用 `pgrep --name`（历史假阴性根因）。
-#   ⚠️ 标题可能被外部改写（PM 实测变为 "pi:c"）⇒ pane 定位按三层后备（find_pane_for）：
-#     ① 终端标题契约（最快）
-#     ② pi-intercom 名册 tmuxPane（注册时读 $TMUX_PANE；与标题改名无关，权威）
-#     ③ 本仓「未被认领 pi pane」唯一兜底（启发式；歧义即 warn，不猜）
-#   名册由 intercom-probe.mts（一次调用、进程内缓存，含 tmuxPane）取；探针不可用回退
-#   pi-intercom 官方 cli.ts（无 tmuxPane），再不可用回退 tmux 会话名。
-#
-# tmux 后端行为（**回退通道**：默认后端为 herdr；本节仅 `NAO_TERMINAL=tmux` 时生效）
-#   - 以派生宿主窗口（调用者 pane 所在 window）分屏拉起，不新建窗口；
-#     显式 `-t @<window_id>` 目标（定位链：NAO_TMUX_HOST_WINDOW > $TMUX_PANE > 名册唯一命中；
-#     否则 warn + 跳过该 pane，不落入当前窗口）
-#   - main-row2：第 1 个 pane 全高占左，后续每角色往右开列、每列上下 2 个（默认）：
-#                 1 | 2 | 4
-#                 1 | 3 | 5
-#   - main-col：第 1 个 pane 全高占左，其余 pane 在右列纵向堆叠（委托内建 main-vertical）：
-#                 1 | 2
-#                 1 | 3
-#                 1 | 4
-#   - grid：所有 pane 等大网格（tmux 内建 tiled），宽度最优。
-#   - 窄列守卫：main-row2 的最窄非主 pane < NAO_TMUX_MIN_PANE_WIDTH ⇒ 回退 main-col；
-#              回退后右列仍不足 ⇒ 再回退 grid（带 warn，不中断 ensure）。
+#   身份/归属/忙闲全部取 herdr 结构化事实：pane label（+ argv --name 交叉校验）· pane cwd /
+#     foreground_cwd（谓词复用 repo_contains_path）· agent_status + state_change_seq。
+#   ⚠️ 一律不读终端标题，也不把宿主终端句柄当证据：从 tmux shell 起的 herdr server 会把外层
+#     句柄（TMUX/TMUX_PANE/TMUX_TMPDIR）渗进 pane（spike 实测）⇒ 起 server 前必须清（BR6）。
+#   pane id（%N）是 **server 局部**命名空间 ⇒ 任何「跨 server 比较 pane id」的判据都是错的（T530 误拒根因）。
+#   名册由 intercom-probe.mts（一次调用、进程内缓存，含 tmuxPane 字段）取，仅供 status 的 -v 诊断；
+#     身份判定**不**依赖名册（BR3/BR7）。
 # =============================================================================
 set -euo pipefail
 
@@ -142,7 +112,7 @@ MIN_PI_MINOR="${MIN_PI_MINOR%%.*}"
 # ---- 终端后端（#96 二期 B1 · PRD 附二「门面 + 双实现并存」）----
 # 默认值**唯一赋值点**：全脚本 `grep -cE '^NAO_TERMINAL='` 必须恰 1 处（tests/t4 静态 lint 断言）。
 # 三期 P2（2026-11-11）：**herdr 转默认**只改这一行（B1 立的 lint 就是为这一步准备的）。
-#   `:-` 语义 ⇒ 未设与空串都落 herdr；回退通道 = `NAO_TERMINAL=tmux`（不自动回落，fail loud）。
+#   `:-` 语义 ⇒ 未设与空串都落 herdr；本版起 herdr 是唯一后端（旧回退面已删，其他值 ⇒ 守卫 exit 2）。
 NAO_TERMINAL="${NAO_TERMINAL:-herdr}"
 # herdr 破坏性变更的唯一硬判据（version 只打印不比较：版本串比较脆）
 TERM_HERDR_PROTOCOL="22"
@@ -180,22 +150,13 @@ ROLE_ORDER=()
 NAME=""; PROMPT=""
 declare -A ROLE_CARDS ROLE_WS ALIAS_ROLE
 MODEL_WHITELIST="${NAO_MODEL_WHITELIST:-}"
-TMUX_LAYOUT="${NAO_TMUX_LAYOUT:-main-row2}"
-# main-row2 主 pane 宽度百分比：默认值与非法值回退共用同一常量（防三处漂移）
-TMUX_MAIN_WIDTH_DEFAULT=33
-TMUX_MAIN_WIDTH="${NAO_TMUX_MAIN_WIDTH:-$TMUX_MAIN_WIDTH_DEFAULT}"
-# 最小非主 pane 列宽守卫：默认值与非法值回退共用同一常量（防漂移）
-TMUX_MIN_PANE_WIDTH_DEFAULT=30
-TMUX_MIN_PANE_WIDTH="${NAO_TMUX_MIN_PANE_WIDTH:-$TMUX_MIN_PANE_WIDTH_DEFAULT}"
-# T517：派生宿主窗口 ID（归一化 @<window_id>；空 = 定位失败 ⇒ 该角色 pane warn+skip，禁无 -t 续建）
-HOST_WINDOW=""
 # T536：本轮真正创建成功的 pane 数（>0 ⇒ ensure 收尾打印**恰一行**就绪提示；跳过/失败分支恒 0，BR3/AC4）
 # T539：三态计数（成功 / 跳过 / 失败）—— 每个 ensure 目标恰落一类，合计 = 目标数（BR3 计数守恒）
 SPAWN_OK=0
 SPAWN_SKIP=0
 SPAWN_FAIL=0
-# T539/BR2：spawn_tmux 的**显式**结果契约（返回值；调用方禁用「没打印就是成功」这类隐式约定）：
-#   0 = 成功（pane 已创建）· 2 = 跳过（宿主窗口未解析，未创建）· 3 = 失败（split-window 非 0，未创建）
+# T539/BR2：term_spawn 的**显式**结果契约（返回值；调用方禁用「没打印就是成功」这类隐式约定）：
+#   0 = 成功（pane 已创建）· 2 = 跳过 · 3 = 失败（含就绪超时 / 0 尺寸 pane）
 SPAWN_RC_OK=0
 SPAWN_RC_SKIP=2
 SPAWN_RC_FAIL=3
@@ -250,23 +211,12 @@ CG_MSG_UNPARSABLE='codegraph status 输出不可解析（手工 codegraph status
 log()  { printf '\033[1;32m[fleet]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[fleet]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[fleet]\033[0m %s\n' "$*" >&2; exit 1; }
-# 唯一运行前提（BR1/BR3 · ADR 2026-10-27-strict-tmux-pi）：是指 tmux 后端的前提 —— $TMUX 非空且 tmux 可用。
-#   （默认后端已翻 herdr：herdr 侧对应 _term_herdr_require；两端都 exit 3 + 零副作用）
-# 不满足 ⇒ exit 3 + 单行提示；调用点在建 session / load_manifest / 写状态**之前**（失败零副作用）。
-# rc 语义：3 = 前提不满足 ⇒ 命令未执行；不复用 1（已执行但失败）/ 2（用法守卫，现仅 cleanup）。
-require_tmux() {
-  if [[ -n "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1; then return 0; fi
-  printf '需要 tmux：nao-fleet 只支持在 tmux 会话内运行（先 `tmux new -s nao`，再在该会话内重试）\n' >&2
-  exit 3
-}
-
 # =============================================================================
 # 终端后端门面（#96 二期 B1 · PRD 附二「门面 + 双实现并存」）
 #
 #   契约：**业务区只调** term_require / term_snapshot / term_liveness / term_argv /
 #         term_spawn / term_deliver / term_session_start / term_reclaim / term_cleanup（+ 纯谓词 term_deliverable）。
-#         后端差异只允许出现在本区间与 `# >>> term-impl-tmux` 区间
-#         （静态 lint：tests/t4/lib.sh::t4_scan_term_bare_calls）。
+#         实现只有 herdr 一份（静态 lint：tests/t4/lib.sh::t4_scan_tmux_residue 禁旧面复活）。
 #   默认值唯一：**常量区的 `NAO_TERMINAL` 赋值就是全脚本唯一的赋值点**（此处不重述默认值字面量 ——
 #   重述会与常量区脱钩把注释写成谎话；值只认常量区，grep 判据见 tests/t4 的 `grep -cE '^NAO_TERMINAL='`）。
 #   herdr 侧纪律（BR2/BR3/BR6）：身份取 pane.label（+ argv --name 交叉校验）、归属取
@@ -276,45 +226,51 @@ require_tmux() {
 #         herdr server 会把外层句柄渗进 pane（spike 实测），拿来判身份必串台。
 #   rc 语义：4 = 保留（B3 后无未实现子命令）；1 = 已执行但失败；3 = 前提不满足；2 = 用法守卫。
 # >>> term-facade BEGIN
-term_backend() {
+# 唯一后端（ADR 2026-11-22-herdr-only · supersede 2026-10-27-strict-tmux-pi）
+#   后端身份 = **常量而非分支**：herdr 是唯一后端。`NAO_TERMINAL` 只用于**拒绝**旧值（fail loud，不静默降级）：
+#   未设/空串/herdr ⇒ 放行；其余（含旧回退值）⇒ stderr 恰 1 行 + exit 2（命令未执行，零副作用）。
+#   契约：**业务区只调** term_require / term_snapshot / term_liveness / term_argv /
+#         term_spawn / term_deliver / term_session_start / term_reclaim / term_cleanup（+ 纯谓词 term_deliverable）。
+#   默认值唯一：**常量区的 `NAO_TERMINAL` 赋值就是全脚本唯一的赋值点**（此处不重述默认值字面量 ——
+#   重述会与常量区脱钩把注释写成谎话；值只认常量区，grep 判据见 tests/t4 的 `grep -cE '^NAO_TERMINAL='`）。
+#   herdr 侧纪律（BR2/BR3/BR6）：身份取 pane.label（+ argv --name 交叉校验）、归属取
+#         pane.cwd/foreground_cwd（谓词复用 repo_contains_path）、忙闲取 agent_status +
+#         state_change_seq（权威源 = pane list / agent list；`agent explain` 只作诊断、禁作判据）；
+#         **一律不读终端标题**，也**不把宿主 tmux 的句柄变量当证据** —— 从 tmux shell 起的
+#         herdr server 会把外层句柄渗进 pane（spike 实测），拿来判身份必串台。
+#   rc 语义：1 = 已执行但失败；3 = 前提不满足；2 = 用法守卫（旧调用面：非 herdr 的 NAO_TERMINAL / cleanup -S）。
+term_backend() {  # 守卫（无输出 = 放行）；旧值 ⇒ 单行 stderr + exit 2
   case "${NAO_TERMINAL:-}" in
-    tmux|herdr) printf '%s\n' "$NAO_TERMINAL" ;;
+    ''|herdr) return 0 ;;
+    tmux)
+      printf '[fleet] 已移除 tmux 后端：本版起 herdr（≥0.9.1）是唯一后端 —— 删掉 NAO_TERMINAL 或置空后重试（迁移见 v0.28.0 发布说明）\n' >&2
+      exit 2 ;;
     *)
-      printf '[fleet] NAO_TERMINAL=%s 非法（期望 tmux|herdr）\n' "${NAO_TERMINAL:-<空>}" >&2
-      return 1 ;;
+      printf '[fleet] NAO_TERMINAL=%s 非法：本版唯一后端是 herdr（未设/空串 = herdr）\n' "$NAO_TERMINAL" >&2
+      exit 2 ;;
   esac
 }
 
 # ---- 1/4 前提闸门 ----
-term_require() {
-  case "$(term_backend)" in
-    tmux) require_tmux ;;
-    herdr) _term_herdr_require ;;
-  esac
-}
+term_require() { _term_herdr_require; }
 
-# ---- 2/4 快照（每命令 ≤1 次 pane list / agent list；herdr 侧落临时文件，子 shell 复用同一份）----
+# ---- 2/4 快照（每命令 ≤1 次 pane list / agent list；落临时文件，子 shell 复用同一份）----
 # 12 列（TAB）：name pane_id terminal_id cwd foreground_cwd fg_process
 #               agent_status state_change_seq agent_session argv_name hook_authority workspace_id
-#   tmux：由既有 visible_session_names / pane_cwd_snapshot 合成，新列一律 `-`（语义零改动）
-#   herdr：pane list + agent list 按 pane_id join；只对带 label 的 pane 各取一次 process-info
+#   pane list + agent list 按 pane_id join；只对带 label 的 pane 各取一次 process-info
 term_snapshot() {
-  case "$(term_backend)" in
-    tmux) _term_tmux_snapshot ;;
-    herdr)
-      local f="${_TERM_SNAP_FILE:-${_TERM_SNAP_PATH:-${TMPDIR:-/tmp}/nao-fleet-term-snap.$$}}"
-      # 判据用「文件存在」而非「非空」：**无 label 会话时快照合法为空** —— 用 -s 会每调用重建
-      #   （QA P3-1 实测 status 退化成 pane list ×7 / agent list ×7）。
-      if [[ -e "$f" ]]; then _TERM_SNAP_FILE="$f"; cat "$f"; return 0; fi
-      # 上一轮被 SIGKILL/timeout 杀掉时会留下同名快照（EXIT trap 不执行）⇒ 只在**重建**时清 >2h 的陈迹
-      find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'nao-fleet-term-snap.*' -mmin +120 -delete 2>/dev/null || true
-      if ! _term_herdr_snapshot > "$f"; then
-        rm -f "$f" 2>/dev/null || true; _TERM_SNAP_FILE=""
-        return 1
-      fi
-      _TERM_SNAP_FILE="$f"
-      cat "$f" ;;
-  esac
+  local f="${_TERM_SNAP_FILE:-${_TERM_SNAP_PATH:-${TMPDIR:-/tmp}/nao-fleet-term-snap.$$}}"
+  # 判据用「文件存在」而非「非空」：**无 label 会话时快照合法为空** —— 用 -s 会每调用重建
+  #   （QA P3-1 实测 status 退化成 pane list ×7 / agent list ×7）。
+  if [[ -e "$f" ]]; then _TERM_SNAP_FILE="$f"; cat "$f"; return 0; fi
+  # 上一轮被 SIGKILL/timeout 杀掉时会留下同名快照（EXIT trap 不执行）⇒ 只在**重建**时清 >2h 的陈迹
+  find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'nao-fleet-term-snap.*' -mmin +120 -delete 2>/dev/null || true
+  if ! _term_herdr_snapshot > "$f"; then
+    rm -f "$f" 2>/dev/null || true; _TERM_SNAP_FILE=""
+    return 1
+  fi
+  _TERM_SNAP_FILE="$f"
+  cat "$f"
 }
 
 # ---- 3/4 在线判定 → "<verdict>\t<state>\t<seq>\t<hook_authority>" ----
@@ -323,79 +279,51 @@ term_snapshot() {
 #   integration-missing → online；`hook_authority` = agent list 的 screen_detection_skipped
 #   （1 = 状态来自生命周期 hook（可信）/ 0 = 屏幕启发式或缺失（保守不可投递））。
 term_liveness() {  # <name> [repo]
-  case "$(term_backend)" in
-    tmux) _term_tmux_liveness "${1-}" "${2-}" ;;
-    herdr) _term_herdr_liveness "${1-}" "${2-}" ;;
-  esac
+  _term_herdr_liveness "${1-}" "${2-}"
 }
 
-# ---- 4/4 前台 argv（herdr 取全部前台进程；tmux 只给命令名 ⇒ argv 列留空，不得用 ps 兜底）----
-term_argv() {  # <pane_id> → 每行 "process-name<TAB>argv"
-  case "$(term_backend)" in
-    tmux) _term_tmux_argv "${1-}" ;;
-    herdr) _term_herdr_argv "${1-}" ;;
-  esac
+# ---- 4/4 前台 argv（取全部前台进程 → 每行 "process-name<TAB>argv"；不得用 ps 兜底）----
+term_argv() {  # <pane_id>
+  _term_herdr_argv "${1-}"
 }
 
-# ---- 5/8 放置（B2 + 三期 P1 布局 A）：tmux = split-window / herdr = 1 workspace/仓 + 1 tab/角色 ----
-# herdr 侧：tab label = 角色名，每 tab 恰 1 pane（结构判据，零几何算式）；既有 pane 若在共享 tab 里
+# ---- 5/8 放置（三期 P1 布局 A）：1 workspace/仓 + 1 tab/角色 ----
+# tab label = 角色名，每 tab 恰 1 pane（结构判据，零几何算式）；既有 pane 若在共享 tab 里
 #   ⇒ `pane move --new-tab` + `tab rename` 迁移（pane_id 不变、被搬空的 tab 由 herdr 自动关闭）。
 # 返回三态码（SPAWN_RC_*）：0 成功 · 2 跳过 · 3 失败（含就绪超时 / 0 尺寸 pane；调用方计入 SPAWN_FAIL）。
-# 成功时**必须**回填 `_TERM_SPAWN_PANE`（T548 投递点依赖它；tmux 侧由 spawn_tmux 的 -P -F 回填）。
+# 成功时**必须**回填 `_TERM_SPAWN_PANE`（T548 投递点依赖它）。
 term_spawn() {  # <name> <inner> <repo> [force] [label] [group]
-  case "$(term_backend)" in
-    tmux) spawn_tmux "${1-}" "${2-}" ;;
-    herdr) _term_herdr_spawn "${1-}" "${2-}" "${3-}" "${4:-false}" "${5-}" "${6-}" ;;
-  esac
+  _term_herdr_spawn "${1-}" "${2-}" "${3-}" "${4:-false}" "${5-}" "${6-}"
 }
 
-# ---- 6/8 起 server（B2 · BR6）：herdr 唯一生产入口；tmux 幂等无害（server 随会话自动起）----
+# ---- 6/8 起 server（B2 · BR6）：唯一生产入口 ----
 term_session_start() {  # <session>
-  case "$(term_backend)" in
-    tmux) printf '[fleet] tmux 后端无需 session-start（server 随会话自动起）\n'; return 0 ;;
-    herdr) _term_herdr_session_start "${1-}" ;;
-  esac
+  _term_herdr_session_start "${1-}"
 }
 
 # ---- 5.5/8 投递（T548/Issue #140）：就绪后把**下游版本自检**作为一条用户消息送进已就绪会话 ----
-#   为什么单独一门面：投递通道两后端不同（herdr `agent prompt` / tmux load-buffer+paste-buffer），
-#     且**只在 spawn 成功后**才允许调用（就绪门语义不放宽 —— 自检不再进 argv，见 spawn_one）。
+#   为什么单独一门面：**只在 spawn 成功后**才允许调用（就绪门语义不放宽 —— 自检不再进 argv，见 spawn_one）。
 #   契约：0 = 已投递 · 1 = 投递失败（**调用方不计 SPAWN_FAIL**：会话确实可用，自检只读非阻塞）。
-#     失败时 stdout 给一行可粘贴的诊断（herdr = error code / tmux = 失败阶段），供调用方 warn。
+#     失败时 stdout 给一行可粘贴的诊断（error code），供调用方 warn。
 term_deliver() {  # <pane_id> <message>
-  case "$(term_backend)" in
-    tmux) _term_tmux_deliver "${1-}" "${2-}" ;;
-    herdr) _term_herdr_deliver "${1-}" "${2-}" ;;
-  esac
+  _term_herdr_deliver "${1-}" "${2-}"
 }
 
-# ---- 7/8 回收（B3）：句柄层（定位 / self 判据 / liveness / 忙闲证据 / 回收句柄）双实现 ----
+# ---- 7/8 回收（B3）：句柄层（定位 / self 判据 / liveness / 忙闲证据 / 回收句柄）----
 #   共用闸门层（tasks-state、subagent 拒收、目标解析、--force）仍在 cmd_close，**不动**。
 #   返回 0 = 已回收 / 未运行（幂等成功）；1 = 拒绝或已执行但失败（含 effect 未达成）。
 term_reclaim() {  # <name> <repo> <force> <core> <scope> <ensure-target>
-  case "$(term_backend)" in
-    tmux) _term_tmux_reclaim "${1-}" "${2-}" "${3-}" "${4-}" "${5-}" "${6-}" ;;
-    herdr) _term_herdr_reclaim "${1-}" "${2-}" "${3-}" "${4-}" "${5-}" "${6-}" ;;
-  esac
+  _term_herdr_reclaim "${1-}" "${2-}" "${3-}" "${4-}" "${5-}" "${6-}"
 }
 
-# ---- 8/8 拆场（B3 姊妹入口）：tmux = 终结隔离 server（socket 为显式目标）；herdr = session stop+delete ----
+# ---- 8/8 拆场（B3 姊妹入口）：herdr = session stop+delete ----
 #   herdr 的 stop **非幂等**（第二次 rc=1）⇒ 判 **effect** 不看 rc；default 一律拒（BR9）。
-term_cleanup() {  # <tmux-socket> <herdr-session> [force]
-  case "$(term_backend)" in
-    tmux) _term_tmux_cleanup "${1-}" "${3:-false}" ;;
-    herdr) _term_herdr_cleanup "${2-}" "${3:-false}" ;;
-  esac
+term_cleanup() {  # <herdr-session> [force]
+  _term_herdr_cleanup "${1-}" "${2:-false}"
 }
 
-# ---- 9/9 当前终端会话名（诊断行用；B4 起取代 cmd_check 的裸 `tmux display-message`）----
-#   tmux = 当前 client 的 session 名（无 client/失败 ⇒ 空，调用方给 `?`）；herdr = HERDR_SESSION。
-term_session_name() {
-  case "$(term_backend)" in
-    tmux) _term_tmux_current_session ;;
-    herdr) printf '%s\n' "${HERDR_SESSION:-}" ;;
-  esac
-}
+# ---- 9/9 当前终端会话名（诊断行用）----
+term_session_name() { printf '%s\n' "${HERDR_SESSION:-}"; }
 
 # ---- BR7 忙闲 → 可投递（纯谓词；事实判定与策略映射分离，B3 close 复用）----
 #   idle/done 可投递；working/blocked 不可；unknown 保守不可。
@@ -408,22 +336,6 @@ term_deliverable() {
   esac
 }
 
-# tmux 侧快照：由既有两函数合成（**不改**它们的签名/行为 —— close/ensure 仍直接用）
-_term_tmux_snapshot() {
-  local n p c
-  local -A emitted=()
-  while IFS=$'\t' read -r n p c; do
-    [[ -n "$n" ]] || continue
-    printf '%s\t%s\t-\t%s\t-\t-\t-\t-\t-\t-\t-\t-\n' "$n" "$p" "$c"
-    emitted["$n"]=1
-  done < <(_term_tmux_pane_cwds)
-  # 无 pane 的会话名（tmux 会话 nao-*）：pane/cwd 列留空
-  while IFS= read -r n; do
-    [[ -n "$n" ]] || continue
-    [[ -n "${emitted[$n]:-}" ]] && continue
-    printf '%s\t\t-\t\t-\t-\t-\t-\t-\t-\t-\t-\n' "$n"
-  done < <(_term_tmux_names)
-}
 # >>> term-facade-herdr BEGIN
 # herdr 后端实现（本区间**禁出现** tmux 句柄/标题字段名：静态 lint t4_scan_term_herdr_forbidden）
 #   会话名来源 = 环境变量 HERDR_SESSION（herdr pane 内天然存在）；所有调用经唯一入口注入 --session。
@@ -461,17 +373,17 @@ _term_path_norm() { realpath -m -- "${1-}" 2>/dev/null || printf '%s\n' "${1-}";
 # 前提闸门（herdr）：不满足 ⇒ exit 3（命令未执行）；**禁**从 `session list`/`pane current` 反推会话名
 _term_herdr_require() {
   command -v herdr >/dev/null 2>&1 || {
-    printf '需要 herdr：herdr 后端要求 herdr ≥0.9.1 在 PATH（装好后重试，或 NAO_TERMINAL=tmux 回退）\n' >&2
+    printf '需要 herdr：herdr 后端要求 herdr ≥0.9.1 在 PATH（装好后重试；旧版 tmux 后端已移除，需要它请 pin 回 ≤0.27.x）\n' >&2
     exit 3
   }
   if [[ "${HERDR_ENV:-}" != "1" ]]; then
-    printf '需要 herdr pane：HERDR_ENV=1 缺失（herdr 后端只在其 pane 内运行；从外部推断会话名属猜测面，禁）—— 在该 herdr 会话的 pane 内重试，或 NAO_TERMINAL=tmux 回退\n' >&2
+    printf '需要 herdr pane：HERDR_ENV=1 缺失（herdr 后端只在其 pane 内运行；从外部推断会话名属猜测面，禁）—— 在该 herdr 会话的 pane 内重试（旧版 tmux 后端已移除）\n' >&2
     exit 3
   fi
   local s="${HERDR_SESSION:-}" sp="${HERDR_SOCKET_PATH:-}" root rootp spp
   # T554/AC5：default 全放行（ensure/status/close 直接可用）；仅空名/非法字符仍是前提不满足。
   if [[ -z "$s" || ! "$s" =~ ^[A-Za-z0-9._-]+$ ]]; then
-    printf '需要 herdr 会话：HERDR_SESSION=%s 不可用（须非空、^[A-Za-z0-9._-]+$）—— 在有效 herdr 会话的 pane 内重试，或 NAO_TERMINAL=tmux 回退\n' "${s:-<空>}" >&2
+    printf '需要 herdr 会话：HERDR_SESSION=%s 不可用（须非空、^[A-Za-z0-9._-]+$）—— 在有效 herdr 会话的 pane 内重试（旧版 tmux 后端已移除）\n' "${s:-<空>}" >&2
     exit 3
   fi
   # BR6：socket 必须落在**目标根**下（不是「任意 */sessions/<名>/*」——后者对 stale/外贸 env 等于死守卫）。
@@ -480,18 +392,18 @@ _term_herdr_require() {
   rootp="$(_term_path_norm "$root/sessions/$s")"
   spp="$(_term_path_norm "$sp")"
   if [[ -z "$sp" || "$spp" != "$rootp"/* ]]; then
-    printf '需要 herdr 会话目录：HERDR_SOCKET_PATH=%s 不在目标根 %s/ 下（stale/外贸 env ⇒ 拒绝，防串台）—— 在目标会话 pane 内重试，或 NAO_TERMINAL=tmux 回退\n' \
+    printf '需要 herdr 会话目录：HERDR_SOCKET_PATH=%s 不在目标根 %s/ 下（stale/外贸 env ⇒ 拒绝，防串台）—— 在目标会话 pane 内重试（旧版 tmux 后端已移除）\n' \
       "${sp:-<空>}" "$rootp" >&2
     exit 3
   fi
   local schema proto
   if ! schema="$(_term_herdr_exec api schema 2>/dev/null)"; then
-    printf 'herdr api schema 不可用（server/CLI 异常）：无法校验 protocol ⇒ 拒绝执行（核对 herdr ≥0.9.1 / server 状态后重试，或 NAO_TERMINAL=tmux 回退）\n' >&2
+    printf 'herdr api schema 不可用（server/CLI 异常）：无法校验 protocol ⇒ 拒绝执行（核对 herdr ≥0.9.1 / server 状态后重试；旧版 tmux 后端已移除）\n' >&2
     exit 3
   fi
   proto="$(printf '%s\n' "$schema" | sed -n 's/^protocol:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -1)"
   if [[ "$proto" != "$TERM_HERDR_PROTOCOL" ]]; then
-    printf 'herdr protocol=%s ≠ %s（破坏性变更 ⇒ fail loud，不静默降级；请升级 nao-skill 或回退 NAO_TERMINAL=tmux）\n' \
+    printf 'herdr protocol=%s ≠ %s（破坏性变更 ⇒ fail loud，不静默降级；请升级 nao-skill，或 pin 回 ≤0.27.x）\n' \
       "${proto:-<未知>}" "$TERM_HERDR_PROTOCOL" >&2
     exit 3
   fi
@@ -908,7 +820,7 @@ _term_herdr_cleanup() {  # <session> [force]
     printf '[fleet] --force：当前 pane 若属于 session=default 将被终止\n' >&2
   fi
   command -v herdr >/dev/null 2>&1 || {
-    printf '需要 herdr：herdr 后端要求 herdr ≥0.9.1 在 PATH（装好后重试，或 NAO_TERMINAL=tmux 回退）\n' >&2
+    printf '需要 herdr：herdr 后端要求 herdr ≥0.9.1 在 PATH（装好后重试；旧版 tmux 后端已移除，需要它请 pin 回 ≤0.27.x）\n' >&2
     return 2
   }
   case "$s" in
@@ -1185,7 +1097,7 @@ _term_herdr_space_check() {  # <pane_id> <name> → 0 可继续 / 1 不可用（
     warn "空间不可用：$name（pane=$pid）列=$w 行=$h —— 0 尺寸 pane 读不了内容 ⇒ 计 SPAWN_FAIL（摘要不再算成功）"
     warn "  该怎么办：① 调 [server] headless_cols/headless_rows（config.toml）放大后重启会话（cleanup + session-start）"
     warn "            ② attach 后重排：herdr session attach ${HERDR_SESSION:-<session>}，再调整窗口/分屏"
-    warn "            ③ 切布局：export NAO_TERMINAL=tmux（回退 tmux 后端）"
+    warn "            ③ 换更大窗口/显示器后 attach（唯一后端 = herdr：旧版 tmux 后端已移除）"
     warn "  文档：docs/INSTALL.md「herdr 后端」· docs/prds/2026-11-10-herdr-base.md AC3.2（J1–J5）"
     return 1
   fi
@@ -1193,7 +1105,7 @@ _term_herdr_space_check() {  # <pane_id> <name> → 0 可继续 / 1 不可用（
     warn "空间不足：$name（pane=$pid）列=$w < ${TERM_MIN_COLS} 或 行=$h < ${TERM_MIN_ROWS} —— 仅 warn，不中断（rc 语义跨后端一致）"
     warn "  该怎么办：① 调 [server] headless_cols/headless_rows（config.toml）放大后重启会话（cleanup + session-start）"
     warn "            ② attach 后重排：herdr session attach ${HERDR_SESSION:-<session>}，再调整窗口/分屏"
-    warn "            ③ 切布局：export NAO_TERMINAL=tmux（回退 tmux 后端）"
+    warn "            ③ 换更大窗口/显示器后 attach（唯一后端 = herdr：旧版 tmux 后端已移除）"
     warn "  文档：docs/INSTALL.md「herdr 后端」· docs/prds/2026-11-10-herdr-base.md AC3.2（J1–J5）"
   fi
   return 0
@@ -1521,7 +1433,7 @@ _term_herdr_wait_ready() {  # <pane_id> <name> → 0 就绪 / 1 超时（逐条�
 #   幂等：已就绪 ⇒ effect=0；失败 ⇒ rc=1 + 日志尾 + 改法；用法守卫（缺名/default/非法名）⇒ rc=2。
 _term_herdr_session_start() {  # <session>
   local s="${1-}" root="" sock="" log="" prev="" i ok=0 max="${TERM_READY_POLL_MAX:-50}" int="${TERM_READY_POLL_INT:-0.1}"
-  command -v herdr >/dev/null 2>&1 || { printf '需要 herdr：herdr 后端要求 herdr ≥0.9.1 在 PATH（装好后重试，或 NAO_TERMINAL=tmux 回退）\n' >&2; return 1; }
+  command -v herdr >/dev/null 2>&1 || { printf '需要 herdr：herdr 后端要求 herdr ≥0.9.1 在 PATH（装好后重试；旧版 tmux 后端已移除，需要它请 pin 回 ≤0.27.x）\n' >&2; return 1; }
   case "$s" in
     ""|"default") printf '需要 herdr 会话名：%s 不可用（--session 必填且 ≠default —— default 是用户会话，BR9）\n' "${s:-<空>}" >&2; return 2 ;;
   esac
@@ -1675,10 +1587,9 @@ check_eol() {
 # 端前提声明一致性（#124 · AC5/AC6；上游 #118 §八 D4 裁定 = **不加新闸门**，改单点 warn）
 #   比对面：机制文本声明的「默认后端」（`.agents/common/intercom-protocol.md` + `AGENTS.md`）
 #   vs 实现默认（`NAO_TERMINAL` 唯一赋值点，从本脚本源码解析 —— 不在此重述默认值字面量）。
-#   纪律：**只 warn、不改 rc**（BR4）；**一致时零输出** —— 显式 `NAO_TERMINAL=tmux` 的 check 输出
-#   必须与旧版逐字等价（tests/t4/cases/06 的 golden md5 依赖这一点）。
-#   声明写法契约（改文案别破坏）：声明行须含 **`默认 herdr`** 或 **`默认 tmux`** 原文（`默认` 与后端名
-#   之间只许空格 / `=`/`＝`；不要插 `**` 等标记）。解析不出 ⇒ `nodecl` ⇒ warn（fail loud，不静默放过）。
+#   纪律：**只 warn、不改 rc**（BR4）；**一致时零输出**（tests/t4/cases/06 的 golden md5 依赖这一点）。
+#   声明写法契约（改文案别破坏）：声明行须含 **`默认 herdr`** 原文（`默认` 与后端名之间只许空格 /
+#   `=`/`＝`；不要插 `**` 等标记）。解析不出 ⇒ `nodecl` ⇒ warn（fail loud，不静默放过）。
 #   **全部声明行参与判定**（P2-1 · QA 复核）：同文件内多行声明各判各的 —— 只回退其中一个症状行
 #   （如 `AGENTS.md:18` 而 `:33` 仍写 herdr）也必须被抓到；旧实现「取第一条可解析行」正是该盲区。
 #   输出（每行一条，TAB 分隔）：`<行号>\t<herdr|tmux|nodecl>`；
@@ -1690,6 +1601,7 @@ premise_declared_backend() {
   [[ -f "$f" ]] || return 0
   grep -qE '运行前提|机制只支持|端前提' "$f" 2>/dev/null || return 0
   # 只信「端前提声明行」：其它行的「默认」与后端无关（如「默认 main-row2」布局）
+  #   `tmux` 仍被解析（T555/AC10）：声明里残留它 ⇒ 由调用方 warn 点名「已移除」，**不**静默放过。
   while IFS=: read -r n line; do
     [[ -n "${n:-}" ]] || continue
     decl="$(printf '%s\n' "$line" | grep -oE '默认(后端)?[ ]*(=[ ]*)?(herdr|tmux)' | head -1 | grep -oE '(herdr|tmux)$')"
@@ -1716,6 +1628,9 @@ check_backend_premise() {
       [[ "$decl" == "$actual" ]] && continue         # 该行与实现一致 ⇒ 零输出
       if [[ "$decl" == "nodecl" ]]; then
         printf '  ! 端前提行未给出可比对的后端声明：%s:%s（若该行与终端后端无关，可忽略；或在 AGENTS.md 中删去该行的「运行前提」字样以免被纳入比对）—— 实现默认 = %s（%s 的唯一赋值点）\n' \
+          "$rel" "$n" "$actual" "nao-fleet.sh"
+      elif [[ "$decl" == "tmux" ]]; then
+        printf '  ! 端前提声明不一致：%s:%s 声明默认后端 = tmux，而本版**已移除 tmux 后端**（唯一后端 = %s，见 %s 的唯一赋值点）—— 改声明为「运行前提（仅 pi · 默认 herdr）」\n' \
           "$rel" "$n" "$actual" "nao-fleet.sh"
       else
         printf '  ! 端前提声明不一致：%s:%s 声明默认后端 = %s，而实现默认 = %s（%s 的唯一赋值点）—— 改声明或改实现，同一事实勿双源\n' \
@@ -2427,22 +2342,14 @@ fleet_roles_init() {
   return 0
 }
 
-# 宿主阶梯（已删 · ADR 2026-10-27-strict-tmux-pi）：单一前提 = tmux 会话内；
-#   ② $TMUX 存在 ⇒ 派生宿主窗口（调用者 pane 所在 window）split-window 显式 -t @<window_id>。
-
 # ---------------------------------------------------------------------------
 # 会话在线判定
 #
-# 历史假阴性根因：pi 启动后用 OSC 0 把终端标题设为
-#   "π - <会话名> - <cwd basename>"（pi 源码 updateTerminalTitle），
-# 并同步改写 argv —— /proc/<pid>/cmdline 只剩 "pi"，`pgrep -f --name` 恒失配，
-# 于是 status/close 长期判「不在线」（close 退化为静默空转、exit 0）。
-# 现改为按「终端标题契约」取句柄，argv 扫描一律不用：
-#   ① pi-intercom 名册（权威在线名单）
-#   ② tmux pane_title（pi 自设；与 pane_start_command 是否为空无关）
-#   ③ tmux detached 会话名 nao-<会话名>
-# ⚠️ 标题可被外部改写（实测 "pi:c"）⇒ find_pane_for 再叠三层后备：标题契约 →
-#   名册 tmuxPane（$TMUX_PANE，权威）→ 本仓未认领 pi pane 唯一兜底。
+# 身份/归属/忙闲**全部取 herdr 结构化事实**（ADR 2026-11-22-herdr-only）：
+#   身份 = pane label（+ argv --name 交叉校验）· 归属 = pane.cwd / foreground_cwd ·
+#   忙闲 = agent_status + state_change_seq（权威源 pane list / agent list）。
+# 历史上的「终端标题契约 / tmux pane_id / 会话名」三层句柄随 tmux 后端一并删除（见 ADR）；
+#   名册（intercom-probe.mts，含 tmuxPane 字段）只作 status -v 的诊断差异信号，**不参与**身份判定。
 # repo（可选）：给出时要求标题 basename / 名册 cwd 一致，避免跨项目同名会话互串。
 
 PI_AGENT_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
@@ -2600,230 +2507,13 @@ _close_adopt_repo() {  # <name> <roster_ok>
   die "close 目标歧义：$nm 在名册中对应 ${#cw[@]} 个 cwd：$(printf '%s ' "${cw[@]}")（该怎么办：用 intercom({action:'list'}) 人工核对该会话的仓位置；同名多仓没有「全名」写法可区分）"
 }
 
-# 会话所在的 tmux pane。三层后备（标题可被外部改写，如 "pi:c"）：
+# 名册里记录的 pane 句柄（herdr 起 server 前会清宿主句柄；此处仅作 -v 诊断差异信号）：
 #   ① 终端标题契约 "π - <会话名> - <repo basename>"（pi 自设；最快）
 #   ② pi-intercom 名册 tmuxPane（注册时读 $TMUX_PANE；与标题改名无关，权威）
 #   ③ 本仓「未被认领 pi pane」唯一兜底（启发式：pane_current_command=pi 且
 #      pane_current_path=repo；歧义时 warn，不猜）
 # repo（可选）：给出时要求标题 basename / 名册 cwd / pane 当前路径一致，避免跨项目同名互串。
-# >>> term-impl-tmux BEGIN (pane 定位)
-find_pane_by_title() {
-  local name="$1" repo="${2:-}" base=""
-  command -v tmux >/dev/null 2>&1 || return 0
-  if [[ -n "$repo" ]]; then base="$(repo_basename "$repo")"; fi
-  tmux list-panes -a -F "#{pane_id}"$'\t'"#{pane_title}" 2>/dev/null \
-    | awk -F'\t' -v p="$PI_TITLE" -v n="$name" -v b="$base" '
-        { t=$2
-          if (b != "") { if (t == p " - " n " - " b) { print $1; exit } }
-          else if (index(t, p " - " n " - ") == 1) { print $1; exit }
-        }' || true
-}
 
-# tmux pane 是否存活（名册 tmuxPane 可能滞后于 pane 关闭）
-tmux_pane_live() {
-  [[ -n "$1" ]] || return 1
-  command -v tmux >/dev/null 2>&1 || return 1
-  tmux list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qxF "$1"
-}
-# <<< term-impl-tmux END (pane 定位)
-
-# >>> term-impl-tmux BEGIN (回收 / 自身判定 / 忙闲)
-# 目标 pane 是否就是**调用者自己所在的 pane**（F1 不变量：close 任何路径不得回收调用者的 pane）。
-# T530 修正根因：旧判据是裸 pane id 比较（`"$pane" == "$TMUX_PANE"`）。pane id 是 **server 局部**
-#   命名空间（每个 server 的首块 pane 都是 %0）⇒ 跨 server 撞号时必然误判：隔离/custom socket 的
-#   测试 server 里解析出的 %0 与调用者默认 server 的 $TMUX_PANE=%0 字符串相同 → 误判「是自己」→ **误拒**
-#   正常回收（安全侧失败，不误杀，但功能不可用）。
-#   为什么不用「(socket, pane_id) 二元组相等」：撞号的成因就是 $TMUX_PANE 是**陈旧/外来**的
-#   （$TMUX 指向隔离 server，而 $TMUX_PANE 还是默认 server 的 %0）—— 两边读出来的 socket 恰好都等于
-#   $TMUX 首字段、id 又都是 %0，二元组照样相等 ⇒ 仍误拒。所以判据必须是「我是否真在这个 pane 里」。
-#   实现：目标 pane 的 pane_pid 是否是本进程（$$）的祖先 —— OS 级事实，与 pane id 命名空间无关，
-#   天然免疫跨 server 撞号，且顺带覆盖旧闸门的已知缺口（$TMUX_PANE 被清/未设时旧判据完全失效）。
-#   语义不放松：真自身 pane（如派生时继承 $TMUX_PANE 致名册错注册，T513-S2/T523/T525）⇒ 祖先命中 ⇒ 仍拒。
-#
-# T530-D1（QA 复核）：判据必须 **fail-closed**（三态），不得「不可判定 ⇒ 不声称是自己」。
-#   QA 实证：伪造 `ps` 令祖先链不可读 ＋ 在自身 pane 内跑 close ⇒ 自身 pane 被回收（SELF_KILLED）。
-#   F1「绝不杀自己」是硬不变量 ⇒ 判不了就**拒**（成本是少回收一次，代价是误杀一个会话）。
-#   返回：0 = 确定是自己 · 1 = 确定不是 · 2 = 不可判定（pane_pid 取不到 / ps 读不出 / 链断）
-pane_hosts_caller() {
-  local pane="$1" p_pid cur
-  [[ -n "$pane" ]] || return 2
-  p_pid="$(tmux display-message -p -t "$pane" '#{pane_pid}' 2>/dev/null || true)"
-  [[ "$p_pid" =~ ^[0-9]+$ ]] || return 2          # pane_pid 取不到 ⇒ 不可判定
-  cur="$$"
-  while [[ "$cur" =~ ^[0-9]+$ ]] && (( cur > 1 )); do
-    [[ "$cur" == "$p_pid" ]] && return 0
-    cur="$(ps -o ppid= -p "$cur" 2>/dev/null | tr -d '[:space:]')"
-    [[ -n "$cur" ]] || return 2                  # 链断（ps 不可读/被伪造）⇒ 不可判定
-  done
-  return 1                                        # 走到 init 仍未命中 ⇒ 确定不是
-}
-
-# F1 闸门统一判据（两个调用点共用）：0 = 必须拒绝回收，1 = 放行。
-#   不可判定（rc=2）时**仅当**目标 pane id 与调用者句柄 `$TMUX_PANE` 撞号才拒（保守侧）。
-#   ⛔ 不得把「rc=2 且 id 不等」也拒：跨 server 撞号是陈旧句柄造成的，若一律拒会把 v0.19.0
-#   那种「隔离 server 的 %0 被当成自己」的误拒（发布阻断红态）重新引回来。
-self_pane_refuse() {
-  local pane="$1" rc=0
-  pane_hosts_caller "$pane" || rc=$?
-  case "$rc" in
-    0) return 0 ;;                                                      # 确定是自己 ⇒ 拒
-    2) [[ -n "${TMUX_PANE:-}" && "$pane" == "$TMUX_PANE" ]] && return 0  # 不可判定但撞号 ⇒ 保守拒
-       return 1 ;;
-    *) return 1 ;;                                                      # 确定不是 ⇒ 放行
-  esac
-}
-
-# 该 pane 是否显示在跑 turn（启发式：扫末 12 行找状态行标记；回执/产物以 PM 核对清单为准）
-# ⚠️ 窗口不能只用末 3 行：pi 状态行（如 "⠦ Working"）上方还有分隔线，实测会落到第 4 行以外。
-# 真伪由 roster 状态(intercom_status_for)交叉；此处仅作 pane 级补充。
-pane_busy() {
-  local pane="$1" window
-  window="$(tmux capture-pane -p -t "$pane" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -12)"
-  [[ -n "$window" ]] || return 1
-  grep -qE "$CLOSE_BUSY_PATTERN" <<< "$window"
-}
-
-# 句柄层回收（B3）：tmux 实现。函数体**逐字**来自 B3 之前的 cmd_close（行为零回归；
-#   用例 28 的 B3 节以「提取段 md5 == golden md5」钉住），参数化只为让共用闸门层留在 cmd_close。
-_term_tmux_reclaim() {  # <name> <repo> <force> <core> <scope> <ensure-target>
-  local name="${1-}" repo="${2-}" force="${3:-false}" core="${4-}" scope="${5-}" tgt="${6-}"
-  local pane="" pids="" st="" bus="" pcwd=""
-  # ---- 宿主句柄定位（跨仓）：pane 按标题任意仓 basename / 名册 tmuxPane 不限定 cwd ----
-  pane="$(find_pane_for_any_repo "$name")"
-  # F1 不变量（T513-S2）：close 任何路径不得回收调用者自己的 pane/窗口。
-  #   根因：派生窗口若继承 $TMUX_PANE，子进程按该 pane 注册名册 ⇒ 层② 命中调用者自身；
-  #   本闸门是纵深防御——无论上游解析为何，命中即拒绝（不 kill-pane、不进入 pi_pids_for 兜底）。
-  #   T530：判据=进程归属三态（fail-closed，见 self_pane_refuse），不是裸 pane id 比较 —— pane id 是
-  #   server 局部命名空间，隔离 socket 的 %0 与默认 server 的 $TMUX_PANE=%0 撞号会被误判为「自己」而**误拒**。
-  #   不可判定时只对「撞号」保守拒绝：判不了自己 ⇒ 宁可少回收一次，不得误杀一个会话。
-  if [[ -n "$pane" ]] && self_pane_refuse "$pane"; then
-    warn "拒绝回收 $name：解析出的 pane $pane 判为调用者自身（pane_pid 祖先链命中，或祖先链不可判定且与 \$TMUX_PANE 撞号）"
-    warn "  名册 tmuxPane 可能因派生时继承 TMUX_PANE 而错注册；请用 intercom({action:'list'}) 核对目标会话后再处理"
-    return 1
-  fi
-  if [[ -z "$pane" ]]; then
-    # nao-<会话名> detached tmux 会话（不依赖 repo）
-    if command -v tmux >/dev/null 2>&1 && tmux has-session -t "=nao-$name" 2>/dev/null; then
-      if tmux kill-session -t "=nao-$name" 2>/dev/null; then log "已回收 $name（tmux 会话 nao-$name）@ $repo"; return 0; fi
-    fi
-    # 无任何可杀句柄：名册若报在线 ⇒ 定位失败，必须非静默（禁止「未运行」而 pane 仍在）
-    if intercom_online "$name"; then
-      warn "无法回收 $name：pi-intercom 名册报在线（cwd=${repo}）但未定位到存活 pane/会话"
-      warn "  标题契约 / 名册 tmuxPane 均未命中；tmuxPane 可能滞后或未注册"
-      warn "  请用 intercom({action:'list'}) 人工核对；确认已退出后忽略，或按 pane_id 手工处理"
-      return 1
-    fi
-    # T516 AC3（#1 错定缺陷的负向闸）：常驻精确句柄全缺席而其派生在场 ⇒ 目标歧义，
-    # 拒绝并指路（不得落入「未运行（无需回收）」静默 no-op）。
-    local -a dfield=()
-    mapfile -t dfield < <(derived_in_field "$core" "$scope")
-    if (( ${#dfield[@]} > 0 )); then
-      warn "拒绝回收 $name：常驻会话 nao-$name 不存在，但其派生在场：${dfield[*]}"
-      warn "  目标歧义（tmux 会话名前缀匹配曾误回收派生，T515 #1）：如需回收派生用 close <派生名>（如 close ${dfield[0]}）；如需拉起常驻用 ensure $tgt"
-      return 1
-    fi
-    # BR5（T529）：tmux 下必有句柄，不可判定不再发生 ⇒ 直接报「未运行」（无 offline 分支）
-    log "$name 未运行（无需回收）"; return 0
-  fi
-
-  # 闸门②：在跑 turn（pane 标记 + roster 状态双重信号）
-  bus=""
-  # 显式双分支赋值：pane 空闲时 bus 必须落为 ""。
-  # 曾用 `pane_busy "$pane" && bus=…`：pane_busy 为假时 && 短路，bus 在 set -u 下未绑定 → 行 1007 崩溃。
-  if pane_busy "$pane"; then
-    bus="tmux pane $pane 显示在跑 turn"
-  fi
-  st="$(intercom_status_for "$name")"
-  if [[ -z "$bus" ]]; then
-    case "$st" in
-      ""|idle|\?) ;;   # 无状态或空闲 → 不阻塞
-      *) bus="pi-intercom 名册状态=$st（在跑 turn）" ;;
-    esac
-  fi
-  if [[ -n "$bus" && "$force" != true ]]; then
-    warn "拒绝回收 $name：$bus"
-    warn "  等它停；回执与产物核对见 checklists/pm.md「会话回收 / 收窗核对」（或 --force 强制）"
-    return 1
-  fi
-
-  # 回收前以 pane 真实 cwd 校正日志中的仓（名册可能缺记录）
-  local pcwd
-  pcwd="$(tmux display-message -p -t "$pane" '#{pane_current_path}' 2>/dev/null || true)"
-  [[ -n "$pcwd" ]] && repo="$pcwd"
-  if tmux kill-pane -t "$pane" 2>/dev/null; then
-    log "已回收 $name（tmux pane $pane）@ $repo"; return 0
-  fi
-  pids="$(pi_pids_for "$name" "$repo" | tr '\n' ' ')"
-  if [[ -n "$pids" ]] && kill $pids 2>/dev/null; then
-    log "已回收 $name（结束进程: $pids）@ $repo"; return 0
-  fi
-  warn "已定位到 $name 的 pane $pane 但回收失败（pane 可能刚好退出；核对 pane 已消失后可忽略）"; return 1
-}
-
-# 实验场安全清理（T516 #2 · D2 形态 A）：终结指定实验场 server。
-# 守卫：① 无 -S ⇒ exit 2（默认 socket 是生产名册所在，禁止默认清理）；
-#       ② -S 指向默认 socket ⇒ exit 2（防呆：显式传入也不放行）；
-#       ③ socket 不存在 ⇒ 幂等成功（rc 0）；④ kill 失败 ⇒ 非 0 + 诊断，不谎报。
-# 拆场（B3）：tmux 实现 —— 函数体逐字来自 B3 之前的 cmd_cleanup（行为零回归；用例 28 的 B3 节钉 md5）。
-# 生产默认 socket 候选。T516 事故修正：判定**不得**依赖 `${TMUX_TMPDIR:-/tmp}` ——
-#   实验夹具为让 fleet 内部裸 `tmux` 落到夹具 server 会把 TMUX_TMPDIR 指向隔离目录，
-#   若据此判定，真实默认 socket 会被误判为「非默认」而遭清理 ⇒ 真 server 连坐自灭
-#   （2026-10-13 AC5e 负向用例实测杀掉调用者自己的 server）。恒含常量 /tmp/tmux-<uid>/default
-#   （id -u 失败也是安全路径）；回归脚本护栏用同一常量**独立复算**（双保险，互不依赖）。
-prod_sock_candidates() {  # 每行一个候选
-  local uid; uid="$(id -u)"
-  [[ -n "${TMUX:-}" ]] && printf '%s\n' "${TMUX%%,*}"
-  printf '%s\n' "/tmp/tmux-$uid/default" "${TMPDIR:-/tmp}/tmux-$uid/default"
-}
-_term_tmux_cleanup() {
-  local sock="${CLEANUP_SOCK:-}" force="${2:-false}"
-  if [[ -z "$sock" ]]; then
-    printf '[fleet] cleanup 拒绝：未指定 -S <socket>。生产默认 socket 是生产名册所在，禁止默认清理；实验场清理用：env -u TMUX nao-fleet.sh cleanup -S <隔离socket>\n' >&2
-    return 2
-  fi
-  # F3-B3（arch 评审 · 低）：`-S` 若为符号链接/未归一化路径（`/tmp//…`、symlink）可绕过字符串比对
-  # ⇒ 比对前 readlink -f 归一化；readlink -f 不可用/不可解析时退回原串（保持原语义、无新依赖）。
-  local sock_cmp
-  sock_cmp="$(readlink -f -- "$sock" 2>/dev/null || true)"
-  [[ -n "$sock_cmp" ]] || sock_cmp="$sock"
-  local -a prod=() p
-  mapfile -t prod < <(prod_sock_candidates | awk '!seen[$0]++')
-  local is_prod=0
-  for p in "${prod[@]:-}"; do
-    [[ "$sock_cmp" == "$p" ]] && { is_prod=1; break; }
-  done
-  if (( is_prod )); then
-    # T554/D5：生产默认 socket = 用户会话（default）—— 放行，但必须先打印影响面 + --force 门槛。
-    local _sn=0 _wp=0
-    if [[ -S "$sock" ]] && tmux -S "$sock" ls >/dev/null 2>&1; then
-      _sn="$(tmux -S "$sock" list-sessions -F '#{session_id}' 2>/dev/null | grep -c . || true)"
-      _wp="$(tmux -S "$sock" list-panes -a -F '#{pane_id}' 2>/dev/null | grep -c . || true)"
-    fi
-    printf '[fleet] 将停止 session=default，影响 %s 个 workspace / %s 个 pane\n' "${_sn:-0}" "${_wp:-0}" >&2
-    if [[ "$force" != "true" ]]; then
-      printf '[fleet] 未给 --force ⇒ 零动作（rc=2）；确认执行请加 --force（当前 pane 可能属于该 session，将被终止）\n' >&2
-      return 2
-    fi
-    printf '[fleet] --force：当前 pane 若属于 session=default 将被终止\n' >&2
-  fi
-  [[ -n "${TMUX:-}" ]] && warn "当前在 tmux 客户端内：本次 -S 已显式（安全），但实验纪律建议先 env -u TMUX 再执行"
-  if [[ ! -S "$sock" ]]; then
-    log "socket 不存在（无 server，幂等清理）：$sock"; return 0
-  fi
-  # 陈旧 socket（kill-server 后残留的 socket 文件，无 server 监听）：清除文件即幂等成功
-  # （实测 tmux 3.7c 在 -S 自定义路径下 kill-server 不卸载 socket 文件 ⇒ 二次 cleanup 需兜底）
-  if ! tmux -S "$sock" ls >/dev/null 2>&1; then
-    rm -f "$sock" 2>/dev/null || true
-    log "socket 无 server 监听（残留），已清除：$sock"; return 0
-  fi
-  if tmux -S "$sock" kill-server 2>/dev/null; then
-    log "已终结实验场 tmux server：$sock"; return 0
-  fi
-  warn "cleanup 失败：tmux -S $sock kill-server 非 0（server 可能刚好退出；核对 socket 后重试）"
-  return 1
-}
-
-# <<< term-impl-tmux END (回收 / 自身判定 / 忙闲)
 
 # 名册中该会话的 tmux pane（注册时读 $TMUX_PANE；标题被改写仍有效）
 intercom_pane_for() {
@@ -2860,115 +2550,6 @@ intercom_status_for() {
 
 # 本仓所有「当前前台命令为 pi」的 pane：pane_id<TAB>pane_current_path
 # pane_current_command 与标题/argv 无关，是标题被改写时的可靠进程特征。
-# >>> term-impl-tmux BEGIN (pane 枚举 / argv / 在线)
-pi_panes() {
-  command -v tmux >/dev/null 2>&1 || return 0
-  tmux list-panes -a -F "#{pane_id}"$'\t'"#{pane_current_command}"$'\t'"#{pane_current_path}" 2>/dev/null \
-    | awk -F'\t' '{ c=$2; sub(/^.*\//,"",c); if (c=="pi") print $1 "\t" $3 }' || true
-}
-
-# 兜底：本仓 pi pane 中「未被其它会话认领」且**跨全部角色唯一**者。
-# ⚠ 层③ 误配根因（T513f）：新 pane 尚未被标题/名册认领时会被误判给别的角色
-#   （实测 ensure qa rd-infra ⇒ rd-infra 被 qa 的新 pane 命中而误判「已在运行」跳过）。
-# 收紧（不猜）：① 本仓未认领 pi pane 必须**跨全部角色唯一**（>1 ⇒ warn + 不返回）；
-#   ② 还须叠加「名册 cwd 匹配」（目标会话确实登记在本仓）才可返回。
-# 层①标题契约 / 层②名册 tmuxPane 语义不变（T512-① 属独立课题）。
-fallback_pane_for() {
-  local name="$1" repo="$2" abs="" cp j v
-  command -v tmux >/dev/null 2>&1 || return 0
-  abs="$(repo_abspath "$repo")"; [[ -n "$abs" ]] || return 0
-  local -A claimed=()
-  while IFS= read -r cp; do
-    [[ -n "$cp" ]] && claimed["$cp"]=1
-  done < <(tmux list-panes -a -F "#{pane_id}"$'\t'"#{pane_title}" 2>/dev/null \
-             | awk -F'\t' -v t="$PI_TITLE" '$2 ~ "^" t " - " { print $1 }')
-  j="$(intercom_list_json 2>/dev/null)" || j=""
-  if [[ -n "$j" ]]; then
-    cp="$(printf '%s\n' "$j" | sed -n 's/.*"tmuxPane":[[:space:]]*"\([^"]*\)".*/\1/p')"
-    while IFS= read -r v; do [[ -n "$v" ]] && claimed["$v"]=1; done <<< "$cp"
-  fi
-  local -a cand=()
-  local pid ppath
-  while IFS=$'\t' read -r pid ppath; do
-    [[ "$ppath" == "$abs" ]] || continue
-    [[ -n "${claimed[$pid]:-}" ]] && continue
-    cand+=("$pid")
-  done < <(pi_panes)
-  # ① 跨全部角色唯一（歧义不猜）
-  if (( ${#cand[@]} > 1 )); then
-    warn "标题被改写且名册无 pane 记录：$abs 内有多个未认领 pi pane（${cand[*]}）→ 无法唯一确定 $name（不认领）"
-    return 0
-  fi
-  (( ${#cand[@]} == 0 )) && return 0
-  # ② 名册 cwd 匹配（目标会话须确实登记在本仓），否则绝不认领本仓 pane
-  intercom_online "$name" "$abs" || return 0
-  printf '%s\n' "${cand[0]}"; return 0
-}
-
-find_pane_for() {
-  local name="$1" repo="${2:-}" pane=""
-  # ① 终端标题契约
-  pane="$(find_pane_by_title "$name" "$repo")"
-  [[ -n "$pane" ]] && { printf '%s\n' "$pane"; return 0; }
-  # ② pi-intercom 名册 tmuxPane（权威；标题被改写仍有效）
-  pane="$(intercom_pane_for "$name" "$repo")"
-  if [[ -n "$pane" ]] && tmux_pane_live "$pane"; then printf '%s\n' "$pane"; return 0; fi
-  # ③ 本仓未认领 pi pane 唯一兜底
-  pane="$(fallback_pane_for "$name" "$repo")"
-  [[ -n "$pane" ]] && { printf '%s\n' "$pane"; return 0; }
-  return 0
-}
-
-# 跨仓 pane 定位：不限定 repo（标题任意仓 basename / 名册 tmuxPane 不限 cwd）
-# close 的目标可能在别的仓（roles.yaml workspace 恒为本仓）⇒ 不能用 find_pane_for 的 repo 约束。
-find_pane_for_any_repo() {
-  local name="$1" pane=""
-  pane="$(find_pane_by_title "$name" "")"
-  [[ -n "$pane" ]] && { printf '%s\n' "$pane"; return 0; }
-  pane="$(intercom_pane_for "$name" "")"
-  if [[ -n "$pane" ]] && tmux_pane_live "$pane"; then printf '%s\n' "$pane"; return 0; fi
-  return 0
-}
-
-# 该会话名对应的 pi 进程 PID（经 pane 句柄取 pane_pid 及其子进程中 comm=pi 者）
-pi_pids_for() {
-  local pane root pid
-  pane="$(find_pane_for "$1" "${2:-}")"
-  [[ -n "$pane" ]] || return 0
-  # F1 纵深（T513-S2）：绝不据「调用者自己的 pane」反查 pid，否则会 kill 到自身进程。
-  # T530：判据=进程归属（pane_hosts_caller 三态，fail-closed），不比较裸 pane id（server 局部命名空间）。
-  self_pane_refuse "$pane" && return 0
-  root="$(tmux display-message -p -t "$pane" '#{pane_pid}' 2>/dev/null)"
-  [[ -n "$root" ]] || return 0
-  { printf '%s\n' "$root"; pgrep -P "$root" 2>/dev/null || true; } | while IFS= read -r pid; do
-    [[ "$(ps -o comm= -p "$pid" 2>/dev/null | tr -d ' ')" == "pi" ]] || continue
-    printf '%s\n' "$pid"
-  done
-}
-
-# tmux 侧 argv：只有命令名（无完整 argv）⇒ argv 列留空；**不得**用 ps 兜底（pid 竞态 + 判据不同源）
-_term_tmux_argv() {  # <pane_id> → 每行 "process-name<TAB>"
-  local p="${1-}" c
-  [[ -n "$p" ]] || return 0
-  command -v tmux >/dev/null 2>&1 || return 0
-  c="$(tmux display-message -p -t "$p" '#{pane_current_command}' 2>/dev/null || true)"
-  [[ -n "$c" ]] || return 0
-  c="${c##*/}"
-  printf '%s\t\n' "$c"
-}
-
-# tmux 侧在线判定：保留现有证据链（名册 → pane 定位 → 会话名），**不用**门面新列改语义（BR1）
-_term_tmux_liveness() {  # <name> [repo] → "<verdict>\t-\t-\t-"
-  local name="${1-}" repo="${2:-}"
-  if intercom_online "$name" "$repo"; then printf 'online\t-\t-\t-\n'; return 0; fi
-  if [[ -n "$(find_pane_for "$name" "$repo")" ]]; then printf 'online\t-\t-\t-\n'; return 0; fi
-  # T516 #1（=锚）：tmux 会话名唯一前缀匹配曾误命中派生 nao-<名>-<任务>（T515 V4 实证）⇒ 一律 =nao-<名>。
-  if command -v tmux >/dev/null 2>&1 && tmux has-session -t "=nao-$name" 2>/dev/null; then
-    printf 'online\t-\t-\t-\n'; return 0
-  fi
-  printf 'absent\t-\t-\t-\n'; return 0
-}
-# <<< term-impl-tmux END (pane 枚举 / argv / 在线)
 
 # ---- ④ 路径句柄（app-id/class）已随宿主阶梯删除（ADR 2026-10-27-strict-tmux-pi）---------
 
@@ -3044,7 +2625,7 @@ subagent_in_field() {  # → echo 子代理会话数（0..N）
 }
 
 running() {
-  # 门面包装：证据链按后端双实现（tmux = 名册/pane/会话名；herdr = label+argv+agent 结构化事实）
+  # 门面包装：证据链 = herdr 结构化事实（label + argv + agent_status）
   [[ "$(term_liveness "${1-}" "${2-}" | cut -f1)" == "online" ]]
 }
 
@@ -3060,61 +2641,9 @@ running_verdict() {  # <name> [repo] → same | absent
   printf 'absent\n'
 }
 
-# 本机可见的会话名（tmux 标题 + tmux 会话 + 名册），供 status 枚举；已去重
-# ⚠️ 每条枚举 `|| true`：set -e + pipefail 下 `tmux`（无 server 时 rc=1）会中断其余枚举，
-#    使「名册回退」永远走不到 —— 必疾。
-# P6（BR8）：标题字符集必须含 `@` —— 否则带 scope 的会话在 status 里**整条消失**（已实测）。
-# >>> term-impl-tmux BEGIN (会话名 / 未归属)
-_term_tmux_current_session() { tmux display-message -p '#S' 2>/dev/null || true; }
-
-_term_tmux_names() {
-  { if command -v tmux >/dev/null 2>&1; then
-      { tmux list-panes -a -F '#{pane_title}' 2>/dev/null || true; } \
-        | sed -n "s/^${PI_TITLE} - \([A-Za-z0-9_@()-]*\) - .*/\1/p"
-      { tmux list-sessions -F '#{session_name}' 2>/dev/null || true; } \
-        | sed -n 's/^nao-//p'
-    fi
-    intercom_roster 2>/dev/null || true
-  } | awk -F'\t' 'NF {print $1}' | awk '!seen[$0]++'
-}
-
-# 名册「条目感知」pane 认领集（T525 E2）：name↔tmuxPane 配对后**过滤** `^subagent-` 条目 ⇒ 每行一个 pane。
-# 兼容紧凑/pretty 两种 JSON：`sed 's/},/}\n/g'` 先按对象边界切行（纯状态机 awk 在紧凑单行名册里会因
-# 贪婪匹配塌缩成末条 ⇒ 假告警）；取值法与 intercom_pane_for 的逐条目取法同源。
-# ⚠ 仅用于 unattributed_pi_panes：fallback_pane_for 的 claimed 语义是「该 pane 已被占用」（含子代理），
-#   排除会致兜底**误认领父 pane**（D-A 已裁定，见 PRD §三.4）。
-roster_pane_claims() {  # → 被非子代理会话认领的 pane_id（每行一个；rc 恒 0）
-  intercom_list_json 2>/dev/null | sed 's/},/}\n/g' | awk '
-    /"name":[[:space:]]*"/     { s=$0; sub(/.*"name":[[:space:]]*"/,"",s);     sub(/".*/,"",s); n=s }
-    /"tmuxPane":[[:space:]]*"/ { s=$0; sub(/.*"tmuxPane":[[:space:]]*"/,"",s); sub(/".*/,"",s); p=s
-                                 if (p != "" && n !~ /^subagent-/) print p }
-  ' || true
-}
-
-# 未能归属到任何会话名的 pi pane（标题不符契约且名册无 tmuxPane 记录）：
-# 输出 pane_id<TAB>pane_title；供 status 做「非静默」提示（不假装看不到）。
-# T525 E2：claimed 用 roster_pane_claims（条目感知、排除 `^subagent-`）⇒ 仅被子代理继承 tmuxPane 的孤儿
-# pane 回到「无法归属会话名」告警（BR8 非静默优先）。
-unattributed_pi_panes() {
-  command -v tmux >/dev/null 2>&1 || return 0
-  local claimed p tt
-  claimed="$(roster_pane_claims)" || claimed=""
-  while IFS=$'\t' read -r p tt; do
-    [[ -n "$p" ]] || continue
-    grep -qxF "$p" <<< "$claimed" && continue
-    printf '%s\t%s\n' "$p" "$tt"
-  done < <(tmux list-panes -a -F "#{pane_id}"$'\t'"#{pane_current_command}"$'\t'"#{pane_title}" 2>/dev/null \
-             | awk -F'\t' -v t="$PI_TITLE" '{ c=$2; sub(/^.*\//,"",c); if (c!="pi") next; if ($3 ~ "^" t " - ") next; print $1 "\t" $3 }' || true)
-}
-# <<< term-impl-tmux END (会话名 / 未归属)
-
-# ---- 共享投影（无后端调用）：会话名 / pane cwd 从门面快照取（herdr）或走 tmux 证据层 ----
+# ---- 共享投影（无后端调用）：会话名从门面快照取（label 即会话名；名册不参与身份判定 —— BR3/BR7）----
 visible_session_names() {
-  case "$(term_backend)" in
-    tmux) _term_tmux_names ;;
-    # herdr：label 即会话名（结构化事实；名册不参与身份判定 —— 见 BR3/BR7）
-    herdr) term_snapshot | awk -F'\t' 'NF && $1 != "" {print $1}' | awk '!seen[$0]++' ;;
-  esac
+  term_snapshot | awk -F'\t' 'NF && $1 != "" {print $1}' | awk '!seen[$0]++'
 }
 
 # 任务在 tasks-state 的归处：
@@ -3165,351 +2694,7 @@ check_model() {
   return 1
 }
 
-# 16 位 checksum，与 tmux 源码 layout_checksum() 一致
-_layout_checksum() {
-  local s="$1" c=0 b
-  local -a bytes=()
-  # shellcheck disable=SC2207
-  bytes=($(printf '%s' "$s" | od -An -v -tu1 | tr -s ' \n' ' '))
-  for b in "${bytes[@]}"; do
-    c=$(( ((c >> 1) + ((c & 1) << 15) + b) & 0xFFFF ))
-  done
-  printf '%04x' "$c"
-}
-
-# main-row2 / main-col 共用几何（单一源头，防守卫与构建两处漂移）
-# 输入：窗口宽 win_w · pane 数 n · 主宽百分比 pct
-# 输出（空格分隔）：main_w right_w right_x cols cw_base cw_last
-main_row2_geom() {
-  local win_w="$1" n="$2" pct="$3"
-  local usable_w=$(( win_w - 1 ))
-  (( usable_w < 2 )) && usable_w=2
-  local main_w=$(( usable_w * pct / 100 ))
-  (( main_w < 1 )) && main_w=1
-  (( main_w > usable_w - 1 )) && main_w=$(( usable_w - 1 ))
-  local right_w=$(( usable_w - main_w ))
-  (( right_w < 1 )) && right_w=1
-  local right_x=$(( main_w + 1 ))
-  local m=$(( n - 1 ))
-  (( m < 1 )) && m=1
-  local cols=$(( (m + 1) / 2 ))
-  (( cols < 1 )) && cols=1
-  local r_usable=$(( right_w - (cols - 1) ))
-  (( r_usable < 1 )) && r_usable=1
-  local cw_base=$(( r_usable / cols ))
-  (( cw_base < 1 )) && cw_base=1
-  local cw_last=$(( r_usable - cw_base * (cols - 1) ))
-  (( cw_last < 1 )) && cw_last=1
-  printf '%s %s %s %s %s %s' "$main_w" "$right_w" "$right_x" "$cols" "$cw_base" "$cw_last"
-}
-
-# main-row2 最窄非主 pane 列宽（窄列守卫用；与 build 共用 main_row2_geom）
-main_row2_min_col() {
-  local win_w="$1" n="$2" pct="$3"
-  (( n >= 2 )) || { printf '%s' "$win_w"; return 0; }
-  local main_w right_w right_x cols cw_base cw_last
-  read -r main_w right_w right_x cols cw_base cw_last < <(main_row2_geom "$win_w" "$n" "$pct")
-  if (( cw_base < cw_last )); then printf '%s' "$cw_base"; else printf '%s' "$cw_last"; fi
-}
-
-# main-col 右列宽（tmux main-vertical 百分比语义；与 main_row2_geom 的 right_w 同源）
-main_col_right_w() {
-  local main_w right_w right_x cols cw_base cw_last
-  read -r main_w right_w right_x cols cw_base cw_last < <(main_row2_geom "$1" 2 "$2")
-  printf '%s' "$right_w"
-}
-
-# main-row2：主 pane 全高占左；往右每列 2 个上下堆叠
-#   5 pane：1 | 2 | 4
-#           1 | 3 | 5
-#   7 pane：1 | 2 | 4 | 6
-#           1 | 3 | 5 | 7
-# tmux 规范：相邻子 pane 之间 1 格 gap；{} 左右排列，[] 上下排列
-build_main_row2_layout() {
-  local win_w="$1" win_h="$2" pct="$3"
-  shift 3
-  local -a panes=("$@")
-  local n=${#panes[@]}
-  (( n >= 1 )) || return 1
-  if (( n == 1 )); then
-    printf '%sx%s,0,0,%s' "$win_w" "$win_h" "${panes[0]}"
-    return 0
-  fi
-
-  # 几何统一来自 main_row2_geom（守卫与构建同源，防漂移）
-  local main_w right_w right_x cols cw_base cw_last
-  read -r main_w right_w right_x cols cw_base cw_last < <(main_row2_geom "$win_w" "$n" "$pct")
-
-  # 每列内部：上下 2 个，中间 1 gap
-  local v_usable=$(( win_h - 1 ))
-  (( v_usable < 2 )) && v_usable=2
-  local top_h=$(( v_usable / 2 ))
-  (( top_h < 1 )) && top_h=1
-  local bot_h=$(( v_usable - top_h ))
-  (( bot_h < 1 )) && bot_h=1
-  local bot_y=$(( top_h + 1 ))
-
-  local -a col_parts=()
-  local col col_x cw i_top i_bot
-  for (( col=0; col<cols; col++ )); do
-    col_x=$(( right_x + col * (cw_base + 1) ))
-    if (( col == cols - 1 )); then cw=$cw_last; else cw=$cw_base; fi
-    i_top=$(( col * 2 + 1 ))
-    i_bot=$(( col * 2 + 2 ))
-    if (( i_bot < n )); then
-      col_parts+=("${cw}x${win_h},${col_x},0[${cw}x${top_h},${col_x},0,${panes[$i_top]},${cw}x${bot_h},${col_x},${bot_y},${panes[$i_bot]}]")
-    elif (( i_top < n )); then
-      col_parts+=("${cw}x${win_h},${col_x},0,${panes[$i_top]}")
-    fi
-  done
-
-  local right_body
-  if (( cols == 1 )); then
-    right_body="${col_parts[0]}"
-  else
-    local IFS=','
-    right_body="${right_w}x${win_h},${right_x},0{${col_parts[*]}}"
-    unset IFS
-  fi
-
-  printf '%sx%s,0,0{%sx%s,0,0,%s,%s}' \
-    "$win_w" "$win_h" \
-    "$main_w" "$win_h" "${panes[0]}" \
-    "$right_body"
-}
-
-# >>> term-impl-tmux BEGIN (布局 / 窄列回退)
-# B4（#96 二期）：布局面整段进 tmux 标记区 —— 它是**后端专有**证据层（三期 workspace/tab 拓扑替换），
-#   不是业务区。进门面标记区后台账条目（apply_main_col / apply_tmux_layout）清零，只减不增。
-# main-col：委托 tmux 内建 main-vertical（主 pane 左全高 + 右列纵向堆叠）
-#   坑：tmux 默认 main-pane-width=80（格）⇒ 必须显式设百分比
-apply_main_col() {
-  local pct="$1" n="$2" min_w="$3" win_w="$4" from="$5"
-  if (( n >= 2 )); then
-    local right_w; right_w="$(main_col_right_w "$win_w" "$pct")"
-    if (( right_w < min_w )); then
-      if [[ "$from" == "main-col" ]]; then
-        warn "main-col 右列 ${right_w} < 最小 ${min_w}（${n} pane @ ${win_w} 列）→ 回退 grid"
-      else
-        warn "${from} → main-col 右列 ${right_w} < 最小 ${min_w}（${n} pane @ ${win_w} 列）→ 再回退 grid"
-      fi
-      tmux select-layout -t "$HOST_WINDOW" tiled >/dev/null 2>&1 || true
-      return 0
-    fi
-  fi
-  tmux set-window-option -t "$HOST_WINDOW" main-pane-width "${pct}%" >/dev/null 2>&1 || true
-  local err
-  if ! err=$(tmux select-layout -t "$HOST_WINDOW" main-vertical 2>&1); then
-    warn "main-col（main-vertical）应用失败，回退 grid（宿主窗口 $HOST_WINDOW）"
-    warn "  tmux:   ${err:-<no message>}"
-    tmux select-layout -t "$HOST_WINDOW" tiled >/dev/null 2>&1 || true
-  fi
-}
-
-apply_tmux_layout() {
-  [[ -n "${TMUX:-}" ]] || return 0
-  [[ -n "$HOST_WINDOW" ]] || return 0
-  if [[ "$TMUX_LAYOUT" == "grid" ]]; then
-    tmux select-layout -t "$HOST_WINDOW" tiled >/dev/null 2>&1 || true
-    return
-  fi
-  # main-row2
-  local win_w win_h
-  # D7（T513-S3）：display-message 无输出时 `read` 返回 1，set -e 会硬中断整轮 ensure
-  #   ⇒ 守卫为 true（读不到尺寸即跳过布局，不硬崩）。
-  read -r win_w win_h < <(tmux display-message -p -t "$HOST_WINDOW" '#{window_width} #{window_height}' 2>/dev/null) || true
-  [[ -n "$win_w" && -n "$win_h" ]] || return 0
-
-  local -a pane_ids=()
-  local line
-  while IFS= read -r line; do
-    [[ -n "$line" ]] && pane_ids+=("$line")
-  done < <(tmux list-panes -t "$HOST_WINDOW" -F '#{pane_id}' 2>/dev/null | sed 's/^%//')
-  local n=${#pane_ids[@]}
-  (( n >= 1 )) || return 0
-
-  local pct="$TMUX_MAIN_WIDTH"
-  [[ "$pct" =~ ^[0-9]+$ ]] || pct="$TMUX_MAIN_WIDTH_DEFAULT"
-  (( pct < 10 )) && pct=10
-  (( pct > 90 )) && pct=90
-
-  local min_w="$TMUX_MIN_PANE_WIDTH"
-  [[ "$min_w" =~ ^[0-9]+$ ]] || min_w="$TMUX_MIN_PANE_WIDTH_DEFAULT"
-  (( min_w < 10 )) && min_w=10
-  (( min_w > 80 )) && min_w=80
-
-  if [[ "$TMUX_LAYOUT" == "main-col" ]]; then
-    apply_main_col "$pct" "$n" "$min_w" "$win_w" "main-col"
-    return
-  fi
-
-  # 窄列守卫：main-row2 最窄非主 pane < 阈值 ⇒ 回退 main-col（再不足⇒grid）
-  local narrow; narrow="$(main_row2_min_col "$win_w" "$n" "$pct")"
-  if (( narrow < min_w )); then
-    warn "${n} pane @ ${win_w} 列：main-row2 最窄列 ${narrow} < 最小 ${min_w} → 回退 main-col"
-    apply_main_col "$pct" "$n" "$min_w" "$win_w" "main-row2"
-    return
-  fi
-
-  local full; full="$(build_main_row2_layout "$win_w" "$win_h" "$pct" "${pane_ids[@]}")"
-  [[ -n "$full" ]] || return 0
-
-  local ck; ck="$(_layout_checksum "$full")"
-  local err
-  if ! err=$(tmux select-layout -t "$HOST_WINDOW" "${ck},${full}" 2>&1); then
-    warn "main-row2 布局应用失败，回退 tiled（宿主窗口 $HOST_WINDOW）"
-    warn "  tmux:   ${err:-<no message>}"
-    warn "  layout: $full"
-    tmux select-layout -t "$HOST_WINDOW" tiled >/dev/null 2>&1 || true
-  fi
-}
-
-# <<< term-impl-tmux END (布局 / 窄列回退)
-
 # ---------------------------------------------------------------------------
-# >>> term-impl-tmux BEGIN (spawn)
-# T517 派生宿主窗口解析（ADR 2026-10-13-derived-pane-window-addressing · PRD T517 §五）
-#   入口一次性解析 → 全局 HOST_WINDOW=@<window_id>；空 = 定位失败 ⇒ 解析处 warn 一次（每 run 一次），
-#   spawn_tmux 对空值跳过该 pane（D-A：warn + skip，禁无 -t 续建——那是拆用户视图）。定位链：
-#     L1 NAO_TMUX_HOST_WINDOW   显式覆盖：display-message 探测归一化；允许跨 session（@id 全局唯一），
-#                                非 @id 形式 warn 建议用 @id；解析失败（关窗/垃圾值）⇒ warn + 沿链降级（不 die）
-#     L2 $TMUX_PANE → window_id 调用者 pane 所在 window（= 派生宿主；不依赖 client 视图；核心路径）
-#     L3 名册唯一命中            仅在本 $TMUX 所属 session 内取候选窗（pane→window 全表一次调用
-#                                + 名册 cwd=本仓 + 活 pane + 窗口去重唯一）；歧义/无命中 ⇒ warn 标来源，不猜
-#     L4 skip                    warn + 不创建（其余角色继续；rc 不劣化）
-#   调用预算：L1/L2 各 ≤1 次 tmux 调用；L3 ≤2 次（session 探测 + list-panes 全表）。
-resolve_host_window() {
-  local tgt="" sess_id="" pid wid sid abs rp rw
-  # L1 显式覆盖
-  if [[ -n "${NAO_TMUX_HOST_WINDOW:-}" ]]; then
-    tgt="$(tmux display-message -p -t "$NAO_TMUX_HOST_WINDOW" '#{window_id}' 2>/dev/null || true)"
-    if [[ -n "$tgt" ]]; then
-      [[ "$NAO_TMUX_HOST_WINDOW" == "@"* ]] || \
-        warn "NAO_TMUX_HOST_WINDOW=$NAO_TMUX_HOST_WINDOW 非 @id 形式（裸窗口名跨 session 可能歧义）→ 已归一化 $tgt，建议改用 @id"
-      log "宿主窗口 = NAO_TMUX_HOST_WINDOW（显式覆盖）→ $tgt"
-      HOST_WINDOW="$tgt"; return 0
-    fi
-    warn "NAO_TMUX_HOST_WINDOW=$NAO_TMUX_HOST_WINDOW 解析失败（窗口已关或非法）→ 降级 TMUX_PANE/名册"
-  fi
-  # L2 调用者 pane → window_id（同一次调用顺带取 session_id，供 L3 限定本 session）
-  if [[ -n "${TMUX_PANE:-}" ]]; then
-    read -r tgt sess_id < <(tmux display-message -p -t "$TMUX_PANE" '#{window_id} #{session_id}' 2>/dev/null || true) || true
-    if [[ -n "$tgt" ]]; then
-      HOST_WINDOW="$tgt"; return 0
-    fi
-    warn "TMUX_PANE=$TMUX_PANE 解析不到 window_id（pane 已关？）→ 降级名册推断"
-  else
-    warn "TMUX 已设但 TMUX_PANE 空（AC5b 场景）→ 跳 L2，降级名册推断"
-  fi
-  # L3 名册唯一命中（D-B：仅本 $TMUX 所属 session 内取候选窗，不跨 session 推断）
-  [[ -n "$sess_id" ]] || sess_id="$(tmux display-message -p '#{session_id}' 2>/dev/null || true)"
-  if [[ -z "$sess_id" ]]; then
-    warn "无法确定本 \$TMUX 所属 session（无 client/无 pane 句柄）→ 名册推断无从限定，L4 skip"
-    return 0
-  fi
-  local -A win_of=()
-  # pane→window 全表（1 次调用；pane 在表中即活，无需单独探测）
-  while IFS=$'\t' read -r pid wid sid; do
-    [[ "$sid" == "$sess_id" ]] && win_of["$pid"]="$wid"
-  done < <(tmux list-panes -a -F "#{pane_id}"$'\t'"#{window_id}"$'\t'"#{session_id}" 2>/dev/null || true)
-  abs="$(repo_abspath "$PWD")"; [[ -n "$abs" ]] || return 0
-  local -A seen=()
-  local -a wins=()
-  # 名册 tmuxPane（cwd=本仓）→ 本 session 窗口去重（与 fallback_pane_for 同构的 cwd 过滤）
-  while IFS= read -r rp; do
-    [[ -n "$rp" ]] || continue
-    rw="${win_of[$rp]:-}"
-    [[ -n "$rw" ]] && { [[ -z "${seen[$rw]:-}" ]] && { seen["$rw"]=1; wins+=("$rw"); }; }
-  done < <(intercom_list_json 2>/dev/null | sed 's/},/}\n/g' | awk -v a="$abs" '
-    /"cwd":[[:space:]]*"/  { s=$0; sub(/.*"cwd":[[:space:]]*"/,"",s);  sub(/".*/,"",s);  cc=s }
-    /"tmuxPane":[[:space:]]*"/ { s=$0; sub(/.*"tmuxPane":[[:space:]]*"/,"",s); sub(/".*/,"",s); cp=s
-                                  if (cp != "" && cc == a) print cp }
-  ' || true)  # sed 按对象边界拆行：紧凑/pretty 两种 JSON 布局同语义（逐条目取 cwd+tmuxPane）
-  if (( ${#wins[@]} == 1 )); then
-    HOST_WINDOW="${wins[0]}"
-    warn "名册唯一命中宿主窗口 $HOST_WINDOW（来源：名册 tmuxPane + cwd=本仓 + 仅本 session $sess_id）"
-    return 0
-  fi
-  if (( ${#wins[@]} > 1 )); then
-    warn "名册推断歧义：本 session 内候选窗 ${wins[*]}（>1）→ 不猜，L4 skip（可设 NAO_TMUX_HOST_WINDOW 显式指定）"
-  else
-    warn "名册推断无命中：本 session 内无名册 pane 或 cwd≠本仓 → L4 skip（可设 NAO_TMUX_HOST_WINDOW 显式指定）"
-  fi
-  return 0   # HOST_WINDOW 保持空 ⇒ spawn_tmux 跳过（D-A：warn + skip，禁无 -t 续建）
-}
-
-spawn_tmux() {
-  local name="$1" inner="$2"
-  case "$TMUX_LAYOUT" in
-    main-row2|main-col|grid) ;;
-    *) die "NAO_TMUX_LAYOUT 无效: $TMUX_LAYOUT（可选 main-row2|main-col|grid）" ;;
-  esac
-  local wrapped="bash -lc $(printf %q "$inner")"
-  # T517：目标显式化——HOST_WINDOW 解析失败时此处已由解析处 warn（每 run 一次），
-  #   跳过该 pane；禁止无 -t 续建（tmux 会落「当前窗口」= 用户视图，即缺陷根因）。
-  # T539：显式回报「跳过」（不再用 return 0 冒充成功）。
-  [[ -n "$HOST_WINDOW" ]] || return "$SPAWN_RC_SKIP"
-  # 窄窗口/宿主上限会让 split-window 失败（no space for new pane，含宿主窗已关竞态）；
-  # 捕获后 warn 并继续，不因单个 pane 失败中断整轮 ensure。
-  # T539：显式回报「失败」；两条 warn 是诊断信息，保留不合并。
-  # T548：`-P -F '#{pane_id}'` 回填投递目标（arch 遗留②）；成功时 stdout 只有 pane_id，失败时是诊断串。
-  local out
-  if ! out=$(tmux split-window -h -t "$HOST_WINDOW" -P -F '#{pane_id}' "$wrapped" 2>&1); then
-    warn "pane 创建失败（宿主窗口 $HOST_WINDOW 过窄/已关或已达上限）：${out:-<no message>}"
-    warn "  已跳过该 pane，其余角色继续拉起；可放大窗口后重跑 ensure"
-    return "$SPAWN_RC_FAIL"
-  fi
-  _TERM_SPAWN_PANE="$out"
-  # 布局是尽力而为（内部各 tmux 调用已 || true）；布局成败不影响「pane 已创建」这一结果。
-  apply_tmux_layout || true
-  return "$SPAWN_RC_OK"
-}
-
-# 投递（T548 · tmux 通道）：复用既有 `_term_tmux_argv` 等 `pane_current_command==pi`（≤50×100ms，**不新增轮询面**）
-#   —— tmux 后端没有 herdr 那种就绪门，投递必须自己等到 pi 真的在前台，否则按键会落到 shell。
-#   bracketed paste（arch 遗留③ / PM 拍 · QA 复核 P3）：`paste-buffer -p` **只在 pane 已协商 bracketed paste
-#   时**包 ESC[200~…201~（本机 tmux 3.8 实测；判定面 = `#{bracket_paste_flag}`）。未协商 ⇒ 多行会被逐行
-#   当 Enter 提交 ⇒ 投递前做**形态归一**（换行 → 空格）：只改投递形态，文案单一源 `$NAO_UPDATE_MSG` 不动。
-#   **真 pi 的多行路径在本机不可达（不是两条活路径）**：QA 实测真 pi 的 flag 在 `pane_current_command==pi`
-#   之后 ~1349ms 才置 1（RD 独立实测 577ms，同向）而本函数在 10–100ms 判定 ⇒ 实际总走归一（文案被压成
-#   一行，送达/执行不受影响）。保留 `flag==1` 分支是为了已协商的 pane（如手工起的 REPL），**不得**据此
-#   声称真 pi 保留多行。
-#   其余要点：独立 buffer 名 + `-d`（**别动用户粘贴板**）；末尾一次键名 `Enter`；禁 `send-keys -l` 逐行 + sleep。
-_term_tmux_deliver() {  # <pane_id> <message> → 0 已投递 / 1 失败（stdout: 失败阶段）
-  local pane="${1-}" msg="${2-}" i name flag buf
-  [[ -n "$pane" ]] || { printf 'pane_id 缺失\n'; return 1; }
-  command -v tmux >/dev/null 2>&1 || { printf 'tmux 不在 PATH\n'; return 1; }
-  for ((i = 1; i <= ${TERM_READY_POLL_MAX:-50}; i++)); do
-    name="$(_term_tmux_argv "$pane" | cut -f1)"
-    [[ "$name" == "pi" ]] && break
-    sleep "${TERM_READY_POLL_INT:-0.1}"
-  done
-  if [[ "${name:-}" != "pi" ]]; then
-    printf '等 pi 前台超时（pane_current_command=%s）\n' "${name:-<空>}"
-    return 1
-  fi
-  # 退化归一：bracket_paste_flag == 1 ⇒ 保留多行（已协商的 pane）；否则单行化。
-  #   注：真 pi 本机在判定点（10–100ms）尚未置 1（~1349ms 才置）⇒ 实际总走归一（QA P3）。
-  flag="$(tmux display-message -p -t "$pane" '#{bracket_paste_flag}' 2>/dev/null || true)"
-  if [[ "$flag" != "1" ]]; then
-    msg="${msg//$'\n'/ }"
-  fi
-  buf="nao-sc-${pane//[^A-Za-z0-9]/_}"
-  if ! printf '%s' "$msg" | tmux load-buffer -b "$buf" - 2>/dev/null; then
-    printf 'load-buffer 失败（pane=%s buffer=%s）\n' "$pane" "$buf"
-    return 1
-  fi
-  if ! tmux paste-buffer -p -d -b "$buf" -t "$pane" 2>/dev/null; then
-    printf 'paste-buffer 失败（pane=%s buffer=%s）\n' "$pane" "$buf"
-    return 1
-  fi
-  if ! tmux send-keys -t "$pane" Enter 2>/dev/null; then
-    printf 'send-keys Enter 失败（pane=%s）\n' "$pane"
-    return 1
-  fi
-  return 0
-}
-# <<< term-impl-tmux END (spawn)
 
 # 组装系统提示文件：角色卡 + 环境锚点（本机绝对路径，供跨仓库会话解析 @ 引用失败时兜底）
 build_system_prompt() {
@@ -3534,7 +2719,7 @@ spawn_one() {
   [[ -f "$card" ]] || die "角色卡不存在: $card"
   [[ -d "$repo" ]] || die "工作区不存在: $repo"
 
-  # 前提已由入口 term_require 硬校验（tmux: exit 3；herdr: HERDR_ENV/HERDR_SESSION/protocol 22）；
+  # 前提已由入口 term_require 硬校验（HERDR_ENV / HERDR_SESSION / protocol 22）；
   #   此处只走唯一路径（BR1/BR3）。
   prompt_file="$(build_system_prompt "$card")"
   inner="cd $(printf %q "$repo") && export CODEGRAPH_TELEMETRY=0 && exec pi --name $(printf %q "$name")"
@@ -3550,19 +2735,15 @@ spawn_one() {
   #   不用 setsid：macOS 无该 bin，`… || true` 会静默跳过清理（BR1 缩水）。清理窗口 60s 不缩短。
   bash -c 'sleep 60; rm -f -- "$1"' _ "$prompt_file" >/dev/null 2>&1 </dev/null & disown 2>/dev/null || true
 
-  # 拉起：门面 term_spawn 以**显式三态**回报（T539/BR2；tmux = spawn_tmux 逐字不变，herdr = B2 新实现）；
-  #   每目标恰一行结果行：成功 → 唯一一条 `[tmux] 已拉起 …`（tmux 仍逐字不变，BR1）· 跳过/失败 → 不打印成功行。
+  # 拉起：门面 term_spawn 以**显式三态**回报（T539/BR2 · B2 herdr 实现）；
+  #   每目标恰一行结果行：成功 → 唯一一条 `[herdr] 已拉起 …` · 跳过/失败 → 不打印成功行。
   #   `|| rc=$?` 是 set -e 下的必需写法（|| 列表豁免 errexit）；函数返回值即结果契约。
   local rc=0
   _TERM_SPAWN_PANE=""
   term_spawn "$name" "$inner" "$repo" "$force" "$label" "$group" || rc=$?
   case "$rc" in
     "$SPAWN_RC_OK")   SPAWN_OK=$((SPAWN_OK + 1))
-                      if [[ "$NAO_TERMINAL" == "herdr" ]]; then
-                        log "[herdr] 已拉起 $name @ $repo${model:+（model=$model）}${_TERM_SPAWN_PANE:+（pane=$_TERM_SPAWN_PANE）}"
-                      else
-                        log "[tmux] 已拉起 $name @ $repo${model:+（model=$model）}（layout=$TMUX_LAYOUT）"
-                      fi
+                      log "[herdr] 已拉起 $name @ $repo${model:+（model=$model）}${_TERM_SPAWN_PANE:+（pane=$_TERM_SPAWN_PANE）}"
                       # T548/AC2/AC4：投递点**唯一**（新 pane / 幽灵复用 / --force 重开均经此处恰 1 次）；
                       #   投递失败 ⇒ **rc 仍 0、不计 SPAWN_FAIL**（会话确实可用；计 FAIL 正是本缺陷的假红灯源）
                       #   ！失败必须**默认可见**（一条 warn + error code），`-v` 再补诊断指路。
@@ -3571,12 +2752,8 @@ spawn_one() {
                         if ! derr="$(term_deliver "$_TERM_SPAWN_PANE" "$NAO_UPDATE_MSG")"; then
                           warn "版本自检投递失败（$name ⇒ pane=${_TERM_SPAWN_PANE:-?}；${derr:-未知错误}）—— 会话仍可用，本次**不计失败**（自检只读非阻塞）"
                           if [[ "$VERBOSE" == "true" ]]; then
-                            if [[ "$NAO_TERMINAL" == "herdr" ]]; then
-                              warn "  · 诊断：herdr --session ${HERDR_SESSION:-<session>} agent explain ${_TERM_SPAWN_PANE:-<pane>}"
-                              warn "  · 常见原因：启动浮层（What's New / 信任提示）吃按键 / agent 处于 blocked（agent_blocked）"
-                            else
-                              warn "  · 诊断：tmux capture-pane -p -J -t ${_TERM_SPAWN_PANE:-<pane>} -S -200（确认 pi 是否已在前台）"
-                            fi
+                            warn "  · 诊断：herdr --session ${HERDR_SESSION:-<session>} agent explain ${_TERM_SPAWN_PANE:-<pane>}"
+                            warn "  · 常见原因：启动浮层（What's New / 信任提示）吃按键 / agent 处于 blocked（agent_blocked）"
                           fi
                         fi
                       fi ;;
@@ -3792,55 +2969,32 @@ cmd_check() {
     done
   fi
 
-  echo "== 运行前提（端前提 = 后端 pane + pi ≥$MIN_PI_VERSION；AC1/AC3）=="
-  if [[ "$(term_backend 2>/dev/null)" == "herdr" ]]; then
-    # B1：仅 herdr 模式加行（tmux 路径零新增输出 —— BR1/AC2.6）。
-    #   rc 口径（P3-4 订正）：显式指定 herdr 却**缺 herdr 可执行文件** ⇒ rc=1（明确错配，不能装没看见）；
-    #   缺 `HERDR_SESSION`（未在 herdr pane 内，CI 常见）⇒ 只提示不置红（静态体检照跑）；
-    #   `protocol≠22` ⇒ rc=1（唯一可置红的机械项）。
-    # 三期 P2：herdr 是**默认**后端 ⇒ 本行在「未设/空串」时也打印（显式 `=tmux` 不打印，二期口径不破）。
-    echo '  · 生效后端 NAO_TERMINAL=herdr（默认后端；#96 二期 B4：status/ensure/close/cleanup 走门面；session-start 起 server；台账 0 条）'
-    if command -v herdr >/dev/null 2>&1; then
-      printf '  ✓ herdr 可用\n'
-      if [[ -n "${HERDR_SESSION:-}" && "${HERDR_SESSION}" != "default" ]]; then
-        printf '  ✓ HERDR_SESSION=%s\n' "$HERDR_SESSION"
-        local hschema hproto
-        if hschema="$(_term_herdr_exec api schema 2>/dev/null)"; then
-          hproto="$(printf '%s\n' "$hschema" | sed -n 's/^protocol:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -1)"
-          if [[ "$hproto" == "$TERM_HERDR_PROTOCOL" ]]; then
-            printf '  ✓ herdr protocol=%s\n' "$hproto"
-          else
-            printf '  ✗ herdr protocol=%s ≠ %s（破坏性变更 ⇒ fail loud）\n' "${hproto:-<未知>}" "$TERM_HERDR_PROTOCOL"
-            rc=1
-          fi
+  echo "== 运行前提（端前提 = herdr pane + pi ≥$MIN_PI_VERSION；AC1/AC3）=="
+  # rc 口径（P3-4 订正）：**缺 herdr 可执行文件** ⇒ rc=1（明确错配，不能装没看见）；
+  #   缺 `HERDR_SESSION`（未在 herdr pane 内，CI 常见）⇒ 只提示不置红（静态体检照跑）；
+  #   `protocol≠22` ⇒ rc=1（唯一可置红的机械项）。
+  echo '  · 生效后端 NAO_TERMINAL=herdr（唯一后端；#96 二期 B4：status/ensure/close/cleanup 走门面；session-start 起 server；台账 0 条）'
+  if command -v herdr >/dev/null 2>&1; then
+    printf '  ✓ herdr 可用\n'
+    if [[ -n "${HERDR_SESSION:-}" && "${HERDR_SESSION}" != "default" ]]; then
+      printf '  ✓ HERDR_SESSION=%s\n' "$HERDR_SESSION"
+      local hschema hproto
+      if hschema="$(_term_herdr_exec api schema 2>/dev/null)"; then
+        hproto="$(printf '%s\n' "$hschema" | sed -n 's/^protocol:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -1)"
+        if [[ "$hproto" == "$TERM_HERDR_PROTOCOL" ]]; then
+          printf '  ✓ herdr protocol=%s\n' "$hproto"
         else
-          printf '  · herdr api schema 不可用（status 将 exit 3）—— 核对 herdr ≥0.9.1 / server 状态后重试，或 export NAO_TERMINAL=tmux 回退\n'
+          printf '  ✗ herdr protocol=%s ≠ %s（破坏性变更 ⇒ fail loud）\n' "${hproto:-<未知>}" "$TERM_HERDR_PROTOCOL"
+          rc=1
         fi
       else
-        echo '  · 未在 herdr pane 内（HERDR_SESSION 空）：status 将 exit 3；default 已放行（仅破坏性动作需 --force）；纯静态体检可照跑（回退：export NAO_TERMINAL=tmux）'
+        printf '  · herdr api schema 不可用（status 将 exit 3）—— 核对 herdr ≥0.9.1 / server 状态后重试\n'
       fi
     else
-      printf '  ✗ herdr 缺失（status 将 exit 3）—— 装 herdr ≥0.9.1，或 export NAO_TERMINAL=tmux 回退\n'; rc=1
-    fi
-    if command -v tmux >/dev/null 2>&1; then
-      echo '  · tmux 可用（回退能力：NAO_TERMINAL=tmux）'
-    else
-      echo '  · tmux 缺失（herdr 后端下仅影响回退能力）'
+      echo '  · 未在 herdr pane 内（HERDR_SESSION 空）：status 将 exit 3；default 已放行（仅破坏性动作需 --force）；纯静态体检可照跑'
     fi
   else
-  if command -v tmux >/dev/null 2>&1; then
-    echo '  ✓ tmux 可用（回退后端）'
-  else
-    printf '  ✗ tmux 缺失（ensure/status/close 将 exit 3）\n'; rc=1
-  fi
-  if [[ -n "${TMUX:-}" ]]; then
-    # B4：会话名经门面取（tmux 证据层 `_term_tmux_current_session`；业务区不再裸调后端）
-    local tmux_session_now
-    tmux_session_now="$(term_session_name 2>/dev/null)"
-    echo "  ✓ 当前在 tmux 会话内（${tmux_session_now:-?}）"
-  else
-    printf '  · 当前不在 tmux 会话内：ensure/status/close 将 exit 3（先 `tmux new -s nao`）；纯静态体检可照跑\n'
-  fi
+    printf '  ✗ herdr 缺失（status 将 exit 3）—— 装 herdr ≥0.9.1 后重试\n'; rc=1
   fi
   local pi_cur
   if pi_cur="$(pi_version_check)"; then
@@ -3851,29 +3005,6 @@ cmd_check() {
   # #124：端前提声明（协议 / AGENTS.md）vs 实现默认后端 —— **单点 warn，不进 rc**；
   #   一致时零输出（不同后端、不同仓都不改既有输出形态；见函数注释与 tests/t4/cases/34）。
   check_backend_premise || true
-
-  echo "== tmux 布局 =="
-  if [[ -z "${TMUX:-}" && "$(term_backend 2>/dev/null)" == "tmux" ]]; then
-    echo '  · 当前不在 tmux 内（布局只在 tmux 分屏时生效）'
-  fi
-  case "$TMUX_LAYOUT" in
-    main-row2|main-col|grid)
-      printf '  ✓ NAO_TMUX_LAYOUT=%-10s 合法\n' "$TMUX_LAYOUT" ;;
-    *)
-      printf '  ✗ NAO_TMUX_LAYOUT=%-10s 非法（可选 main-row2|main-col|grid）\n' "$TMUX_LAYOUT"; rc=1 ;;
-  esac
-  if [[ "$TMUX_LAYOUT" == "main-row2" || "$TMUX_LAYOUT" == "main-col" ]]; then
-    if [[ "$TMUX_MAIN_WIDTH" =~ ^[0-9]+$ ]] && (( TMUX_MAIN_WIDTH >= 10 && TMUX_MAIN_WIDTH <= 90 )); then
-      printf '  ✓ NAO_TMUX_MAIN_WIDTH=%-3s%% 合法\n' "$TMUX_MAIN_WIDTH"
-    else
-      printf '  ! NAO_TMUX_MAIN_WIDTH=%-3s  非法（10..90）：越界夹取到 10/90，非数字回退 %s\n' "$TMUX_MAIN_WIDTH" "$TMUX_MAIN_WIDTH_DEFAULT"
-    fi
-  fi
-  if [[ "$TMUX_MIN_PANE_WIDTH" =~ ^[0-9]+$ ]] && (( TMUX_MIN_PANE_WIDTH >= 10 && TMUX_MIN_PANE_WIDTH <= 80 )); then
-    printf '  ✓ NAO_TMUX_MIN_PANE_WIDTH=%-3s 合法\n' "$TMUX_MIN_PANE_WIDTH"
-  else
-    printf '  ! NAO_TMUX_MIN_PANE_WIDTH=%-3s 非法（10..80）：越界夹取到 10/80，非数字回退 %s\n' "$TMUX_MIN_PANE_WIDTH" "$TMUX_MIN_PANE_WIDTH_DEFAULT"
-  fi
 
   if [[ "$strict" == "true" && $wl_problems -gt 0 ]]; then
     warn "strict 模式：白名单发现 $wl_problems 项问题（空条目/重复/过宽）"
@@ -3916,32 +3047,9 @@ repo_anchor_roots() {
   printf '%s\n' "$top"
 }
 
-# pane cwd 一次快照（**禁**逐名 find_pane_for：O(N) 次 tmux 调用违 NFR「不引入额外 I/O 循环」）
-#   输出：name<TAB>pane_id<TAB>pane_current_path；标题契约 `π - <会话名> - <任意>`（会话名字符集含 `@`）
-# P7（BR8）：名字字符集不加 `@` ⇒ 带 scope 的 pane 在归属层直接丢失 ⇒ 被归他仓/unknown。
-# >>> term-impl-tmux BEGIN (pane cwd)
-_term_tmux_pane_cwds() {
-  command -v tmux >/dev/null 2>&1 || return 0
-  tmux list-panes -a -F "#{pane_id}"$'\t'"#{pane_title}"$'\t'"#{pane_current_path}" 2>/dev/null \
-    | awk -F'\t' -v p="$PI_TITLE" '
-        { pre = p " - "
-          if (index($2, pre) != 1) next
-          rest = substr($2, length(pre) + 1)
-          i = index(rest, " - ")
-          if (i <= 1) next
-          name = substr(rest, 1, i - 1)
-          if (name !~ /^[A-Za-z0-9_@()-]+$/) next
-          print name "\t" $1 "\t" $3
-        }' || true
-}
-# <<< term-impl-tmux END (pane cwd)
-
-# 共享投影（无后端调用）：herdr 从门面快照取 name/pane/cwd（列 1/2/4）；tmux 走标题契约证据层
+# 共享投影（无后端调用）：从门面快照取 name/pane/cwd（列 1/2/4）；**禁**逐名查询（O(N) 次后端调用）
 pane_cwd_snapshot() {
-  case "$(term_backend)" in
-    tmux) _term_tmux_pane_cwds ;;
-    herdr) term_snapshot | awk -F'\t' '$1 != "" && $2 != "" {print $1 "\t" $2 "\t" $4}' ;;
-  esac
+  term_snapshot | awk -F'\t' '$1 != "" && $2 != "" {print $1 "\t" $2 "\t" $4}'
 }
 
 # 归属三态：local（本仓）/ other（他仓）/ unknown（不可判定 ⇒ fail-closed，只标注不给命令）
@@ -4033,7 +3141,7 @@ card_name_problem() {
 # 卡集（status/close 的识别集 · Q2）：锚根全集下 <root>/.agents/prompts/*.md 的 frontmatter role（退化文件名）。
 #   输出：role<TAB>卡路径<TAB>锚根。**只收合法且非常驻的 role** —— 安装副本/常驻卡不进卡集
 #   （BR9 保证二者不相交；非法卡 ensure 必拒，其历史会话落 status 的「角色未识别」节，不静默）。
-#   运行时读、不落状态文件（守「不新增配置」）；每 run 一次 glob + frontmatter 读，不新增 tmux/node 调用。
+#   运行时读、不落状态文件（守「不新增配置」）；每 run 一次 glob + frontmatter 读，不新增后端/node 调用。
 card_role_set() {
   local root f role phys n=0
   local -a roots=() files=()
@@ -4233,17 +3341,12 @@ _status_other_same() {  # <name> <repo_phys>
 }
 
 cmd_status() {
-  local a backend
-  backend="$(term_backend)"
-  if [[ "$backend" == "herdr" ]]; then
-    # B1（BR3/BR7）：herdr 的身份/归属/忙闲全部来自结构化事实 ⇒ 快照**每命令一次**
-    #   （≤1 次 pane list / agent list；逐名查询会 7×2 次 CLI，且同命令内两份快照不一致 = 新 flake 源）
-    if ! term_snapshot >/dev/null; then
-      printf '需要 herdr server：pane list / agent list 不可用（核对 `herdr --session %s server` 是否在跑、protocol 是否 22）—— 修好后重试，或 NAO_TERMINAL=tmux 回退\n' "${HERDR_SESSION:-?}" >&2
-      exit 3
-    fi
-  else
-    intercom_list_json >/dev/null 2>&1 || true   # 预热名册缓存（后续子 shell 复用）
+  local a
+  # B1（BR3/BR7）：身份/归属/忙闲全部来自结构化事实 ⇒ 快照**每命令一次**
+  #   （≤1 次 pane list / agent list；逐名查询会 7×2 次 CLI，且同命令内两份快照不一致 = 新 flake 源）
+  if ! term_snapshot >/dev/null; then
+    printf '需要 herdr server：pane list / agent list 不可用（核对 `herdr --session %s server` 是否在跑、protocol 是否 22）—— 修好后重试\n' "${HERDR_SESSION:-?}" >&2
+    exit 3
   fi
   # BR8：parse 的角色事实表（常驻 id + 锚根下合法卡 role）；**一次** glob，不再二次 card_role_set
   fleet_roles_init --cards
@@ -4269,17 +3372,15 @@ cmd_status() {
   fi
   # S13：herdr 快照（12 列）+ workspace label 表（≤1 次 workspace list；快照已由入口建好）
   STATUS_SNAP=""; STATUS_WS_LABEL=()
-  if [[ "$backend" == "herdr" ]]; then
-    STATUS_SNAP="$(term_snapshot 2>/dev/null || true)"
-    local _wjs="" _wobj _wid _wlabel
-    _wjs="$(_term_herdr_exec workspace list 2>/dev/null || true)"
-    while IFS= read -r _wobj; do
-      _wid="$(_term_json_str "$_wobj" workspace_id)"; [[ -n "$_wid" ]] || continue
-      _wlabel="$(_term_json_str "$_wobj" label)"
-      STATUS_WS_LABEL["$_wid"]="$_wlabel"
-    done < <(_term_json_objs <<< "$_wjs")
-  fi
-  # 一次枚举会话名（标题/会话/名册去重）：下面两轮共用，避免多一轮 tmux/node 调用
+  STATUS_SNAP="$(term_snapshot 2>/dev/null || true)"
+  local _wjs="" _wobj _wid _wlabel
+  _wjs="$(_term_herdr_exec workspace list 2>/dev/null || true)"
+  while IFS= read -r _wobj; do
+    _wid="$(_term_json_str "$_wobj" workspace_id)"; [[ -n "$_wid" ]] || continue
+    _wlabel="$(_term_json_str "$_wobj" label)"
+    STATUS_WS_LABEL["$_wid"]="$_wlabel"
+  done < <(_term_json_objs <<< "$_wjs")
+  # 一次枚举会话名（label 去重）：下面两轮共用，避免多一轮后端/node 调用
   local -a field_names=()
   local dname pout p_kind p_role p_task p_scope p_num
   mapfile -t field_names < <(visible_session_names)
@@ -4314,54 +3415,46 @@ cmd_status() {
   done
   # ---- B1（herdr）：逐名在线证据一次算定（只读快照，零后端调用）----
   #   单列缺陷类（幽灵 pane / 集成缺失 / 前台非 pi / 身份不一致）不得静默退化成 unknown；
-  #   `label` 命中 ≠ same/在线（BR1/AC2.1）。tmux 侧本表恒空 ⇒ 输出逐字不变。
+  #   `label` 命中 ≠ same/在线（BR1/AC2.1）。
   local -A hv=() hstate=() hseq=() hhook=() abn_seen=()
   local -a term_abn=()
   local vline nm vd vstate vseq vhook
-  if [[ "$backend" == "herdr" ]]; then
-    for nm in "${ROLE_ORDER[@]}" "${field_names[@]}"; do
-      [[ -n "$nm" ]] || continue
-      [[ -n "${hv[$nm]:-}" ]] && continue
-      if [[ -n "${ROLE_CARDS[$nm]:-}" ]]; then
-        vline="$(term_liveness "$nm" "${ROLE_WS[$nm]:-}")"
-      else
-        vline="$(term_liveness "$nm")"
-      fi
-      IFS=$'\t' read -r vd vstate vseq vhook <<< "$vline"
-      hv["$nm"]="${vd:-absent}"; hstate["$nm"]="${vstate:--}"; hseq["$nm"]="${vseq:--}"; hhook["$nm"]="${vhook:--}"
-    done
-    for nm in "${ROLE_ORDER[@]}" "${field_names[@]}"; do
-      [[ -n "$nm" ]] || continue
-      [[ -n "${abn_seen[$nm]:-}" ]] && continue
-      abn_seen["$nm"]=1
-      case "${hv[$nm]:-absent}" in
-        ghost)
-          term_abn+=("  ! $nm 幽灵 pane：label 在、agent 条目缺（label 命中 ≠ 在线；勿当「已在运行」，回收归 B3）") ;;
-        dead)
-          term_abn+=("  ! $nm 前台非 pi（状态 ${hstate[$nm]}）→ 非在线（可能刚退出/重启回放）") ;;
-        mismatch)
-          term_abn+=("  ! $nm 身份不一致：label 与 argv --name 不符 → 非在线（禁猜）") ;;
-        integration-missing)
-          term_abn+=("  ! $nm 集成缺失：agent_session 空或生命周期钩子权威缺（状态 ${hstate[$nm]}）→ **不可投递**；请核对 pi-intercom/herdr 集成；若 pi 首次启动停在 What's New / 信任提示，先手工关闭再重试") ;;
-        ambiguous)
-          term_abn+=("  ! $nm 同名 label 多 pane：命中多个 ⇒ 不猜（既不判在线，也不静默挑一个）；先人工核对/清理重复 label（回收面归 B3）") ;;
-      esac
-    done
-  fi
-  if [[ "$backend" == "herdr" ]]; then
-    echo "== 角色会话在线状态（本表按 herdr pane label + agent 状态判定；权威源 = pane list / agent list）=="
-  else
-    echo "== 角色会话在线状态（权威名单见 intercom({action:'list'})；本表按 tmux 终端标题/名册判定）=="
-  fi
+  for nm in "${ROLE_ORDER[@]}" "${field_names[@]}"; do
+    [[ -n "$nm" ]] || continue
+    [[ -n "${hv[$nm]:-}" ]] && continue
+    if [[ -n "${ROLE_CARDS[$nm]:-}" ]]; then
+      vline="$(term_liveness "$nm" "${ROLE_WS[$nm]:-}")"
+    else
+      vline="$(term_liveness "$nm")"
+    fi
+    IFS=$'\t' read -r vd vstate vseq vhook <<< "$vline"
+    hv["$nm"]="${vd:-absent}"; hstate["$nm"]="${vstate:--}"; hseq["$nm"]="${vseq:--}"; hhook["$nm"]="${vhook:--}"
+  done
+  for nm in "${ROLE_ORDER[@]}" "${field_names[@]}"; do
+    [[ -n "$nm" ]] || continue
+    [[ -n "${abn_seen[$nm]:-}" ]] && continue
+    abn_seen["$nm"]=1
+    case "${hv[$nm]:-absent}" in
+      ghost)
+        term_abn+=("  ! $nm 幽灵 pane：label 在、agent 条目缺（label 命中 ≠ 在线；勿当「已在运行」，回收归 B3）") ;;
+      dead)
+        term_abn+=("  ! $nm 前台非 pi（状态 ${hstate[$nm]}）→ 非在线（可能刚退出/重启回放）") ;;
+      mismatch)
+        term_abn+=("  ! $nm 身份不一致：label 与 argv --name 不符 → 非在线（禁猜）") ;;
+      integration-missing)
+        term_abn+=("  ! $nm 集成缺失：agent_session 空或生命周期钩子权威缺（状态 ${hstate[$nm]}）→ **不可投递**；请核对 pi-intercom/herdr 集成；若 pi 首次启动停在 What's New / 信任提示，先手工关闭再重试") ;;
+      ambiguous)
+        term_abn+=("  ! $nm 同名 label 多 pane：命中多个 ⇒ 不猜（既不判在线，也不静默挑一个）；先人工核对/清理重复 label（回收面归 B3）") ;;
+    esac
+  done
+  
+  echo "== 角色会话在线状态（本表按 herdr pane label + agent 状态判定；权威源 = pane list / agent list）=="
   local a_ok a_sc a_nm
   local a_extra=""
   for a in "${ROLE_ORDER[@]}"; do
     a_ok=0
     if running "$a" "${ROLE_WS[$a]:-}"; then
-      a_extra=""
-      if [[ "$backend" == "herdr" ]]; then
-        a_extra="$(_status_other_same "$a" "$(nao_phys_path "${ROLE_WS[$a]:-}")")"
-      fi
+      a_extra="$(_status_other_same "$a" "$(nao_phys_path "${ROLE_WS[$a]:-}")")"
       printf '  ✓ %-14s 在线（--name %s；卡片 %s）%s\n' "$a" "$a" "${ROLE_CARDS[$a]}" "$a_extra"
       a_ok=1
     fi
@@ -4369,12 +3462,8 @@ cmd_status() {
     local a_slot
     for a_slot in ${resident_v2[$a]:-}; do
       [[ -n "$a_slot" ]] || continue
-      if [[ "$backend" == "herdr" && "${hv[$a_slot]:-absent}" != "online" ]]; then continue; fi
-      if [[ "$backend" != "herdr" ]] && ! running "$a_slot" "${ROLE_WS[$a]:-}"; then continue; fi
-      a_extra=""
-      if [[ "$backend" == "herdr" ]]; then
-        a_extra="$(_status_other_same "$a_slot" "$(nao_phys_path "${ROLE_WS[$a]:-}")")"
-      fi
+      if [[ "${hv[$a_slot]:-absent}" != "online" ]]; then continue; fi
+      a_extra="$(_status_other_same "$a_slot" "$(nao_phys_path "${ROLE_WS[$a]:-}")")"
       printf '  ✓ %-14s 在线（--name %s；卡片 %s）%s\n' "$a" "$a_slot" "${ROLE_CARDS[$a]}" "$a_extra"
       a_ok=1
     done
@@ -4386,13 +3475,10 @@ cmd_status() {
         a_sc=""
         pout="$(fleet_name_parse "$a_nm")"
         case "$pout" in "LEGACY OK "*) IFS=',' read -r _ _ _ a_sc <<< "${pout#LEGACY OK }" ;; esac
-        # P1（QA 第二轮 · AC2.1 语义破口）：herdr 模式下带 scope 的名字来自 pane.label —— **不是证据**。
-        #   tmux 侧该名单来自标题/会话/名册（是证据），可直接打 ✓；herdr 侧必须过门面在线判定，
-        #   否则 ghost / dead / mismatch / integration-missing 会被打成「✓ 在线」，
+        # P1（QA 第二轮 · AC2.1 语义破口）：带 scope 的名字来自 pane.label —— **不是证据**，
+        #   必须过门面在线判定；否则 ghost / dead / mismatch / integration-missing 会被打成「✓ 在线」，
         #   与紧随其后的「终端证据异常」节自相矛盾。非在线交给那一节单列。
-        if [[ "$backend" == "herdr" && "${hv[$a_nm]:-absent}" != "online" ]]; then
-          continue
-        fi
+        if [[ "${hv[$a_nm]:-absent}" != "online" ]]; then continue; fi
         printf '  ✓ %-14s 在线（--name %s；卡片 %s）%s\n' \
           "$a" "$a_nm" "${ROLE_CARDS[$a]}" "$(_status_scope_tag "$a_sc")"
         a_ok=1
@@ -4420,14 +3506,7 @@ cmd_status() {
     prev="${pane_cwds[$pname]:-}"
     pane_cwds["$pname"]="$prev$pcwd"$'\n'
   done < <(pane_cwd_snapshot)
-  # 名册 cwd 只在 tmux 后端参与归属回退；herdr 侧**只用结构化事实**（roster 仅 -v 差异日志用），
-  #   否则名册陈旧/双源矛盾会把 B1 要根除的旧病带回来（arch 1b-3 / 验收补项）。
-  if [[ "$backend" == "tmux" ]]; then
-    while IFS=$'\t' read -r rn rcwd; do
-      [[ -n "$rn" ]] || continue
-      [[ -n "${roster_cwds[$rn]:-}" ]] || roster_cwds["$rn"]="$rcwd"
-    done < <(intercom_roster 2>/dev/null || true)
-  fi
+  # 归属**只用结构化事实**（pane cwd）；名册 cwd 不参与（否则名册陈旧/双源矛盾会把旧病带回来 —— arch 1b-3）
 
   local found=0 role id cls tag verdict obase scope_tag
   local -a unrecognized=()
@@ -4442,12 +3521,10 @@ cmd_status() {
     esac
     scope_tag=""
     [[ -n "$p_scope" ]] && scope_tag=" $(_status_scope_tag "$p_scope")"   # 只追加字段，既有行格式不动（BR1）
-    # herdr：非在线证据类**单列**（下方「终端证据异常」节），此处不重复渲染成残留/进行态
-    if [[ "$backend" == "herdr" ]]; then
-      case "${hv[$dname]:-absent}" in
-        ghost|dead|mismatch|integration-missing|ambiguous) continue ;;
-      esac
-    fi
+    # 非在线证据类**单列**（下方「终端证据异常」节），此处不重复渲染成残留/进行态
+    case "${hv[$dname]:-absent}" in
+      ghost|dead|mismatch|integration-missing|ambiguous) continue ;;
+    esac
     case "$p_kind" in
       resident)
         # 常驻会话本身已在上方 ROLE_ORDER 轮打印（含带 scope 的变体）⇒ 本区静默跳过（逐字不变）
@@ -4530,29 +3607,27 @@ cmd_status() {
   fi
   # AC2.2 闭环（B3）：可投递标注 —— **独立节/独立行**，不改任何既有行格式（BR1 md5 仍逐字）
   #   消费者 = close 忙闲闸门 + 本节；映射单源 = term_deliverable（idle/done 可投递，其余/unknown 不可）
-  if [[ "$backend" == "herdr" ]]; then
-    local -a dl=()
-    local -A dl_seen=()
-    local dn dv ds
-    for dn in "${ROLE_ORDER[@]}" "${field_names[@]}"; do
-      [[ -n "$dn" ]] || continue
-      if [[ -n "${dl_seen[$dn]:-}" ]]; then continue; fi   # ROLE_ORDER 与现场名册有交集 ⇒ 去重后再渲染
-      dl_seen["$dn"]=1
-      [[ -n "${abn_seen[$dn]:-}" ]] || continue     # 只对已算定证据的名字（全集）
-      dv="${hv[$dn]:-absent}"; ds="${hstate[$dn]:--}"
-      [[ "$dv" == "absent" ]] && continue
-      if [[ "$dv" == "online" ]] && term_deliverable "$ds"; then
-        dl+=("  · $dn：可投递（agent_status=$ds）")
-      elif [[ "$dv" == "online" ]]; then
-        dl+=("  · $dn：不可投递（agent_status=$ds；BR7 ⇒ 保守不可投递）")
-      else
-        dl+=("  · $dn：不可投递（$dv ⇒ 无在线证据）")
-      fi
-    done
-    if (( ${#dl[@]} > 0 )); then
-      echo '== 投递判定（BR7：idle/done 可投递；working/blocked/unknown 不可投递）=='
-      printf '%s\n' "${dl[@]}"
+  local -a dl=()
+  local -A dl_seen=()
+  local dn dv ds
+  for dn in "${ROLE_ORDER[@]}" "${field_names[@]}"; do
+    [[ -n "$dn" ]] || continue
+    if [[ -n "${dl_seen[$dn]:-}" ]]; then continue; fi   # ROLE_ORDER 与现场名册有交集 ⇒ 去重后再渲染
+    dl_seen["$dn"]=1
+    [[ -n "${abn_seen[$dn]:-}" ]] || continue     # 只对已算定证据的名字（全集）
+    dv="${hv[$dn]:-absent}"; ds="${hstate[$dn]:--}"
+    [[ "$dv" == "absent" ]] && continue
+    if [[ "$dv" == "online" ]] && term_deliverable "$ds"; then
+      dl+=("  · $dn：可投递（agent_status=$ds）")
+    elif [[ "$dv" == "online" ]]; then
+      dl+=("  · $dn：不可投递（agent_status=$ds；BR7 ⇒ 保守不可投递）")
+    else
+      dl+=("  · $dn：不可投递（$dv ⇒ 无在线证据）")
     fi
+  done
+  if (( ${#dl[@]} > 0 )); then
+    echo '== 投递判定（BR7：idle/done 可投递；working/blocked/unknown 不可投递）=='
+    printf '%s\n' "${dl[@]}"
   fi
   # D5：未识别节（F3）—— 单列，不给可执行命令（T530「非静默」对偶）
   if (( ${#unrecognized[@]} > 0 )); then
@@ -4563,23 +3638,12 @@ cmd_status() {
   local nsub
   nsub="$(subagent_in_field)"
   (( nsub > 0 )) && printf '  · 另有 %d 个子代理会话（subagent-*）· 生命周期由 pi-subagents 管理，nao 不回收\n' "$nsub"
-  # 标题被改写/无名的 pi pane：非静默——显式列出，供人工核对
-  #   herdr 后端：本批不列（无标题契约、pane 可无 label 且可属用户自己的 agent；幽灵 pane 已单列）
-  local -a orph=()
-  local pn2 pt
-  if [[ "$backend" == "tmux" ]]; then
-    while IFS=$'\t' read -r pn2 pt; do
-      [[ -n "$pn2" ]] && orph+=("$pn2($pt)")
-    done < <(unattributed_pi_panes)
-  fi
-  if (( ${#orph[@]} > 0 )); then
-    warn "以下 pi pane 标题不符契约且名册无 pane 记录，无法归属会话名：${orph[*]}"
-    warn "  （标题可能被外部改写；用 intercom({action:'list'}) 人工核对，或按 pane_id 处理）"
-  fi
+  # 无标签 pi pane：**不列**（herdr 无标题契约、pane 可无 label 且可属用户自己的 agent；幽灵 pane 已单列）
+  return 0
 }
 
 # ---------------------------------------------------------------------------
-# 回收已完成会话：闸门（tasks-state 已推进 + 无在跑 turn）+ 落地（pane/tmux 会话/进程）
+# 回收已完成会话：闸门（tasks-state 已推进 + 无在跑 turn）+ 落地（pane/session）
 cmd_close() {
   local force="$1" task="$2" target="${3:-}"
   [[ -n "$target" ]] || die "close 需要目标：角色别名或会话名（如 rd-be / qa(T1) / 旧形 qa-T1）"
@@ -4876,16 +3940,15 @@ cmd_close() {
     [[ "$cls" == "nofile" ]] && log "未启用 $TASKS_STATE（跳过状态闸门）"
   fi
 
-  # ---- 句柄层（B3）：tmux / herdr 双实现（定位 / self 判据 / liveness / 忙闲 / 回收句柄）----
+  # ---- 句柄层（B3）：herdr 实现（定位 / self 判据 / liveness / 忙闲 / 回收句柄）----
   term_reclaim "$name" "$repo" "$force" "$role" "$scope" "${tgt:-$role}"
   return $?
 }
 
 # ---------------------------------------------------------------------------
-# 拆场入口（B3 · 双实现）：tmux = 终结实验场 server（-S 显式 socket）；herdr = session stop+delete。
-#   后端差异在门面后（_term_tmux_cleanup / _term_herdr_cleanup）；显式目标守卫在入口（rc=2）。
+# 拆场入口（B3）：herdr = session stop+delete（实现 `_term_herdr_cleanup`）；显式目标守卫在入口（rc=2）。
 cmd_cleanup() {
-  term_cleanup "${CLEANUP_SOCK:-}" "${SESSION_ARG:-}" "$FORCE"
+  term_cleanup "${SESSION_ARG:-}" "$FORCE"
 }
 
 # ---------------------------------------------------------------------------
@@ -4894,7 +3957,7 @@ cmd_cleanup() {
 #   · 槽位占用的单一判据：目标 workspace 内、名字经 parse 后 (role,num) 相同者占位
 #     （v2：slot = 第 4 段，空 = 槽位 1；旧形不占 v2 槽位 —— 旧会话只读、可并存）。
 #   · 本批预留：同批两个 pm ⇒ pm / pm2（`_T_RSV_*` 只服务本命令，禁全局状态跨命令泄漏）。
-#   · 数据源：herdr = 本命令快照（≤1 workspace list + ≤1 pane list）；tmux = 可见会话名（尽力而为）。
+#   · 数据源：本命令快照（≤1 workspace list + ≤1 pane list）。
 # ---------------------------------------------------------------------------
 declare -a _T_RSV_WS=() _T_RSV_NAME=() _T_RSV_ROLE=() _T_RSV_NUM=()
 declare -A _DEP_SCOPE_WARNED=()
@@ -5259,8 +4322,6 @@ cmd_ensure() {
   done
 
   # ==== 相位 2：拉起（判重 + codegraph + spawn 逐目标）====
-  HOST_WINDOW=""
-  if [[ "$NAO_TERMINAL" == "tmux" && -n "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1; then resolve_host_window; fi
   for i in "${!t_names[@]}"; do
     repo="${t_repos[$i]}"
     disp="${t_disps[$i]}"
@@ -5387,8 +4448,8 @@ done
 if $PEND_CARD; then die "--card 后缺少卡路径参数（该怎么办：ensure --card .agents/prompts/<name>.md）"; fi
 if [[ -n "$PEND_AS" ]]; then die "--as 缺少同目标的 --card 与卡路径（该怎么办：ensure --card <卡路径> --as <会话名>）"; fi
 
-# 后端取值校验（fail loud，禁静默回落 tmux）
-term_backend >/dev/null || exit 2
+# 后端守卫（fail loud，不静默降级）：非 herdr 的 NAO_TERMINAL ⇒ stderr 1 行 + exit 2（命令未执行）
+term_backend || exit 2
 
 # session-start：--session 必填（在一切副作用之前；herdr 实现内部再校 default/字符集/socket 前缀）
 if [[ "$CMD" == "session-start" && -z "$SESSION_ARG" ]]; then
@@ -5396,10 +4457,10 @@ if [[ "$CMD" == "session-start" && -z "$SESSION_ARG" ]]; then
 fi
 
 # 唯一运行前提闸门（BR1/BR3）：先于 load_manifest 与任何副作用；不满足 ⇒ exit 3（命令未执行）。
-# cleanup 豁免：其正常场景就是实验场拆场（tmux: env -u TMUX ... -S <socket> / herdr: --session <名>）。
+# cleanup 豁免：拆场是外部动作（`cleanup --session <名>`）。
 # herdr 后端（#96 二期 B1–B3）：ensure/status/close 走 term_require（pane + protocol 闸门）；
 #   闸门在此之前 ⇒ 零后端调用（用例以 PATH 桩 0 命中断言）。
-# session-start 自校验（herdr = 起 server，无需已在 pane 内；tmux = 幂等无操作）
+# session-start 自校验（herdr = 起 server，无需已在 pane 内）
 case "$CMD" in
   check)  : ;;   # cmd_check 自行先做文本契约体检，再 load_manifest（缩进违例时也能先出报告）
   session-start) : ;;
@@ -5411,25 +4472,15 @@ case "$CMD" in
     : ;;  # cleanup 不需角色清单（也不要求已在 pane 内：拆场是外部动作）
 esac
 
-# -S 仅 cleanup 消费：其他子命令带上 -S 视为用法错误（避免静默吞参）
-if [[ -n "${CLEANUP_SOCK:-}" && "$CMD" != "cleanup" ]]; then
-  die "-S 仅用于 cleanup 子命令（实验场安全清理）：nao-fleet.sh cleanup -S <socket>"
+# `-S` 已随 tmux 后端移除：任何子命令带上它 ⇒ stderr 恰 1 行 + exit 2 + 指路 --session（fail loud，不静默吞参）
+if [[ -n "${CLEANUP_SOCK:-}" ]]; then
+  printf '[fleet] -S 已随 tmux 后端移除：cleanup 改用 --session <名>（如 nao-fleet.sh cleanup --session nao-fleet）\n' >&2
+  exit 2
 fi
-# B3 · 拆场的显式目标按后端分派（用法守卫 rc=2；在一切后端调用之前）
-if [[ "$CMD" == "cleanup" ]]; then
-  if [[ "$(term_backend)" == "herdr" ]]; then
-    if [[ -n "${CLEANUP_SOCK:-}" ]]; then
-      printf '[fleet] herdr 后端的 cleanup 用 --session <名>（-S 仅用于 tmux 实验场 socket）\n' >&2
-      exit 2
-    fi
-    if [[ -z "${SESSION_ARG:-}" ]]; then
-      printf '[fleet] cleanup 拒绝：herdr 后端须显式 --session <名>（default 已放行，但需 --force；如 --session nao-fleet）\n' >&2
-      exit 2
-    fi
-  elif [[ -n "${SESSION_ARG:-}" ]]; then
-    printf '[fleet] --session 仅用于 herdr 后端（tmux cleanup 用 -S <隔离socket>）\n' >&2
-    exit 2
-  fi
+# B3 · 拆场的显式目标守卫（用法守卫 rc=2；在一切后端调用之前）
+if [[ "$CMD" == "cleanup" && -z "${SESSION_ARG:-}" ]]; then
+  printf '[fleet] cleanup 拒绝：须显式 --session <名>（default 已放行，但需 --force；如 --session nao-fleet）\n' >&2
+  exit 2
 fi
 
 case "$CMD" in
@@ -5453,21 +4504,19 @@ case "$CMD" in
       ROLES_N="$(grep -oE '解析成功，[0-9]+ 个角色' "$REPFILE" | grep -oE '[0-9]+' | head -1 || true)"
       FILES_N="$(grep -oE '[0-9]+ 个文本文件全 LF' "$REPFILE" | grep -oE '^[0-9]+' | head -1 || true)"
       if (( WARNS > 0 )); then
-        printf 'check: OK · roles=%s · files=%s · layout=%s · warn=%d（-v 看详情）\n' \
-          "${ROLES_N:-?}" "${FILES_N:-?}" "$TMUX_LAYOUT" "$WARNS"
+        printf 'check: OK · roles=%s · files=%s · warn=%d（-v 看详情）\n' \
+          "${ROLES_N:-?}" "${FILES_N:-?}" "$WARNS"
       else
-        printf 'check: OK · roles=%s · files=%s · layout=%s\n' \
-          "${ROLES_N:-?}" "${FILES_N:-?}" "$TMUX_LAYOUT"
+        printf 'check: OK · roles=%s · files=%s\n' \
+          "${ROLES_N:-?}" "${FILES_N:-?}"
       fi
       # CodeGraph 四态行常驻可见（BR9 不静默）：摘要模式下也从报告里抽这一行原样回显，
       # 保持「默认只出四态中的一行」（PRD AC1）且不额外 fork（full=0 已在报告期算完）。
       grep -m1 -E '^  . codegraph ' "$REPFILE" || true
       # M20261118：PRD 结构提示也常驻可见（与 codegraph 同口径：**不计入 warn**，可见性由它自己这行承担）
       grep -m1 -E '^  ! PRD 结构' "$REPFILE" || true
-      # B1（BR1 六条机械保证之「check 打印生效后端」）：**仅 herdr 模式加行**；tmux 路径零新增输出
-      if [[ "$NAO_TERMINAL" == "herdr" ]]; then
-        echo '  · 生效后端 NAO_TERMINAL=herdr（默认后端；#96 二期 B4：status/ensure/close/cleanup 走门面；session-start 起 server；台账 0 条）'
-      fi
+      # B1（BR1 六条机械保证之「check 打印生效后端」）：唯一后端 ⇒ 恒打印（与 -v 报告同文案）
+      echo '  · 生效后端 NAO_TERMINAL=herdr（唯一后端；#96 二期 B4：status/ensure/close/cleanup 走门面；session-start 起 server；台账 0 条）'
     else
       cat "$REPFILE"
     fi

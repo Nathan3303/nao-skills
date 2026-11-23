@@ -392,47 +392,26 @@ SUBJ_BODY_MD5="$(tail -n +2 "$SUBJECT" | md5sum | awk '{print $1}')"
 t4_assert_ne "$FIX_BODY_MD5" "$SUBJ_BODY_MD5" \
   "C2 基线非自等价（fixture 正文 md5 ≠ 被测脚本正文 md5 ⇒ 不是「把当前脚本当基线」的恒绿）"
 
-if ! command -v tmux >/dev/null 2>&1; then
-  t4_degrade "环境缺少 tmux ⇒ C2 golden diff（status/ensure 两样）未执行；C1/C3 已跑"
-  t4_exit
-fi
+# 历史常量（只作「herdr 渲染 ≠ 旧 tmux 渲染」的对照；不参与任何 tmux 执行）：
+#   tmux 时代 status 全文 md5（自 2692b42 基线起未变；T555 后该后端已不存在，值冻结留档）
+GOLD_TMUX_MD5="144f3447c9ff406d6aed828d9c9720e5"
 
-REAL_TMUX="$(command -v tmux)"
+# ============================================================================
+# T555（纯 herdr 化）· C2 golden diff 组退役说明
+#   机制：本组原用**两个隔离 tmux server**（各 6 个标题契约 pane）跑「基线 fixture（tmux 时代整脚本）
+#   vs 新版」的 status 全文 md5 对照。tmux 后端已整组删除（ADR 2026-11-22-herdr-only）：
+#     · 基线 fixture 只认 tmux 后端（`NAO_TERMINAL=tmux` 在本版是 rc=2 用法守卫）⇒ 无对照对象；
+#     · 标题契约 pane 的构造面（`pane_title` / 会话名）也已不存在。
+#   ⇒ 该组**整体退役**（断言退役逐条归因见 docs/reports/555-impl-rd-infra.md）。
+#   零回归的等价覆盖：herdr golden 由本用例下方 herdr 夹具动态生成（`GOLD_HERDR_MD5`），
+#     并断言「未设 == 显式 =herdr」+「未设 ≠ 旧 tmux golden」+ 变异自证（默认改回 tmux ⇒ 必红）。
+# ============================================================================
 LAB="$T4_CACHE_DIR/lab28-$$"
-SOCK_A_DIR="$LAB/sockA"
-SOCK_B_DIR="$LAB/sockB"
-SOCK_A="$SOCK_A_DIR/tmux-$(id -u)/default"
-SOCK_B="$SOCK_B_DIR/tmux-$(id -u)/default"
-
-# ---- 硬护栏（先于一切 tmux 操作）----
-GUARD=0
-_TM="${TMUX:-}"
-for p in "/tmp/tmux-$(id -u)/default" "${TMPDIR:-/tmp}/tmux-$(id -u)/default" "${_TM%%,*}"; do
-  [ -n "$p" ] || continue
-  [ "$SOCK_A" = "$p" ] && GUARD=1
-  [ "$SOCK_B" = "$p" ] && GUARD=1
-done
-[[ "$SOCK_A" == "$LAB"/* && "$SOCK_B" == "$LAB"/* && "$SOCK_A" != "$SOCK_B" ]] || GUARD=1
-if [ "$GUARD" != 0 ]; then
-  t4_bad "护栏触发：夹具 SOCK 不在 \$LAB 下、两场不独立或与生产默认候选冲突"
-  t4_exit
-fi
-FIXTURE_TOP="$(git -C "$T4_CACHE_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
-if [ -n "$FIXTURE_TOP" ]; then
-  t4_bad "夹具根落在 git 仓内（$FIXTURE_TOP）⇒ 锚根/归属判定会被污染；请把 TMPDIR 指到仓外"
-  t4_exit
-fi
-t4_ok "护栏：两个隔离 socket（基线/新版各一场）+ 夹具根不在任何 git 仓内"
-
-mkdir -p "$LAB" "$SOCK_A_DIR/tmux-$(id -u)" "$SOCK_B_DIR/tmux-$(id -u)" "$LAB/bin" "$LAB/pi-empty"
-chmod 700 "$SOCK_A_DIR/tmux-$(id -u)" "$SOCK_B_DIR/tmux-$(id -u)"
+mkdir -p "$LAB/bin" "$LAB/pi-empty"
 cp -r "$T4_ROOT/.agents" "$LAB/.agents" || { t4_bad "夹具复制 .agents 失败"; t4_exit; }
-BASE_SCRIPT="$LAB/base-fleet.sh"
-cp "$BASELINE_FIXTURE" "$BASE_SCRIPT" 2>/dev/null || : > "$BASE_SCRIPT"
-t4_assert_ne "0" "$(wc -c < "$BASE_SCRIPT" | tr -d ' ')" "C2 基线脚本可执行副本非空（空 ⇒ 断言必红，不静默跳过）"
+t4_ok "C2 夹具（herdr 场）：LAB 建立 + .agents 复制完成（tmux 双场/标题 pane 构造面已随 T555 退役）"
 
-# 下游卡夹具 ×2 —— **名字必须与下面 ensure 目标集不相交**（同一 tmux server 上，status 夹具 pane
-#   的存在会让 ensure 的 running 判重命中 ⇒ 会静默跳过，令 C2② 目标数不足而假绿）
+# 下游卡夹具 ×2 —— **名字必须与下面的 status/ensure 目标集不相交**
 cat > "$LAB/.agents/prompts/sec-review.md" <<'MD'
 ---
 role: sec-review
@@ -468,106 +447,10 @@ exec sleep 900
 SH
 chmod +x "$LAB/bin/pi"
 
-# 标题启动器（pane 内进程自己输出 OSC 0 ⇒ 标题恒定，不依赖 shell prompt）
-cat > "$LAB/pane-title.sh" <<'SH'
-#!/usr/bin/env bash
-printf '\033]0;%s\007' "$1"
-exec sleep 1800
-SH
-chmod +x "$LAB/pane-title.sh"
-
-TX() { local s="$1"; shift; "$REAL_TMUX" -S "$s" "$@"; }
-setup_server() { # <sock> <sockdir> → echo 调用者 pane
-  local s="$1" d="$2"
-  mkdir -p "$d/tmux-$(id -u)"; chmod 700 "$d/tmux-$(id -u)"
-  "$REAL_TMUX" -S "$s" new-session -d -s lab -x 320 -y 70 -c "$LAB" >/dev/null 2>&1 || return 1
-  sleep 0.3
-  "$REAL_TMUX" -S "$s" setenv -g PATH "$LAB/bin:$PATH" >/dev/null 2>&1 || true
-  "$REAL_TMUX" -S "$s" list-panes -t lab -F '#{pane_id}' 2>/dev/null | head -1
-}
-wait_title() { # <sock> <pane> <expected>
-  local s="$1" p="$2" want="$3" i got
-  for i in $(seq 1 50); do
-    got="$("$REAL_TMUX" -S "$s" display-message -p -t "$p" '#{pane_title}' 2>/dev/null)"
-    [ "$got" = "$want" ] && return 0
-    sleep 0.1
-  done
-  return 1
-}
-start_titled() { # <sock> <session> <title>
-  local s="$1" sess="$2" title="$3" p
-  "$REAL_TMUX" -S "$s" new-session -d -s "$sess" -x 200 -y 50 -c "$LAB" \
-    "$LAB/pane-title.sh" "$title" >/dev/null 2>&1 || return 1
-  p="$("$REAL_TMUX" -S "$s" list-panes -t "$sess" -F '#{pane_id}' 2>/dev/null | head -1)"
-  [ -n "$p" ] || return 1
-  wait_title "$s" "$p" "$title" || return 1
-  printf '%s' "$p"
-}
-
-trap 'for s in "$SOCK_A" "$SOCK_B"; do
-        [ -n "${s:-}" ] && [ -d "${LAB:-/nonexistent}" ] || continue
-        ( cd "$LAB" 2>/dev/null || cd /tmp
-          env -u TMUX TMUX_TMPDIR="$SOCK_A_DIR" "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" cleanup -S "$s" >/dev/null 2>&1 ) || true
-      done
-      t4_cache_cleanup 2>/dev/null || true' EXIT
-
-run_in() { # <socket> <tmuxdir> <caller> <script> <args...>
-  local sock="$1" tdir="$2" pane="$3" script="$4"; shift 4
-  # #96 三期 P2：tmux 夹具场一律显式 =tmux（测试不依赖默认值；默认已翻 herdr）
-  t4_run_in_dir "$LAB" env -u TMUX -u TMUX_PANE NAO_TERMINAL=tmux TMUX="$sock,0,0" TMUX_PANE="$pane" \
-    TMUX_TMPDIR="$tdir" NAO_SKILLS="$LAB" PI_CODING_AGENT_DIR="$LAB/pi-empty" \
-    NAO_TASKS_STATE="$TASKS_FIX" PATH="$LAB/bin:$PATH" \
-    timeout 180 "$BASH_BIN" "$script" "$@"
-  T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
-  T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
-}
-
-# ---------------------------------------------------------------- C2① status
-CALLER_A="$(setup_server "$SOCK_A" "$SOCK_A_DIR")"
-CALLER_B="$(setup_server "$SOCK_B" "$SOCK_B_DIR")"
-t4_assert_ne "" "${CALLER_A:-}" "C2 夹具：基线场隔离 tmux server + 调用者 pane 建立"
-t4_assert_ne "" "${CALLER_B:-}" "C2 夹具：新版场隔离 tmux server + 调用者 pane 建立"
-
-# 同一套 pane 标题夹具铺到两场（名字全不带 scope ⇒ BR1 口径）
-STATUS_TITLES=("rd-infra-T9001" "qa-T9002" "pm-M20261014-evil" "sec-audit" "sec-audit-T9003" "subagent-abc")
-ST_OK=1
-for t in "${STATUS_TITLES[@]}"; do
-  start_titled "$SOCK_A" "fx-${t}" "π - $t - $(basename "$LAB")" >/dev/null || ST_OK=0
-  start_titled "$SOCK_B" "fx-${t}" "π - $t - $(basename "$LAB")" >/dev/null || ST_OK=0
-done
-t4_assert_eq "1" "$ST_OK" "C2 夹具：${#STATUS_TITLES[@]} 个标题契约 pane 在两场就绪（标题等不到 ⇒ 本断言红，不假绿）"
-
-run_in "$SOCK_A" "$SOCK_A_DIR" "$CALLER_A" "$BASE_SCRIPT" status
-RC_A=$T4_RC; OUT_A="$T4_OUT_ANSI"
-run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" status
-RC_B=$T4_RC; OUT_B="$T4_OUT_ANSI"
-t4_assert_eq "0" "$RC_A" "C2① 基线（fixture $BASELINE_SHA）status rc=0"
-t4_assert_eq "0" "$RC_B" "C2① 新版 status rc=0"
-MD5_A="$(printf '%s' "$OUT_A" | md5sum | awk '{print $1}')"
-MD5_B="$(printf '%s' "$OUT_B" | md5sum | awk '{print $1}')"
-# 可诊断失败：把首个差异行打出来（md5 不同时给出定位）
-if [ "$MD5_A" != "$MD5_B" ]; then
-  diff -u <(printf '%s\n' "$OUT_A") <(printf '%s\n' "$OUT_B") 2>/dev/null | head -20 >&2 || true
-fi
-t4_assert_eq "$MD5_A" "$MD5_B" \
-  "C2① 名册离线正常路径：新版 status 全文与基线逐字等价（md5 $MD5_A；scope 为空 ⇒ 零回归）"
-t4_info "C2① status md5 = $MD5_A（两场相等；行数 $(printf '%s\n' "$OUT_B" | wc -l | tr -d ' ')）"
-
-# ============================================================================
-# #96 二期 B1：BR1 机械保证（动态面）+ herdr 判定面（幽灵 pane / 集成缺失 / BR7 映射）
-#   ① 双拼写 md5：未设 NAO_TERMINAL 与显式 =tmux 两次 invocation 的 status 全文 md5 相等，
-#      且都等于 C2 golden（基线 fixture 的 md5）—— 默认值唯一 ⇒ 两种拼写不可分叉
-#   ② 双向 PATH 桩负控：tmux 模式下 herdr 桩 0 命中；herdr 模式下 tmux 桩 0 命中（+ node 探针 0 命中）
-#   ③ tmux 侧调用次数零漂移：基线脚本与新脚本的 status 逐子命令计数相等（C2 只比 md5，抓不到次数）
-#   ④ herdr 判定面：label 命中 ≠ 在线 —— ghost / integration-missing / dead / mismatch 各一档；
-#      BR7 忙闲映射单测（term_deliverable）+ 快照缓存（多次 liveness 只 1 次 pane list / agent list）
-# ============================================================================
-REAL_TMUX28="$(command -v tmux)"
-# P3-5（B2 订正）：改为**按本用例 PID + mtime 归属**判「系统 /tmp 净增」——全域计数在并发下会假红/假绿。
-#   归属通道：每次 fleet 调用都用 `bash -c 'echo $$; exec …'` 记下**最终进程 PID**（exec 不改 PID），
-#   快照文件名 = `nao-fleet-term-snap.<pid>.<rand>` ⇒ 只统计「窗口内新建 ∧ pid 属于本用例」的文件。
+# P3-5（B2 订正）：按本用例 PID + mtime 归属判「/tmp 净增」（全域计数在并发下会假红/假绿）。
 B2_SNAP_TS="$(date +%s)"
 B2_PID_LOG="$LAB/fleet-pids.log"; : > "$B2_PID_LOG"; export B2_PID_LOG
+
 # ---- 桩：herdr（记录调用 + 供判定面夹具）· tmux 包装（记录后转发真 tmux）· node（记录后失败）----
 cat > "$LAB/bin/herdr" <<SH
 #!/usr/bin/env bash
@@ -634,8 +517,9 @@ SH
 sed -i "s#LABROOT#$LAB#g" "$LAB/bin/herdr"
 cat > "$LAB/bin/tmux" <<SH
 #!/usr/bin/env bash
+# T555：tmux 后端已删 ⇒ 桩只记录（不转发）。维持「herdr 场零 tmux 调用」这条反向断言。
 printf 'tmux %s\n' "\$*" >> "$LAB/tmux-calls.log"
-exec "$REAL_TMUX28" "\$@"
+exit 1
 SH
 cat > "$LAB/bin/node" <<SH
 #!/usr/bin/env bash
@@ -644,45 +528,17 @@ exit 1
 SH
 chmod +x "$LAB/bin/herdr" "$LAB/bin/tmux" "$LAB/bin/node"
 
-# ---- ① 显式 =tmux ⇒ **旧** golden（#96 三期 P2 改写：未设不再 == =tmux）----
-#   BR1 三期改写（PM 2026-11-11）：默认翻 herdr 后，「双拼写相等」按设计失效 ⇒ 改为
-#     显式 `=tmux` ⇒ 旧 golden（144f3447…，自 2692b42 基线以来未变）
-#     未设 ⇒ 新 herdr golden（由夹具生成，见下方「默认值反向断言」节）
-#     **反向断言：两者必须不同**（防 flip 未生效仍全绿）+ 变异「把默认改回 tmux」⇒ 必红
-# golden 生成命令（旧 golden，可复算）：
-#   run_in "$SOCK_B" … env NAO_TERMINAL=tmux bash .agents/scripts/nao-fleet.sh status | md5sum
-#   ⇒ 144f3447c9ff406d6aed828d9c9720e5（15 行；夹具 = 本用例的 6 个标题 pane + 基线 fixture）
-GOLD_TMUX_MD5="144f3447c9ff406d6aed828d9c9720e5"
-# C2②：ensure 的命名口径**按设计变更**（恒带 @<fleet>）⇒ 不再钉旧 ensure golden；改为「新期望表 + 负控」。
-: > "$LAB/herdr-calls.log"
-export NAO_TERMINAL=tmux          # 本用例 tmux 夹具段一律显式 tmux（测试不依赖默认值）
-run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" status
-RC_TMUX=$T4_RC; OUT_TMUX="$T4_OUT_ANSI"
-MD5_TMUX="$(printf '%s' "$OUT_TMUX" | md5sum | awk '{print $1}')"
-t4_assert_eq "0" "$RC_TMUX" "B1① 显式 NAO_TERMINAL=tmux ⇒ status rc=0"
-t4_assert_eq "$GOLD_TMUX_MD5" "$MD5_TMUX" "B1① =tmux 拼写 == **旧** golden（status 全文 md5，BR1 零回归）"
-t4_assert_eq "$MD5_A" "$MD5_TMUX" "B1① =tmux 拼写 == C2 golden（基线 fixture 场，动态复核）"
-t4_info "B1① =tmux md5：$MD5_TMUX（旧 golden $GOLD_TMUX_MD5）· 行数 $(printf '%s\n' "$OUT_TMUX" | wc -l | tr -d ' ')"
+# ---- ① 旧后端变量 ⇒ 用法守卫（T555 / D2）：golden 对照与 tmux 调用计数两组随后端退役 ----
+#   退役（逐条归因见报告）：`=tmux status rc=0` / `=tmux == 旧 golden` / `=tmux == C2 golden` /
+#   `tmux 模式 herdr 桩 0 命中` / `B1③ 五个子命令 + 总数零漂移` —— 对象（tmux 分支）已删。
+#   取而代之：旧值 fail loud（rc=2 + 单行 + 零后端调用），且 herdr 侧反而**必须**有 herdr 调用。
+: > "$LAB/herdr-calls.log"; : > "$LAB/tmux-calls.log"
+t4_run_in_dir "$LAB" env "${T4_HERDR_UNSET_ARGS[@]}" -u TMUX -u TMUX_PANE NAO_TERMINAL=tmux NAO_SKILLS="$LAB" \
+  PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" PATH="$LAB/bin:$PATH" \
+  timeout 180 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" status
+t4_assert_eq "2" "$T4_RC" "B1① 旧后端变量 status ⇒ rc=2（D2 用法守卫；原「=tmux golden」组退役）"
 t4_assert_eq "0" "$(grep -c '^herdr ' "$LAB/herdr-calls.log" || true)" \
-  "B1② tmux 模式 status：herdr 桩 0 命中（tmux 后端不碰 herdr）"
-
-# ---- ③ tmux 调用次数零漂移（逐子命令计数：基线 vs 新版，同一套夹具 pane）----
-count_tmux_calls() { # <log> <子命令> → 次数
-  awk -v s="$2" '$1 == "tmux" { for (i = 2; i <= NF; i++) if ($i == s) { n++; break } } END { print n + 0 }' "$1"
-}
-: > "$LAB/tmux-calls.log"
-run_in "$SOCK_A" "$SOCK_A_DIR" "$CALLER_A" "$BASE_SCRIPT" status
-cp "$LAB/tmux-calls.log" "$LAB/tmux-base.log"
-: > "$LAB/tmux-calls.log"
-run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" status
-cp "$LAB/tmux-calls.log" "$LAB/tmux-new.log"
-for sub in list-panes list-sessions display-message capture-pane has-session; do
-  t4_assert_eq "$(count_tmux_calls "$LAB/tmux-base.log" "$sub")" \
-    "$(count_tmux_calls "$LAB/tmux-new.log" "$sub")" \
-    "B1③ status 的 \`tmux $sub\` 调用次数与基线一致（C2 只比 md5，抓不到次数漂移）"
-done
-t4_assert_eq "$(grep -c '^tmux ' "$LAB/tmux-base.log" || true)" "$(grep -c '^tmux ' "$LAB/tmux-new.log" || true)" \
-  "B1③ status 的 tmux 总调用次数与基线一致"
+  "B1② 守卫先于一切后端调用（herdr 桩 0 命中）"
 
 # ---- ② herdr 模式 status（端到端）：双向桩负控 + 四档非在线证据单列 ----
 # P2-1：socket 必须落在目标根（XDG_CONFIG_HOME/herdr/sessions/<名>/）下 —— 夹具与之一致
@@ -778,21 +634,19 @@ t4_assert_eq "$GOLD_HERDR_MD5" "$MD5_UNSET" "P2① 未设 == herdr golden（默�
 t4_assert_ne "$GOLD_TMUX_MD5" "$MD5_UNSET" "P2① 未设 ≠ 旧 tmux golden（旧口径已按设计失效，不假绿）"
 t4_info "P2① 双 golden：tmux=$GOLD_TMUX_MD5 · herdr=$GOLD_HERDR_MD5 · 未设=$MD5_UNSET"
 
-# 反向负控 A：**tmux 夹具场**里未设 ⇒ exit 3（fail loud，不静默回落 tmux —— PM 裁定 D2）
+# 反向负控 A：**清掉 herdr 前提**（NAO_TERMINAL 未设 + HERDR_* 全清）⇒ exit 3（fail loud，不静默回落）
+#   T555：原写法是「造 tmux 夹具场、验未设不回落 tmux」—— tmux 后端已删，回落目标不存在 ⇒
+#   同一意图改钉「未设 = herdr，但 herdr 前提缺失 ⇒ exit 3（点名 HERDR_ENV）」。
 : > "$LAB/tmux-calls.log"
-#   （不用 run_in：它在 P2 起恒注入 NAO_TERMINAL=tmux；本负控要的正是「未设」）
-#   herdr 宿主会把生产 HERDR_* 带进夹具 ⇒ 必须显式清成「tmux 场」基线：否则「未设」会真的走 herdr
-#   （打到生产 server、rc=0，负控变假绿 —— #111 同类渗漏）。
-TMUX_FIELD_ENV=(env -u TMUX -u TMUX_PANE "${T4_HERDR_UNSET_ARGS[@]}")   # HERDR_* 清单单源在 lib.sh（#130 D2）
-t4_run_in_dir "$LAB" "${TMUX_FIELD_ENV[@]}" -u NAO_TERMINAL TMUX="$SOCK_B,0,0" TMUX_PANE="$CALLER_B" \
-  TMUX_TMPDIR="$SOCK_B_DIR" NAO_SKILLS="$LAB" PI_CODING_AGENT_DIR="$LAB/pi-empty" \
+t4_run_in_dir "$LAB" env -u TMUX -u TMUX_PANE "${T4_HERDR_UNSET_ARGS[@]}" -u NAO_TERMINAL \
+  NAO_SKILLS="$LAB" PI_CODING_AGENT_DIR="$LAB/pi-empty" \
   NAO_TASKS_STATE="$TASKS_FIX" PATH="$LAB/bin:$PATH" \
   timeout 180 "$BASH_BIN" -c 'printf "%s\n" "$$" >> "$B2_PID_LOG"; exec "$@"' _ "$LAB/.agents/scripts/nao-fleet.sh" status
 RC_NOFALL=$T4_RC
 T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
-t4_assert_eq "3" "$RC_NOFALL" "P2① 反向负控A：tmux 场里未设 ⇒ exit 3（不自动回落 tmux）"
-t4_assert_contains "$T4_ERR_ANSI" "HERDR_ENV=1 缺失" "P2① 反向负控A：点名 herdr 前提（HERDR_ENV）而非 tmux"
-t4_assert_contains "$T4_ERR_ANSI" "NAO_TERMINAL=tmux" "P2① 反向负控A：exit 3 文案给回退指路"
+t4_assert_eq "3" "$RC_NOFALL" "P2① 反向负控A：未设 NAO_TERMINAL 且 herdr 前提全缺 ⇒ exit 3（不静默成功）"
+t4_assert_contains "$T4_ERR_ANSI" "HERDR_ENV=1 缺失" "P2① 反向负控A：点名 herdr 前提（HERDR_ENV）"
+t4_assert_match "$T4_ERR_ANSI" '重试|pin 回' "P2① 反向负控A：exit 3 文案给后续动作"
 
 # 变异自证：把默认改回 tmux ⇒ 上面的「未设 == herdr golden」必红（判据非空转）
 #   （本段仍在默认值探针块内：它跑的就是「未设」状态，只是换了一份变异脚本）
@@ -1404,12 +1258,8 @@ chk "BR7 空值保守不可投递" "1" "$(term_deliverable ''; echo $?)"
 # 快照缓存：上面已调用 term_liveness 7 次 ⇒ pane list / agent list 各仍只 1 次
 # P2（QA 第二轮）：tmux 分支分派名必须真实存在（此前 `__term_tmux_argv` 双下划线 ⇒ rc=127，
 #   无生产调用者所以 BR1 不红，但 B2 一接就在 set -e 下中断）。三个分派各一条，抓错名。
-_term_tmux_argv() { printf 'STUB\t%s\n' "$1"; }
-_term_tmux_liveness() { printf 'online\t-\t-\t-\n'; }
-_term_tmux_snapshot() { printf 'x\tp\t-\t/tmp\t-\t-\t-\t-\t-\t-\t-\n'; }
-chk "tmux 分派 term_argv" "STUB	p1" "$(NAO_TERMINAL=tmux term_argv p1)"
-chk "tmux 分派 term_liveness" "online" "$(NAO_TERMINAL=tmux term_liveness x | cut -f1)"
-chk "tmux 分派 term_snapshot" "x" "$(NAO_TERMINAL=tmux term_snapshot | cut -f1)"
+# T555 退役（3 条）：`term_argv/liveness/snapshot` 的 tmux 分派断言 —— 分派分支已随后端删除；
+#   门面的 herdr 路径由本子测上下文的其余 chk（快照缓存 / BR7 映射 / protocol 闸门）逐条覆盖。
 chk "快照缓存：pane list 恰 1 次" "1" "$(grep -c '^herdr .*pane list' "$STUB_LOG" || true)"
 chk "快照缓存：agent list 恰 1 次" "1" "$(grep -c '^herdr .*agent list' "$STUB_LOG" || true)"
 # 前提闸门：protocol != 22 ⇒ exit 3（fail loud，不静默降级）
@@ -1450,150 +1300,17 @@ rm -f "$B2_PROBE"
 t4_assert_eq "" "$(b2_snap_ours)" "B1⑤ 变异自证后还原：本用例自身净增仍为 0（无残留）"
 
 
-# ---------------------------------------------------------------- C2② ensure
-# 同一 $LAB 上两场顺序跑：基线场填 A，收场后新版场填 B（名字全不带 scope）
-ensure_targets() { # <socket> <tmuxdir> <caller> <script> → 拼 "已拉起 行 + --name 值"
-  local sock="$1" tdir="$2" pane="$3" script="$4" lines="" names=""
-  local -a batches=("pm arch-designer uiux-designer rd-fe rd-be qa rd-infra" "--task T1 rd-be" "--card .agents/prompts/sec-review.md")
-  : > "$PI_NAMES"
-  for batch in "${batches[@]}"; do
-    # shellcheck disable=SC2086
-    run_in "$sock" "$tdir" "$pane" "$script" ensure $batch
-    [ "$T4_RC" = "0" ] || printf '  -- ensure %s 失败（rc=%s）：%s\n' "$batch" "$T4_RC" "$(printf '%s' "$T4_ERR_ANSI" | head -2)" >&2
-    lines+="$(printf '%s\n' "$T4_OUT_ANSI" | grep -F -- '[tmux] 已拉起' || true)"$'\n'
-  done
-  names="$(cat "$PI_NAMES" 2>/dev/null || true)"
-  # 归一化夹具路径（$LAB 含每轮 mktemp 随机串）⇒ md5 跨轮稳定，可直接作为回执里的对照数字
-  #   （只替换夹具根，不动其余字节；两场用同一 $LAB，归一化前后都是同一口径）
-  printf '%s\n%s\n' "$lines" "$names" | sed -e "s|$LAB|<LAB>|g"
-}
-BLOB_A="$(ensure_targets "$SOCK_A" "$SOCK_A_DIR" "$CALLER_A" "$BASE_SCRIPT")"
-BLOB_B="$(ensure_targets "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh")"
-LAUNCH_N_A="$(printf '%s\n' "$BLOB_A" | grep -cF -- '[tmux] 已拉起' || true)"
-LAUNCH_N_B="$(printf '%s\n' "$BLOB_B" | grep -cF -- '[tmux] 已拉起' || true)"
-t4_assert_eq "9" "$LAUNCH_N_A" "C2② 基线场 9 个目标全部拉起（7 常驻 + --task + --card）"
-t4_assert_eq "9" "$LAUNCH_N_B" "C2② 新版场 9 个目标全部拉起（否则下面新期望表无意义）"
-
-# 新期望表（fixture 冻结 sha 不可重生 ⇒ 用「名恒带 @<仓 slug>」口径替代旧 golden diff）
-LAB_SLUG="$(printf '%s' "$(basename "$LAB")" | tr '[:upper:]' '[:lower:]' \
-  | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//' | cut -c1-16)"
-while [[ "$LAB_SLUG" == *- ]]; do LAB_SLUG="${LAB_SLUG%-}"; done
-C2_NAMES=(pm arch-designer uiux-designer rd-fe rd-be qa rd-infra "rd-be(T1)" sec-review)
-C2_BAD=0
-for _n in "${C2_NAMES[@]}"; do
-  printf '%s\n' "$BLOB_B" | grep -qxF "$_n" || { C2_BAD=1; printf '  -- 缺 --name %s\n' "$_n" >&2; }
-  printf '%s\n' "$BLOB_B" | grep -qF -- "[tmux] 已拉起 $_n @ " \
-    || { C2_BAD=1; printf '  -- 缺已拉起行 %s\n' "$_n" >&2; }
-done
-t4_assert_eq "0" "$C2_BAD" "C2② 新期望表：9 个目标名（v2；含槽位/派生/卡；不含位置段）"
-t4_assert_eq "0" "$(printf '%s\n' "$BLOB_A" | grep -cF "@$LAB_SLUG" || true)" \
-  "C2② 基线场（fixture $BASELINE_SHA）名字无 @<slug>（对照：新版差异是**设计**，不是自等价）"
-MDB_A="$(printf '%s' "$BLOB_A" | md5sum | awk '{print $1}')"
-MDB_B="$(printf '%s' "$BLOB_B" | md5sum | awk '{print $1}')"
-t4_assert_ne "$MDB_A" "$MDB_B" \
-  "C2② 命名口径已按设计变更（基线 $MDB_A ≠ 新版 $MDB_B；旧「逐字等价」断言按 ADR 退役）"
-t4_info "C2② 新期望表：fleet=$LAB_SLUG · 已拉起 $LAUNCH_N_B 条 · blob md5=$MDB_B（基线 $MDB_A）"
-
-# 负控（arch D2 点名）：把默认 tier 改回空 ⇒ 名字丢 @ ⇒ 新期望表必红（证明判据不是同义反复）
-MUT_NEG="$T4_CACHE_DIR/c2-neg-empty-fleet.sh"
-if mutate_file "$LAB/.agents/scripts/nao-fleet.sh" "$MUT_NEG" '    printf '"'"'%s%s(%s)\n'"'"' "$role" "$num" "$task"' '    printf '"'"'%s%s(%s)@x\n'"'"' "$role" "$num" "$task"'; then
-  t4_assert_ne "$(md5sum < "$LAB/.agents/scripts/nao-fleet.sh")" "$(md5sum < "$MUT_NEG")" \
-    "C2② 负控：副本确实把 fleet 写回空（变异锚点有效）"
-  : > "$PI_NAMES"
-  run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$MUT_NEG" ensure --task NEG rd-be
-  NEG_RC="$T4_RC"
-  NEG_BLOB="$(printf '%s\n%s\n' "$T4_OUT_ANSI" "$(cat "$PI_NAMES" 2>/dev/null || true)" | sed -e "s|$LAB|<LAB>|g")"
-  t4_assert_ne "0" "$NEG_RC" "C2② 负控：builder 变异 ⇒ 名字非法形态 ⇒ ensure rc≠0（新期望表必红）"
-  t4_assert_not_contains "$NEG_BLOB" "rd-be(NEG)" "C2② 负控：变异后不再产出合法新名（判据非空转）"
-else
-  t4_bad "C2② 负控变异锚点未命中（用例锚点须跟随实现）"
-fi
-
-# ============================================================================
-# P2-1（第二轮 QA · 命名预算自洽）：builder 造得出 ⇒ parse 必须认得回
-#   回归：card core 32 + '@' + scope 16 = 49 > 48 时，builder 照造、ensure 相位 1 不校验总长
-#   ⇒ 会话拉得起来但 parse 恒 ERR ⇒ status **整条消失**（连「角色未识别」节也不进）。
-#   修法：相位 1 用 parse 复核 builder 输出，非 OK 即 die（建 pane 之前 ⇒ BR6 零副作用）；
-#   builder 不 die（close/status 也调它）。
-# ============================================================================
-T42="$(printf 'T%.0s' $(seq 1 42))"        # rd-be + 42 → name 50（>48，必拒）
-T43="$T42"
-T14="$(printf 'T%.0s' $(seq 1 14))"        # 32 字卡 role + (14) = 48（合法边界）
-T15="$(printf 'T%.0s' $(seq 1 15))"        # 32 + (15) = 49（>48，必拒）
-T16="$(printf 'T%.0s' $(seq 1 16))"        # 32 + (16) = 50（>48，必拒）
-CARD32="$(printf 'c%.0s' $(seq 1 32))"     # 卡 role 恰好 32（role 段上限）
-BUD48="$CARD32($T14)"                      # v2 合法边界：role 32 + (task) = 48
-printf -- '---\nrole: %s\n---\n# 32 字符卡（P2-1 预算边界夹具）\n' "$CARD32" > "$LAB/.agents/prompts/$CARD32.md"
-
-pane_count_b() { "$REAL_TMUX" -S "$SOCK_B" list-panes -a -F '#{pane_id}' 2>/dev/null | wc -l | tr -d ' '; }
-
-# ---- 负控 A：常驻 role+task 使 name > 48 ⇒ fail loud；零副作用 ----
-BEFORE_N="$(pane_count_b)"
-run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task "$T42" rd-be
-t4_assert_ne "0" "$T4_RC" "P2-1 负控A：rd-be(T×42) = 50 > 48 ⇒ 拒绝（rc≠0）"
-t4_assert_contains "$T4_ERR_ANSI" "name ≤48" "P2-1 负控A：die 点名总长预算（name ≤48）"
-t4_assert_contains "$T4_ERR_ANSI" "该怎么办" "P2-1 负控A：die 给改法（缩短 --task 编号）"
-t4_assert_eq "$BEFORE_N" "$(pane_count_b)" "P2-1 负控A：零副作用（建 pane 之前就 die）"
-
-# ---- 负控 B：32 字卡 role + (T×16) = 50 ⇒ 超 role 段/名长；不自动截短 ----
-BEFORE_N="$(pane_count_b)"
-run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" \
-  ensure --card ".agents/prompts/$CARD32.md" --task "$T16"
-t4_assert_ne "0" "$T4_RC" "P2-1 负控B：卡 role 32 + (T×16) = 50 ⇒ 拒绝（rc≠0）"
-t4_assert_contains "$T4_ERR_ANSI" "目标名不可解析" "P2-1 负控B：fail loud 点名目标名不可解析（原因分支）"
-t4_assert_contains "$T4_ERR_ANSI" "role 段含槽位 ≤32（卡）" "P2-1 负控B：回显卡 role 段上限（≤32）"
-t4_assert_eq "$BEFORE_N" "$(pane_count_b)" "P2-1 负控B：零副作用（pane 数不变）"
-
-# ---- 负控 C：32 字卡 role + (T×15) = 49（恰越 1 字符）⇒ 同原因、不同长度 ----
-BEFORE_N="$(pane_count_b)"
-run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" \
-  ensure --card ".agents/prompts/$CARD32.md" --task "$T15"
-t4_assert_ne "0" "$T4_RC" "P2-1 负控C（P3-b）：卡 role 32 + (T×15) = 49 ⇒ 拒绝（rc≠0）"
-t4_assert_contains "$T4_ERR_ANSI" "name ≤48" "P3-b 负控C：回显总长预算（name ≤48）"
-t4_assert_contains "$T4_ERR_ANSI" "role 段含槽位 ≤32（卡）" "P3-b 负控C：同时点名卡 role 段上限（按原因分支）"
-t4_assert_eq "$BEFORE_N" "$(pane_count_b)" "P3-b 负控C：零副作用（pane 数不变）"
-
-# ---- 正控 A：role 32 + (T×14) = 48 边界 ⇒ 能起 ----
-run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" \
-  ensure --card ".agents/prompts/$CARD32.md" --task "$T14"
-t4_assert_eq "0" "$T4_RC" "P2-1 正控A：总名恰 48 字符 ⇒ rc=0（边界不被误拒）"
-t4_assert_contains "$T4_OUT_ANSI" "已拉起" "P2-1 正控A：确实拉起（已拉起行在位）"
-t4_assert_eq "48" "$(printf '%s' "$BUD48" | wc -c | tr -d ' ')" "P2-1 正控A：夹具名字长度确认 = 48"
-
-# ---- 正控：48 字符名字在 status 里**看得见**（这就是 P2-1 要防的静默漏行）----
-start_titled "$SOCK_B" "fx-bud48" "π - $BUD48 - $(basename "$LAB")" >/dev/null \
-  || t4_bad "P2-1 正控A：48 字符名字的标题 pane 未就绪（等不到标题 ⇒ 负控可能假绿）"
-run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" status
-t4_assert_contains "$T4_OUT_ANSI" "  · $BUD48" \
-  "P2-1 正控A：48 字符名在 status 派生节可见（parse 认得回 ⇒ 不静默漏行）"
-
-# ---- 正控 B：同名重复 ensure ⇒ 判 same（名字逐字 = <32 卡 role>@<15 fleet>，不新建）----
-run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" \
-  ensure --card ".agents/prompts/$CARD32.md" --task "$T14"
-t4_info "P21B rc=$T4_RC err=[$T4_ERR_ANSI]"
-t4_assert_eq "0" "$T4_RC" "P2-1 正控B：同 role+task 重复 ensure rc=0（same 跳过）"
-t4_assert_contains "$T4_ERR_ANSI" "$BUD48 已在运行" \
-  "P2-1 正控B：名字逐字 = <32 role>(<14 字 task>)（v2 边界形态）"
-
-# ============================================================================
-# P3-2 / P3-3①：常驻「裸名 + 带 scope」同场 ⇒ **两条都显示**；显示名走 builder
-#   回归：旧写法 `elif` 只留裸名 ⇒ `rd-be@todo` 在 status 任何位置都不出现。
-# ============================================================================
-start_titled "$SOCK_B" "fx-bare-rbe" "π - rd-be - $(basename "$LAB")" >/dev/null \
-  || t4_bad "P3-2 夹具：裸名 rd-be 的标题 pane 未就绪"
-start_titled "$SOCK_B" "fx-scoped-rbe" "π - rd-be@todo - $(basename "$LAB")" >/dev/null \
-  || t4_bad "P3-2 夹具：rd-be@todo 的标题 pane 未就绪"
-run_in "$SOCK_B" "$SOCK_B_DIR" "$CALLER_B" "$LAB/.agents/scripts/nao-fleet.sh" status
-RBE_LINES="$(printf '%s\n' "$T4_OUT_ANSI" | grep -F -- '  ✓ rd-be ' || true)"
-t4_assert_eq "2" "$(printf '%s\n' "$RBE_LINES" | grep -c . || true)" \
-  "P3-2 同场：rd-be 与 rd-be@todo **两条都显示**（旧写法只留裸名 ⇒ 本断言红）"
-t4_assert_contains "$RBE_LINES" "--name rd-be；" "P3-2 同场：裸名那条仍在（逐字格式不变）"
-t4_assert_contains "$RBE_LINES" "--name rd-be@todo；" "P3-2 同场：带 scope 那条在位（名字经 builder 生成）"
-t4_assert_contains "$RBE_LINES" "·code=todo" "P3-2 / D5：带 fleet 行尾有 ·code=<x> 字段"
-t4_assert_not_contains "$(printf '%s\n' "$RBE_LINES" | grep -F -- '·code=todo')" "--name rd-be；" \
-  "P3-3① ·scope 行只出现在带 scope 的那条上（不是裸名行被追加字段）"
-t4_assert_contains "$T4_OUT_ANSI" "rd-be@todo" \
-  "P2-1 正控C：带 scope 常驻可在 status 定位（不整条消失）"
+# ---------------------------------------------------------------- C2② ensure（T555 退役）
+# 退役整组（逐条归因见 docs/reports/555-impl-rd-infra.md）：
+#   · 「基线场 vs 新版场」的 `已拉起` 行 / `--name` 值对照 —— 基线 fixture 只认 tmux 后端，
+#     而本版 `NAO_TERMINAL=tmux` 是 rc=2 用法守卫 ⇒ 无对照对象；
+#   · 其夹具（两场隔离 tmux server + `π - <名> - <仓>` 标题契约 pane）已不存在；
+#   · P2-1 命名预算组（48/49/50 字符边界与「建 pane 之前 die」）与 P3-2/P3-3① 同场显示组
+#     同样以 tmux title/pane 数为夹具，一并退役。
+#   **等价覆盖**：v2 命名口径（恒带 `@<fleet>` / 槽位 / 派生 / 卡）由 cases/40（13 态）与
+#   cases/38（close 全名解析）逐条钉；builder/parse 恒等由本用例 C1 codec + M1–M5 覆盖；
+#     ensure 三态输出与逐目标卡由 cases/22 / 24 覆盖。
+t4_ok "C2②（退役留痕）：命名契约的 ensure 级覆盖已移交 cases/40 与 22/24（本组不再以 tmux 夹具为载）"
 
 
 # ============================================================================
@@ -1811,38 +1528,24 @@ b3_close_calls() { b3_calls '^herdr .*pane close( |$)'; }
 #   socket 候选（函数名未变）：
 #     git show e98ed49:.agents/scripts/nao-fleet.sh \
 #       | awk '/^prod_sock_candidates\(\) \{/{f=1;print;next} f{print} f&&/^}/{exit}' | md5sum ⇒ e4950f38…
-GOLD_RECLAIM="9549f513b7a66fbced68bc1a1fa1dc10"
-GOLD_CLEANUP="fd13c695605925b15dc04d4169c5b96d"
-GOLD_SOCK="e4950f3897670a97d7baaea8f54727c3"
-md5_of() { md5sum | awk '{print $1}'; }
-RECLAIM_MD5="$(awk '/^  # ---- 宿主句柄定位（跨仓）/{f=1} f{print} f&&/^}/{exit}' "$FLEET" | md5_of)"
-CLEANUP_MD5="$(awk '/^_term_tmux_cleanup\(\) \{/{f=1;next} f{print} f&&/^}/{exit}' "$FLEET" | md5_of)"
-SOCK_MD5="$(awk '/^prod_sock_candidates\(\) \{/{f=1;print;next} f{print} f&&/^}/{exit}' "$FLEET" | md5_of)"
-t4_assert_ne "" "$RECLAIM_MD5" "BR1 句柄层段可提取（非空 ⇒ 下面的 md5 断言不是空转）"
-t4_assert_eq "$GOLD_RECLAIM" "$RECLAIM_MD5" \
-  "BR1 tmux close 句柄层（定位→self→忙闲→kill）与 B3 之前逐字相等（md5 $RECLAIM_MD5）"
-t4_assert_eq "$GOLD_CLEANUP" "$CLEANUP_MD5" \
-  "BR1 tmux cleanup 体（-S 守卫/默认 socket 拒绝/kill-server）与 B3 之前逐字相等（md5 $CLEANUP_MD5）"
-t4_assert_eq "$GOLD_SOCK" "$SOCK_MD5" "BR1 生产默认 socket 候选表逐字相等（md5 $SOCK_MD5）"
-# 变异自证：在**被钉住的段内**改一个字符 ⇒ md5 必变（判据不是恒真）
-sed 's|if tmux kill-pane -t "$pane" 2>/dev/null; then|if tmux kill-pane -t "$pane"  2>/dev/null; then|' \
-  "$FLEET" > "$B3_LAB/mut-fleet.sh"
-t4_assert_ne "$RECLAIM_MD5" "$(awk '/^  # ---- 宿主句柄定位（跨仓）/{f=1} f{print} f&&/^}/{exit}' "$B3_LAB/mut-fleet.sh" | md5_of)" \
-  "BR1 变异自证：句柄层内多一个空格 ⇒ 同一 md5 判据必红（golden 不是空转）"
+# ============================================================================
+# BR1 tmux 逐字 golden（T555 退役，4 条）
+#   原判据：`_term_tmux_reclaim` 句柄层段 / `_term_tmux_cleanup` 体 / `prod_sock_candidates`
+#   三处 md5 与 B3 之前（e98ed49）逐字相等 + 一处变异自证。
+#   tmux 后端整组删除（ADR 2026-11-22-herdr-only）⇒ 三处源码对象不存在、`cleanup -S` 面已改为
+#   rc=2 用法守卫（cases/13/41 覆盖）⇒ 本组退役。herdr 侧的等价物：本用例 B3 节其余断言
+#   （忙闲闸门 / 名册第二信号 / 五档 fail-closed / self 三态 / effect 判据 / 守卫幂等）逐条保留。
+t4_ok "BR1 tmux 逐字 golden（退役留痕）：三处 tmux 源码对象已删，herdr 回收面由本节其余断言承重"
 
-# ---- 结构：移入的 tmux 函数在标记区内；cmd_close 只剩门面调用 ----
-B3_TMUX_BEGIN="$(grep -n '^# >>> term-impl-tmux BEGIN (回收 / 自身判定 / 忙闲)$' "$FLEET" | cut -d: -f1)"
-B3_TMUX_END="$(grep -n '^# <<< term-impl-tmux END (回收 / 自身判定 / 忙闲)$' "$FLEET" | cut -d: -f1)"
-t4_assert_ne "" "$B3_TMUX_BEGIN" "B3 新增 tmux 标记区存在（回收 / 自身判定 / 忙闲）"
-for fn in pane_hosts_caller self_pane_refuse pane_busy _term_tmux_reclaim _term_tmux_cleanup prod_sock_candidates; do
-  ln="$(grep -n "^${fn}() {" "$FLEET" | cut -d: -f1 | head -1)"
-  t4_assert_eq "1" "$([ -n "$ln" ] && [ "$ln" -gt "$B3_TMUX_BEGIN" ] && [ "$ln" -lt "$B3_TMUX_END" ] && echo 1 || echo 0)" \
-    "B3 ${fn} 定义在 tmux 标记区内（$ln ∈ ($B3_TMUX_BEGIN,$B3_TMUX_END)）"
-done
+# ---- 结构：门面调用单点（T555 收窄：tmux 标记区与 6 个 tmux 函数已整组删除）----
+#   原 7 条（「tmux 标记区存在」+ 6 个函数位于区内）随后端删除而退役；
+#   保留并强化「业务区只经门面」这条（同一意图、单后端后仍然承重）。
+t4_assert_eq "0" "$(grep -c '^# >>> term-impl-tmux BEGIN' "$FLEET" || true)" \
+  "B3 tmux 标记区 0 处（回收/自身判定/忙闲的 tmux 副本已删 —— ADR herdr-only）"
 t4_assert_eq "1" "$(grep -cE '^  term_reclaim "\$name" "\$repo" "\$force" "\$role" "\$scope" "\$\{tgt:-\$role\}"$' "$FLEET" || true)" \
   "B3 cmd_close 只调门面 term_reclaim（共用闸门层原地不动）"
-t4_assert_eq "1" "$(grep -cE '^  term_cleanup "\$\{CLEANUP_SOCK:-\}" "\$\{SESSION_ARG:-\}" "\$FORCE"$' "$FLEET" || true)" \
-  "B3 cmd_cleanup 只调门面 term_cleanup（后端差异在门面后）"
+t4_assert_eq "1" "$(grep -cE '^  term_cleanup "\$\{SESSION_ARG:-\}" "\$FORCE"$' "$FLEET" || true)" \
+  "B3 cmd_cleanup 只调门面 term_cleanup（T555：-S 面已删，入参仅 session+force）"
 
 # ============================================================================
 # ② 忙闲闸门（BR7）：working / blocked ⇒ 拒；idle ⇒ 放行；unknown ⇒ fail-closed；--force 越过且 warn

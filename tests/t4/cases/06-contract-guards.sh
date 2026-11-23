@@ -703,6 +703,12 @@ rm -rf "$E2_LAB" "$E2_LAB-b" "$E2_LAB-c" "$E2_LAB-d"
 FLEET_B1="$T4_ROOT/.agents/scripts/nao-fleet.sh"
 LEDGER_B1="$T4_ROOT/tests/t4/fixtures/term-legacy-allowlist.txt"
 t4_assert_file "$FLEET_B1" "B1: 被测脚本存在"
+# T555 QA 轮实测踩到的失败模式：lint helper 本身被误删 ⇒ 调用点 rc=127 + 空输出 ⇒ 「负控必红」
+#   这类断言反被掏空（假绿）。此处把「helper 存在」钉成前置（少一个就红）。
+t4_assert_eq "5" "$(for _f in t4_scan_term_bare_calls t4_verify_term_ledger t4_scan_term_herdr_forbidden \
+    t4_scan_nao_terminal_default_probe t4_scan_tmux_residue; do
+      declare -F "$_f" >/dev/null 2>&1 && echo x; done | grep -c .)" \
+  "B1: 5 个 lint helper 均已定义（缺任一 ⇒ 其负控断言会因 127/空输出假绿）"
 t4_assert_file "$LEDGER_B1" "B1: 门面台账存在（tests/t4/fixtures/term-legacy-allowlist.txt）"
 
 # ---- ① 默认值唯一（#96 三期 P2：默认已翻 herdr；B1 立的 lint 就是为这一步准备的）----
@@ -728,14 +734,14 @@ t4_assert_contains "$(head -40 "$LEDGER_B1")" "baseline: 0" \
 t4_assert_eq "0" "$(grep -vcE '^[[:space:]]*(#|$)' "$LEDGER_B1")" \
   "B4 台账条目数 = 0（布局段进 tmux 标记区 + cmd_check 的裸调用进 term_session_name 门面）"
 
-# ---- ② 负控 A：往 cmd_status 里塞裸 tmux 调用 ⇒ 必红并点名（渲染层强制门面化）----
+# ---- ② 负控 A（T555/AC8）：往 cmd_status 里塞裸 tmux 调用 ⇒ 旧面 lint 必红并点名 ----
+#   旧 tmux 门面分支已删 ⇒ 该注入面改由 `t4_scan_tmux_residue`（禁旧面复活）接管。
 NEG_B1A="$T4_CACHE_DIR/b1-neg-a.sh"
 awk '{ print } /^cmd_status\(\) \{/ { print "  tmux list-panes -a -F '"'"'#{pane_id}'"'"' >/dev/null" }' \
   "$FLEET_B1" > "$NEG_B1A"
-out="$(t4_scan_term_bare_calls "$NEG_B1A" "$LEDGER_B1")"
-t4_assert_ne "" "$out" "B1② 负控A: cmd_status 内注入 tmux 调用 ⇒ 门面 lint 必红（不是空转）"
-t4_assert_contains "$out" "[tmux-门面外]" "B1② 负控A: 命中标签点名「tmux-门面外」"
-t4_assert_contains "$out" "tmux list-panes" "B1② 负控A: 回显被注入的那一行（可定位）"
+out="$(t4_scan_tmux_residue "$NEG_B1A")"
+t4_assert_ne "" "$out" "B1② 负控A: cmd_status 内注入 tmux 调用 ⇒ 旧面 lint 必红（不是空转）"
+t4_assert_contains "$out" "tmux list-panes" "B1② 负控A: 命中并回显被注入的那一行（可定位）"
 
 # ---- ② 负控 B：herdr 实现区之外直接调 herdr ⇒ 必红（唯一入口不可旁路）----
 NEG_B1B="$T4_CACHE_DIR/b1-neg-b.sh"
@@ -768,7 +774,7 @@ printf 'no_such_function_b1\tB2\ttypo\n' >> "$NEG_LED"
 t4_assert_contains "$(t4_verify_term_ledger "$FLEET_B1" "$NEG_LED")" "函数不存在（typo）" \
   "B1② 负控C2: 台账函数名 typo ⇒ 必红"
 cp "$LEDGER_B1" "$NEG_LED"
-printf 'pi_pids_for\tB2\t已在 tmux 标记区内\n' >> "$NEG_LED"
+printf '_term_herdr_snapshot\tB2\t已在 herdr 标记区内（T555：旧 tmux 区间已删，改用现存标记区）\n' >> "$NEG_LED"
 out="$(t4_verify_term_ledger "$FLEET_B1" "$NEG_LED")"
 t4_assert_contains "$out" "台账行数 1 超过 baseline 0" "B1②/B4 负控C3: 条目数超 baseline ⇒ 必红（B4: 0 条上限；自造第 1 条即红）"
 t4_assert_contains "$out" "台账多余（该函数已在标记区内" "B1② 负控C4: 标记区内函数混进台账 ⇒ 必红"
@@ -818,28 +824,29 @@ t4_assert_contains "$out" "生效后端 NAO_TERMINAL=herdr" "B1④ herdr 模式 
 t4_assert_eq "0" "$(grep -c '^tmux ' "$B1_LOG" || true)" "B1④ herdr 模式 check 零 tmux 调用（桩 0 命中）"
 
 : > "$B1_LOG"
-# 三期 P2：默认已翻 herdr ⇒ 「tmux 模式」必须**显式 =tmux**（不再靠「未设」搭车 —— 测试不依赖默认值）
-out="$(cd "$T4_ROOT" && env -u NAO_SKILLS NAO_TERMINAL=tmux PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" NAO_STASH_ROOT="$C6_STASH_NONE" bash .agents/scripts/nao-fleet.sh check 2>&1)"; rc=$?
-t4_assert_eq "0" "$rc" "B1④ 显式 NAO_TERMINAL=tmux check rc=0（零回归）"
-t4_assert_eq "0" "$(printf '%s\n' "$out" | grep -c 'NAO_TERMINAL' || true)" \
-  "B1④ 显式 =tmux check 输出**零** NAO_TERMINAL 字样（仅 herdr 模式加行；二期口径不破）"
-OUT_B1_TMUX_CHECK="$out"
+# T555（D2/D5）：旧后端变量从「可用回退通道」变为**用法守卫**（rc=2 + 单行 stderr，命令未执行）——
+#   原「=tmux check 与旧 golden 逐字等价 / 零 NAO_TERMINAL 字样」两条断言随后端退役（无对照对象），
+#   改钉 fail loud 契约本身 + 零副作用（桩 herdr/tmux 均 0 命中）。
+OUT_B1_TMUX_CHECK="$(cd "$T4_ROOT" && env -u NAO_SKILLS NAO_TERMINAL=tmux PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" NAO_STASH_ROOT="$C6_STASH_NONE" bash .agents/scripts/nao-fleet.sh check 2>&1)"
+rc=$?
+t4_assert_eq "2" "$rc" "B1④ 旧后端变量 check ⇒ rc=2（用法守卫，命令未执行 —— D2）"
+t4_assert_match "$OUT_B1_TMUX_CHECK" '已移除 tmux 后端.*herdr' "B1④ stderr 点名「已移除」+ herdr 指路（D2 文案）"
+t4_assert_eq "1" "$(printf '%s\n' "$OUT_B1_TMUX_CHECK" | grep -c . || true)" "B1④ 提示恰为单行（不刷屏）"
+t4_assert_eq "0" "$(grep -cE '^(herdr|tmux) ' "$B1_LOG" || true)" "B1④ 守卫先于一切后端调用（桩 0 命中，零副作用）"
 
-# P2④（PM 验收 5/6）：默认翻 herdr **不得**改动 tmux 输出 —— 显式 =tmux 的 check 摘要逐字等于旧 golden。
-#   钉两段：① 首行逐字（roles/files/layout 口径不变）② 在「codegraph 齐备」态下全输出 md5 == 旧 golden
-#   （codegraph 态行随环境变 —— 无索引的机器/CI 会打印别的态，故该条在非齐备态下只 info 不假红）。
-CHECK_GOLD_LINE='check: OK · roles=7 · files=52 · layout=main-row2'
-t4_assert_eq "$CHECK_GOLD_LINE" "$(printf '%s\n' "$OUT_B1_TMUX_CHECK" | head -1)" \
-  "P2④ 显式 =tmux check 首行逐字不变（旧样）"
-t4_assert_eq "2" "$(printf '%s\n' "$OUT_B1_TMUX_CHECK" | grep -c . || true)" \
-  "P2④ 显式 =tmux check 仍 2 行（未新增「生效后端」行 —— 二期口径不破）"
-if printf '%s\n' "$OUT_B1_TMUX_CHECK" | sed -n '2p' | grep -q '^  ✓ codegraph 齐备'; then
-  t4_assert_eq "428784d20499de8b4be2624cfc53561e" \
-    "$(printf '%s\n' "$OUT_B1_TMUX_CHECK" | md5sum | awk '{print $1}')" \
-    "P2④ 显式 =tmux check 全输出 == 旧 golden md5（codegraph 齐备态下逐字）"
-else
-  t4_info "P2④ 全输出 md5 未断言（本机 codegraph 态非「齐备」；首行逐字 + 行数已断言，不假红）"
-fi
+# P2④（T555 取代旧 golden）：herdr 默认摘要首行 = roles/files 计数（`layout=` 字段随 tmux 布局整组删除 —— D3）；
+#   行数 = 3（摘要 + codegraph 态 + 生效后端行）。
+c6_check() { # <NAO_STASH_ROOT> [check 参数...] · 在真仓跑（**herdr 默认**：不再注入旧后端变量）
+  local root="$1"; shift
+  ( cd "$T4_ROOT" && env -u NAO_SKILLS PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" \
+      NAO_STASH_ROOT="$root" bash .agents/scripts/nao-fleet.sh check "$@" 2>&1 )
+}
+OUT_B1_BASE_CHECK="$(c6_check "$C6_STASH_NONE")"
+CHECK_GOLD_LINE='check: OK · roles=7 · files=52'
+t4_assert_eq "$CHECK_GOLD_LINE" "$(printf '%s\n' "$OUT_B1_BASE_CHECK" | head -1)" \
+  "P2④ herdr 摘要首行 = roles/files 计数（layout= 字段随 tmux 布局删除 —— D3）"
+t4_assert_eq "3" "$(printf '%s\n' "$OUT_B1_BASE_CHECK" | grep -c . || true)" \
+  "P2④ herdr 摘要恒 3 行（摘要 + codegraph 态 + 生效后端）"
 
 # ---- P2-1（#126 · QA 复核）：stash 闸对真仓也生效 ⇒ golden 面与「仓 stash」解耦（注入非仓根）----
 #   机理：`check_stash_residue` 读 `$SKILLS_DIR`（= 本仓）的 `git stash list`；仓里只要有 1 条 stash
@@ -872,16 +879,11 @@ t4_assert_eq "1" "$(git -C "$C6_GIT" stash list 2>/dev/null | grep -c . || true)
 t4_assert_eq "1" "$(git -C "$C6_GIT" stash list --format='%ct' | awk -v now="$(date +%s)" '{print (now-$1>=7*3600)?1:0}' | head -1)" \
   "P2-1 夹具自证：该 stash 的 %ct 在 7 小时前以上（#130 D1 年龄阈值下仍会 warn）"
 warn_n() { local n; n="$(printf '%s\n' "$1" | grep -oE 'warn=[0-9]+' | head -1 | grep -oE '[0-9]+' || true)"; printf '%s' "${n:-0}"; }
-c6_check() { # <NAO_STASH_ROOT> [check 参数...] · 在真仓跑（与 golden 同一条调用形态）
-  local root="$1"; shift
-  ( cd "$T4_ROOT" && env -u NAO_SKILLS NAO_TERMINAL=tmux PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" \
-      NAO_STASH_ROOT="$root" bash .agents/scripts/nao-fleet.sh check "$@" 2>&1 )
-}
 OUT_STASHED="$(c6_check "$C6_GIT")"
 t4_assert_contains "$OUT_STASHED" "check: OK" "P2-1① 注入「有 stash 的临时仓」：摘要行仍在（正锚）"
 t4_assert_ne "$CHECK_GOLD_LINE" "$(printf '%s\n' "$OUT_STASHED" | head -1)" \
   "P2-1① 该形态首行 ≠ golden（QA 实测的假红面 —— 现由注入规避，而非剥行）"
-t4_assert_eq "1" "$(( $(warn_n "$OUT_STASHED") - $(warn_n "$OUT_B1_TMUX_CHECK") ))" \
+t4_assert_eq "1" "$(( $(warn_n "$OUT_STASHED") - $(warn_n "$OUT_B1_BASE_CHECK") ))" \
   "P2-1② 相对基线（同形态无 stash 注入的那一轮）恰 +1 条 warn（闸门真在跑）"
 OUT_STASHED_V="$(c6_check "$C6_GIT" -v)"
 t4_assert_eq "1" "$(printf '%s\n' "$OUT_STASHED_V" | grep -c '^  ! git stash' || true)" \
@@ -955,13 +957,9 @@ for b3guard in "" "default"; do
   fi
 done
 
-# ---- B2（#96 二期）：session-start —— tmux 幂等无操作 / herdr 守卫（--session 必填 · ≠default）----
+# ---- B2（#96 二期 · T555 收窄）：session-start —— herdr 守卫（--session 必填 · ≠default）----
+#   「tmux 幂等无操作」三条断言随后端删除（`term_session_start` 的 tmux 分支已整组删除，无对照对象）。
 : > "$B1_LOG"
-out="$(cd "$T4_ROOT" && env NAO_TERMINAL=tmux PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" \
-  bash .agents/scripts/nao-fleet.sh session-start --session nao-x 2>&1)"; rc=$?
-t4_assert_eq "0" "$rc" "B2④ 显式 =tmux session-start ⇒ rc=0（server 随会话自动起，幂等无操作）"
-t4_assert_contains "$out" "tmux 后端无需 session-start" "B2④ 显式 =tmux session-start 打印指路行"
-t4_assert_eq "0" "$(grep -cE '^(herdr|tmux) ' "$B1_LOG" || true)" "B2④ 显式 =tmux session-start 零后端调用"
 err="$(cd "$T4_ROOT" && "${B1_ENV[@]}" bash .agents/scripts/nao-fleet.sh session-start --session default 2>&1 >/dev/null)"; rc=$?
 t4_assert_eq "2" "$rc" "B2④ herdr 模式 session-start --session default ⇒ rc=2（BR9：绝不碰用户会话）"
 t4_assert_contains "$err" "≠default" "B2④ session-start 拒绝 default 并点名原因"
@@ -1028,28 +1026,28 @@ exit3_hint_scan() { # <script> → 逐站点检查前 3 行报文是否带指路
     [ -n "$ln" ] || continue
     body="$(awk -v n="$ln" 'NR >= n - 3 && NR <= n { buf = buf "\n" $0 } END { print buf }' "$script")"
     case "$body" in
-      *"NAO_TERMINAL=tmux"*|*"tmux new -s nao"*) continue ;;
+      *"重试"*|*"pin 回"*) continue ;;   # T555：tmux 回退指路已删 ⇒ 判据 = 报文给出后续动作
     esac
     printf '%s: 报文缺回退指路\n' "$ln"
   done < <(exit3_token_sites "$script" | cut -f1)
 }
 EXIT3_STANDALONE="$(grep -cE '^[[:space:]]*exit 3[[:space:]]*$' "$FLEET_B1" || true)"
 EXIT3_TOKEN="$(exit3_token_sites "$FLEET_B1" | grep -c . || true)"
-t4_assert_eq "8" "$EXIT3_STANDALONE" "P2② 独占行形态 exit 3 = 8（tmux 前置 1 + herdr 侧 7）"
-t4_assert_eq "8" "$EXIT3_TOKEN" "P2② token 级 exit 3 站点 = 8（含「; exit 3」「|| exit 3」等命令位形态，排除注释行）"
+t4_assert_eq "7" "$EXIT3_STANDALONE" "P2② 独占行形态 exit 3 = 7（T555：tmux 前置 1 条随后端删除；herdr 侧 7 条不变）"
+t4_assert_eq "7" "$EXIT3_TOKEN" "P2② token 级 exit 3 站点 = 7（含「; exit 3」「|| exit 3」等命令位形态，排除注释行）"
 t4_assert_eq "$EXIT3_STANDALONE" "$EXIT3_TOKEN" \
   "P2② 两轴相等（当前无「非独占行」形态）；若有人写成「cmd || exit 3」，本断言会把差异摆出来"
 t4_assert_eq "" "$(exit3_hint_scan "$FLEET_B1")" \
-  "P2② herdr 侧每条 exit 3 文案都含 NAO_TERMINAL=tmux 指路（tmux 前置那条含 tmux new -s nao）"
+  "P2② 每条 exit 3 文案都给后续动作（重试 / pin 回旧版；T555：tmux 回退指路已随后端删除）"
 EXIT3_HINTED="$(exit3_token_sites "$FLEET_B1" | cut -f1 | while IFS= read -r ln; do
   body="$(awk -v n="$ln" 'NR >= n - 3 && NR <= n { buf = buf "\n" $0 } END { print buf }' "$FLEET_B1")"
-  case "$body" in *"NAO_TERMINAL=tmux"*) printf 'x\n' ;; esac
+  case "$body" in *"重试"*|*"pin 回"*) printf 'x\n' ;; esac
 done | grep -c . || true)"
-t4_assert_eq "7" "$EXIT3_HINTED" "P2② 含回退指路的 exit 3 = 7 条（herdr 侧全数；tmux 前置那条不计）"
+t4_assert_eq "7" "$EXIT3_HINTED" "P2② 含后续动作的 exit 3 = 7 条（全数）"
 
 # 负控 A：摘掉一条 herdr 文案的回退指路 ⇒ hint 扫描恰 1 条必红（判据非空转）
 NEG_EXIT3="$T4_CACHE_DIR/p2-neg-exit3-$$.sh"
-sed 's/—— 在该 herdr 会话的 pane 内重试，或 NAO_TERMINAL=tmux 回退//' "$FLEET_B1" > "$NEG_EXIT3"
+sed 's/—— 在该 herdr 会话的 pane 内重试（旧版 tmux 后端已移除）//' "$FLEET_B1" > "$NEG_EXIT3"
 t4_assert_eq "1" "$(exit3_hint_scan "$NEG_EXIT3" | grep -c . || true)" \
   "P2② 负控A：摘掉一条 herdr 文案的回退指路 ⇒ 全扫恰 1 条必红（断言不是空转）"
 rm -f "$NEG_EXIT3"
@@ -1059,13 +1057,13 @@ rm -f "$NEG_EXIT3"
 NEG_EXIT3B="$T4_CACHE_DIR/p2-neg-exit3b-$$.sh"
 awk '{ if ($0 ~ /^[[:space:]]*exit 3[[:space:]]*$/ && !done) { sub(/^[[:space:]]*exit 3[[:space:]]*$/, "    : || exit 3"); done = 1 } print }' \
   "$FLEET_B1" > "$NEG_EXIT3B"
-t4_assert_eq "7" "$(grep -cE '^[[:space:]]*exit 3[[:space:]]*$' "$NEG_EXIT3B" || true)" \
-  "P2② 负控B：改成「cmd || exit 3」后独占行数 8→7（旧判据会漏掉它）"
-t4_assert_eq "8" "$(exit3_token_sites "$NEG_EXIT3B" | grep -c . || true)" \
-  "P2② 负控B：token 级计数仍为 8 ⇒ 新写法被计入（≠ 旧判据的 7）"
+t4_assert_eq "6" "$(grep -cE '^[[:space:]]*exit 3[[:space:]]*$' "$NEG_EXIT3B" || true)" \
+  "P2② 负控B：改成「cmd || exit 3」后独占行数 7→6（旧判据会漏掉它）"
+t4_assert_eq "7" "$(exit3_token_sites "$NEG_EXIT3B" | grep -c . || true)" \
+  "P2② 负控B：token 级计数仍为 7 ⇒ 新写法被计入（≠ 旧判据的 6）"
 t4_assert_eq "" "$(exit3_hint_scan "$NEG_EXIT3B")" \
   "P2② 负控B：该形态同样受报文指路判据约束（hint 仍在 ⇒ 0 命中）"
-sed -i 's/—— 在该 herdr 会话的 pane 内重试，或 NAO_TERMINAL=tmux 回退//' "$NEG_EXIT3B"
+sed -i 's/—— 在该 herdr 会话的 pane 内重试（旧版 tmux 后端已移除）//' "$NEG_EXIT3B"
 t4_assert_eq "1" "$(exit3_hint_scan "$NEG_EXIT3B" | grep -c . || true)" \
   "P2② 负控B2：该形态缺指路时 hint 扫描必红（覆盖到位，不是只计数）"
 rm -f "$NEG_EXIT3B"
@@ -1074,11 +1072,11 @@ rm -f "$NEG_EXIT3B"
 CASES_DIR="$T4_ROOT/tests/t4/cases"
 t4_assert_eq "1" "$(grep -cE '^export NAO_TERMINAL="\$BACKEND"$' "$T4_ROOT/tests/t4/run.sh" || true)" \
   "P2③ 测试基座：run.sh 按 BE_BACKEND 显式导出 NAO_TERMINAL（CI 固定后端）"
-t4_assert_eq "2" "$(grep -cE "printf 'NAO_TERMINAL=(tmux|herdr)" "$T4_ROOT/tests/t4/lib-backend.sh" || true)" \
-  "P2③ 测试基座：be_fleet_handles 两后端都显式给 NAO_TERMINAL（不靠默认值）"
+t4_assert_eq "1" "$(grep -cE "printf 'NAO_TERMINAL=(tmux|herdr)" "$T4_ROOT/tests/t4/lib-backend.sh" || true)" \
+  "P2③ 测试基座：be_fleet_handles 显式给 NAO_TERMINAL=herdr（T555：单后端，不靠默认值）"
 t4_assert_eq "" "$(t4_scan_nao_terminal_default_probe "$CASES_DIR")" \
   "P2③ 全部用例：默认值探针块外 0 处 unset / env -u / 空串 NAO_TERMINAL ⇒ 无任何用例在 unset 下跑生产路径"
-t4_assert_eq "39" "$(ls -1 "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" "P2③ 扫描面 = 全部 39 个用例文件（编号到 40，11 号为空；T554 增 cases/40；T545/33 · #124/34 · #126/35 · Q8/36 · #146/37 · #151/38 · #139/39）"
+t4_assert_eq "38" "$(ls -1 "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" "P2③ 扫描面 = 全部 38 个用例文件（39 − 退役 12/25 = 37，T555 增 cases/41 ⇒ 38；11 号仍为空）"
 t4_assert_eq "2" "$(grep -l 'default-value-probe BEGIN' "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" \
   "P2③ 默认值探针块白名单 = 2 个文件（cases/06 默认值段 · cases/28 B1① 反向断言）"
 # 负控：块外注入 unset ⇒ 必被扫到（并点名行号与形态）
@@ -1236,19 +1234,18 @@ d2_handwritten() { grep -rnE -- '-u HERD[R]_' "$T4_ROOT/tests" 2>/dev/null | wc 
 
 t4_assert_eq "1" "$(grep -c '^T4_HERDR_ENV_VARS=(' "$D2_LIB" || true)" "D2① 单源定义处恰 1 处（tests/t4/lib.sh）"
 t4_assert_eq "$D2_GOLD" "$(d2_vars_str "$D2_LIB")" "D2② 单源集合 == 收敛前各点清理变量的**并集**（8 个，只增不减）"
-t4_assert_eq "0" "$(d2_handwritten)" "D2③ 调用点零手写（tests/ 下 `env -u <HERDR 变量>` 直写 = 0 行）"
+t4_assert_eq "0" "$(d2_handwritten)" "D2③ 调用点零手写（tests/ 下 「env -u <HERDR 变量>」 直写 = 0 行）"
 t4_assert_ge 2 "$(d2_refs "$T4_ROOT/tests/t4/lib-backend.sh")" "D2④ lib-backend 夹具经单源清（引用 + 缺失时 fail loud 的守卫）"
 t4_assert_eq "1" "$(grep -cE '^B3_CLEAN_ENV=\(env .*T4_HERDR_UNSET_ARG[S]' "$T4_ROOT/tests/t4/cases/06-contract-guards.sh" || true)" \
-  "D2④ cases/06 `B3_CLEAN_ENV` 改为引用单源"
-t4_assert_eq "1" "$(grep -cE '^TMUX_FIELD_ENV=\(env .*T4_HERDR_UNSET_ARG[S]' "$T4_ROOT/tests/t4/cases/28-naming-contract.sh" || true)" \
-  "D2④ cases/28 `TMUX_FIELD_ENV` 改为引用单源"
-t4_assert_eq "2" "$(grep -cE '^t4_run_in_dir .*env .*T4_HERDR_UNSET_ARG[S]' "$T4_ROOT/tests/t4/cases/28-naming-contract.sh" || true)" \
-  "D2④ cases/28 两条直连（B3⑧ tmux 守卫）改为引用单源"
-t4_assert_eq "16" "$(d2_args_n "$D2_LIB")" "D2⑤ 派生参数数 = 2×8（`env -u <名>` 成对；形态可运行）"
+  "D2④ cases/06 「B3_CLEAN_ENV」 改为引用单源"
+grep -qE '^B2_ENV=\(env "\$\{T4_HERDR_UNSET_ARGS\[@\]\}"' "$T4_ROOT/tests/t4/cases/28-naming-contract.sh"   && t4_ok "D2④ cases/28 \`B2_ENV\` 改为引用单源（T555：原 TMUX_FIELD_ENV 随 tmux 夹具退役）"   || t4_bad "D2④ cases/28 \`B2_ENV\` 应引用单源"
+t4_assert_eq "4" "$(grep -cE '^t4_run_in_dir .*env .*T4_HERDR_UNSET_ARG[S]' "$T4_ROOT/tests/t4/cases/28-naming-contract.sh" || true)" \
+  "D2④ cases/28 四处直连（herdr 场负控 ×2 + B3 桩场 ×2）改为引用单源"
+t4_assert_eq "16" "$(d2_args_n "$D2_LIB")" "D2⑤ 派生参数数 = 2×8（「env -u <名>」 成对；形态可运行）"
 # 变异 A（枚举减少 ⇒ 必红）：从副本的单源里删掉 `HERDR_SOCKET_FILE`
 D2_MUT="$T4_CACHE_DIR/d2-lib-mut-$$.sh"
 sed 's/ HERDR_SOCKET_FILE//' "$D2_LIB" > "$D2_MUT"
-t4_assert_eq "7" "$(d2_vars "$D2_MUT" | grep -c .)" "D2⑥ 变异锚点：副本单源只剩 7 个（`HERDR_SOCKET_FILE` 已删）"
+t4_assert_eq "7" "$(d2_vars "$D2_MUT" | grep -c .)" "D2⑥ 变异锚点：副本单源只剩 7 个（「HERDR_SOCKET_FILE」 已删）"
 t4_assert_ne "$D2_GOLD" "$(d2_vars_str "$D2_MUT")" "D2⑥ 变异自证：删一个变量 ⇒ D2② 必红（枚举收紧蒙混不过）"
 # 变异 B（新增只改一处）：往副本单源加一个 HERDR_*，派生参数自动 +2，**调用点零改动**
 D2_ADD="$T4_CACHE_DIR/d2-lib-add-$$.sh"
@@ -1357,7 +1354,7 @@ t4_assert_eq "1" "$(git -C "$C6_GIT" stash list 2>/dev/null | grep -c . || true)
   "E2-2 夹具自证：临时仓有 1 条 stash（判据非空转；真仓未造 stash）"
 # 阈值 0 = 立即 ⇒ 不依赖 stash 年龄（fresh stash 也必 warn），判据与时钟解耦
 E2_ENV=(PI_CODING_AGENT_DIR="$T4_CACHE_DIR/b1-pi-empty" \
-  PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" NAO_TERMINAL=tmux NAO_STASH_WARN_HOURS=0)
+  PATH="$B1BIN:$PATH" REAL_TMUX_B1="$REAL_TMUX_B1" NAO_STASH_WARN_HOURS=0)
 E2_NONE="$T4_CACHE_DIR/e2-2-none-$$"; mkdir -p "$E2_NONE"   # 闸门「不适用」根 = 基线（无 stash 注入）
 e2_stash_n()  { printf '%s\n' "$1" | grep -c '^  ! git stash' || true; }   # 仅 `-v` 可见（直连旁证用）
 e2_warn_n()   { local w; w="$(printf '%s\n' "$1" | grep -oE 'warn=[0-9]+' | head -1 | grep -oE '[0-9]+' || true)"; printf '%s' "${w:-0}"; }
@@ -1450,9 +1447,9 @@ t4_assert_eq "$(( $(e2_warn_n "$E2_BE_BASE") + 1 ))" "$(e2_warn_n "$E2_BE_BAD")"
 t4_assert_eq "1" "$(grep -c 'env -u NAO_STASH_ROOT' "$T4_ROOT/tests/t4/lib.sh" || true)" \
   "E2-2⑤ 单点①：t4_run_shim 带 \`env -u NAO_STASH_ROOT\` 恰 1 处"
 t4_assert_eq "1" "$(grep -c '^be_clean_env() {' "$T4_ROOT/tests/t4/lib-backend.sh" || true)" \
-  "E2-2⑤ 单点②：净化入口定义恰 1 处（`be_clean_env`，Q7）"
+  "E2-2⑤ 单点②：净化入口定义恰 1 处（「be_clean_env」，Q7）"
 t4_assert_eq "1" "$(grep -cF 'clean=($(be_clean_env))' "$T4_ROOT/tests/t4/lib-backend.sh" || true)" \
-  "E2-2⑤ 单点②：净化入口的调用点恰 1 处（be_run_fleet；调用点不再手写 `-u`）"
+  "E2-2⑤ 单点②：净化入口的调用点恰 1 处（be_run_fleet；调用点不再手写 「-u」）"
 E2_BE_ARGS="$( T4_CACHE_DIR="$T4_CACHE_DIR" NAO_STASH_ROOT=/x NAO_SKILLS=/x \
   bash -c 'source "$1/tests/t4/lib.sh" >/dev/null 2>&1; source "$1/tests/t4/lib-backend.sh" >/dev/null 2>&1; be_clean_unset_args' \
   _ "$T4_ROOT" 2>/dev/null || true )"

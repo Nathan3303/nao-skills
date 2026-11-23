@@ -15,12 +15,9 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
 
-BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
+BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
 PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
-if [ "$BE_NAME" != "herdr" ]; then
-  t4_note backend-gate "herdr 集成缺失（agent_session / 钩子权威）是 herdr 专有证据面；tmux 侧由名册离线 + 标题契约路径覆盖"
-  t4_exit
-fi
+  t4_note backend-gate "tmux 面已删除（T555 / ADR 2026-11-22-herdr-only）：唯一后端 = herdr，本组原为 tmux 专有夹具/语义，随后端整组退役；等价覆盖见 herdr 侧断言"
 LAB="$T4_CACHE_DIR/lab31-$$"; mkdir -p "$LAB"
 cp -r "$T4_ROOT/.agents" "$LAB/.agents" || { t4_bad "夹具复制 .agents 失败"; t4_exit; }
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"

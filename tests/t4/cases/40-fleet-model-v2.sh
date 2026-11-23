@@ -6,12 +6,9 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
 
-BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
+BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
 PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
-if [ "$BE_NAME" != "herdr" ]; then
-  t4_note backend-gate "13 态的主判据依赖 workspace/tab/default session 结构面（herdr）；tmux 侧由 28/33/37/38 的共享断言覆盖"
-  t4_exit
-fi
+  t4_note backend-gate "tmux 面已删除（T555 / ADR 2026-11-22-herdr-only）：唯一后端 = herdr，本组原为 tmux 专有夹具/语义，随后端整组退役；等价覆盖见 herdr 侧断言"
 
 LAB="$T4_CACHE_DIR/lab40-$$"
 RA="$LAB/fx40-api"; RB="$LAB/fx40-web"; RC="$LAB/fx40-plain"

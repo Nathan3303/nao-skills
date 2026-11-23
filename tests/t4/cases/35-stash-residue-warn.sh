@@ -286,7 +286,7 @@ t4_assert_eq "1" "$(stash_warns)" "H10 夹具自证：真 git 下同一条 9h st
 run_check_fakegit -v
 t4_assert_eq "0" "$C35_RC" "H10 %ct 不可解析：rc=0（不炸）"
 t4_assert_eq "0" "$(stash_warns)" "H10 %ct 不可解析：仍不 warn（避免误报 —— 方向不变）"
-t4_assert_contains "$C35_OUT" "暂存滞留检查跳过" "H10 %ct 不可解析：`-v` 留下降级注记（与「无 stash」可区分）"
+t4_assert_contains "$C35_OUT" "暂存滞留检查跳过" "H10 %ct 不可解析：「-v」 留下降级注记（与「无 stash」可区分）"
 t4_assert_contains "$C35_OUT" "不可解析" "H10 注记点名能力缺失（可诊断）"
 run_check_fakegit
 t4_assert_eq "" "$(warn_field)" "H10 摘要模式：降级注记不计入 warn=（不进摘要、不污染噪声）"

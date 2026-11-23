@@ -25,11 +25,7 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
 
-BE_NAME="$(be_backend)" || { t4_bad "NAO_TEST_TERMINAL 非法"; t4_exit; }
-if [ "$BE_NAME" = "tmux" ]; then
-  command -v tmux >/dev/null 2>&1 \
-    || t4_skip "环境缺少 tmux（tmux 后端需真隔离 socket 观察 ensure 命令行）"
-fi
+BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
 BASH_BIN="$(command -v bash)"
 # 变异子进程会继承父进程的 PATH（含 $LAB/bin 桩 tmux）⇒ 必须优先用父进程解析好的真 tmux，
 #   否则桩会 exec 自己（实测：子进程里 split.log 递归，用例挂死）。
@@ -171,8 +167,7 @@ expected_inner() { # <repo> <name> <prompt_file>
 }
 # 后端差异只在「外层包装」：tmux split-window 收 `bash -lc %q(inner)`；herdr pane run 收 inner 本体
 expected_wrapped() {
-  if [ "$BE_NAME" = "tmux" ]; then printf 'bash -lc %s' "$(printf %q "$(expected_inner "$1" "$2" "$3")")"
-  else printf '%s' "$(expected_inner "$1" "$2" "$3")"; fi
+  printf '%s' "$(expected_inner "$1" "$2" "$3")"
 }
 
 # ============================================================ 静态接线（修复形状）
@@ -201,11 +196,6 @@ for pair in "arch-designer:arch-designer" "rd-fe:rd-fe" "rd-infra:rd-infra"; do
   _i=$((_i + 1))
 done
 # tmux：pi 桩不写标题 ⇒ 为后续相位 1 的槽位判重补写身份（herdr 侧 label 已由 ensure 写好）
-if [ "$BE_NAME" = "tmux" ]; then
-  for _n in arch-designer rd-fe rd-infra; do
-    _p="$(be_pane_by_name "$_n")"; [ -n "$_p" ] && set_title "$_p" "$_n"
-  done
-fi
 PFS_3="$(printf '%s\n' "$NEWS" | while IFS= read -r l; do printf '%s\n' "$(prompt_file_of "$l")"; done)"
 t4_assert_eq "3" "$(printf '%s\n' "$PFS_3" | sort -u | grep -c .)" \
   "AC1① 三个 pane 的提示文件互不相同（不再共用一个卡）"
@@ -227,9 +217,6 @@ for pair in "rd-be:rd-be" "qa:qa"; do
   expect_card "$_pf" "$_card" "AC1②[$_rid]"
   _i=$((_i + 1))
 done
-if [ "$BE_NAME" = "tmux" ]; then
-  for _n in rd-be qa; do _p="$(be_pane_by_name "$_n")"; [ -n "$_p" ] && set_title "$_p" "$_n"; done
-fi
 
 # ============================================================ AC2 零回归（单目标 / --card / 混合）
 if [ "$MUT_CHILD" != "1" ]; then

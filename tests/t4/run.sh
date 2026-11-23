@@ -15,15 +15,11 @@
 #     ⇒ 快档白名单与判据单点定义在下面的 FAST_CASES（每条一行注释写依据）；未登记的新用例会硬错。
 #   T4_ALLOW_MISSING=1 bash tests/t4/run.sh  # 宽松：依赖缺失=BLOCKED（仅显式 1）
 #   T4_REQUIRE_FULL=1 bash tests/t4/run.sh   # 发布前置：SKIP+DEGRADE 计数>0 即 FAIL，非白名单 NOTE 亦 FAIL（与上者正交）
-#   NAO_TEST_TERMINAL=herdr bash tests/t4/run.sh   # 后端自检：只跑 tests/t4/backends/herdr.txt 登记集，未登记点名 PENDING
-#                                                  #   另有 `# tmux-only:` 声明（12/25）⇒ 输出 [TMUX-ONLY] 并单列计数（不进 PENDING）
-#   NAO_TEST_TERMINAL=tmux bash tests/t4/run.sh    # 默认后端（未设同义）：全量跑，行为与 #96 改动前逐字一致
 #
-# 后端开关（PRD #96 一期 AC1.1/AC1.2 · 三期 P2 默认翻 herdr）：NAO_TEST_TERMINAL=tmux|herdr|auto
-#   （**未设 = herdr**，与生产默认一致；auto = herdr；`NAO_TERMINAL=tmux npm test` 亦可走回退通道）。
-#   **仅 herdr** 启用「登记集 + PENDING 点名」：登记文件 `tests/t4/backends/herdr.txt`（每条 = 编号/共享或专有/到期/理由）。
-#   未登记的用例输出 `[PENDING]` 并点名（**不得静默 SKIP**）；登记集非法（未知编号/重复/缺列）⇒ rc=1 硬错。
-#   tmux（默认）路径**不加载登记集、不新增任何输出行** —— AC1.2 的「逐字 diff 空」靠此保证。
+# 后端（T555 / ADR 2026-11-22-herdr-only）：**唯一后端 = herdr**（与生产一致）。
+#   多后端时代的「登记集（backends/herdr.txt）+ PENDING 点名 + TMUX-ONLY」概念已删除 ——
+#   用例清点单一事实 = `tests/t4/cases/*.sh` + 本文件的 CASE_IDS/CASE_TITLE（新增用例未分类 ⇒ 参数错误）。
+#   `NAO_TEST_TERMINAL` 传入任意值 ⇒ rc=1 + 指路（fail loud，等价生产侧 `NAO_TERMINAL=tmux` 的守卫）。
 #
 # NOTE 白名单（T531）：用例产出 `[NOTE] <tag> <msg>`；tag 枚举单点定义于 lib.sh 的 T4_NOTE_TAGS。
 # 非 full ⇒ 仅计数 + 未登记 tag 给警告（不阻断，日常 `npm test` 不因旧式调用变红）；
@@ -38,7 +34,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 
-CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "30" "31" "32" "33" "34" "35" "36" "37" "38" "39" "40")
+CASE_IDS=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "26" "27" "28" "29" "30" "31" "32" "33" "34" "35" "36" "37" "38" "39" "40" "41")
 CASE_TITLES=(
   "主路径足迹 + check exit=0（AC1）"
   "设计一致性：注册 skill 数==2 且无 collision（AC1/AC6）"
@@ -50,10 +46,9 @@ CASE_TITLES=(
   "评审修复回归：F1 lock 保缩进 + F2 init --force 走 migrate 防混装"
   "T509 别名解析 / check 守卫 / close 跨仓回收（#19）"
   "T510 migrate 收尾：shim 判定式 / 开关 / 单行 lock 去重 / B2（#21）"
-  "派生会话 tmux 落点：宿主窗口显式寻址（T517 · AC1–AC7）"
-  "close 前提与末段：非 tmux ⇒ exit 3 单行提示；tmux 内名册离线 ⇒ 「未运行」rc=0（T529 · AC1/AC4）"
+  "close 前提与末段（T555 纯 herdr）：旧后端变量 ⇒ rc=2 单行 fail loud；herdr 空场 ⇒ 「未运行」rc=0（T529 AC1/AC4）"
   "夹具缓存生命周期：成功清理 / 失败保留 / 用户目录永不删（T524 · BR3–BR10）"
-  "子代理会话（subagent-*）在 status/close 的显式识别与排除（T525 · AC2–AC8）"
+  "子代理会话（subagent-*）在 status/close 的显式识别与排除（T525 · AC2–AC8；T555：tmux 名册/孤儿面退役）"
   "子代理桥口径：模板 G1–G3 + 协议条款 + 配置 schema（T526 · AC2–AC7）"
   "角色→子代理 agent 单一事实：装配字节比对 + 锚点 cross-assert + 命名双向 + 幂等 + 三态负控（T527 · AC2–AC7）"
   "codegraph 四态检测 / 默认零 codegraph 调用 / warn 口径 / 遥测注入 / 契约文案 + 变异负控（T532 · AC1/AC2/AC7/AC11）"
@@ -63,10 +58,9 @@ CASE_TITLES=(
   "ensure 三态输出互斥 + 摘要三类计数（成功/跳过/失败）+ 桩构造失败分支（T539 · AC1–AC4）"
   "ensure pm 就绪后投递下游版本自检（仅提示）+ 两通道送达/幂等/失败语义 + 命令行逐字不变 + 零网络（T548 · AC1–AC5）"
   "ensure 多目标每 pane 用目标自己的角色卡（含 --card 完整路径通道）+ 全局 PROMPT 负控（#75）"
-  "布局守卫容量判据：n = 角色数 + 调用者（n=7/8/9/10 ⇒ 137/184/184/230）+ n-1 变异负控（#82 B）"
   "真 pi 冒烟受限重试护栏（#86 A）：超时才重试 / 非超时失败不重试（按调用次数证）/ 无凭据不重试"
   "后端抽象层自检（#96 一期步 1）：两场隔离 / 零渗透 / 拆场幂等 / 零残留 / default 不可达 + 护栏变异自证"
-  "舰队命名契约（BR8 · #96 步 2a + T547）：C1 codec + M1–M5 负控 / C2 status golden + ensure 新期望表 / C3 单写点 lint"
+  "舰队命名契约（BR8 · #96 步 2a + T547）：C1 codec + M1–M5 负控 / herdr golden + 默认值反向断言 + C3 单写点 lint（T555：tmux golden 组退役）"
   "herdr 就绪门反假阳性（#96 B4）：已 idle 但 state_change_seq 不动 ⇒ 超时 fail loud（rc 仍 0）"
   "herdr 幽灵 pane（#96 B4）：label 在、agent 无 ⇒ 不判在线 / ensure 不判已在运行（复用重跑）"
   "herdr 集成缺失 fail loud（#96 B4）：agent_session 空 / 钩子权威缺 ⇒ 点名不可投递，不退化 idle"
@@ -79,6 +73,7 @@ CASE_TITLES=(
   "close 全名解析的仓来源（#151 · T552）：唯一命中 a/b + 不退化 b3/a2 + 多命中 c/d/m（die 零回收；m = 重复条目 + 另一路径）+ 同仓重复去重 g1/g2（g2-herdr 绑拒绝理由）+ 0 命中 e + 名册不可用 f + 探针 ≤1 次 + 七向变异负控"
   "联动仓 manifest（#139 · T553）：A 无 manifest 逐字旧行为 + B/C/D 派生与同 workspace + tab 组前缀 + E 未命中 + F 11 项字段非法 + G/H 放置来源一致性 + I 三预算 + J close 回落 + K 并列不猜 + L 无缓存 + AC10 单源"
   "舰队模型 v2（T554）：13 态（S1–S13）—— 放置键=仓 / 槽位名 / @code / default 放行 / 弃用 warn / status ego"
+  "纯 herdr 化（T555）：fail loud 三态（旧后端变量 / cleanup -S / NAO_TEST_TERMINAL）+ 旧面静态 lint 双向 + 退役面不存在"
 )
 declare -A CASE_TITLE=()
 for i in "${!CASE_IDS[@]}"; do CASE_TITLE[${CASE_IDS[$i]}]="${CASE_TITLES[$i]}"; done
@@ -110,15 +105,13 @@ FAST_CASES=(
 # 这四组的并集 + FAST_CASES 必须 == CASE_IDS（下方起跑前自检，缺登记 ⇒ 硬错）。
 FAST_SKIP_REAL=(02 07 27 32)                             # 真机类：真 pi 会话 / 真 `pi install` / 真 herdr server
 FAST_SKIP_DOUBLE=(09 15 19 20 21 22 23 24 28 29 30 33 37 38 39 40)  # 替身 herdr 重档：无真机，但单价 >15s（37 = 假名册 + 两仓 pane + 六向变异副本；38 = 假名册 + 三仓 pane + 七向变异副本，实测 herdr 31.0s / tmux 17.7s ⇒ 按最慢后端计价超预算；39 = 多仓 pane + 11 项非法 manifest 组合）
-FAST_SKIP_PRICE=(06 18 36)                                  # 静态/契约主档：06=56.7s · 18=17.1s（单价超限）· 36=14s（单价合格，但属「契约档」；扩快档面须同步 profile 报告「未覆盖」段 ⇒ 归 PM 裁定，不夹带）
-FAST_SKIP_BACKEND=(12 25)                                # tmux 专有面：herdr 下 TMUX-ONLY（跳过=不跑），不纳入
+FAST_SKIP_PRICE=(06 18 36 41)                               # 静态/契约主档：06=56.7s · 18=17.1s（单价超限）· 36=14s · 41=41（T555 静态 lint + fail loud，单价合格但属「契约档」；扩快档面须同步 profile 报告「未覆盖」段 ⇒ 归 PM 裁定，不夹带）
 
 declare -A FAST_SET=() FAST_SKIP_GROUP=()
 for id in "${FAST_CASES[@]}"; do FAST_SET[$id]=1; done
 for id in "${FAST_SKIP_REAL[@]}";    do FAST_SKIP_GROUP[$id]="真机类"; done
 for id in "${FAST_SKIP_DOUBLE[@]}";  do FAST_SKIP_GROUP[$id]="替身重档"; done
 for id in "${FAST_SKIP_PRICE[@]}";   do FAST_SKIP_GROUP[$id]="单价超限"; done
-for id in "${FAST_SKIP_BACKEND[@]}"; do FAST_SKIP_GROUP[$id]="TMUX-ONLY"; done
 
 mode="run"; only=""; arg_err=""; timings=0; fast=0; verbose=0
 while [ $# -gt 0 ]; do
@@ -150,7 +143,7 @@ if [ -z "$arg_err" ] && [ "$mode" = "case" ]; then
   if [ -n "$only" ]; then
     matched=0
     for id in "${CASE_IDS[@]}"; do [ "$only" = "$id" ] && matched=1; done
-    [ "$matched" = "1" ] || arg_err="--case 无匹配用例: $only"
+    [ "$matched" = "1" ] || arg_err="用例不存在: $only（tests/t4/cases/ 无此编号；已退役用例不复用编号 —— 旧 12/25 已随 tmux 后端退役，见 docs/reports/555-lite-spec.md）"
   fi
 fi
 
@@ -196,16 +189,13 @@ _t4_timing_row() { # $1=用例编号 $2=起始 ns
 }
 
 # ---------------------------------------------------------------- 后端开关（PRD #96 · 三期 P2 默认翻 herdr）
-# 取值来源（优先级从高到低）：NAO_TEST_TERMINAL > NAO_TERMINAL > **生产默认 herdr**。
-#   ⇒ `npm test`（什么都不设）= herdr（与生产默认一致，AC3.3 的「未设 ⇒ herdr」在门禁上成立）；
-#     `NAO_TERMINAL=tmux npm test` / `NAO_TEST_TERMINAL=tmux npm test` = 回退通道全量跑。
-#   `auto` 三期起 = 生产默认 = herdr。非法取值 fail loud，不猜、不静默回落。
-RAW_BACKEND="${NAO_TEST_TERMINAL:-${NAO_TERMINAL:-herdr}}"
-case "$RAW_BACKEND" in
-  tmux|herdr) BACKEND="$RAW_BACKEND" ;;
-  auto) BACKEND="herdr" ;;
-  *) printf '参数错误: 后端取值 %s 非法（NAO_TEST_TERMINAL / NAO_TERMINAL 期望 tmux|herdr|auto）\n' "$RAW_BACKEND" >&2; exit 1 ;;
-esac
+# 单后端（T555）：唯一后端 = herdr。旧的 `NAO_TEST_TERMINAL` 开关已删除 —— **传入任意值即 fail loud**
+#   （rc=1 + 指路；等价生产侧 `NAO_TERMINAL=tmux` 的 rc=2 守卫，测试侧沿用「参数错误 = 1」口径）。
+if [ -n "${NAO_TEST_TERMINAL:-}" ]; then
+  printf '参数错误: NAO_TEST_TERMINAL=%s 已移除（T555：herdr 是唯一后端）—— 删掉该变量后重试；tmux 回退已随 v0.28.0 移除\n' "$NAO_TEST_TERMINAL" >&2
+  exit 1
+fi
+BACKEND="herdr"
 
 # #96 三期 P2（默认翻 herdr）· **测试不依赖默认值**
 #   生产默认已 = herdr ⇒ 若用例靠「未设」搭车，同一份用例会在不同机器/不同默认下走不同后端（不可复现）。
@@ -215,58 +205,6 @@ esac
 #   标记块外的 `unset NAO_TERMINAL` / `env -u NAO_TERMINAL` / `NAO_TERMINAL=` 一律 0 命中。
 export NAO_TERMINAL="$BACKEND"
 
-# 登记集（仅 herdr 加载；tmux 路径零新增行为/零新增输出）
-#   `# tmux-only: <id...>` 注释声明 = 该用例**本后端不适用**（结构上是另一后端的断言面），
-#   三期重判；运行期输出 `[TMUX-ONLY]` 并单独计数 —— 不进登记集、也不计入 PENDING。
-declare -A REG_KIND=()
-declare -A TMUX_ONLY=()
-if [ "$BACKEND" = "herdr" ]; then
-  REG_FILE="$HERE/backends/herdr.txt"
-  if [ ! -f "$REG_FILE" ]; then
-    printf '登记集缺失: %s（herdr 后端只跑登记集，不得静默全跑）\n' "$REG_FILE" >&2; exit 1
-  fi
-  while IFS= read -r line || [ -n "$line" ]; do
-    line="${line#"${line%%[![:space:]]*}"}"          # 去前导空白
-    case "$line" in
-      '# tmux-only:'*)
-        for x in ${line#*'# tmux-only:'}; do
-          matched=0; for y in "${CASE_IDS[@]}"; do [ "$x" = "$y" ] && matched=1; done
-          if [ "$matched" != 1 ]; then
-            printf '登记集非法: tmux-only 声明含未知编号 %s（%s）\n' "$x" "$REG_FILE" >&2; exit 1
-          fi
-          [ -n "${TMUX_ONLY[$x]:-}" ] && { printf '登记集重复: tmux-only 声明 %s（%s）\n' "$x" "$REG_FILE" >&2; exit 1; }
-          TMUX_ONLY[$x]=1
-        done
-        continue ;;
-      ''|'#'*) continue ;;
-    esac
-    id="${line%%[[:space:]]*}"
-    rest="${line#"$id"}"; rest="${rest#"${rest%%[![:space:]]*}"}"
-    kind="${rest%%[[:space:]]*}"
-    matched=0; for x in "${CASE_IDS[@]}"; do [ "$id" = "$x" ] && matched=1; done
-    if [ "$matched" != 1 ]; then
-      printf '登记集非法: 用例编号 %s 不在 CASE_IDS（%s）\n' "$id" "$REG_FILE" >&2; exit 1
-    fi
-    if [ -n "${REG_KIND[$id]:-}" ]; then
-      printf '登记集重复: 用例编号 %s（%s）\n' "$id" "$REG_FILE" >&2; exit 1
-    fi
-    case "$kind" in
-      shared|own) ;;
-      *) printf '登记集非法: 用例 %s 的第 2 列必须是 shared|own（实际=%s，%s）\n' "$id" "${kind:-<空>}" "$REG_FILE" >&2; exit 1 ;;
-    esac
-    if [ -z "${rest#"$kind"}" ]; then
-      printf '登记集非法: 用例 %s 缺「到期 + 理由」两列（%s）\n' "$id" "$REG_FILE" >&2; exit 1
-    fi
-    [ -n "${TMUX_ONLY[$id]:-}" ] && {
-      printf '登记集非法: 用例 %s 既登记又声明 tmux-only（%s）\n' "$id" "$REG_FILE" >&2; exit 1; }
-    REG_KIND[$id]="$kind"
-  done < "$REG_FILE"
-fi
-
-if [ -z "$arg_err" ] && [ "$mode" = "case" ] && [ "$BACKEND" = "herdr" ]; then
-  [ -n "${REG_KIND[$only]:-}" ] \
-    || arg_err="用例 $only 未登记在 tests/t4/backends/herdr.txt（herdr 后端只跑登记集，见 PRD #96 AC1.1）"
-fi
 
 if [ -n "$arg_err" ]; then
   printf '参数错误: %s\n' "$arg_err" >&2
@@ -319,8 +257,8 @@ if [ "$fast" = 1 ]; then
   for id in "${CASE_IDS[@]}"; do [ -n "${FAST_SKIP_GROUP[$id]:-}" ] && _skip_ids+=("$id"); done
   printf '快档（--fast）：只跑白名单 %d 例（判据与逐例依据见 tests/t4/run.sh 的 FAST_CASES 注释）\n' "${#FAST_CASES[@]}"
   printf '跳过 %d 例（真机类/重档）：%s\n' "${#_skip_ids[@]}" "${_skip_ids[*]}"
-  printf '本档未覆盖（快档绿 ≠ 全绿）：真机类 %s · 替身重档 %s · 单价超限 %s · TMUX-ONLY %s\n' \
-    "${FAST_SKIP_REAL[*]}" "${FAST_SKIP_DOUBLE[*]}" "${FAST_SKIP_PRICE[*]}" "${FAST_SKIP_BACKEND[*]}"
+  printf '本档未覆盖（快档绿 ≠ 全绿）：真机类 %s · 替身重档 %s · 单价超限 %s\n' \
+    "${FAST_SKIP_REAL[*]}" "${FAST_SKIP_DOUBLE[*]}" "${FAST_SKIP_PRICE[*]}"
   printf '  （全量语义不变：`npm test` = 全部用例照跑；发布前置 `test:t4:full` 也必跑全量）\n'
   if [ "$verbose" = 1 ]; then
     for id in "${_skip_ids[@]}"; do
@@ -338,17 +276,15 @@ source "$HERE/lib.sh"
 
 # 孤儿 sweep（#96 P2 缺陷修复）：herdr server 用 setsid 脱离进程组 ⇒ 失败/被中断的跑次会遗留常驻 server。
 # 起跑前清扫「死 run 遗留」并 stop；**不碰用户 ~/.config/herdr**、**不碰活 run 的 cache**（防并发互杀）。
-# tmux（默认）路径整段不执行 ⇒ 零新增输出（AC1.2）；herdr 侧只在真扫到东西时说一句话。
-if [ "$BACKEND" = "herdr" ]; then
-  source "$HERE/lib-backend.sh"
-  if be_sweep_orphans; then
-    if [ "${BE_SWEEP_EFFECT:-0}" -gt 0 ]; then
-      printf '孤儿 sweep: 停掉死 run 遗留的 herdr server %d 个（活 run 跳过 %d / 非实验根跳过 %d）\n' \
-        "$BE_SWEEP_EFFECT" "$BE_SWEEP_SKIPPED_LIVE" "$BE_SWEEP_SKIPPED_FOREIGN"
-    fi
-  else
-    printf '孤儿 sweep: WARN 有 %d 个遗留 server 停不掉（见上逐条点名；下次起跑重试）\n' "$BE_SWEEP_FAILED"
+# 只在真扫到东西时说一句话（零输出 = 干净现场）。
+source "$HERE/lib-backend.sh"
+if be_sweep_orphans; then
+  if [ "${BE_SWEEP_EFFECT:-0}" -gt 0 ]; then
+    printf '孤儿 sweep: 停掉死 run 遗留的 herdr server %d 个（活 run 跳过 %d / 非实验根跳过 %d）\n' \
+      "$BE_SWEEP_EFFECT" "$BE_SWEEP_SKIPPED_LIVE" "$BE_SWEEP_SKIPPED_FOREIGN"
   fi
+else
+  printf '孤儿 sweep: WARN 有 %d 个遗留 server 停不掉（见上逐条点名；下次起跑重试）\n' "$BE_SWEEP_FAILED"
 fi
 
 declare -A results
@@ -358,20 +294,6 @@ for i in "${!CASE_IDS[@]}"; do
   if [ "$mode" = "case" ] && [ "$only" != "$id" ]; then continue; fi
   if [ "$fast" = 1 ] && [ -z "${FAST_SET[$id]:-}" ]; then results[$id]="FAST-SKIP"; continue; fi
   iter_ns=0; [ "$timings" = 1 ] && iter_ns="$(_t4_now_ns)"
-  if [ "$BACKEND" = "herdr" ] && [ -n "${TMUX_ONLY[$id]:-}" ]; then
-    # 本后端不适用（三期重判）：点名 + 单独计数，**不算 PENDING**（也不是 SKIP）
-    results[$id]="TMUX-ONLY"
-    printf '  [TMUX-ONLY] 用例 %s: %s —— 声明为 tmux 专有（tests/t4/backends/herdr.txt 注释区；三期重判）\n' "$id" "${CASE_TITLES[$i]}"
-    [ "$timings" = 1 ] && _t4_timing_row "$id" "$iter_ns"
-    continue
-  fi
-  if [ "$BACKEND" = "herdr" ] && [ -z "${REG_KIND[$id]:-}" ]; then
-    # 未登记 ⇒ **点名**（不得静默 SKIP）：不跑、不计 SKIP，汇总结算为 PENDING
-    results[$id]="PENDING"
-    printf '  [PENDING] 用例 %s: %s —— 未登记 tests/t4/backends/herdr.txt（点名，不静默 SKIP）\n' "$id" "${CASE_TITLES[$i]}"
-    [ "$timings" = 1 ] && _t4_timing_row "$id" "$iter_ns"
-    continue
-  fi
   printf '\n===== 用例 %s: %s =====\n' "$id" "${CASE_TITLES[$i]}"
   script="$(ls "$HERE/cases/${id}-"*.sh 2>/dev/null | head -1)"
   if [ -z "$script" ]; then results[$id]="MISSING"; [ "$timings" = 1 ] && _t4_timing_row "$id" "$iter_ns"; continue; fi
@@ -391,7 +313,6 @@ done
 
 printf '\n==================== T4 汇总 ====================\n'
 fail=0; blocked=0; skip_cases=0; degrade_lines=0; note_lines=0; fast_skipped=0
-run_shared=0; run_own=0; run_pending=0; run_tmuxonly=0
 # NOTE 白名单聚合（T531 · BR1/BR2）：逐条解析行首 `[NOTE]` 后的首个 token，合法性判定只在此处。
 note_wl=(); note_bad=()
 for i in "${!CASE_IDS[@]}"; do
@@ -419,22 +340,8 @@ for i in "${!CASE_IDS[@]}"; do
     done < <(sed -nE 's/^[[:space:]]*\[NOTE\][[:space:]]*([^[:space:]]*).*/\1/p' "$log" 2>/dev/null)
   fi
   printf '  %s  %-12s %s\n' "$id" "$st" "${CASE_TITLES[$i]}"
-  if [ "$BACKEND" = "herdr" ]; then
-    case "$st" in
-      PENDING)   run_pending=$((run_pending + 1)) ;;
-      TMUX-ONLY) run_tmuxonly=$((run_tmuxonly + 1)) ;;
-      *) case "${REG_KIND[$id]:-}" in
-           shared) run_shared=$((run_shared + 1)) ;;
-           own)    run_own=$((run_own + 1)) ;;
-         esac ;;
-    esac
-  fi
   case "$st" in
     PASS|SKIP) ;;       # 白名单：仅 PASS/SKIP 视为通过
-    PENDING)            # 仅 herdr 登记集模式可出现；不算 SKIP、不算 FAIL
-      [ "$BACKEND" = "herdr" ] || fail=1 ;;
-    TMUX-ONLY)          # 声明为 tmux 专有（本后端不适用）；不算 SKIP/FAIL/PENDING
-      [ "$BACKEND" = "herdr" ] || fail=1 ;;
     BLOCKED) blocked=1 ;;
     *) fail=1 ;;        # FAIL* / MISSING / NOT_RUN / 未知值 一律 rc≠0
   esac
@@ -449,14 +356,6 @@ printf '  （SKIP 含用例内 [SKIP]/SKIP: 行；DEGRADE=能力降级，默认�
 if [ "$fast" = 1 ]; then
   printf '  快档：白名单已跑 %d 例 · 跳过 %d 例（真机类/重档；清单见起跑段与 -v；未覆盖声明同处）\n' \
     "${#FAST_CASES[@]}" "$fast_skipped"
-fi
-if [ "$BACKEND" = "herdr" ]; then
-  printf '  后端索引（herdr）：共享 %d / 本后端专有 %d / tmux 专有 %d / PENDING %d（登记文件 tests/t4/backends/herdr.txt）\n' \
-    "$run_shared" "$run_own" "$run_tmuxonly" "$run_pending"
-  if [ "$mode" = "run" ] && [ "$fast" = 0 ]; then
-    printf '  对账：共享+专有+tmux专有+PENDING = %d（--list 计数 %d）\n' \
-      "$((run_shared + run_own + run_tmuxonly + run_pending))" "${#CASE_IDS[@]}"
-  fi
 fi
 if [ "${#note_wl[@]}" -gt 0 ]; then
   printf '  NOTE 白名单命中（%d 条）：%s\n' "${#note_wl[@]}" "$(join_by ' · ' "${note_wl[@]}")"

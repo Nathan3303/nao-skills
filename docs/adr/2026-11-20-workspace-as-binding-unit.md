@@ -1,6 +1,6 @@
 # ADR：workspace 为绑定单位（取消 fleet · 名字不含位置）
 
-- 状态：已接受（待落地）
+- 状态：已接受（待落地）· 注记 2026-11-22：tmux 回退面已删除（`2026-11-22-herdr-only`），本文的 workspace=仓 / 名字契约在单后端下不变
 - 更新：2026-11-21
 - Owner：arch-designer
 - 指针：Issue [#554](https://github.com/Nathan3303/nao-skills/issues/554) · PRD `docs/prds/2026-11-20-fleet-model-v2.md` · 判据 `docs/reports/554-lite-spec.md` · 被本篇取代：`2026-11-13-herdr-workspace-scope-key.md` / `2026-11-17-fleet-identity-source.md` / `2026-11-19-fleet-repo-manifest.md`
