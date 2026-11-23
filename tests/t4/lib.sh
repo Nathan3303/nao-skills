@@ -601,7 +601,8 @@ t4_scan_term_herdr_forbidden() { # <script>
 #     ② 循环体必须出现 `_term_place_pane_fields "$line"`（唯一取值入口）；
 #     ③ 循环体内不得做 `$'\t'` 字段运算（前缀切 / IFS=TAB）。
 #   输出：`<行号>:<正文>`（空 = 合规）。行号 = 真件行号（循环体内的行）；② 缺访问器时给循环起始行。
-#   注：只认「首层 done 收尾」的简单循环（当前 6 处消费点全部如此）；嵌套新增时本闸需同步扩展。
+#   注：只认「首层 done 收尾」的简单循环；当前**扫到 10 个消费循环**（`nao-fleet.sh:993/1008/1088/1111/1239/1331/4068/4131/4158/4186`），
+#   全部符合该形态；若日后新增嵌套循环或其他消费写法（`mapfile`/子 shell 复制数组），本闸需同步扩展。
 t4_scan_place_pane_rows() { # <script>
   local script="$1" ln rest start body line
   [ -f "$script" ] || { printf '脚本不存在: %s\n' "$script"; return 0; }
