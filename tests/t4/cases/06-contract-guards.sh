@@ -842,7 +842,7 @@ c6_check() { # <NAO_STASH_ROOT> [check 参数...] · 在真仓跑（**herdr 默�
       NAO_STASH_ROOT="$root" bash .agents/scripts/nao-fleet.sh check "$@" 2>&1 )
 }
 OUT_B1_BASE_CHECK="$(c6_check "$C6_STASH_NONE")"
-CHECK_GOLD_LINE='check: OK · roles=7 · files=52'
+CHECK_GOLD_LINE='check: OK · roles=7 · files=53'   # T557 增 .agents/skills/design-loop.md（52 → 53）；改机制文件数须同步本行
 t4_assert_eq "$CHECK_GOLD_LINE" "$(printf '%s\n' "$OUT_B1_BASE_CHECK" | head -1)" \
   "P2④ herdr 摘要首行 = roles/files 计数（layout= 字段随 tmux 布局删除 —— D3）"
 t4_assert_eq "3" "$(printf '%s\n' "$OUT_B1_BASE_CHECK" | grep -c . || true)" \
@@ -1076,7 +1076,7 @@ t4_assert_eq "1" "$(grep -cE "printf 'NAO_TERMINAL=(tmux|herdr)" "$T4_ROOT/tests
   "P2③ 测试基座：be_fleet_handles 显式给 NAO_TERMINAL=herdr（T555：单后端，不靠默认值）"
 t4_assert_eq "" "$(t4_scan_nao_terminal_default_probe "$CASES_DIR")" \
   "P2③ 全部用例：默认值探针块外 0 处 unset / env -u / 空串 NAO_TERMINAL ⇒ 无任何用例在 unset 下跑生产路径"
-t4_assert_eq "38" "$(ls -1 "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" "P2③ 扫描面 = 全部 38 个用例文件（39 − 退役 12/25 = 37，T555 增 cases/41 ⇒ 38；11 号仍为空）"
+t4_assert_eq "39" "$(ls -1 "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" "P2③ 扫描面 = 全部 39 个用例文件（= CASE_IDS 登记数；11/12/25 退役不复用，T557 增 cases/42 后最大编号 42）"
 t4_assert_eq "2" "$(grep -l 'default-value-probe BEGIN' "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" \
   "P2③ 默认值探针块白名单 = 2 个文件（cases/06 默认值段 · cases/28 B1① 反向断言）"
 # 负控：块外注入 unset ⇒ 必被扫到（并点名行号与形态）
