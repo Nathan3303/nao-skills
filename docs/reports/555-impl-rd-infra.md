@@ -51,8 +51,8 @@
 ## 四、门禁与证据
 
 - `bash .agents/scripts/nao-fleet.sh check` —— rc=0；连跑 2 次输出 `diff` 空（effect=0）。
-- `bash tests/t4/run.sh`（单后端全量）—— **38 例 · 2413 PASS / 0 FAIL · `RESULT: PASS（SKIP=0 · DEGRADE=0 · NOTE=17）`**（HEAD 见修订行；`--fast` 未用于替代）。
-- `npm test`（`test:agents` + `test:t4`）—— rc=0 · **2413 PASS / 0 FAIL** · stderr「未找到命令」噪声 **0**（QA 轮顺手清掉 7 处断言文案里的裸反引号）。
+- `bash tests/t4/run.sh` / `npm run test:t4:full`（单后端全量）—— **38 例 · 2420 PASS / 0 FAIL · `RESULT: PASS（SKIP=0 · DEGRADE=0 · NOTE=17 · 白名单=17）`** · SKIP=0 / DEGRADE=0（HEAD 见修订行；未用 `--fast` 替代）。
+- `npm test`（`test:agents` + `test:t4`）—— rc=0（同一工作树内容）· stderr「未找到命令」噪声 **0**（QA 第一轮顺手清掉 7 处断言文案里的裸反引号）。
 - `npm run test:fast` —— rc=0（白名单 14 例 · NOTE=2 白名单）。
 - `npm run test:t4:full`（最终 HEAD）—— rc=0 · `RESULT: PASS（SKIP=0 · DEGRADE=0 · NOTE=17 · NOTE白名单=17）`。
 - 幂等：`tests/t4/run.sh --case 41` 连跑 2 次均 rc=0（PASS 数 = 该例当前断言数）。
@@ -95,4 +95,4 @@
 
 ---
 
-- 修订：2026-11-22 QA 整改版（P1 锚点加固 · P2-2 lint 扩形态 · 计数订正；HEAD `42b229b` + 本批提交）
+- 修订：2026-11-23 QA 两轮整改版（P1 锚点 · P2-2/Point-3-1 lint 扩形态与白名单双重条件 · 计数订正；HEAD `933695c`）
