@@ -16,7 +16,7 @@
 ## 项目约束（红线）
 
 - **仅 pi 宿主（唯一，无第二宿主）**：机制只支持 **pi ≥1.4.0**；终端后端**默认后端 = herdr ≥0.9.1（唯一后端）**（`NAO_TERMINAL` 给其他任何值含 `tmux` ⇒ `rc=2` fail loud，旧 tmux 后端 v0.28.0 已移除；前提链见 `README.md`「前置环境」与 `docs/INSTALL.md`「herdr 后端」）。**不为其他编程 Agent（Claude Code / Codex / Cursor 等）做适配、shim 或兼容承诺**，文档 / `description` / `keywords` 一律不得暗示可互换；需要那类能力时按「新增宿主」立项，不夹带。用户可见边界写在 `README.md`「前置环境」。
-- **全范围门禁口径（本项目）**：`bash .agents/scripts/nao-fleet.sh check` rc=0 + `npm test` rc=0（tests/ 全目录，非子目录）；改任何机制文件/角色卡后必跑 `check`。**日常迭代用快档** `npm run test:fast`（白名单 14 例 · 实测 ≈95s · 显式打印跳过例与未覆盖清单）；**PR CI / 合并前 / 发布前仍跑全量** `npm test`（34 例）与 `test:t4:full`（快档绿 ≠ 全绿，白名单与判据见 `tests/t4/run.sh` 的 `FAST_CASES` + `docs/reports/143-profile.md`）。
+- **全范围门禁口径（本项目）**：`bash .agents/scripts/nao-fleet.sh check` rc=0 + `npm test` rc=0（tests/ 全目录，非子目录）；改任何机制文件/角色卡后必跑 `check`。**日常迭代用快档** `npm run test:fast`（白名单 14 例 · 实测 ≈95s · 显式打印跳过例与未覆盖清单）；**PR CI / 合并前 / 发布前仍跑全量** `npm test`（39 例）与 `test:t4:full`（快档绿 ≠ 全绿，白名单与判据见 `tests/t4/run.sh` 的 `FAST_CASES` + `docs/reports/143-profile.md`）。
 - **零敏感值**：仓库内禁 token/私钥/绝对家目录路径；grep 复核是 rd-infra 红线的硬门禁。
 - **幂等**：脚本/迁移/安装器连跑 2 次 effect = 0 且 rc = 0；守卫改动带失败演练。
 - **维护型闭环口径**：外部命令 / 依赖 / 环境类动作 = 维护型任务（`M<YYYYMMDD>-<slug>`），**`exit 0` 不算完成** —— `audit` / `install-scripts` / 每条 `warn`/`error`/`pending approval` 逐条归口，遗留项走三出口（关闭 / 接受含到期 / 转办），台账落 `docs/reports/<编号>-followups.md`（协议 `.agents/skills/task-completion.md`；首个实例 `M20261014-pi-ext-update`）。

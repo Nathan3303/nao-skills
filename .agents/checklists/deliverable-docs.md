@@ -151,3 +151,4 @@ description: 交付文档写作规范（PRD/ADR/报告/调研：简洁、可读�
 - **必留**：9 项结论 + 本次**降级档位**（文字规格 / ASCII 线框 / 分步作图指令，见 @.agents/skills/uiux-design.md §二）+ 逐条 **AC 编号** 的 PASS/REJECT 意见。
 - **禁写 / 一律下沉**：实现源码与代码片段（回 `rd-fe`/`rd-be`）· 主观评价（无 AC 编号即无效）· 截图与导出图全文 · Penpot 凭证 / 真实实例 URL（只留帧链接 + ≤5 行要点摘录）· 用例集（回 `qa`）· 「因缺工具阻塞」的表述（应走降级阶梯）。
 - **口径指针**：逐项要点与可用性/无障碍基线见 @.agents/skills/uiux-design.md §一/§四；闸门语义（BR2/BR2a）见 @.agents/prompts/uiux-designer.md §五；默认不用表格（§七）。
+- **循环口径单源**：任务路由 / 灰模先行 / 参考→概念 / 外视评审 / 视觉验收 / 偏好持久化见 @.agents/skills/design-loop.md（本节不复制步骤）。
