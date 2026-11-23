@@ -48,7 +48,11 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 🔁 **交接快照（2026-11-22 下午 · T555 已立项 + 判据已拍板，等待实现派单）**：接手者只需读本文件。要点：
+- 🔁 **交接快照（2026-11-23 · T555 已全闭环，T557 立项中）**：接手者只需读本文件。要点：
+  - **v0.28.0 全闭环**（合并 `2d5dcfc` · 发布提交 `ccd89e7` · tag/Release `v0.28.0` · **npm 已核验**：`latest` = 0.28.0 · integrity 与本地 `npm pack` tarball **214,856 B** 逐字节一致）
+  - **T557 已立项**（Issue [#158](https://github.com/Nathan3303/nao-skills/issues/158) · 分支 `feat/158-design-loop` · PRD `docs/prds/2026-11-23-design-loop.md` AC1–AC8 · 用户四答：只取方法自写 / 新建 `design-loop.md` + 指针 / 灰模先行做成 PM 开工卡必答一问 / T555 收尾后开工）
+  - **下一批候选**：T556（舰队配合 herdr desktop app · 可行性笔记 `docs/research/2026-11-22-herdr-desktop-app.md` · 用户指定先做 A 双后端并存三步验证）
+  - **以下为 T555 交接时的历史要点（保留备查）**：
   - **v0.27.0 全闭环**（发布提交 `c68cfcb` · tag/Release `v0.27.0` · 标题裸版本号）· **npm 已核验（2026-11-22 · 接任 PM 独立复验）**：`dist-tags.latest` = **0.27.0** · `dist.integrity` = `sha512-b/N2+OBs0qq5S3cPlaXpYUdJtJ9mrAPGqZ1Lf786IVbyaja8ZwjsGG0NyJ3q0T2KqDYJx4tOHIQyr7Qm3vX5sg==` 与本地 `git archive c68cfcb` + `npm pack` tarball（**233,464 B**）**逐字节一致**；`docs/releases/v0.27.0.md` 状态行与 `gh release view` 正文同值（双载体无分叉）
   - **T554 已合并 `f962813`**（PR #155 · 26 文件）· `check` rc=0 · roles=7 · files=52 · 用例 39
   - **T555 已立项**（Issue #156 · 分支 `feat/555-herdr-only` · HEAD `327a0ce`）：PRD `docs/prds/2026-11-22-herdr-only.md` · ADR `docs/adr/2026-11-22-herdr-only.md`（supersede `2026-10-27-strict-tmux-pi`）· 判据 `docs/reports/555-lite-spec.md`
@@ -623,7 +627,7 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-（无在跑任务；T555 已合并归档 ⇒ 行已清空，终态见下方「已验收 / 已归档」归档墙）
+| **T557** | `rd-infra` → `qa` | **设计循环（灰模先行 · 外视评审）**（Issue [#158](https://github.com/Nathan3303/nao-skills/issues/158) · feat · 流程变更） | 2026-11-23 | PRD `docs/prds/2026-11-23-design-loop.md` AC1–AC8 | `feat/158-design-loop`（PRD 已落，待判据 + 派发） |
 
 **用户拍板（2026-11-21）**：① **不再支持 tmux，纯 herdr** ② **缩减 `nao-fleet.sh` 体量** ③ 一步一步来（T554 已合并 `f962813` 后再做）④ 睡眠期授权：需决策的事 PM 自行决定，拿不准派 arch 合议。
 （T554 已合并归档 ⇒ 行已清空；终态见下方「已验收 / 已归档」归档墙）
