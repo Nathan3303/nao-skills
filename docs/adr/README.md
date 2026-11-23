@@ -27,4 +27,4 @@
 | 2026-11-17 | [舰队身份单一来源（`--fleet` 同时定名字 scope 与放置键）](2026-11-17-fleet-identity-source.md) | fleet 单源，名字恒带 @ | 已废弃（被 2026-11-20-workspace-as-binding-unit 取代） |
 | 2026-11-19 | [联动仓 manifest（1 fleet = 1 workspace · tab 前缀分组）](2026-11-19-fleet-repo-manifest.md) | 放置键与身份键不同源 | 已废弃（被 2026-11-20-workspace-as-binding-unit 取代） |
 | 2026-11-20 | [workspace 为绑定单位（取消 fleet · 名字不含位置）](2026-11-20-workspace-as-binding-unit.md) | 放置键 = 仓，名字去 @ | 已接受（待落地） |
-| 2026-11-22 | [herdr 唯一后端（删除 tmux 回退面）](2026-11-22-herdr-only.md) | 唯一后端 = herdr，旧面 fail loud | 已接受（待落地） |
+| 2026-11-22 | [herdr 唯一后端（删除 tmux 回退面）](2026-11-22-herdr-only.md) | 唯一后端 = herdr，旧面 fail loud | 已落地（v0.28.0） |

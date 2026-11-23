@@ -1,7 +1,7 @@
 # ADR：herdr 唯一后端（删除 tmux 回退面）
 
-- 状态：已接受（待落地）
-- 更新：2026-11-22
+- 状态：已落地（2026-11-23 随 `2d5dcfc` 入 main · v0.28.0 MINOR）
+- 更新：2026-11-23
 - Owner：arch-designer
 - 指针：Issue [#156](https://github.com/Nathan3303/nao-skills/issues/156) · PRD `docs/prds/2026-11-22-herdr-only.md` · 判据 `docs/reports/555-lite-spec.md` · 被本篇取代：`docs/adr/2026-10-27-strict-tmux-pi.md`（当年「只支持 tmux」）
 

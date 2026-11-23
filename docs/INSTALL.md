@@ -39,7 +39,7 @@ gh --version                          # 可选
 
 ```bash
 cd <你的项目>
-pi install --local npm:@nathan33/nao-skill@0.21.3   # 声明 pin + 把机制包物化到 .pi/npm
+pi install --local npm:@nathan33/nao-skill@0.28.0   # 声明 pin + 把机制包物化到 .pi/npm
 npx @nathan33/nao-skill init                        # 写转发 shim + 生成 AGENTS.md
 npx @nathan33/nao-skill plugins install-all         # 装协作插件（多会话派活必需）
 ```

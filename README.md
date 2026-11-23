@@ -56,11 +56,11 @@ pi --version && node -v && git --version && herdr --version
 
    ```bash
    cd 你的项目
-   pi install --local npm:@nathan33/nao-skill@0.21.3   # 声明 pin，并把机制包物化到项目内 .pi/npm
+   pi install --local npm:@nathan33/nao-skill@0.28.0   # 声明 pin，并把机制包物化到项目内 .pi/npm
    npx @nathan33/nao-skill init                        # 写入转发入口 shim + 生成 AGENTS.md
    ```
 
-   > 示例带版本 pin（团队 clone 即得同款）。只想装最新版，可省略 `@0.21.3`：`pi install --local npm:@nathan33/nao-skill`。
+   > 示例带版本 pin（团队 clone 即得同款）。只想装最新版，可省略 `@0.28.0`：`pi install --local npm:@nathan33/nao-skill`。
 
 3. **装协作插件**（多会话派活必需）：
 
