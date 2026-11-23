@@ -113,85 +113,50 @@ cd <repo> && codegraph init                # 建索引（不带 -i；该 flag �
 - **`--card` 只作用于紧跟它的那个目标**：`ensure qa --card x.md` 是「常驻 `qa`」+「卡 `x.md`」两个会话，不会整批串味；命令末尾悬挂 `--card`、或把它递给 `check`/`status`/`close`，都按用法错误处理。
 - **卡正文就是系统提示**，属于**完全可信输入**（能写你仓库的人本来就能定义角色）。fleet 只校验目录、文件类型、大小与命名一致性，不做内容安全审查。卡同样可以被 pi-subagents 当项目 agent 用（加 `name:` 即可），但那条路径没有「环境锚点」行，卡正文别依赖 `@.agents/...` 引用才自洽。若你已在使用 overlay 清单（`NAO_SKILLS` 指向自己的清单目录），同一仓别两法并用。
 
-## 会话命名与多仓舰队（`--fleet` / `.agents/fleet-scope`）
+## 会话命名与多仓（v2 命名 · 1 仓 1 workspace）
 
-舰队会话名是**路由标签**（不是身份证明），统一形如 `<core>@<fleet>`：
+会话名是**路由标签**（不是身份证明），形如 **`<role>[<N>](<task>)`**：
 
-- `core` = `<role>[-<task>]` —— 常驻角色 id（或别名解析后的 id）或下游卡 `role`；`--task` 追加 `-<编号>`。
-- `fleet` = 舰队身份 slug，**末位、`@` 分隔、恒非空**。新会话一定带 `@<fleet>`（升级前的裸名会话仍会在场，见下「并存期」）。
-- fleet 语法：`^[a-z0-9][a-z0-9_-]{0,15}$`（≤16 字符、不以 `-` 结尾、禁 `@` `.` `:` 与空白）。**保留前缀 `subagent-` / `nao-` 只限 core**，fleet 位不再受限（`nao-skills` 这类目录名可直接当 fleet）。
-- 预算：**卡会话** `core` ≤32 字符（普通角色 id 更短），**总名长 ≤48**。
-- 名字只由脚本内唯一一对纯函数生成与解析（`fleet_name_build` / `fleet_name_parse`），语法冻结。
+- 常驻：`<role>[<N>]` —— `pm`、`qa`、`qa2`（`N` 空 = 槽位 1；同 workspace 内重名自动加数字，`>9` 直接 fail loud）。
+- 派生：`<role>[<N>](<task>)` —— `rd-be(T1)`、`qa2(T558)`；`ensure --task <编号>` 生成。
+- **名字不含位置**：不再有 `@<fleet>` 段。绑定单位 = herdr **workspace**（1 仓 1 workspace，label = 仓基键；同机同基名两仓自动加序号）。
+- 预算：卡会话 core ≤32、总名长 ≤48；撞线 fail loud，**不自动截短**。
 
-fleet 值从哪来（优先级从高到低）：
+**`ensure <角色>@<段>` 里的 `@` 是「目标仓选择符」，不是名字的一部分**（四步解析，唯一顺序）：① 命中 `.agents/fleet.yaml` 的 `code` ⇒ 联动仓；② 否则按**既有仓路径**语义（`ensure rd-be@../api` 照旧）；③ 两者都命中但物理路径不同 ⇒ **fail loud**；④ 都未命中 ⇒ fail loud 并列出可用 code。**不猜**。
 
-1. `ensure --fleet <slug>` —— 显式给定即**静默胜出**（覆盖文件；来源 tier 在 `-v`/体检面可见）。
-2. `<目标仓>/.agents/fleet-scope` —— 单行文本，就一个 slug。读取对象是**目标仓**（`--card …@<仓>` 取卡的仓），不是调用者当前目录。它现在的语义是「**覆盖默认值**」。
-3. 都没有 ⇒ **目标仓 slug**（默认 tier）。
+### 已弃用（v0.27.0 起，仍有 warn 但不生效）
 
-同一个 fleet 值**同时**决定三件事：会话名里的 scope、herdr workspace 的放置键、单例边界（同 fleet 内同 core 只能有一个）。
+| 旧入口 | 现在 |
+| --- | --- |
+| `ensure --fleet <slug>` | 给参只打一条 warn，**忽略**；放置键恒为仓基键 |
+| `ensure --scope <slug>` | 同上 |
+| `.agents/fleet-scope` | 读到时只 warn，**忽略**；放置键恒为仓基键 |
+| `fleet.yaml` 的 `slug:` | 同上（`repos:` 仍有效，见下节） |
+| 会话名带 `@<fleet>` | 新会话**不再产生**；在场遗留会话仍能被 `list`/`status` 看见，`ask` 可按精确名命中，但 **`send`/`handover` 会把含 `@` 的 `to` 当跨机地址 ⇒ 本机不可达** |
 
-```bash
-# 两个仓同时跑同一套角色：零配置即可，各自默认取仓 slug
-cd ~/proj/api && .agents/scripts/nao-fleet.sh ensure rd-be    # → rd-be@api，落 label=api 的 workspace
-cd ~/proj/web && .agents/scripts/nao-fleet.sh ensure rd-be    # → rd-be@web，落 label=web 的 workspace
-```
+> **迁移**：想继续用旧语义 ⇒ 把机制版本 pin 回 `≤0.27.x`。不想迁移 ⇒ 删掉 `--fleet`/`--scope` 调用与 `.agents/fleet-scope` 文件即可，其余不动也能跑。
 
-**两仓并发不再需要写任何文件。** 只有当两仓**算出同一个 fleet 值**时才会撞车（例如目录同名、都写了相同的 `fleet-scope`、或显式给了同一个 `--fleet`），此时第二仓 `ensure` 同一个 core 会 **fail loud** 并列出在场会话——这是故意的：同名会话会互相顶掉，静默拉起等于给你一个「看起来有两个、其实只有一个」的舰队。要分开就 `--fleet <不同值>`。
+## 联动仓 manifest（`.agents/fleet.yaml`）
 
-失败一律 loud，不静默回落：
-
-- `fleet-scope` 缺失 ⇒ 用仓 slug（默认 tier，唯一允许的静默分支）。
-- 空文件 / 只有空白 / 多行 ⇒ 拒绝（「声明了却没值」或歧义多半是 typo）。
-- 非法字符 / 超 16 / 尾 `-` ⇒ 拒绝并回显规则；CRLF 会先剥 `\r` 再校验（换行风格归 `check` 管）。
-- 不是普通文件（目录、fifo）/ 不可读 / symlink 逃出该仓 ⇒ 拒绝（与角色卡同一套边界口径）。
-- `--fleet ""`（给了参数但是空）⇒ 拒绝；想用默认值**别写**这个参数。
-- `--fleet` 与 `--scope` 同时给 ⇒ 拒绝（二者等价，歧义）。
-
-名长与截短：
-
-- **默认 tier**（仓 slug）超 48 时**自动截短**到剩下能放的长度，并打**恰一行**提示（不需要 `-v`）。
-- **显式 tier**（`--fleet` / 文件）超长 ⇒ fail loud，并点明该缩哪一段。想稳就先在 `fleet-scope` 里给短名。
-
-`--scope` **已弃用**（下一 MINOR 移除）：等价 `--fleet`，会打一条弃用提示，不报错。
-
-回收与查看：
-
-- `status` **不读** fleet 文件 —— 它从会话名解析。带 fleet 的常驻会话显示为 `✓ rd-be 在线（--name rd-be@api；…）·fleet=api`。
-- `close rd-be`（裸别名/裸派生名）= 用**调用方所在仓推导出的 fleet**；同仓存在升级前的裸名会话时按 legacy 等价命中它（**不会**假报「未运行」）；`close rd-be@api`（全名）= 用它自己带的 fleet，**忽略** fleet 文件。
-- 同 core 的带 fleet 会话不止一个、而你又只给了裸名 ⇒ 拒绝并列出候选（用全名指定，不猜）。
-
-并存期（升级后第一次跑）：
-
-- 升级前起的裸名会话（`pm`、`rd-be`）**不会被自动回收或顶掉**；在对应仓内 `close pm` 能命中（同仓等价规则），不会误伤 `pm@api`。
-- 同仓内裸名 `pm` 与 `pm@<该仓 slug>` 视为**同一会话**：不会因此起出第二个 PM。
-
-## 联动仓 manifest（`.agents/fleet.yaml`，0.26 起）
-
-单仓单舰队不需要它（不写 = 与 0.25 完全一致）。要「一支舰队声明它能派到哪些仓」，在**主仓根**写 `.agents/fleet.yaml`：
+单仓不需要它（不写 = 与以前完全一致）。要让角色能被派到**其它仓**干活、但仍住同一个 workspace，在**主仓根**写：
 
 ```yaml
-slug: alpha            # 舰队名（放置键）；≤16，同 fleet-scope 语法
 repos:
-  - code: api          # 仓短代号（≤16）⇒ 会话名里的 scope
+  - code: api          # 仓短代号（≤16）⇒ `ensure rd-be@api` 的 `@` 段
     path: ../api       # 相对主仓根；也可写绝对路径
   - code: web
     path: ../web
 ```
 
-然后 `ensure rd-be@api` ⇒ 会话名 `rd-be@api`、pane cwd = api 仓、**与主仓同住 label=alpha 的 workspace**；tab 标签为 `api/rd-be@api`（主仓会话是 `main/<name>`，`main` 是保留组前缀）。`ensure rd-be`（不带 `@`）= 主仓会话。
+然后 `ensure rd-be@api` ⇒ pane cwd = api 仓、tab label 前缀 `api/`（主仓会话是 `main/`）；**放置键仍是调用方仓基键**（联动仓的会话也住在主仓 workspace 里）。
 
 规则与边界：
 
-- **放置键 = `slug`**（不再按目标仓分裂 workspace）；名字 scope = `code`（联动仓）或 `slug`（主仓）——两者只在主仓会话上相同。
-- `@<段>` 四步解析（唯一顺序）：① 命中 `code` ⇒ 联动仓；② 否则按**既有仓路径**语义（`ensure rd-be@../api` 照旧）；③ 两者都命中但物理路径不同 ⇒ **fail loud**；④ 都未命中 ⇒ fail loud 并列出可用 code。**不猜**。
-- 校验（解析期就拒，**零 pane**）：`slug` 必填；`code` 不得重复、不得为 `main`、不得等于 `slug`、≤16 且 `^[a-z0-9][a-z0-9_-]*$`；`path` 必须存在且是目录；看似仓内却经 symlink 逃出仓根 ⇒ 拒绝（显式 `../` / 绝对路径才允许出仓）；未知键 / 锚点 / 别名 / 流式 / 多文档 / 制表符缩进 ⇒ 拒绝。报错恒为 `文件:行号 字段 原因`。
-- 与 `.agents/fleet-scope` 共存：同值放行；**分歧 fail loud**（点名两文件两值）。`--fleet` 与 manifest `slug` 不一致 ⇒ fail loud（同一 manifest 只有一支舰队名）。
-- 三预算不放宽：`code` ≤16 / 卡 core ≤32 / 总名长 ≤48；撞线 fail loud，**不**自动截短 code。
-- 名长：manifest 派生（`code`/`slug`）与显式 tier 一样**不自动截短**；只有默认 tier（仓 slug）保留既有截短。
+- **顶层只认 `repos`**；`slug:` 为**弃用键**：读到只打一条 warn 后忽略（放置键恒为仓基键）。
+- 校验（解析期就拒，**零 pane**）：`code` 必填、不重复、不为 `main`、≤16 且 `^[a-z0-9][a-z0-9_-]*$`；`path` 必须存在且是目录；看似仓内却经 symlink 逃出仓根 ⇒ 拒绝（显式 `../` / 绝对路径才允许出仓）；未知键 / 锚点 / 别名 / 流式 / 多文档 / 制表符缩进 ⇒ 拒绝。报错恒为 `文件:行号 字段 原因`。
 - 源 = **调用方仓根**的 `.agents/fleet.yaml`：不做向上查找、不自动发现联动仓；在联动仓里 `ensure` 无 manifest 语义（= 单仓行为，已知边界）。
 - 每次命令重新读文件（**无落盘缓存**）：运行期改坏 manifest ⇒ 下一次调用即 fail loud。
-- `status` 对 code scope 同时显示 `·fleet=<slug> ·code=<code>`（manifest 不可读时 `·fleet=?`，显式不可知）；`close <core>@<code>` 的期望仓回落 = manifest 的 code → path（候选 >1 仍拒绝、零回收）。
+- `status` 对 code scope 显示 `·fleet=<仓基键> ·code=<code>`；`close <core>@<code>` 的期望仓回落 = manifest 的 code → path（候选 >1 仍拒绝、零回收）。
 - herdr 没有 tab 重排 API ⇒ 分组只是 tab label 前缀命名空间，**不**追求 tab 物理相邻。
 
 ## 体检（`check`）的提示面
