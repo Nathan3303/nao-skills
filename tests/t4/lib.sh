@@ -591,6 +591,42 @@ t4_scan_term_herdr_forbidden() { # <script>
   done <<< "$rs"
 }
 
+# T558/#160 静态闸：放置快照 pane 行的**裸 read 消费点 = 0**，且每个消费循环首步必须经单点访问器。
+#   缺陷背景（Issue #160 · P0）：行字段分隔符原为 TAB（IFS 空白类）⇒ 无 label 的 pane 行整体左移，
+#   wsid 位读到 tab_id ⇒ `ensure` 把「只有用户自己 pane 的 workspace」判成空 workspace 并 `workspace close`，
+#   连带杀掉用户 pi 会话。修法 = 单一构造器/访问器 + 非空白分隔符（US），本闸防回潮。
+#   判据（逐个 `for … in "${_TERM_PLACE_PANE_ROWS[@]:-}"` 循环体）：
+#     ① 循环体内不得出现「消费行变量」的 `read`（`read … <<< "$line"`）⇒ 又走回 IFS 折叠语义；
+#        （循环体内用 `read` 拆**名字/其他值**是合法的，不算违规）
+#     ② 循环体必须出现 `_term_place_pane_fields "$line"`（唯一取值入口）；
+#     ③ 循环体内不得做 `$'\t'` 字段运算（前缀切 / IFS=TAB）。
+#   输出：`<行号>:<正文>`（空 = 合规）。行号 = 真件行号（循环体内的行）；② 缺访问器时给循环起始行。
+#   注：只认「首层 done 收尾」的简单循环（当前 6 处消费点全部如此）；嵌套新增时本闸需同步扩展。
+t4_scan_place_pane_rows() { # <script>
+  local script="$1" ln rest start body line
+  [ -f "$script" ] || { printf '脚本不存在: %s\n' "$script"; return 0; }
+  while IFS=: read -r ln rest; do
+    [ -n "$ln" ] || continue
+    start="$ln"
+    body="$(awk -v s="$start" 'NR>s { if ($0 ~ /^[[:space:]]*done[[:space:]]*$/) exit; print NR":"$0 }' "$script")"
+    # ① 消费行变量的裸 read（`read … <<< "$line"`；其他值的 read 合法）
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      case "${line#*:}" in
+        *read*'<<< "$line"'*|*read*'<<<"$line"'*) printf '%s\n' "$line" ;;
+      esac
+    done <<< "$body"
+    # ② 访问器（唯一取值入口）
+    grep -qF -- '_term_place_pane_fields "$line"' <<< "$body" \
+      || printf '%s:%s\n' "$start" "缺访问器（循环体未调用 _term_place_pane_fields \"\$line\"）"
+    # ③ TAB 字段运算
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      case "${line#*:}" in *"\$'\\t'"*) printf '%s\n' "$line" ;; esac
+    done <<< "$body"
+  done < <(grep -nE 'for [a-z_]+ in "\$\{_TERM_PLACE_PANE_ROWS\[@\]:-\}"' "$script")
+}
+
 # 三期 P2（默认翻 herdr）静态面：**用例不得依赖生产默认值**。
 #   默认已 = herdr ⇒ 靠「未设」搭车的用例会在不同机器/不同默认下走不同后端（不可复现）。基线由
 #   `run.sh` 按 `NAO_TEST_TERMINAL` **显式导出** `NAO_TERMINAL`；允许 unset/清空的**唯一**位置 =
