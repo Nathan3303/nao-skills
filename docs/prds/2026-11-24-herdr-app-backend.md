@@ -41,7 +41,7 @@ HC_SCOPE=…  HC_TERMINAL_ID=t3  HC_TERMINAL_SOCKET=/run/user/1000/herdr-core/de
 - **M1 后端抽象第二实现**：新增 `term-impl-app` 区间（门面 `_term_*` 的 app 臂），`term_backend()` 允许 `app`，`check` 增加 app 前提节；**默认仍 herdr（TUI）**。
 - **M2 身份闸门**：`HC_SCOPE` + `HC_TERMINAL_ID` + `HC_TERMINAL_SOCKET` 三件套；缺任一 ⇒ `exit 3` + 一行指路（形状照 TUI 版）。
 - **M3 放置**：space = 仓（读该仓现有终端 label 得 space id；没有则用新 id 让 app 自建）、tab = 角色/任务（label = 会话名）；标签写入走 `hc run --label`。
-- **M4 就绪与忙闲**：`hc get <t> --json` 的 `status.state`（working / idle / blocked / done）+ `turn` 对齐 TUI 的 `agent_status` / `state_change_seq`；就绪门、忙闲闸门语义与 TUI 版一致。
+- **M4 就绪与忙闲**：`hc get <t> --json` 的 `status.state`（working / idle / blocked / done）对齐 `agent_status`；**`state_change_seq` 无等价物**（`turn` 只在 `done` 时 +1，不能当变化证据）⇒ **就绪门 = `status.app=pi ∧ state=idle`**（辅以 `status_ms`），忙闲闸门用 `state ∈ {working, blocked}`。**不照搬 TUI 的 `state_change_seq` 判据**。
 - **M5 回收**：`hc kill` + `hc rm`；`keep` 语义显式处理（`keep:true` 时程序退出 pane 不关 ⇒ 回收必须显式 kill）。
 - **M6 文档**：README 前置环境加「两种终端：herdr TUI（默认）/ herdr desktop app」+ `docs/INSTALL.md` 新节「desktop app 后端（`NAO_TERMINAL=app`）」；**必须写死「两套程序不共享 agent」**（同一仓在 TUI 起的舰队，app 里看不到）。
 - **M7 测试**：用例要能**不碰用户真实 app** 地验证（隔离手段见 §六 R1）；新增 `cases/44`（app 后端契约：身份闸门三态 / 放置 where 断言 / 就绪与忙闲 / 回收）。
@@ -62,17 +62,28 @@ HC_SCOPE=…  HC_TERMINAL_ID=t3  HC_TERMINAL_SOCKET=/run/user/1000/herdr-core/de
 ## 五、业务规则
 
 - **BR1**：`NAO_TERMINAL` 取值集合 = `herdr`（TUI，默认）/ `app`；其他值（含 `tmux`）⇒ `rc=2` 用法守卫（沿用 T555 D2）。
-- **BR2**：放置断言必须先写、后验：写标签 → `hc ls --json` 读 `where` → 不匹配 ⇒ **fail loud 并回滚**（kill 自己刚建的终端），禁止「写成功就算放置成功」。
+- **BR2**：放置断言必须先写、后验：写标签 → 读 **`doc.get herdr-app`（`version:10`）** 判「终端地址是否在目标 tab 的 root 树」→ 不匹配 ⇒ **fail loud 并回滚**（kill 自己刚建的终端），禁止「写成功就算放置成功」。
+  - **订正（arch 实测 2026-11-24）**：**不`where` 当结构判据** —— `where` 是 app 写的展示 label，实测已与 doc 的 space folder 不一致（`t2` 即例）。`hc ls` 的 `where` 降为**辅助显示**，不进断言。
 - **BR3**：身份不可判定（三件套缺、socket 不落在 app core 下）⇒ `exit 3`，**不猜**。
-- **BR4**：`keep` 语义显式：`ensure` 起的会话一律 `--keep`（程序退出 pane 不丢），`close` 必须在 kill 之后 `hc rm`，否则 `status` 会看到僵尸条目。
+- **BR4**：`keep` 语义**按实测订正**：`--keep` **不保 pane** —— 程序退出 ⇒ 终端 `finished` + pane 关闭（`hc ls` 隐藏、`--all` 可见）；keep 的真实语义 = **core 丢失后原地换 shell（labels 保留）** ⇒ 会留「幽灵 pane」，**身份判据不得只用 label**。`close` 顺序固定 = **`hc kill` → `hc rm`**（对 live 终端直接 `rm` 会 `rc=1 kind:live`）；`kill` 会连带子终端。
 - **BR5**：两套程序不共享 agent ⇒ 文档、`status` 输出、错误文案都不得暗示可以互见。
 
 ## 六、NFRs / 风险
 
-- **R1 测试隔离（最大风险）**：`hc` 连的是**用户正在用的**桌面版；用例如真起终端会污染用户界面。**处置**：优先找 app 侧隔离开关（`HERDR_APP_HOME` / 独立 core socket）；找不到 ⇒ 用例只用**只读探针**（`hc ls` / `hc get` / 标签解析）+ 桩（`hc` 桩记录调用参数），把「真起终端」留为**人工验收项**并在用例里显式 `[SKIP]` 注明。**这一点必须 arch 给定论**。
+- **R1 测试隔离 = ③ 部分隔离（arch 2026-11-24 实测定论，见 `docs/reports/168-arch-review.md`）**：
+  - **核心面可自动化**：`XDG_RUNTIME_DIR=/tmp/apr XDG_STATE_HOME=/tmp/aps HC_SESSION=nao-t4-x hc …` ⇒ 起**私有 core**（pid/socket/state 全在私有根），默认 `hc ls` 逐字不变。
+  - **放置/收养不可自动化**：app 窗口不在跑时，带 `herdr.space/tab` 标签起终端 ⇒ `where` 恒 `None`、`doc.get` 不含该终端（kill+rm 后零残留）⇒ **收养是 app 写的，core 只存标签**。`HERDR_APP_HOME` 只换窗口控制 socket、不换 core（仍写用户布局）⇒ **不是沙箱**。
+  - **用例形态**：真 `hc` + 私有 core 测三件套闸门 / 往返 / `status` 状态机（OSC 7501 小脚本，不必真 pi）；`hc` 桩测 `--label/--no-parent/--keep` 与「写 → 读 doc → 回滚」；**真实收养、ensure/close 的 UI 效果 = `[SKIP]` + 转人工验收**（`cases/44` 里逐条注明理由）。
 - **R2 契约非稳定 API**：`labels` / `where` / `status` 是 app 的文档契约但不是版本化 API ⇒ 需**能力探测 + fail loud**（例如 `hc get --json` 无 `labels.herdr.space` ⇒ 明确报「app 版本不支持放置」）。
 - **R3 命名与空间语义差**：TUI 1 workspace = 1 仓；app 的 space 名字随首个终端 cwd 变 ⇒ 必须用**显式 label id** 而不是名字匹配。
 - **否定条件**：若 `hc` 无任何方式在不污染用户界面的前提下被测试 ⇒ 本批**只做「可读面」（status/就绪/忙闲）+ 明确标注 ensure/close 属人工验收**，不硬塞自动化。
+
+## 六之二、实施护栏（arch 实测，硬性）
+
+- `hc run` **必须 `--no-parent`**：默认会被记为父终端的子终端，父会话一结束就带走子终端（实测 kill 父 ⇒ 子同死）。
+- app 臂连接**用 `HC_SOCKET=$HC_TERMINAL_SOCKET`**：`HC_TERMINAL_SOCKET` **不参与路由**，`HC_SESSION` 拼错会静默新建一个空 core（假成功）。
+- **失败判据看 JSON `error` 字段，不看 rc**（`hc` 有些错误路径 rc=0）。
+- 未验项 **R-b**（app 关闭期间起的终端，开窗后是否补收养）：因 AC3b 已禁止「窗口没开就 ensure」，此路径对本批**无影响**；登记为观察项（到期 2027-05-24）。
 
 ## 七、AC
 
@@ -84,11 +95,12 @@ HC_SCOPE=…  HC_TERMINAL_ID=t3  HC_TERMINAL_SOCKET=/run/user/1000/herdr-core/de
 ### 异常
 
 - **AC3** 三件套缺任一 / socket 不在 app core 下 ⇒ `exit 3` + 恰一行指路；`NAO_TERMINAL=<其他值>` ⇒ `rc=2`（不回归 T555）。
+- **AC3b（新增 · arch 实测）** **app 窗口不在跑**（`herdr-app status` 无窗口）⇒ `ensure` **`exit 3` + 恰一行指路**（「桌面版没开 / 打开后重试」），**不得**先起终端再回滚（窗口未开时收养永不成 ⇒ 必然空转）。
 - **AC4** 放置失败（标签写了但 `where` 没到）⇒ **fail loud + 回滚自己建的终端**，不静默留孤儿。
 
 ### 边界
 
-- **AC5** `keep` 语义：程序退出后 pane 仍在 ⇒ `status` 必须能区分「真在跑」与「残留」，`close` 必须清理干净（`hc rm`）。
+- **AC5** `keep` 语义（订正后）：core 丢失留下的「换壳」终端**不得**被判成「真在跑」（不得只凭 label）；`status` 必须区分「真在跑 / 残留」，`close` 走 `kill` → `rm` 且清理干净。
 - **AC6** 两套程序不共享：TUI 起的舰队在 `NAO_TERMINAL=app` 下 `status` **不得**列出（反之亦然）；文档写死。
 
 ### 负向闭环
