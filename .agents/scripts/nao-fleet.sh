@@ -10,9 +10,10 @@
 #     fail loud exit 3 + 一行提示，不建 session/pane/lock、不写状态。
 #   cleanup 豁免本前提：拆场是外部动作（`cleanup --session <名>`）。
 #   herdr 后端（#96 二期 B1/B2/B3 · 三期 P1 布局 A）：判定面（status）· 放置/就绪面（ensure）· 回收面（close/cleanup）
-#     —— 全部走门面。**布局 A（AC3.1）**：1 workspace/仓（label=fleet —— 默认目标仓 slug，可用
-#     `--fleet`/`.agents/fleet-scope` 覆盖；ADR 2026-11-17-fleet-identity-source：放置键与身份键**同源**
-#     但仍是两个变量，**不得**取会话名）+ 1 tab/角色（label=角色名）+ 每 tab 恰 1 pane；
+#     —— 全部走门面。**布局 A（AC3.1）**：1 workspace/仓（label = **仓基键**：git 仓名/目录名归一化；
+#     同机两仓同基名 ⇒ 后者自动让号 `base2`..`base9`（base 截 15 字符 + 单字符 N），段满 fail loud；
+#     ADR 2026-11-20-workspace-as-binding-unit：绑定单位 = herdr workspace，**名字不含位置**）
+#     + 1 tab/角色（label=角色名）+ 每 tab 恰 1 pane；
 #     放置后自测空间（HERDR 不报空间不足 ⇒ rc 不可作判据，见 TERM_MIN_COLS/ROWS 与 J1/J5）。
 #     起 server 由独立入口 `session-start --session <名>` 负责（BR6：清宿主终端句柄 + 枚举清 HERDR_*）；
 #     拆场由姊妹入口 `cleanup --session <名>` 负责（stop+delete，判 effect 不看 rc）。
@@ -28,22 +29,23 @@
 #   nao-fleet.sh status                           角色会话在线状态（pane label + agent 状态
 #                                                 （结构化事实，权威源 pane list/agent list）；非在线证据单列）
 #   nao-fleet.sh ensure <别名>[@<repo>] [更多...]  拉起角色窗口（默认工作区=roles.yaml workspace）
+#                                                 `@<repo>` = 目标仓选择符（`@main` 走 manifest、`@<路径>` 直指），不入会话名
 #   nao-fleet.sh ensure -m <model> <别名>...       显式指定模型（须命中白名单）
-#   nao-fleet.sh ensure --task <编号> <别名>[@<repo>]   任务派生会话：--name <别名>-<编号>@<fleet>（并行隔离，避免同名冲突）
+#   nao-fleet.sh ensure --task <编号> <别名>[@<repo>]   任务派生会话：名字 = `<别名>(<编号>)`；同 workspace 内该
+#                                                 role 已有会话 ⇒ 自动取槽位 `<别名><N>(<编号>)`（N=2..9，段满 fail loud）
 #   nao-fleet.sh ensure --card <卡路径> [--as <会话名>] [--task <编号>]
 #                                                 下游仓自定义角色会话（一次性）：卡须为 <repo>/.agents/prompts/<file>.md
 #                                                 （卡 role 与常驻 id/别名必须前缀不相交；不入 roles.yaml、不算常驻；
-#                                                  --as 须等于卡 role 或以 <role>- 为前缀，否则拒绝 —— fleet 按前缀识别身份）
-#   会话名契约（BR8）：`<role>[-<task>]@<fleet>` —— fleet 末位、`@` 分隔、**恒非空**（新会话恒带 `@<fleet>`）。
-#                                                 `--as` 只给 core（含 `@` 即拒）；fleet 只能由 `--fleet`/文件/默认 slug 派生。
-#   --fleet <slug>                                显式舰队身份（^[a-z0-9][a-z0-9_-]{0,15}$，≤16）；
-#                                                 该值**同时**决定会话名 scope 与 herdr workspace 放置键。
-#                                                 解析优先级：`--fleet` > `<目标仓>/.agents/fleet-scope` > 目标仓 slug（默认）。
-#                                                 `fleet-scope` 存在但空/多行/非法/非常规文件/symlink 逃仓 ⇒ 一律 fail loud。
-#                                                 默认 tier（仓 slug）在名长超 48 时自动截短并打**恰一行**提示；
-#                                                 显式 tier（`--fleet`/文件）超长 ⇒ fail loud 并点明该缩哪一段。
-#   --scope <slug>                                **已弃用**（下一 MINOR 移除）：等价 `--fleet`（warn 恰一条）；
-#                                                 与 `--fleet` 同时给 ⇒ 拒绝（歧义）。
+#                                                  --as 只给常驻名/旧形后缀：= 卡 role、`<role><N>`（N=2..9）或
+#                                                  `<role>-<后缀>`；含 `(` 即拒 —— 派生 task 只走 --task）
+#   会话名契约（v2 · ADR 2026-11-20）：`<role>[<N>](<task>)` —— 常驻 `<role>[<N>]`、派生 `<role>[<N>](<task>)`；
+#                                                 N = 单字符 2..9（空 = 槽位 1；>9 结构上不可解析 ⇒ fail loud）；
+#                                                 名字不含位置，绑定单位 = herdr workspace（同名跨仓合法）。
+#                                                 旧形 `<core>[-<task>][@<scope>]` 只读：status/close 能认，ensure 永不生成。
+#   --fleet <slug>                                **已弃用**（下一 MINOR 移除）：给参但空 ⇒ 用法错；非空 ⇒ 恰一行
+#                                                 warn 后**忽略**（不校验、不影响放置）。放置键恒为仓基键。
+#   --scope <slug>                                **已弃用别名**（同口径）：等同 --fleet 被忽略，不再「覆盖放置键」。
+#   `.agents/fleet-scope` / fleet.yaml 的 `slug:`  **已弃用**：读到即恰一行 warn 后忽略（放置键恒为仓基键）。
 #   nao-fleet.sh session-start --session <名>     起专用 herdr session 的 server（herdr 后端）。
 #                                                 --session 必填、≠default；起 server 前**清宿主终端句柄**
 #                                                 （TMUX/TMUX_PANE/TMUX_TMPDIR）+ **枚举清 HERDR_***（BR6），
@@ -51,10 +53,10 @@
 #   nao-fleet.sh ensure --force <别名>...          忽略"已在运行"判重
 #                                                 （目标解析为 pm 时，**就绪后**投递一条固定用户消息：机制包版本自检，
 #                                                  仅提示不自动升级；关闭用 NAO_UPDATE_ON_ENSURE=0）
-#   nao-fleet.sh close <别名|派生会话名|全名> [--task <编号>] [--force]
-#                                                 回收已完成会话（派生名如 rd-be-T1；全名如 rd-be-T1@todo）；
-#                                                 裸别名 = 调用者所在仓的 fleet（带 scope 候选 → 同仓 legacy 裸名
-#                                                 → 全 session 唯一同 core → 否则拒绝列候选）；带 `@` 的全名忽略文件
+#   nao-fleet.sh close <别名|派生会话名|legacy 全名> [--task <编号>] [--force]
+#                                                 回收已完成会话（派生名如 rd-be(T1)、带槽位 rd-be2(T1)）；
+#                                                 裸别名 = 本仓锚内同 core（v2 各槽位 → legacy 旧形候选
+#                                                 → 全 session 唯一同 core → 否则拒绝列候选）；带 `@` 的 legacy
 #                                                 （跨仓定位；定位失败/名册报在线但无句柄 ⇒ 非 0 + 诊断）
 #                                                 （闸门：在跑 turn / tasks-state 未推进 → 拒绝，--force 跳过；
 #                                                  常驻缺席而其派生在场 ⇒ 目标歧义拒绝，T516 AC3）
@@ -4437,7 +4439,7 @@ usage() {
 
 # ---- 入口 ----
 CMD=""; FORCE=false; STRICT=false; MODEL=""; TASK=""; CLEANUP_SOCK=""; SESSION_ARG=""; TARGETS=()
-# BR8：本次 ensure 的显式 fleet（优先级 --fleet > 弃用别名 --scope > <目标仓>/.agents/fleet-scope > 仓 slug）
+# T554/D7：`--fleet` / `--scope` 已弃用 —— 只保留「给参但空 ⇒ 用法错」守卫；非空仅打一行 warn 后丢弃（放置键恒为仓基键）
 CLI_FLEET=""; SCOPE_SEEN=false; FLEET_SEEN=false
 # T537：目标级修饰符（--card / --as）的绑定状态 —— 只作用于**其后第一个 positional**（BR11）
 TARGET_CARD=(); TARGET_AS=(); PEND_CARD=false; PEND_AS=""; LAST_CARD_IDX=-1
