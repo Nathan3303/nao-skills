@@ -1076,7 +1076,12 @@ t4_assert_eq "1" "$(grep -cE "printf 'NAO_TERMINAL=(tmux|herdr)" "$T4_ROOT/tests
   "P2③ 测试基座：be_fleet_handles 显式给 NAO_TERMINAL=herdr（T555：单后端，不靠默认值）"
 t4_assert_eq "" "$(t4_scan_nao_terminal_default_probe "$CASES_DIR")" \
   "P2③ 全部用例：默认值探针块外 0 处 unset / env -u / 空串 NAO_TERMINAL ⇒ 无任何用例在 unset 下跑生产路径"
-t4_assert_eq "39" "$(ls -1 "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" "P2③ 扫描面 = 全部 39 个用例文件（= CASE_IDS 登记数；11/12/25 退役不复用，T557 增 cases/42 后最大编号 42）"
+t4_assert_eq "$(sed -n '/^CASE_IDS=(/,/)/p' "$T4_ROOT/tests/t4/run.sh" | grep -oE '"[0-9]+"' | wc -l | tr -d ' ')" \
+  "$(ls -1 "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" \
+  "P2③ 扫描面 = 全部用例文件（= run.sh CASE_IDS 登记数；用例增删须两侧同步）"
+t4_assert_eq "$(sed -n '/^CASE_IDS=(/,/)/p' "$T4_ROOT/tests/t4/run.sh" | grep -oE '"[0-9]+"' | tail -1 | tr -d '"')" \
+  "$(ls -1 "$CASES_DIR"/*.sh | tail -1 | sed -E 's#.*/([0-9]+)-.*#\1#')" \
+  "P2③ 最大用例编号 = run.sh CASE_IDS 末位（退役编号不复用）"
 t4_assert_eq "2" "$(grep -l 'default-value-probe BEGIN' "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" \
   "P2③ 默认值探针块白名单 = 2 个文件（cases/06 默认值段 · cases/28 B1① 反向断言）"
 # 负控：块外注入 unset ⇒ 必被扫到（并点名行号与形态）

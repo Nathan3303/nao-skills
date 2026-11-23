@@ -428,6 +428,18 @@ _term_argv_name() {  # <argv 串> → `--name` 的值（无则空）
   awk '{ for (i = 1; i < NF; i++) if ($i == "--name") { print $(i + 1); exit } }' <<< "${1-}"
 }
 
+# 快照字段归一（同族护栏 · T558/#160）：`term_snapshot` 的 TSV 行要求每个可变字段**非空且不含 TAB**
+#   —— 空字段 / 字段内 TAB 会让下游 `IFS=$'\t' read` 左移或串列（#160 P0 就是这一族）。
+#   规则：字段内 TAB/CR/LF ⇒ 空格；空 ⇒ `-`（与既有 `${x:--}` 口径一致，单点收此）。
+_TSV_NORM=""
+_term_tsv_norm() {  # <value> → _TSV_NORM
+  local v="${1-}"
+  v="${v//$'\t'/ }"
+  v="${v//$'\r'/ }"
+  v="${v//$'\n'/ }"
+  _TSV_NORM="${v:--}"
+}
+
 _term_herdr_argv() {  # <pane_id> → 每行 "process-name<TAB>argv"（全部前台进程，不只首个）
   local pid="${1-}" js obj nm av
   [[ -n "$pid" ]] || return 0
@@ -463,16 +475,21 @@ _term_herdr_snapshot() {
     case "$hook" in true) ag_hook["$pid"]=1 ;; *) ag_hook["$pid"]=0 ;; esac
   done < <(_term_json_objs <<< "$al")
   # pane list → 每行一个带 label 的 pane（无 label 的 pane 不属舰队会话，B1 不判）
-  local label cwd fgcwd astat tid fg pname avline avname st wsid
+  local label cwd fgcwd astat tid fg pname avline avname st wsid nlabel ntid ncwd nfgcwd nwsid
   while IFS= read -r obj; do
     label="$(_term_json_str "$obj" label)"
     [[ -n "$label" ]] || continue
+    _term_tsv_norm "$label"; nlabel="$_TSV_NORM"
     pid="$(_term_json_str "$obj" pane_id)"
     wsid="$(_term_json_str "$obj" workspace_id)"
     tid="$(_term_json_str "$obj" terminal_id)"
     cwd="$(_term_json_str "$obj" cwd)"
     fgcwd="$(_term_json_str "$obj" foreground_cwd)"
     astat="$(_term_json_str "$obj" agent_status)"
+    _term_tsv_norm "$tid";   ntid="$_TSV_NORM"
+    _term_tsv_norm "$cwd";   ncwd="$_TSV_NORM"
+    _term_tsv_norm "$fgcwd"; nfgcwd="$_TSV_NORM"
+    _term_tsv_norm "$wsid";  nwsid="$_TSV_NORM"
     fg=""; avname=""
     while IFS=$'\t' read -r pname avline; do
       [[ -n "$pname" ]] || continue
@@ -483,8 +500,8 @@ _term_herdr_snapshot() {
     done < <(_term_herdr_argv "$pid")
     st="${ag_stat[$pid]:-}"; [[ -n "$st" ]] || st="${astat:--}"
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-      "$label" "$pid" "${tid:--}" "${cwd:--}" "${fgcwd:--}" "${fg:--}" \
-      "$st" "${ag_seq[$pid]:--}" "${ag_sess[$pid]:--}" "${avname:--}" "${ag_hook[$pid]:-0}" "${wsid:--}"
+      "$nlabel" "$pid" "$ntid" "$ncwd" "$nfgcwd" "${fg:--}" \
+      "$st" "${ag_seq[$pid]:--}" "${ag_sess[$pid]:--}" "${avname:--}" "${ag_hook[$pid]:-0}" "$nwsid"
   done < <(_term_json_objs <<< "$pl")
 }
 
@@ -905,7 +922,27 @@ _term_herdr_workspace_id_for() {  # <label> → workspace_id（无则空）
 _TERM_PLACE_CACHE=0
 declare -A _TERM_PLACE_WS_BY_LABEL=()
 declare -a _TERM_PLACE_WS_ROWS=()     # "wsid<TAB>label"
-declare -a _TERM_PLACE_PANE_ROWS=()   # "label<TAB>pane_id<TAB>wsid<TAB>tab_id<TAB>cwd<TAB>fgcwd"
+# pane 行字段分隔符（#160 P0）：US（`\x1f`，**非空白**）。TAB 属 IFS 空白类 ⇒ `IFS=$'\t' read`
+#   会把空字段（无 label 的 pane = 用户自己手起的会话）整个折叠，字段整体左移（wsid 位读到 tab_id）。
+_TERM_PLACE_FS=$'\x1f'
+declare -a _TERM_PLACE_PANE_ROWS=()   # 6 字段行（`_term_place_pane_row` 构造；US 分隔，空字段保真）
+_TP_LABEL=""; _TP_PANE=""; _TP_WS=""; _TP_TAB=""; _TP_CWD=""; _TP_FGCWD=""
+
+# pane 行**唯一构造点**：空字段原样保留（**不**补 `-` —— 空 label 是合法语义「非舰队 pane」，
+#   而 tab_id/wsid 可能真的是空值；补哨兵会引入第二套「空值等价」规则）。
+_term_place_pane_row() {  # <label> <pane_id> <wsid> <tab_id> <cwd> <fgcwd>
+  local FS="$_TERM_PLACE_FS"
+  printf '%s' "${1-}${FS}${2-}${FS}${3-}${FS}${4-}${FS}${5-}${FS}${6-}"
+}
+
+# pane 行**唯一解析点**（#160 P0）：所有消费点只准经本函数取值 —— 禁止再出现「直接 `read` 消费
+#   `_TERM_PLACE_PANE_ROWS`」（静态闸 tests/t4/lib.sh::t4_scan_place_pane_rows 断言裸 read = 0）。
+#   空字段保真（`\x1f` 非空白 ⇒ IFS 不折叠）；字段数不足时 `read` 把余下变量置空（不残留上一行）。
+_term_place_pane_fields() {  # <row> → _TP_LABEL/_TP_PANE/_TP_WS/_TP_TAB/_TP_CWD/_TP_FGCWD
+  _TP_LABEL=""; _TP_PANE=""; _TP_WS=""; _TP_TAB=""; _TP_CWD=""; _TP_FGCWD=""
+  IFS="$_TERM_PLACE_FS" read -r _TP_LABEL _TP_PANE _TP_WS _TP_TAB _TP_CWD _TP_FGCWD <<< "${1-}"
+  return 0
+}
 
 _term_herdr_place_prime() {  # → 0 已建快照 / 1 后端不可用
   local js="" obj label wsid pid tid cwd fgcwd
@@ -925,13 +962,27 @@ _term_herdr_place_prime() {  # → 0 已建快照 / 1 后端不可用
     wsid="$(_term_json_str "$obj" workspace_id)"
     cwd="$(_term_json_str "$obj" cwd)"
     fgcwd="$(_term_json_str "$obj" foreground_cwd)"
-    _TERM_PLACE_PANE_ROWS+=("$label"$'\t'"$pid"$'\t'"$wsid"$'\t'"$tid"$'\t'"$cwd"$'\t'"$fgcwd")
+    _TERM_PLACE_PANE_ROWS+=("$(_term_place_pane_row "$label" "$pid" "$wsid" "$tid" "$cwd" "$fgcwd")")
   done < <(_term_json_objs <<< "$js")
   _TERM_PLACE_CACHE=1
   return 0
 }
 
 _term_herdr_place_reset() { _TERM_PLACE_CACHE=0; _TERM_PLACE_WS_BY_LABEL=(); _TERM_PLACE_WS_ROWS=(); _TERM_PLACE_PANE_ROWS=(); }
+
+# 关 workspace 前的**原始复核**（#160 P0 护栏）：返回 `pane list --workspace <wsid>` 的 pane 数。
+#   快照可能失真（解析缺陷/并发变更），但关闭是**破坏性且不可回滚**的（会连带杀掉用户 pi 会话）
+#   ⇒ 关前必须用后端原始结果再确认一次。读不到（命令失败）⇒ rc=1（调用方 fail loud，**不关**）。
+_term_herdr_ws_pane_count_live() {  # <wsid> → stdout 计数
+  local wsid="${1-}" js obj n=0
+  [[ -n "$wsid" ]] || return 1
+  js="$(_term_herdr_exec pane list --workspace "$wsid" 2>/dev/null)" || return 1
+  [[ -n "$js" && "$js" != *'"error"'* ]] || return 1
+  while IFS= read -r obj; do
+    [[ -n "$(_term_json_str "$obj" pane_id)" ]] && n=$((n + 1))
+  done < <(_term_json_objs <<< "$js")
+  printf '%s\n' "$n"
+}
 
 # 快照内新增一条 pane 行（spawn 成功后回填；缓存只服务本命令的后续目标）
 _term_herdr_place_set_pane() {  # <label> <pane> <wsid> <tab> <cwd>
@@ -941,10 +992,11 @@ _term_herdr_place_set_pane() {  # <label> <pane> <wsid> <tab> <cwd>
   (( _TERM_PLACE_CACHE )) || return 0
   for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
     [[ -n "$line" ]] || continue
-    [[ "${line#*$'\t'}" == "$pane"$'\t'* ]] && continue
+    _term_place_pane_fields "$line"
+    [[ "$_TP_PANE" == "$pane" ]] && continue
     keep+=("$line")
   done
-  keep+=("$label"$'\t'"$pane"$'\t'"$wsid"$'\t'"$tab"$'\t'"$cwd"$'\t'"$cwd")
+  keep+=("$(_term_place_pane_row "$label" "$pane" "$wsid" "$tab" "$cwd" "$cwd")")
   _TERM_PLACE_PANE_ROWS=("${keep[@]:-}")
 }
 
@@ -955,7 +1007,8 @@ _term_herdr_place_drop_pane() {  # <pane_id>
   (( _TERM_PLACE_CACHE )) || return 0
   for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
     [[ -n "$line" ]] || continue
-    [[ "${line#*$'\t'}" == "$pid"$'\t'* ]] && continue
+    _term_place_pane_fields "$line"
+    [[ "$_TP_PANE" == "$pid" ]] && continue
     keep+=("$line")
   done
   _TERM_PLACE_PANE_ROWS=("${keep[@]:-}")
@@ -1032,12 +1085,11 @@ _term_herdr_pane_tab() {  # <pane_id> → "tab_id<TAB>workspace_id"（无 ⇒ �
   [[ -n "$pid" ]] || return 0
   # T554：ensure 快照启用 ⇒ 读本命令快照（不再 per-target `pane list`）
   if (( _TERM_PLACE_CACHE )); then
-    local _label _pp _ww _tt
     for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
       [[ -n "$line" ]] || continue
-      IFS=$'\t' read -r _label _pp _ww _tt _ <<< "$line"
-      [[ "$_pp" == "$pid" ]] || continue
-      printf '%s\t%s\n' "$_tt" "$_ww"
+      _term_place_pane_fields "$line"
+      [[ "$_TP_PANE" == "$pid" ]] || continue
+      printf '%s\t%s\n' "$_TP_TAB" "$_TP_WS"
       return 0
     done
     return 0
@@ -1058,8 +1110,12 @@ _term_herdr_place_set_tab() {  # <pane_id> <tab_id> <wsid>
   (( _TERM_PLACE_CACHE )) || return 0
   for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
     [[ -n "$line" ]] || continue
-    keep+=("$(LINE="$line" PID="$pid" TAB="$tab" WS="$ws" awk -F'\t' -v OFS='\t' '
-      BEGIN { split(ENVIRON["LINE"], a, "\t"); if (a[2] == ENVIRON["PID"]) { a[3] = ENVIRON["WS"]; a[4] = ENVIRON["TAB"] } print a[1],a[2],a[3],a[4],a[5],a[6] }')")
+    _term_place_pane_fields "$line"
+    if [[ "$_TP_PANE" == "$pid" ]]; then
+      keep+=("$(_term_place_pane_row "$_TP_LABEL" "$pid" "$ws" "$tab" "$_TP_CWD" "$_TP_FGCWD")")
+    else
+      keep+=("$line")
+    fi
   done
   _TERM_PLACE_PANE_ROWS=("${keep[@]:-}")
 }
@@ -1161,7 +1217,7 @@ _term_herdr_layout_converge() {  # <pane_id> <name> [group] → 0 布局 A 达�
 
 _term_herdr_spawn() {  # <name> <inner> <repo> [force] <label> [group] → SPAWN_RC_OK|FAIL
   local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" pl="" obj js line
-  local pane="" wsid="" tid="" first="" nmatch=0 hit="" verdict="" seq="" launched=0
+  local pane="" wsid="" tid="" first="" nmatch=0 hit="" verdict="" seq="" launched=0 live_n=""
   # T554：tab 标签 = 名字（**组前缀退役** —— 1 workspace = 1 仓，同仓无需 `code/` 分组）。
   local tablabel="$name"
   [[ -n "$name" && -n "$inner" ]] || { warn "herdr spawn 参数缺失（name/inner）"; return "$SPAWN_RC_FAIL"; }
@@ -1182,11 +1238,11 @@ _term_herdr_spawn() {  # <name> <inner> <repo> [force] <label> [group] → SPAWN
   if (( _TERM_PLACE_CACHE )); then
     for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
       [[ -n "$line" ]] || continue
-      IFS=$'\t' read -r hit_name hit_pane hit_ws _ <<< "$line"
-      [[ -n "$wsid" && "$hit_ws" == "$wsid" ]] || continue
-      [[ "$hit_name" == "$name" ]] || continue
+      _term_place_pane_fields "$line"
+      [[ -n "$wsid" && "$_TP_WS" == "$wsid" ]] || continue
+      [[ "$_TP_LABEL" == "$name" ]] || continue
       nmatch=$((nmatch + 1))
-      hit="${hit}${hit:+ }$hit_pane"
+      hit="${hit}${hit:+ }$_TP_PANE"
     done
   else
     pl="$(_term_herdr_exec pane list 2>/dev/null)" || { warn "herdr pane list 失败（server 未就绪？）"; return "$SPAWN_RC_FAIL"; }
@@ -1274,8 +1330,8 @@ _term_herdr_spawn() {  # <name> <inner> <repo> [force] <label> [group] → SPAWN
       first=""
       for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
         [[ -n "$line" ]] || continue
-        IFS=$'\t' read -r _ hit_pane hit_ws _ <<< "$line"
-        [[ -n "$wsid" && "$hit_ws" == "$wsid" ]] && { first="$hit_pane"; break; }
+        _term_place_pane_fields "$line"
+        [[ -n "$wsid" && "$_TP_WS" == "$wsid" ]] && { first="$_TP_PANE"; break; }
       done
     else
       if [[ -n "$wsid" ]]; then
@@ -1285,7 +1341,20 @@ _term_herdr_spawn() {  # <name> <inner> <repo> [force] <label> [group] → SPAWN
       fi
     fi
     if [[ -n "$wsid" && -z "$first" ]]; then
-      # 空 workspace（pane 已被关）：先关掉空的旧 workspace，再建新的（同名 label 仍唯一）
+      # 空 workspace（pane 已被关）：先关掉空的旧 workspace，再建新的（同名 label 仍唯一）。
+      #   **#160 P0 护栏**：关闭是破坏性且不可回滚（会连带杀掉该 ws 里用户的 pi 会话）⇒ 关前用
+      #   **原始 `pane list --workspace`** 再确认「确实 0 pane」；快照判空但实测非空 ⇒ **不关 + fail loud**
+      #   （点名 wsid 与实测 pane 数）。宁可不建新 ws，也不杀用户会话。
+      if ! live_n="$(_term_herdr_ws_pane_count_live "$wsid")"; then
+        warn "workspace 关闭前复核失败（workspace=$wsid：pane list --workspace 不可用）⇒ **不关**（无法证明它是空的）"
+        warn "  该怎么办：核对 herdr server 后重跑 ensure；确认该 ws 无人使用后手工 herdr workspace close $wsid（回收面归 B3）"
+        return "$SPAWN_RC_FAIL"
+      fi
+      if [[ "$live_n" != "0" ]]; then
+        warn "空 workspace 判据与实测冲突：workspace=$wsid 快照判 0 pane，实测 ${live_n} pane ⇒ **不关**（关掉会连带杀掉在场会话）"
+        warn "  该怎么办：这是解析/并发缺陷的信号，勿手工重试同一命令；先看 herdr pane list --workspace $wsid 核对归属，再重跑 ensure"
+        return "$SPAWN_RC_FAIL"
+      fi
       _term_herdr_exec workspace close "$wsid" >/dev/null 2>&1 || true
       wsid=""
     fi
@@ -3993,14 +4062,14 @@ _repo_identity() {  # <path> → 物理身份串
 
 # 快照内某 workspace 的 pane cwd 是否**全在**目标仓内（含空 ws ⇒ true）
 _ensure_ws_panes_in_repo() {  # <wsid> <repo_phys> → 0 全部在仓内 / 1 有 pane 在仓外
-  local wsid="${1-}" repo="${2-}" line _l _p _w _t _c _f
+  local wsid="${1-}" repo="${2-}" line
   local -a cwds=()
   if (( _TERM_PLACE_CACHE )); then
     for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
       [[ -n "$line" ]] || continue
-      IFS=$'\t' read -r _l _p _w _t _c _f <<< "$line"
-      [[ "$_w" == "$wsid" ]] || continue
-      cwds+=("${_f:-$_c}")
+      _term_place_pane_fields "$line"
+      [[ "$_TP_WS" == "$wsid" ]] || continue
+      cwds+=("${_TP_FGCWD:-$_TP_CWD}")
     done
   fi
   (( ${#cwds[@]} )) || return 0
@@ -4050,7 +4119,7 @@ _ensure_place_label() {  # <base> <repo_phys> → stdout label
 
 # 名字是否已占目标槽位（v2 parse 同 role/num；含本批预留）
 _ensure_slot_taken() {  # <wsid> <role> <num>
-  local wsid="${1-}" role="${2-}" num="${3-}" name out k r t s line _l _p _w
+  local wsid="${1-}" role="${2-}" num="${3-}" name out k r t s line
   local want="$role/$num"; want="${want%/}"
   # 本批预留
   local i
@@ -4061,9 +4130,10 @@ _ensure_slot_taken() {  # <wsid> <role> <num>
   if (( _TERM_PLACE_CACHE )); then
     for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
       [[ -n "$line" ]] || continue
-      IFS=$'\t' read -r name _p _w _ <<< "$line"
-      [[ -n "$name" ]] || continue
-      [[ "$_w" == "$wsid" ]] || continue
+      _term_place_pane_fields "$line"
+      [[ -n "$_TP_LABEL" ]] || continue
+      [[ "$_TP_WS" == "$wsid" ]] || continue
+      name="$_TP_LABEL"
       out="$(fleet_name_parse "$name")"
       [[ "$out" == "OK "* ]] || continue
       IFS=',' read -r k r t s <<< "${out#OK }"
@@ -4083,12 +4153,13 @@ _ensure_slot_taken() {  # <wsid> <role> <num>
 
 # 派生任务复用：目标 ws 内已有同 (role,task) 的 v2 名字 ⇒ 打印该名字（同槽位同 task = same）
 _ensure_task_name_in_ws() {  # <wsid> <role> <task>
-  local wsid="${1-}" role="${2-}" task="${3-}" name out k r t s line _l _p _w
+  local wsid="${1-}" role="${2-}" task="${3-}" name out k r t s line
   if (( _TERM_PLACE_CACHE )); then
     for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
       [[ -n "$line" ]] || continue
-      IFS=$'\t' read -r name _p _w _ <<< "$line"
-      [[ -n "$name" && "$_w" == "$wsid" ]] || continue
+      _term_place_pane_fields "$line"
+      name="$_TP_LABEL"
+      [[ -n "$name" && "$_TP_WS" == "$wsid" ]] || continue
       out="$(fleet_name_parse "$name")"
       [[ "$out" == "OK "* ]] || continue
       IFS=',' read -r k r t s <<< "${out#OK }"
@@ -4108,14 +4179,15 @@ _ensure_task_name_in_ws() {  # <wsid> <role> <task>
 
 # 选槽位：派生优先复用已有次槽位（≥2），否则取最小空闲槽位；常驻取最小空闲。全占 ⇒ fail（rc=1）。
 _ensure_pick_num() {  # <wsid> <role> <task> <kind> → stdout num（空 = 槽位 1）
-  local wsid="${1-}" role="${2-}" task="${3-}" kind="${4-}" n found="" name line _l _p _w out k r t s
+  local wsid="${1-}" role="${2-}" task="${3-}" kind="${4-}" n found="" name line out k r t s
   # 收集已占槽位
   local -a occ=()
   if (( _TERM_PLACE_CACHE )); then
     for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
       [[ -n "$line" ]] || continue
-      IFS=$'\t' read -r name _p _w _ <<< "$line"
-      [[ -n "$name" && "$_w" == "$wsid" ]] || continue
+      _term_place_pane_fields "$line"
+      name="$_TP_LABEL"
+      [[ -n "$name" && "$_TP_WS" == "$wsid" ]] || continue
       out="$(fleet_name_parse "$name")"
       [[ "$out" == "OK "* ]] || continue
       IFS=',' read -r k r t s <<< "${out#OK }"
