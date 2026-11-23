@@ -28,3 +28,4 @@
 | 2026-11-19 | [联动仓 manifest（1 fleet = 1 workspace · tab 前缀分组）](2026-11-19-fleet-repo-manifest.md) | 放置键与身份键不同源 | 已废弃（被 2026-11-20-workspace-as-binding-unit 取代） |
 | 2026-11-20 | [workspace 为绑定单位（取消 fleet · 名字不含位置）](2026-11-20-workspace-as-binding-unit.md) | 放置键 = 仓，名字去 @ | 已接受（待落地） |
 | 2026-11-22 | [herdr 唯一后端（删除 tmux 回退面）](2026-11-22-herdr-only.md) | 唯一后端 = herdr，旧面 fail loud | 已落地（v0.28.0） |
+| 2026-11-24 | [herdr desktop app 作为第二后端](2026-11-24-herdr-app-backend.md) | 双后端并存，放置读 doc 验证 | 已接受（待落地 v0.30.0） |
