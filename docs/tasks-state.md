@@ -49,7 +49,7 @@
 ## PM 接续快照（会话重开后**先读本区**）
 
 - 🔁 **交接快照（2026-11-23 晚 · T555/T557/T558 全闭环，v0.29.0 待 npm）**：接手者只需读本文件。要点：
-  - **v0.29.0 待用户 `npm publish`**（合并 `d8e4d09`（T557）+ `0bc7b3c`（T558 P0）；发布后按 `dist-tags.latest` + `dist.integrity` 与本地 `npm pack` 逐字节核验回填）
+  - **v0.29.0 全闭环**（合并 `d8e4d09`（T557）+ `0bc7b3c`（T558 P0）· 发布提交 `acc451e` · tag/Release `v0.29.0` · **npm 已核验**：`latest` = 0.29.0 · integrity 与本地 `npm pack` tarball **222,034 B** 逐字节一致）
   - **T558 是 P0**：`ensure` 曾会把「只有用户自己 pane 的 workspace」误判为空而关闭、杀掉用户会话（v0.28.0 及以前）——升级 v0.29.0 即修复，用户侧无需改配置
   - **下一批候选（按优先级）**：① Issue [#161](https://github.com/Nathan3303/nao-skills/issues/161) 派单投递寻址硬化（裸名跨仓错投，今日错投 2 次；`to` 一律用会话 id 或 `to`+`cwd`）② **T556** herdr desktop app 双后端（三步验证已通过：`hc run` 起会话 / `hc get` 读 OSC 7501 状态 / **label 收养放置**可行；研究笔记已订正）
   - **旧快照（T555 时代）保留备查：**
@@ -631,7 +631,8 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-（无在跑任务；T557 / T558 均已合并归档 ⇒ 终态见下方「已验收 / 已归档」归档墙）
+| **T559** | `rd-infra` → `qa` | **派单投递寻址硬化**（Issue [#161](https://github.com/Nathan3303/nao-skills/issues/161) · fix · 机制文本） | 2026-11-23 | Issue #161 AC1–AC5 | `fix/161-dispatch-addressing` |
+
 
 **用户拍板（2026-11-21）**：① **不再支持 tmux，纯 herdr** ② **缩减 `nao-fleet.sh` 体量** ③ 一步一步来（T554 已合并 `f962813` 后再做）④ 睡眠期授权：需决策的事 PM 自行决定，拿不准派 arch 合议。
 （T554 已合并归档 ⇒ 行已清空；终态见下方「已验收 / 已归档」归档墙）
