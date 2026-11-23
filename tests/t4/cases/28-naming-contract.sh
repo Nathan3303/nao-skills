@@ -607,7 +607,9 @@ GOLD_HERDR_MD5="$(printf '%s' "$OUT_H" | md5sum | awk '{print $1}')"
 #   （`env NAO_TERMINAL=herdr ${HENV[@]} … status`；与「未设」两跑同源）。两次独立跑次实测同值
 #   （lab 路径含 $$ 但 herdr status 不回显路径 ⇒ 跨跑/跨机稳定）。
 #   **有意改 herdr 渲染（文案/节标题/列）时须同步更新本行** —— 与 C2 tmux golden 同一纪律（BR1）。
-GOLD_HERDR_MD5_RECORDED="123bf85ba92783fb4210b19126849c42"
+# T561（#166）：status 分节标题示例改 v2（`rd-be(T1) / rd-be2(T1)`、`rd-fe(T1) / rd-infra(T1)`）
+#   ⇒ 有意改渲染，按上文纪律同步本行。证据：同一夹具下「仅打这两行标题」的旧树命中本值（其余断言零变化）。
+GOLD_HERDR_MD5_RECORDED="8b50475296f4bd5880fe37b9f454f73a"
 t4_assert_eq "$GOLD_HERDR_MD5_RECORDED" "$GOLD_HERDR_MD5" \
   "P2① herdr golden == 记录的 golden（herdr 渲染零漂移；$GOLD_HERDR_MD5_RECORDED）"
 t4_assert_contains "$OUT_H" "herdr 后端：label 命中 ≠ 在线" \

@@ -3559,9 +3559,9 @@ cmd_status() {
   done
   # D5：分节标题示例带上全名写法 —— **仅当在场确有带 scope 的会话**（scope 为空时逐字保留旧标题 ⇒ BR1）
   if (( any_scoped )); then
-    echo "== 任务派生会话（--task 拉起，如 rd-be-T1 / rd-be-T1@todo）=="
+    echo "== 任务派生会话（--task 拉起，如 rd-be(T1) / rd-be2(T1)；含旧式 @ 名）=="
   else
-    echo "== 任务派生会话（--task 拉起，如 rd-be-T1 / rd-infra-T1）=="
+    echo "== 任务派生会话（--task 拉起，如 rd-fe(T1) / rd-infra(T1)）=="
   fi
   # T534：先建归属快照（本仓锚 / pane cwd / 名册 cwd），再逐会话**先定归属、后判本仓台账**
   #   （他仓不查本仓 tasks-state，杜绝误读；本仓行 cls tag 逐字不变）
@@ -3825,7 +3825,7 @@ cmd_close() {
       fi
     fi
     if [[ -z "$tgt" && "$is_resident" == "1" ]]; then
-      die "未知角色或会话名: $target（可用角色: ${ROLE_ORDER[*]}；常驻名 = <角色>[N]（N=2..9）；派生名 = <角色>(<任务号>)；旧形如 rd-be-T1 / qa@todo 仍可回收；亦可用 close --task <编号> <角色>；下游卡角色需在本仓锚下存在 .agents/prompts/<role>.md）"
+      die "未知角色或会话名: $target（可用角色: ${ROLE_ORDER[*]}；常驻名 = <角色>[N]（N=2..9）；派生名 = <角色>(<任务号>)；旧形（<角色>-<任务号> / <角色>@<scope>）仍可回收；亦可用 close --task <编号> <角色>；下游卡角色需在本仓锚下存在 .agents/prompts/<role>.md）"
     fi
     if [[ "$is_resident" == "1" ]]; then
       resolve_role "$tgt"; role="$NAME"; kindc="resident"
