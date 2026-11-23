@@ -29,8 +29,12 @@
    `index.ts:1690` 名称前缀回退）。所以只要他仓的 `pm` 在线，`pm` **永远不会**落到 `pm(T555)` —— 该误投是
    **确定性**的，不是偶发。
 
-   取数命令：源码位置在 `~/.pi/agent/npm/node_modules/pi-intercom/`（下称 `<IC>/`）；`grep -n 'byName.length > 1' <IC>/index.ts`；
-   会话现状 = `intercom list`。
+   取数命令（源码位置在 `~/.pi/agent/npm/node_modules/pi-intercom/`，下称 `<IC>/`；行号均为 `0.18.1` 实测）：
+   - `grep -n 'Without .cwd' <IC>/README.md` → `387`（`send` 段在 `grep -n 'to. plus .cwd. requires' <IC>/README.md` → `418`）
+   - `grep -n 'sends to ambiguous names fail' <IC>/README.md` → `643`
+   - `grep -n 'PI_INTERCOM_SCOPE_ID' <IC>/README.md` → `490`（池命令 `grep -n 'intercom-pool <name>' <IC>/README.md` → `492`）
+   - `grep -n 'byName.length > 1' <IC>/index.ts` → `1657` · `grep -n 'byNamePrefix = ' <IC>/index.ts` → `1690`
+   - 会话现状 = `intercom list`
 
 ## 二、范围（5 处改动位置）
 
