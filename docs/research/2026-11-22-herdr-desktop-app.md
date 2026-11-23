@@ -1,6 +1,6 @@
 # 可行性笔记 · 舰队机制配合 herdr **desktop app**（非 TUI）
 
-- 状态：**可行（高）**，但属「**新后端移植**」，不是现有 TUI 后端的开关 · 更新：2026-11-22 · Owner：product-manager
+- 状态：**可行（高）**，但属「**新后端移植**」，不是现有 TUI 后端的开关 · 更新：**2026-11-23（实测订正：放置有 CLI）** · Owner：product-manager
 - 触发：用户 2026-11-22「要将舰队机制配合 herdr desktop app，看一下可不可行」
 - 结论摘要：**本机三块前提全齐**（桌面版在跑 / `hc` CLI 可用 / pi 支持 OSC 7501）⇒ 可行；**难点不在启动与状态，而在「放置」** —— 桌面版的 space / tab 是**配置文件 + mods（JS）**驱动，**没有** CLI 创建接口。
 
@@ -12,6 +12,7 @@
 | CLI | `herdr --session S workspace/tab/pane/agent …` | **`hc`**（`run` / `ls` / `get` / `send` / `keys` / `wait` / `kill` / `exec` / `file`） |
 | 概念 | workspace / tab / pane / agent_status | **space / tab / terminal** · `state` + `turn` + `where` |
 | 配置 | `~/.config/herdr/sessions/<名>` | `~/.config/herdr-app/`（`layouts/*.json` · `mods/*.js` · `herdr.d.ts` · `AGENTS.md`） |
+| 终端 env（**身份闸门可用**） | `HERDR_ENV=1` · `HERDR_SESSION` · `HERDR_SOCKET_PATH` | `HC_SCOPE` · `HC_TERMINAL_ID` · `HC_TERMINAL_SOCKET`（2026-11-23 实测） |
 | 状态协议 | 快照里的 `agent_status` | **OSC 7501**（working / done / waiting / failed） |
 | 互通 | **与 app 互不共享 agent**（官方 FAQ 明示） | 同左 |
 
@@ -25,7 +26,10 @@
 ## 三、三处集成面（可行性判断落在这里）
 
 1. **启动 / 回收**（`ensure` / `close` 的骨架）：✅ 有 CLI —— `hc run --bg <cmd>`、`hc kill <t>`、`hc ls --json`、`hc get <t>`、`hc read <t>`；跨机还有 `--on <machine>`。
-2. **放置（space = 仓 / tab = 任务）**：⚠️ **无 CLI**。桌面版的 space/tab 由 `~/.config/herdr-app/layouts/*.json` 与 `mods/*.js` 决定 ⇒ 要么**生成/增量改 layout JSON**，要么写一个 **mod**（JS，`herdr.d.ts` 有完整类型）。这是本方案唯一需要设计的地方，也是风险集中点（schema 非公开契约、app 升级可能改）。
+2. **放置（space = 仓 / tab = 任务）**：✅ **有 CLI，走「标签收养」，不用写 layout 也不用写 mod**（**2026-11-23 实测订正，原文「无 CLI」是错判**）。
+   - 依据 = 桌面版自带 `AGENTS.md`「The model: spaces, tabs, terminals」：每个终端是 core 终端，**只要带上 `herdr.space=<id>` 与 `herdr.tab=<id>` 两个 label 就会出现在对应 space/tab 里**（`hc run --keep --label herdr.space=… --label herdr.tab=… -- <cmd>`）；**未知 id 会自动新建 space/tab**（名字按首终端 cwd 起，可 rename）。
+   - 实测验（2026-11-23，本机）：① `hc run --bg --keep --pi --name probe` ⇒ 终端 `t4`，`hc get --json` 读到 `status={"app":"pi","state":"idle"}`（OSC 7501）② 带目标 space/tab label 起终端 ⇒ `hc ls --json` 的 `where` = `nao-skills / 1`（**真的落到已有 space/tab**）③ 用一个未知 id ⇒ 新 space 出现，`where` = `tmp / 1`。三个探针终端已 kill + rm，无残留。
+   - 仍需设计的是**「该仓的 space id 从哪来」**（读该 cwd 终端的 label / 首个终端定名规则 / rename 时机），不是「能不能放」。剩余风险 = schema 与 label 契约非公开稳定 API ⇒ 需能力探测 + fail loud。
 3. **命名与身份**：✅ 正好对味 —— app 的官方模型就是「**space per repo · tab per task**」，与 v0.27.0 的「1 workspace = 1 仓 = 1 pm」同构；`hc label <t> k=v` 可挂我们的身份标签。
 
 ## 四、可选路线（供立项时选）
