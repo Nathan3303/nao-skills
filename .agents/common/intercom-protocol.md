@@ -8,12 +8,12 @@ description: pi-intercom 多会话协作协议（常驻引用）
 
 - **上下文分层与优先级**：`AGENTS.md`（项目级，PM 维护）**优先** → 本文件/roles.yaml（团队级）→ 角色卡（角色级）→ 技能（按需）。AGENTS.md 已由 pi 自动注入上下文，**所有角色必须遵循其中项目约束**（命令纪律/领域红线/机制衔接）；各层只写自己的内容，不互相复制。
 - 会话由 `nao-fleet.sh` 以 `--name <别名>` 拉起，角色卡经 `--append-system-prompt` 启动期注入。
-- **会话名 = `<role>[-<task>]@<fleet>`**（如 `rd-be@api` / `rd-be-T1@api`）：fleet 末位、`@` 分隔、**恒非空**（默认 = 目标仓 slug；`--fleet` 或 `<仓>/.agents/fleet-scope` 覆盖）；名字是**路由标签，不是身份证明**。同一 herdr session 内多仓并行**无需任何配置**：每仓 `ensure` 自动带各自 slug，放置键与名字 scope 同源（1 仓 1 workspace）。只有两仓**同 `--fleet`** 时同 core 才会 fail loud 并列候选。`status` 从名字 parse fleet（不读文件）；`close` 裸名按「带 fleet 候选 → 同仓 legacy 裸名 → 全 session 唯一同 core → 否则拒绝列候选」解析，全名 `…@<fleet>` 忽略文件。口头寻址优先用全名，跨仓时尤其如此。细节见 `docs/INSTALL.md`「会话命名与多仓舰队」。
+- **会话名 = `<role>[<N>](<task>)`**（v2 舰队模型 · ADR `2026-11-20-workspace-as-binding-unit`）：常驻形 `<role>[<N>]`（`pm` · `qa2`），派生形 `<role>[<N>](<task>)`（`rd-infra(T557)` · `qa2(T558)`）；N 空 = 槽位 1，同 workspace 内重名自动加数字（N>9 fail loud）；**名字不含位置**，绑定单位 = herdr **workspace**（1 仓 1 workspace）。⇒ **同名是机制使然**（每仓一个 `pm`），不是异常；**跨仓寻址一律用会话 id**（口径单源 @.agents/skills/pm-operations.md §一「投递寻址」，此处不复述）。旧形的 `@` 位置段（v1；在场遗留的 v1 会话名字含 `@`）已退场：旧会话只读、仍可被 `status` 识别，但**新会话不再产生**、`@` 形**不作准**；**`send`/`handover` 会把含 `@` 的 `to` 当跨机地址 ⇒ 本机不可达**，故投递一律用会话 id（`--fleet` / `--scope` / `.agents/fleet-scope` 已弃用：给参只 warn、放置键恒为仓基键）。
 - **角色 id / 别名 / 卡片映射以 `.agents/roles.yaml` 为唯一事实来源**（下表为当前快照，改动先改 roles.yaml）。
 - 被点名先回执：`已按 <role> 角色执行`。
 - 仅当消息明确要求、且确认未注入时，才自行读取 `@.agents/prompts/<role>.md`（跨仓库会话用启动期注入的环境锚点绝对路径）。
 
-## 别名与工作区（fleet.sh，以 .agents/roles.yaml 为准）
+## 别名与工作区（nao-fleet.sh，以 .agents/roles.yaml 为准）
 
 | 别名 | 角色卡 | 默认工作区 |
 | :--- | :--- | :--- |
@@ -21,18 +21,18 @@ description: pi-intercom 多会话协作协议（常驻引用）
 | `arch` / `arch-designer`（同义） | architecture-designer | 当前项目目录 |
 | `uiux` / `ui-designer`（同义） | uiux-designer | 当前项目目录 |
 | `rd-fe` | frontend-developer | 当前项目目录 |
-| `rd-be` | backend-developer | 前后端分离时显式 `rd-be@<repo>` |
+| `rd-be` | backend-developer | 前后端分离时显式 `rd-be@<repo>`（`@<repo>` = 目标仓 code，**不进会话名**） |
 | `infra` / `rd-infra`（同义） | infra-engineer | 当前项目目录 |
 | `qa` | test-engineer | 当前项目目录 |
 
-拉起：`bash .agents/scripts/nao-fleet.sh ensure <别名>[@<repo>]`
+拉起：`bash .agents/scripts/nao-fleet.sh ensure <别名>[@<repo>]`（`@<repo>` 只选目标仓，不进名字；显式槽位写成 `<role>2`…`<role>9`）
 
-- **任务派生**：`ensure --task <编号> <别名>[@<repo>]` 创建 `<角色>-<编号>` 独立会话（如 `rd-be-T1`），并行隔离、互不排队/打断，避免多任务同名冲突；任务闭环即**回收**：`nao-fleet.sh close --task <编号> <别名>`（内置在跑 turn / tasks-state 闸门）。
-- **按需角色会话（`ensure --card`，T537）不入上表**：卡来自**下游项目仓** `.agents/prompts/<role>.md`，会话名 `<role>@<fleet>` / `<role>-<编号>@<fleet>`，属**派生/一次性**语义 —— `status` 在派生节标注「一次性会话 · 下游卡」，`close` 回收时**不弹常驻警告**、且跳过 `tasks-state` active 闸门（在跑 turn 闸门不放宽）。它们不登记 `roles.yaml`，故**不在本表内**；卡即系统提示（完全可信输入），命名与目录约束见 `nao-fleet.sh --help` 与 `README.md`「按需角色会话」一节。
+- **任务派生**：`ensure --task <编号> <别名>[@<repo>]` 创建 `<role>(<任务>)` 独立会话（如 `rd-infra(T557)`；角色槽位已占则自动 `<role>2(<任务>)`），并行隔离、互不排队/打断，避免多任务同名冲突；任务闭环即**回收**：`nao-fleet.sh close --task <编号> <别名>`（内置在跑 turn / tasks-state 闸门）。
+- **按需角色会话（`ensure --card`，T537）不入上表**：卡来自**下游项目仓** `.agents/prompts/<role>.md`，会话名 `<role>(<任务>)` / `<role><N>(<任务>)`（无 `--task` 时为 `<role>` / `<role><N>`；`--as <名字>` 可自定义 core，须保留卡 role 前缀、禁括号），属**派生/一次性**语义 —— `status` 在派生节标注「一次性会话 · 下游卡」，`close` 回收时**不弹常驻警告**、且跳过 `tasks-state` active 闸门（在跑 turn 闸门不放宽）。它们不登记 `roles.yaml`，故**不在本表内**；卡即系统提示（完全可信输入），命名与目录约束见 `nao-fleet.sh --help` 与 `README.md`「按需角色会话」一节。
 - **子代理会话不属舰队会话身份模型**：由 pi-subagents 拉起的子代理会话以 `subagent-<agent>-<id>`（无名时 `subagent-chat-<id>`）进入 intercom 名册，但**不属**舰队会话 —— `status` 只对其汇总计数（不列名、不参与在线/turn 判重），`close subagent-*` 显式拒绝（生命周期归 pi-subagents 的 stop/retention，nao 不接管）。
 
 - **判重 / 在线判定**：全部取 herdr **结构化事实** —— 身份 = `pane.label`（+ argv `--name` 交叉校验）、归属 = `pane.cwd` / `foreground_cwd`、忙闲 = `agent_status` + `state_change_seq`（权威源 `pane list` / `agent list`）。**不读终端标题**，也**不把宿主终端句柄当证据**（从 tmux shell 起的 herdr server 会把外层句柄渗进 pane）。名册（`intercom-probe.mts`，含 `tmuxPane` 字段）只作 `status -v` 的诊断差异信号。已运行 ⇒ 跳过并 warn；确需重开加 `--force`。`close` 的在跑 turn 判定叠加名册活动状态（thinking / tool:* 等）。
-- **运行前提（仅 pi · 默认后端 = herdr，且 herdr 是唯一后端；ADR `2026-11-22-herdr-only` supersede `2026-10-27-strict-tmux-pi`，pi ≥ 1.4.0 与 `exit 3` 语义不变）**：`NAO_TERMINAL` 未设/空串 ⇒ **herdr**（须在 herdr pane 内、`HERDR_SESSION` 有效、protocol 22）；**其他任何值（含旧回退值 tmux）⇒ stderr 1 行 + `exit 2`（命令未执行）**。前提不满足 ⇒ `exit 3`（命令未执行）+ 单行提示，**不建 session/pane/lock、不写状态**。`cleanup` 豁免（拆场是外部动作，`cleanup --session <名>`；旧 `-S` ⇒ `exit 2` 指路）。拉起落点 = 1 workspace/仓 + 1 tab/角色（放置键与 fleet 规则见 ADR `2026-11-17-fleet-identity-source`），**失败不假成功**（打印「已拉起」前必先校验 pane 句柄）。完整前提链 / 安装 / 空间判据见 `README.md`「前置环境」与 `docs/INSTALL.md`「herdr 后端」，**此处不复制**。
+- **运行前提（仅 pi · 默认后端 = herdr，且 herdr 是唯一后端；ADR `2026-11-22-herdr-only` supersede `2026-10-27-strict-tmux-pi`，pi ≥ 1.4.0 与 `exit 3` 语义不变）**：`NAO_TERMINAL` 未设/空串 ⇒ **herdr**（须在 herdr pane 内、`HERDR_SESSION` 有效、protocol 22）；**其他任何值（含旧回退值 tmux）⇒ stderr 1 行 + `exit 2`（命令未执行）**。前提不满足 ⇒ `exit 3`（命令未执行）+ 单行提示，**不建 session/pane/lock、不写状态**。`cleanup` 豁免（拆场是外部动作，`cleanup --session <名>`；旧 `-S` ⇒ `exit 2` 指路）。拉起落点 = 1 workspace/仓 + 1 tab/角色（**放置键 = 仓基键、名字不含位置**，见 ADR `2026-11-20-workspace-as-binding-unit`），**失败不假成功**（打印「已拉起」前必先校验 pane 句柄）。完整前提链 / 安装 / 空间判据见 `README.md`「前置环境」与 `docs/INSTALL.md`「herdr 后端」，**此处不复制**。
 - **模型规则**：用户未指定则**禁止传 `--model`**，也禁止继承 PM 自身模型。
   显式指定时由 `NAO_MODEL_WHITELIST` 在**命令行入口解析阶段**即校验，
   不命中直接 `die`，无部分拉起；PM 只需如实转达用户 `-m` 指定。
@@ -80,12 +80,12 @@ bash .agents/scripts/nao-fleet.sh check
 - **离线检测与恢复**：`list` 发现已派发目标从在线变离线（会话死亡/关闭）→ 任务标记「挂起（离线）」入 tasks-state → `ensure --force` 重拉该角色 → `send` 询问进度或按挂起快照重派。
 - **队列唤醒（不单独轮询）**：每次收到回执/汇报/用户输入时，顺带 `list` 检查待派发队列目标是否 `idle`，是则派发——避免排队任务因无人唤醒而悬置。
 - **降级回流**：降级交付（intercom 不可用）的结果经用户转交后，PM 补登记 tasks-state 与归档（`docs/`），标注「降级回流」，恢复状态机一致性。
-- **单 PM 纪律**：同一项目同一时刻**仅一个 PM 调度会话**（fleet 按会话名 `pm@<fleet>` 判重；默认 tier 下同仓 legacy 裸名 `pm` 视为同一会话；手动会话请用别名 `pm`），避免双头调度互相覆盖 tasks-state。
+- **单 PM 纪律**：同一项目同一时刻**仅一个 PM 调度会话**（判重 = 目标 workspace 内 pane label 的 core `pm` 在线 ⇒ `ensure` 跳过并 warn；`pm2` 是**另一个槽位的另一个 PM**，不是替身，别两处同时调度），避免双头调度互相覆盖 tasks-state。
 
 ## 终态回执（硬性闸门，所有角色适用）
 
 - **两级回执**（模板见 @.agents/checklists/comm-templates.md，回执前读取）：默认 `done(lite)` 单行（含门禁精确数字）；**出现阻塞/风险/需决策或 PM 指定时用 `done(full)`**。前缀 `[编号] done` 不变（PM 追讨/红线均按 `done` 匹配）。
-- 每次派发的任务（含架构评审）**必须以终态回执结束**：按 @.agents/checklists/comm-templates.md `[编号] done(lite|full) | <role>`，经 intercom `send` 回 PM。
+- 每次派发的任务（含架构评审）**必须以终态回执结束**：按 @.agents/checklists/comm-templates.md `[编号] done(lite|full) | <role>`，经 intercom `send` 回**派单方会话** —— `to` 用**会话 id**（或 `to` + `cwd`），**禁裸名**；寻址规则单源见 @.agents/skills/pm-operations.md §一「投递寻址」。
 - **回执 = 已核对清单**：回执须声明已读 `checklists/<role>.md` 并逐项核对（未过项必须列出）；未核对不回执。
 - **回执「测试」字段 = 全量门禁精确数字（硬性）**：必须给 `命令 + exit code + 文件数/例数/红数（或错误数）`，并含**三件套**（口径单源见 @.agents/common/output-format.md「回执硬性」第 3 条，本处不复写；可复制形态见 @.agents/checklists/comm-templates.md）；**只跑子目录、或只写「pass」不算回执** → PM 打回。**跑子目录不算验收**：全范围口径见项目 `AGENTS.md`。
 - 短消息（≤150 字摘要 + 结论/决策点 + 详情落盘路径）；**禁止**把长报告全文 `send` 污染线程（output-format「反模式」）。
@@ -104,7 +104,7 @@ bash .agents/scripts/nao-fleet.sh check
 
 - **system prompt 稳定 = 前缀缓存命中**（命中按 cacheRead 计费，约全价 1/10）：改卡要**批量一次到位**，避免频繁改导致全部会话缓存失效；易变内容（任务/进度）放消息体，不进卡片。
 - 红线/检查清单/速查表已按需化到 `@.agents/checklists/<role>.md`，**只在交付/评审前读取**，不要日常轮次主动展开。
-- **上下文生命周期**：worker **任务闭环即重开会话**（`fleet.sh ensure --force <role>`）优于等自动压缩（压缩要花 token 重写且丢细节）；**PM 是唯一常驻长寿会话**，改按批次边界重开，见下「会话生命周期」。
+- **上下文生命周期**：worker **任务闭环即重开会话**（`nao-fleet.sh ensure --force <role>`）优于等自动压缩（压缩要花 token 重写且丢细节）；**PM 是唯一常驻长寿会话**，改按批次边界重开，见下「会话生命周期」。
 - **会话体检（可回归）**：每次归档后在归档文件「派发记录」记一行 `contextTokens / 压缩次数 / cacheRead 占比`（`/session`）——上下文纪律有数字才能判定何时该重开。
 - 观察：`showCacheMissNotices: true` + `cacheWarming: "idle"`，用 `/session` 看缓存命中/失效与成本。
 
