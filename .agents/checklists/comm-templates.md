@@ -10,7 +10,7 @@ description: 派发消息与回执模板（按需，派发/回执前读取）
 ## 派发消息（PM → worker）
 
 ```text
-[编号/主题] | to=<会话 id（list 括号内，≥8 位）或 list 完整名 + cwd> | role=<角色> | repo=<路径>
+[编号/主题] | to=<会话 id（list 括号内）或 list 完整名 + cwd> | role=<角色> | repo=<路径>
 范围：做 X；不做 Y
 引用：docs/...md#section（禁止贴全文）
 交付：<产物类型>；长文落盘路径
