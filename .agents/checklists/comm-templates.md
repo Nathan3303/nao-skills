@@ -10,7 +10,7 @@ description: 派发消息与回执模板（按需，派发/回执前读取）
 ## 派发消息（PM → worker）
 
 ```text
-[编号/主题] | to=<会话> | role=<角色> | repo=<路径>
+[编号/主题] | to=<会话 id（list 括号内）或 list 完整名 + cwd> | role=<角色> | repo=<路径>
 范围：做 X；不做 Y
 引用：docs/...md#section（禁止贴全文）
 交付：<产物类型>；长文落盘路径
@@ -23,15 +23,18 @@ description: 派发消息与回执模板（按需，派发/回执前读取）
 ```
 
 > 三段缺任一段 ⇒ worker 可回 `ask` 要求补齐，QA 按「可执行性」判不合格（依据：`#84` P1 / `#86` P1 / `#86` P3-1 / `#88` P3-③）。
+> **`to=` 只写形态，不写裸名**：`to=<会话 id>` 或 `to=<list 完整名> cwd=<路径>` 同给；寻址规则单源见 @.agents/skills/pm-operations.md §一「投递寻址」。
+> **正文 `to=` 必须与工具参数 `to` 同值**：只改正文不改参数 = 误投 —— 路由事实在调用参数里（`intercom({ to })`），正文只是自述，故「对」与「写到」是两件事，改时两处一起改。
 > **开工确认卡追加一问**（派发前 PM → 用户）：`设计稿验收模型：用户本人 / 托管给 PM`（设计类任务必答、非设计类写「不适用」；**不答 = 用户本人确认**；闸门见 @.agents/prompts/product-manager.md §六，卡形态见 @.agents/skills/pm-operations.md §二）。
 
 ## 回执 done(lite)：默认（无阻塞、无风险的常规任务，单行）
 
 ```text
-[编号] done(lite) | <role> | 清单：未过<项 或 无> | 测试：HEAD=<跑门禁时短 sha> · 工作区=<静默|非静默(原因)> · <命令> exit=<n> <文件数>/<例数>/<红数>（每个计数数字后跟「命令 → 输出」） | 变更：<f1,f2（>3 个写前 3 + "等 N 个"）> | 遗留：<无 | n 项 → 台账|tasks-state|Issue|接受(到期)> | commit=<交付提交短 hash，≠ 门禁 HEAD；无则 —> | 详情：docs/reports/<编号>.md
+[编号] done(lite) | <role> | to=<会话 id 或 list 完整名+cwd> | 清单：未过<项 或 无> | 测试：HEAD=<跑门禁时短 sha> · 工作区=<静默|非静默(原因)> · <命令> exit=<n> <文件数>/<例数>/<红数>（每个计数数字后跟「命令 → 输出」） | 变更：<f1,f2（>3 个写前 3 + "等 N 个"）> | 遗留：<无 | n 项 → 台账|tasks-state|Issue|接受(到期)> | commit=<交付提交短 hash，≠ 门禁 HEAD；无则 —> | 详情：docs/reports/<编号>.md
 ```
 
 > `commit=`（仅 git 流程任务）：work 分支最新提交短 hash，便于 PM 核对归因（commit.md 约定）；无 push/纯文档任务写 `commit=—`。
+> 两档回执的 `to=` 同派发模板形态（id 或 list 完整名+cwd），**禁裸名**。
 > `遗留：` 取值枚举 `无 | <n> 项 → <台账|tasks-state|Issue|接受(到期)>`；零遗留写 `无`，禁省略字段（三出口定义见 @.agents/skills/task-completion.md §四）。
 > **`测试：` 段三件套口径单源见 @.agents/common/output-format.md「回执硬性」第 3 条** —— 本文件只给可复制形态，**不复写三件套全文**（PM / QA / RD 三侧同源）。
 > **`HEAD=` ≠ `commit=`**：前者 = **跑门禁时**的 HEAD（数字的归属），后者 = **交付提交**（归因）；门禁后又补提交时两者必然不同 —— 混用即「同一命令两种结论」的根源。
@@ -39,7 +42,7 @@ description: 派发消息与回执模板（按需，派发/回执前读取）
 ## 回执 done(full)：出现阻塞/风险/需决策，或 PM 指定
 
 ```text
-[编号] done(full) | <role>
+[编号] done(full) | <role> | to=<会话 id 或 list 完整名+cwd>
 摘要：≤150字
 清单：已核对 checklists/<role>.md；未过：<项 或 无>
 变更：<文件/模块级>
