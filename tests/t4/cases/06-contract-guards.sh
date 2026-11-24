@@ -1110,9 +1110,9 @@ t4_assert_eq "$(sed -n '/^CASE_IDS=(/,/)/p' "$T4_ROOT/tests/t4/run.sh" | grep -o
 t4_assert_eq "$(sed -n '/^CASE_IDS=(/,/)/p' "$T4_ROOT/tests/t4/run.sh" | grep -oE '"[0-9]+"' | tail -1 | tr -d '"')" \
   "$(ls -1 "$CASES_DIR"/*.sh | tail -1 | sed -E 's#.*/([0-9]+)-.*#\1#')" \
   "P2③ 最大用例编号 = run.sh CASE_IDS 末位（退役编号不复用）"
-t4_assert_eq "06-contract-guards.sh 28-naming-contract.sh 44-app-backend.sh" \
+t4_assert_eq "06-contract-guards.sh 28-naming-contract.sh 44-app-backend.sh 45-app-placement.sh" \
   "$(grep -l 'default-value-probe BEGIN' "$CASES_DIR"/*.sh | while IFS= read -r f; do basename "$f"; done | sort | paste -sd' ' -)" \
-  "P2③ 默认值探针块白名单 = 显式文件清单（06 默认值段 · 28 B1① 反向断言 · 44 AC1「默认=herdr」反向断言；新增须显式改本断言，不靠计数漂移）"
+  "P2③ 默认值探针块白名单 = 显式文件清单（06 默认值段 · 28 B1① 反向断言 · 44 AC1「默认=herdr」反向断言 · 45 #175 AC4「app 终端内未设 NAO_TERMINAL」；新增须显式改本断言，不靠计数漂移）"
 # 负控：块外注入 unset ⇒ 必被扫到（并点名行号与形态）
 #   注：本段用 printf **构造**违规样本（不是执行默认值探针）；构造串里必然出现被扫关键字，
 #   故一并包在标记块内（否则用例 06 会「自我举报」—— 判据只白名单标记块内文本）。
