@@ -9,7 +9,10 @@
 #
 # 判据（三档）：
 #   ① 红态（seq=0）：`ensure` 超时 ⇒ 逐条点名「state_change_seq ≥ 1」缺失；无假成功行；摘要计失败；
-#      **rc 仍 0**（PM 裁定 D3：跨后端 rc 语义一致，失败只进计数）。
+#      **rc=1**：就绪超时计入 SPAWN_FAIL ⇒ 单角色 ensure 即「全败」⇒ 对调用方可见。
+#      （本行**取代 #96 B4 的 D3 裁定**「失败只进计数、rc 仍 0」——T563 AC5 重定为
+#       `SPAWN_OK==0 && SPAWN_FAIL>0 ⇒ rc=1`：摘要已说「失败 1」却回 rc=0 属内部自相矛盾。
+#       现行口径唯一事实源 = `.agents/scripts/nao-fleet.sh` 的 spawn 计划收尾段 + T563 报告。）
 #   ② 绿态（seq=1，同一夹具其余不变）：`ensure` 成功 ⇒ 有成功行、摘要成功 1 —— 证明①不是「恒定红」。
 #   ③ 静态面：就绪门**禁用** `agent wait`（PRD 附二硬判据）；且门是「全条件与」（七条逐条可点名）。
 #
@@ -52,7 +55,7 @@ launch_lines() { grep -cF -- '[herdr] 已拉起' <<< "$BE_OUT_ANSI" || true; }
 # ============================================================ ① 红态：已 idle 但 seq 从未前进
 set_knob pi_seq 0
 run_ensure "rd-fe@$LAB"
-t4_assert_eq "0" "$BE_RC" "① 就绪超时不该改 rc（PM 裁定 D3：跨后端 rc 语义一致）"
+t4_assert_eq "1" "$BE_RC" "① 就绪超时计入失败 ⇒ 单角色即全败 ⇒ rc=1（T563 AC5 取代 D3）"
 t4_assert_eq "0" "$(launch_lines)" "① 零假成功行（禁把「现在 idle」当就绪）"
 t4_assert_contains "$BE_ERR_ANSI" "就绪门超时" "① fail loud 点名「就绪门超时」"
 t4_assert_contains "$BE_ERR_ANSI" "state_change_seq ≥ 1" "① 逐条报缺点名「state_change_seq ≥ 1」"

@@ -1169,7 +1169,7 @@ t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=her
   "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 --force rd-fe2
 B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
 B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
-t4_assert_eq "1" "$T4_RC" "P2-1① 角色 tab 被占 + --force：ensure rc=1（T563/AC5 全败；失败只进计数）"
+t4_assert_eq "1" "$T4_RC" "P2-1① 角色 tab 被占 + --force：ensure rc=1（T563/AC5：全败 ⇒ rc=1）"
 t4_assert_contains "$B2_ERR" "角色 tab 已在场但无 pane 命中该角色" "P2-1① 新文案点名「角色 tab 已在场但无 pane 命中」"
 t4_assert_contains "$B2_ERR" '先回收该角色（nao-fleet.sh close rd-fe2(T1)）再重跑 ensure' \
   "P2-1① 指路 = 先 close 该角色再 ensure（不再说「新建 pane」）"

@@ -61,7 +61,7 @@ CASE_TITLES=(
   "真 pi 冒烟受限重试护栏（#86 A）：超时才重试 / 非超时失败不重试（按调用次数证）/ 无凭据不重试"
   "后端抽象层自检（#96 一期步 1）：两场隔离 / 零渗透 / 拆场幂等 / 零残留 / default 不可达 + 护栏变异自证"
   "舰队命名契约（BR8 · #96 步 2a + T547）：C1 codec + M1–M5 负控 / herdr golden + 默认值反向断言 + C3 单写点 lint（T555：tmux golden 组退役）"
-  "herdr 就绪门反假阳性（#96 B4）：已 idle 但 state_change_seq 不动 ⇒ 超时 fail loud（rc 仍 0）"
+  "herdr 就绪门反假阳性（#96 B4）：已 idle 但 state_change_seq 不动 ⇒ 超时 fail loud（全败 ⇒ rc=1）"
   "herdr 幽灵 pane（#96 B4）：label 在、agent 无 ⇒ 不判在线 / ensure 不判已在运行（复用重跑）"
   "herdr 集成缺失 fail loud（#96 B4）：agent_session 空 / 钩子权威缺 ⇒ 点名不可投递，不退化 idle"
   "真机整轮 herdr（#96 三期 P1 · AC3.5/AC3.1/AC3.2）：四件私有 env + 布局 A + 迁移无损 + 小空间 J1/J4"
