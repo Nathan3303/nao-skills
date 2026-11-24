@@ -25,6 +25,17 @@
 #     run_fail=1      run 返回 error（失败分支）
 #     send_fail=1     send 返回 error
 #     app_status_rc=N herdr-app status 的 rc（0=窗口在跑）
+#   —— T565 (#175 放置验证失败) 的收养时序 / 陈旧 id 面 ——
+#     adopt_delay=N   新建终端在 doc 里**尚未收养**：前 N 次 doc.get 只给 tab 不算终端（模拟真 app
+#                     的异步收养：厂方文档「acknowledge with `pending: true`, then apply after the
+#                     machine replies」）；N 用完 ⇒ 终端出现在 tab 的 root 树里（轮询可转绿）
+#     adopt_never=1   同上但**永不**完成（收养超时分支）
+#     stale_ids       每行一个 id（space 或 tab）。run 时若请求的 space/tab 在此名单 ⇒ app 视为
+#                     「重启后已失效的 id」：忽略请求 id，落到该 cwd 的 app 自有 space（无则新建
+#                     `spapp<N>` + `tbapp<N>`）。终端记的 labels = **实际** id（真 app 的行为）
+#                     ⇒ 请求的 space/tab 不在 doc 里 = 复现「终端不在目标 tab 的 root 树里」
+#     space_refuse=1  忽略一切放置标签（= 请求的 id 全被 app 换成自己的）：造「目标 space 永不存在」
+#   契约边界：替身只模拟**观测面**（doc/labels/时序），真 app 的 UI 效果仍归人工验收。
 set -uo pipefail
 
 ST="${HC_DOUBLE_STATE:-}"
@@ -136,15 +147,48 @@ case "$cmd" in
     # 硬护栏证据：--no-parent ⇒ parent 空；缺它且停在终端内（HC_TERMINAL_ID 有值）⇒ 记为子终端
     if [ "$noparent" = "1" ]; then _put "$a" parent ""; else _put "$a" parent "${HC_TERMINAL_ID:-}"; fi
     _put "$a" keep "$keep"
+    # 放置标签（T565）：先取请求值；再按「app 是否还认得这些 id」决定实际落点。
+    #   真 app 的契约（厂方内嵌文档）：标签里的 id 它认识 ⇒ 收养进该 space/tab；不认识 ⇒ 自己新建 ——
+    #   **但它新建的 id 是它自己的**（本替身用 spapp<N>/tbapp<N> 代表），请求的 id 就无处可去。
+    req_space=""; req_tab=""
     for kv in "${labels[@]:-}"; do
       [ -n "$kv" ] || continue
       k="${kv%%=*}"; v="${kv#*=}"
       case "$k" in
-        herdr.space) _put "$a" space "$v"; mkdir -p "$ST/spaces"; [ -f "$ST/spaces/$v" ] || printf '%s' "$cwd" > "$ST/spaces/$v" ;;
-        herdr.tab)   _put "$a" tab "$v" ;;
+        herdr.space) req_space="$v" ;;
+        herdr.tab)   req_tab="$v" ;;
         *)           printf 'HC-DOUBLE-VIOLATION: 未知 label %s\n' "$k" >&2; exit 9 ;;
       esac
     done
+    stale=0
+    if [ -f "$ST/space_refuse" ]; then stale=1; fi
+    if [ -f "$ST/stale_ids" ] && { [ -n "$req_space" ] || [ -n "$req_tab" ]; }; then
+      [ -n "$req_space" ] && grep -qxF -- "$req_space" "$ST/stale_ids" && stale=1
+      [ -n "$req_tab" ]   && grep -qxF -- "$req_tab"   "$ST/stale_ids" && stale=1
+    fi
+    mkdir -p "$ST/spaces"
+    if [ "$stale" = "0" ]; then
+      [ -z "$req_space" ] || { _put "$a" space "$req_space"; [ -f "$ST/spaces/$req_space" ] || printf '%s' "$cwd" > "$ST/spaces/$req_space"; }
+      [ -z "$req_tab" ]   || _put "$a" tab "$req_tab"
+    else
+      # 我（app）自己的 space：该 cwd 已在某个 space ⇒ 用它；否则新开 spapp<N>（tab 同理 tbapp<N>）
+      own=""
+      while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        [ "$(cat "$f")" = "$cwd" ] && { own="$(basename "$f")"; break; }
+      done < <(find "$ST/spaces" -mindepth 1 -maxdepth 1 -type f | sort)
+      if [ -z "$own" ]; then
+        n=1; while [ -f "$ST/spaces/spapp$n" ]; do n=$((n + 1)); done
+        own="spapp$n"; printf '%s' "$cwd" > "$ST/spaces/$own"
+      fi
+      n=1; while [ -f "$ST/tabs/tbapp$n" ]; do n=$((n + 1)); done
+      mkdir -p "$ST/tabs"; : > "$ST/tabs/tbapp$n"
+      _put "$a" space "$own"; _put "$a" tab "tbapp$n"
+    fi
+    # 异步收养（T565）：标签已写、app 还没把终端挂进 tab 的 root 树
+    delay="$(_cfg adopt_delay 0)"
+    if [ -f "$ST/adopt_never" ]; then _put "$a" adopt_pending -1
+    elif [ "$delay" != "0" ]; then _put "$a" adopt_pending "$delay"; fi
     # 状态机：默认立即上报 pi/idle（ready=never ⇒ 永不上报）
     if [ "$(_cfg ready yes)" != "never" ]; then
       _put "$a" app "$(_cfg status_app pi)"; _put "$a" stt "$(_cfg status_state idle)"; _put "$a" reported 1
@@ -183,6 +227,20 @@ case "$cmd" in
     if [ "$ver" = "0" ]; then
       printf '{"jsonrpc":"2.0","id":1,"result":{"value":null,"version":0}}\n'; exit 0
     fi
+    # 异步收养计数（T565）：每次 doc.get 前把 adopt_pending 减 1（-1 = 永不完成）
+    while IFS= read -r pd; do
+      [ -n "$pd" ] || continue
+      n="$(cat "$pd" 2>/dev/null || printf '0')"
+      case "$n" in -1|0|"") : ;; *) n=$((n - 1)); printf '%s' "$n" > "$pd" ;; esac
+    done < <(find "$ST/t" -mindepth 2 -maxdepth 2 -name adopt_pending 2>/dev/null | sort)
+    _adopt_pending() { # <addr> → 0 已收养 / 1 还未收养（tab 已建、终端未挂进 root 树）
+      local f="$ST/t/$1/adopt_pending" n
+      [ -f "$f" ] || return 0
+      n="$(cat "$f" 2>/dev/null || printf '0')"
+      [ "$n" = "-1" ] && return 1
+      [ "${n:-0}" -gt 0 ] && return 1
+      return 0
+    }
     printf '{"jsonrpc":"2.0","id":1,"result":{"value":{"spaces":['
     firstsp=1
     while IFS= read -r d; do
@@ -204,10 +262,17 @@ $hide
 $ta
 "*) continue ;; esac
         tb="$(_field "$ta" tab)"
+        [ -n "$tb" ] || continue
         [ "$firsttb" = "1" ] || printf ','
         firsttb=0
-        printf '{"id":"%s","name":"%s","root":{"content":{"terminal":"%s"}}}' \
-          "$(_esc "$tb")" "$(_esc "$(_field "$ta" name)")" "$ta"
+        if _adopt_pending "$ta"; then
+          printf '{"id":"%s","name":"%s","root":{"content":{"terminal":"%s"}}}' \
+            "$(_esc "$tb")" "$(_esc "$(_field "$ta" name)")" "$ta"
+        else
+          # 标签已写、app 还没把终端挂进该 tab 的 root 树（真 app 的 pending 收养）：tab 在、终端不在
+          printf '{"id":"%s","name":"%s","root":{}}' \
+            "$(_esc "$tb")" "$(_esc "$(_field "$ta" name)")"
+        fi
       done < <(find "$ST/t" -mindepth 1 -maxdepth 1 -type d | sort -V)
       printf ']}'
     done < <(find "$ST/spaces" -mindepth 1 -maxdepth 1 -type f | sort)

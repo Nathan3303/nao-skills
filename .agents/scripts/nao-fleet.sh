@@ -348,7 +348,7 @@ term_session_name() { if _term_app_backend; then printf '%s\n' "${HC_SCOPE:-}"; 
 term_place_prime() {  # → 0 已建快照 / 1 不可用
   if _term_app_backend; then _term_app_place_prime; else _term_herdr_place_prime; fi
 }
-term_place_reset() { _TERM_PLACE_CACHE=0; _TERM_PLACE_WS_BY_LABEL=(); _TERM_PLACE_WS_ROWS=(); _TERM_PLACE_PANE_ROWS=(); _TERM_APP_GHOST_TABS=(); }
+term_place_reset() { _TERM_PLACE_CACHE=0; _TERM_PLACE_WS_BY_LABEL=(); _TERM_PLACE_WS_ROWS=(); _TERM_PLACE_PANE_ROWS=(); _TERM_APP_GHOST_TABS=(); _TERM_APP_DOC_SPACES=(); _TERM_APP_STALE_SPACES=(); }
 
 # ---- 状态页的 workspace/space 标签表（每行 "<id>\t<label>"）----
 term_ws_label_rows() {
@@ -1599,8 +1599,10 @@ _term_herdr_session_start() {  # <session>
 #   连接：**唯一入口 `_term_app_exec`** —— 注入 `HC_SOCKET=$HC_TERMINAL_SOCKET`
 #         （`HC_TERMINAL_SOCKET` 不参与路由；`HC_SESSION` 拼错会静默新建空 core ⇒ 不用它路由）。
 #   失败判据：**JSON `error` 字段**，不看 rc（实测 `hc get` 无目标 rc=3 而 `hc get` 缺参 rc=0）。
-#   放置：写标签 `herdr.space`/`herdr.tab` → **读 `doc.get herdr-app` 验证终端是否在该 tab 的 root 树**
-#         → 不成则 kill+rm 回滚 + fail loud。`hc ls` 的 `where` 只是展示 label，**不进断言**。
+#   放置：写标签 `herdr.space`/`herdr.tab` → **轮询读 `doc.get herdr-app` 验证终端是否在该 tab 的 root 树**
+#         （T565：收养是异步的，立刻读 = 假失败）→ 不成则 kill+rm 回滚 + fail loud 并**分类报因**
+#         （目标 space/tab 不存在 vs 收养超时）。放置前先校验目标 space 仍在 doc 里（陈旧 id 不沿用）。
+#         `hc ls` 的 `where` 只是展示 label，**不进断言**。
 #   忙闲：`status.app` + `status.state`（working/blocked = 忙；idle/done = 可投递；缺失 = unknown）；
 #         **无 `state_change_seq` 等价物** ⇒ 快照 seq 位恒 `-`，判据不依赖它。
 #   生命周期：`hc run --bg --no-parent --keep`（`--no-parent` 必须：否则父终端结束会带走子终端）；
@@ -1613,8 +1615,26 @@ TERM_APP_SCHEMA_MIN="1"
 TERM_APP_DOC_MIN="10"
 TERM_APP_LABEL_SPACE="herdr.space"
 TERM_APP_LABEL_TAB="herdr.tab"
+# 收养轮询（T565/#175 · AC2）：app 的收养是**异步**的 —— 厂方内嵌文档原文：
+#   「acknowledge with `pending: true`, then apply after the machine replies」
+#   ⇒ 写完标签**立刻**读 doc 必然假失败（用户实机：t10 不在目标 tab 的 root 树里 ⇒ 回滚）。
+#   默认 10 次 × 0.5s（上限 5s，不阻塞交互感）；可用 NAO_APP_ADOPT_TRIES / NAO_APP_ADOPT_INTERVAL 覆盖。
+#   轮询期间**不重复起终端**（只读 doc；run 只发一次 —— 用例按 hc run 调用次数打钉）。
+TERM_APP_ADOPT_TRIES="${NAO_APP_ADOPT_TRIES:-10}"
+TERM_APP_ADOPT_INTERVAL="${NAO_APP_ADOPT_INTERVAL:-0.5}"
+
+# 放置快照的 doc 权威集（AC1/T565）：doc 里的 space id + 被判为陈旧（不在 doc）的 space id —— prime 里重建。
+declare -A _TERM_APP_DOC_SPACES=()
+_TERM_APP_STALE_SPACES=()
+_TERM_VERIFY_STATE=""        # ok | no-space | no-tab | no-term | doc-fail（给分类报因）
+_TERM_VERIFY_ATTEMPTS=0      # 实际读回次数（报错带参，不靠猜测）
+_TERM_VERIFY_INTERVAL=""     # 规范化后的轮询间隔（非法值回落 0.5 后的**实际**值）
 
 _term_app_backend() { [[ "${NAO_TERMINAL:-}" == "app" ]]; }
+
+# 是否在 desktop app 终端内（三件套任一在场）：check 的 app 端前提体检按此触发 ——
+#   用户实机就是「在 app 终端里跑 check，但 NAO_TERMINAL 未设」⇒ 端前提只校验了 pi 版本（#175 事实 3）。
+_term_app_context() { [[ -n "${HC_SCOPE:-}${HC_TERMINAL_ID:-}${HC_TERMINAL_SOCKET:-}" ]]; }
 
 # 唯一入口：所有 `hc` 调用经此处（静态闸 tests/t4/lib.sh::t4_scan_app_bare_hc 断言区间内裸调 = 0）
 _term_app_exec() {  # <hc 子命令…> → stdout（错误 JSON 也在合流输出里）；rc 原样透传
@@ -1881,34 +1901,56 @@ _term_app_argv() {  # <addr>
   printf '%s\t%s\n' "${nm:-?}" "$av"
 }
 
-# ---- 放置（M3/BR2）：文档优先发现 space，缺则确定性铸造 ----
+# ---- 放置（M3/BR2 + T565/AC1）：**doc 优先**发现 space；doc 里没有 ⇒ 交一个未知 id 让 app 自建 ----
 _term_sha256() {  # <串> → 64 位 hex（sha256sum / shasum -a 256 两制）
   if command -v sha256sum >/dev/null 2>&1; then printf '%s' "${1-}" | sha256sum | cut -d' ' -f1
   else printf '%s' "${1-}" | shasum -a 256 | cut -d' ' -f1; fi
 }
-_term_app_mint_space() {  # <repo> → sp<32hex>
-  printf 'sp%s\n' "$(_term_sha256 "$(_term_path_norm "${1-}")" | cut -c1-32)"
-}
-_term_app_mint_tab() {  # <space> <name> → tb<32hex>
+_term_app_mint_tab() {  # <space> <name> → tb<32hex>（确定性：同名同 space 不漂移）
   printf 'tb%s\n' "$(_term_sha256 "${1-}|${2-}" | cut -c1-32)"
+}
+# AC1 的新建 space id：**doc 里不可能有**（不沿用陈旧标签）。
+#   为什么不再用“hash(repo)”（T562 旧实现）：它跨 app 重启稳定 ⇒ 重启后拿到的仍是旧 id，
+#   而 AC1 要求“目标不在 doc ⇒ 用未知 id 交给 app 创建”（厂方文档：不认识的 id 由 app 新建）。
+_term_app_mint_fresh_space() {  # <repo> → sp<32hex>
+  local seed="${1-}|$$|${RANDOM:-0}|$(date +%s%N 2>/dev/null || date +%s)"
+  printf 'sp%s\n' "$(_term_sha256 "$seed" | cut -c1-32)"
+}
+# doc 成员判据（AC1/T565）：目标 space 是否仍在 app 当前布局里（陈旧 id ⇒ 不在）。
+#   注：tab 不单做前置校验 —— tab id 是 mint_tab(space, name) 现算的，只在 space 复用时才会撞旧 tab，
+#   而那种情况由下方“目标 tab 已有终端”闸门和写后验证（no-tab / no-term）承担。
+_term_app_doc_has_space() {  # <space_id> → 0 在 / 1 不在
+  [[ -n "${1-}" ]] || return 1
+  [[ -n "${_TERM_APP_DOC_SPACES[$1]:-}" ]]
 }
 
 _term_app_place_prime() {  # → 0 已建快照 / 1 后端不可用（fail loud 由调用方）
   local rows snap sid folder base cand nn kind a b c d
-  local -A sid_folder=() base_folder=() tab_of=()
+  local -A sid_folder=() base_folder=() tab_of=() stale_seen=()
   _TERM_PLACE_WS_BY_LABEL=(); _TERM_PLACE_WS_ROWS=(); _TERM_PLACE_PANE_ROWS=()
+  _TERM_APP_DOC_SPACES=(); _TERM_APP_STALE_SPACES=()
   rows="$(_term_app_doc_rows)" || return 1
   _term_app_doc_guard "$rows" || return 1
-  # ① space 发现：doc 的 folder 是权威（app 持久化）；doc 缺该 space 时才用终端 cwd 兜底
-  #    （M3「读该仓现有终端 label 取 space id」—— label 只存 id，folder 只有 doc 有）
+  # ① space 发现：**doc 是唯一权威**（app 持久化）——AC1/T565：标签里的 id 只是线索，
+  #    不在 doc 里（app 重启后 id 会变化）就不能当“该仓的 space”用。
   while IFS=$'\t' read -r kind a b c; do
     [[ "$kind" == "S" ]] || continue
-    [[ -n "$a" && -n "$b" ]] && sid_folder["$a"]="$b"
+    [[ -n "$a" ]] || continue
+    _TERM_APP_DOC_SPACES["$a"]=1
+    [[ -n "$b" ]] && sid_folder["$a"]="$b"
   done <<< "$rows"
   snap="$(_term_app_snapshot)" || return 1
   while IFS=$'\t' read -r label addr _tid cwd fgcwd _fg _st _seq _sess _av _hook sp; do
     [[ -n "$label" ]] || continue
-    if [[ -n "$sp" && -z "${sid_folder[$sp]:-}" && "$cwd" != "-" ]]; then sid_folder["$sp"]="$cwd"; fi
+    [[ -n "$sp" && "$sp" != "-" ]] || continue    # `-` = 快照里“该字段为空”的占位（非舰队终端/无标签）
+    _term_app_doc_has_space "$sp" && continue
+    # AC1：陈旧放置标签（space 不在 doc）——**不得**再拿它当 folder 兜底（旧实现会把它塞进
+    #   sid_folder ⇒ spawn 沿用旧 id ⇒ 请求的 id 在 app 侧无处可去 ⇒ #175 的假失败）。
+    #   一个陈旧 id 只喊一行（同一 id 可能被多个终端带着）。
+    [[ -n "${stale_seen[$sp]:-}" ]] && continue
+    stale_seen["$sp"]=1
+    _TERM_APP_STALE_SPACES+=("$sp")
+    warn "陈旧放置标签：终端 $addr 的 space=$sp 不在 app 布局文档里（app 重启后 space/tab id 会变化）⇒ 不沿用该 id"
   done <<< "$snap"
   # ② 让号 + label 映射（同基名不同 folder ⇒ base2..9，与 herdr 号段同口径）
   while IFS= read -r sid; do
@@ -1953,15 +1995,51 @@ _term_app_place_prime() {  # → 0 已建快照 / 1 后端不可用（fail loud 
   return 0
 }
 
-# 写后读 doc 验证：终端地址必须在目标 tab 的 root 树里（BR2；where 不参与）
-_term_app_verify_place() {  # <space> <tab> <addr>
-  local rows kind a b c d
-  rows="$(_term_app_doc_rows)" || return 1
+# 写后读 doc 验证：终端地址必须在目标 tab 的 root 树里（BR2；where 不参与）。
+#   AC3/T565：失败时把**成因**落进 _TERM_VERIFY_STATE（no-space / no-tab / no-term / doc-fail），
+#   供调用方分两句报错：“目标 space/tab 不存在（app 重启后 id 会变化）” vs “收养超时”。
+_term_app_verify_place() {  # <space> <tab> <addr> → 0 命中 / 1 未命中
+  local rows kind a b c d sp_seen=0 tab_seen=0
+  _TERM_VERIFY_STATE=""
+  rows="$(_term_app_doc_rows)" || { _TERM_VERIFY_STATE="doc-fail"; return 1; }
   while IFS=$'\t' read -r kind a b c d; do
     [[ "$kind" == "T" ]] || continue
-    [[ "$a" == "$1" && "$b" == "$2" ]] || continue
-    case ",${d}," in *",$3,"*) return 0 ;; esac
+    [[ "$a" == "$1" ]] || continue
+    sp_seen=1
+    [[ "$b" == "$2" ]] || continue
+    tab_seen=1
+    case ",${d}," in *",$3,"*) _TERM_VERIFY_STATE="ok"; return 0 ;; esac
   done <<< "$rows"
+  if (( ! sp_seen )); then _TERM_VERIFY_STATE="no-space"
+  elif (( ! tab_seen )); then _TERM_VERIFY_STATE="no-tab"
+  else _TERM_VERIFY_STATE="no-term"; fi
+  return 1
+}
+
+# 收养轮询（AC2/T565）：app 侧是异步收养（pending 后由 app 落库）⇒ **有限轮询**读 doc，
+#   超时才放弃；轮询期间**不重复起终端**（只读 doc + sleep）。参数校验失败 ⇒ 回落默认（不静默 0 轮）。
+_term_app_poll_place() {  # <space> <tab> <addr> → 0 已收养 / 1 未成（_TERM_VERIFY_STATE 给成因）
+  local sp="${1-}" tb="${2-}" addr="${3-}"
+  local tries="${TERM_APP_ADOPT_TRIES:-10}" intv="${TERM_APP_ADOPT_INTERVAL:-0.5}" i
+  if [[ ! "$tries" =~ ^[0-9]+$ ]]; then
+    warn "NAO_APP_ADOPT_TRIES=$tries 非法（需非负整数）⇒ 回落 10"
+    tries=10
+  fi
+  if [[ ! "$intv" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    warn "NAO_APP_ADOPT_INTERVAL=$intv 非法（需数字）⇒ 回落 0.5"
+    intv=0.5
+  fi
+  (( tries > 0 )) || tries=1        # 0 轮 = 根本不验，不允许（宁可变 1 轮）
+  _TERM_VERIFY_ATTEMPTS=0
+  _TERM_VERIFY_INTERVAL="$intv"
+  for (( i = 1; i <= tries; i++ )); do
+    _TERM_VERIFY_ATTEMPTS=$i
+    if _term_app_verify_place "$sp" "$tb" "$addr"; then
+      (( i > 1 )) && log "放置收养完成（第 $i 次读回；app 收养是异步的）：终端 $addr ⇒ space=$sp tab=$tb"
+      return 0
+    fi
+    (( i < tries )) && sleep "$intv"
+  done
   return 1
 }
 
@@ -1987,9 +2065,21 @@ _term_app_spawn() {  # <name> <inner> <repo> [force] <label> [group] → SPAWN_R
   if ! fleet_scope_problem "$label" >/dev/null; then
     warn "app spawn 的放置键不可用（label=$label；期望 ^[a-z0-9][a-z0-9_-]{0,15}$）"; return "$SPAWN_RC_FAIL"
   fi
-  # space：快照已含该仓现有 space ⇒ 复用其 id；否则确定性铸造（app 按标签自建）
+  # space（AC1/T565）：**只认 doc**（app 持久化是权威）。拿到的 id 若不在 doc 里（陈旧标签 /
+  #   app 重启后 id 变化）⇒ **禁沿用**（旧实现直接用它，app 不认识的 id 由 app 自己新建 ⇒ 请求的
+  #   space/tab 无处可去 ⇒ #175 的假失败）；改交一个 doc 未知的新 id 让 app 自建，并回写标签。
+  local sp_old=""
   if (( _TERM_PLACE_CACHE )); then sp="${_TERM_PLACE_WS_BY_LABEL[$label]:-}"; else sp=""; fi
-  [[ -n "$sp" ]] || sp="$(_term_app_mint_space "$repo")"
+  if ! _term_app_doc_has_space "$sp"; then
+    sp_old="$sp"
+    sp="$(_term_app_mint_fresh_space "$repo")"
+    if [[ -n "$sp_old" ]]; then
+      warn "目标 space 不在 app 布局文档里（陈旧 id / app 重启后 id 变化）⇒ 新建 space=$sp（不沿用 $sp_old）"
+    fi
+    # 本命令内同一放置键的后继角色共用这个新 space（不每次新起一个；仍不跨进程缓存）
+    _TERM_PLACE_WS_BY_LABEL["$label"]="$sp"
+    _TERM_APP_DOC_SPACES["$sp"]=1
+  fi
   tb="$(_term_app_mint_tab "$sp" "$name")"
   # keep 换壳残留：同 tab 的 finished 终端（pi 已退出、只剩 shell）⇒ 先回收再重建，
   #   否则一次退出会永久占住该 tab（准确报因：finished = 无 agent 在跑，回收不杀会话）。
@@ -2029,10 +2119,20 @@ _term_app_spawn() {  # <name> <inner> <repo> [force] <label> [group] → SPAWN_R
     warn "hc run 未返回终端地址（name=$name）：$(printf '%s' "$out" | head -c 200)"
     return "$SPAWN_RC_FAIL"
   fi
-  # BR2/AC4：写后读 doc 验证；不成 ⇒ 回滚自己刚建的终端 + fail loud（不留孤儿）
-  if ! _term_app_verify_place "$sp" "$tb" "$addr"; then
-    warn "放置验证失败：终端 $addr 不在目标 tab 的 root 树里（space=$sp tab=$tb）⇒ 回滚（kill → rm）"
-    warn "  该怎么办：确认 desktop app 窗口在跑且版本支持标签收养；回滚后不会留下孤儿终端"
+  # BR2/AC2/T565：写后**轮询**读 doc 验证（app 收养是异步的）；不成 ⇒ 按成因分两句报错
+  #   + 回滚自己刚建的终端 + fail loud（不留孤儿）。
+  if ! _term_app_poll_place "$sp" "$tb" "$addr"; then
+    case "${_TERM_VERIFY_STATE:-}" in
+      no-space)
+        warn "放置验证失败：目标 space 不存在（app 重启后 space/tab id 会变化）—— space=$sp tab=$tb；终端 $addr 不在该 space ⇒ 回滚（kill → rm）"
+        warn "  该怎么办：确认 desktop app 窗口在跑（本命令读不回该 space）；重跑 ensure 会按 app 当前布局新建 space" ;;
+      no-tab)
+        warn "放置验证失败：目标 tab 不存在（space=$sp 在 doc 里，tab=$tb 不在；app 可能把终端放进了别的 tab）—— 终端 $addr ⇒ 回滚（kill → rm）"
+        warn "  该怎么办：确认 desktop app 版本支持标签收养（doc version ≥ $TERM_APP_DOC_MIN）；回滚后不会留下孤儿终端" ;;
+      *)
+        warn "放置验证失败：收养超时（${_TERM_VERIFY_ATTEMPTS}×${_TERM_VERIFY_INTERVAL:-$TERM_APP_ADOPT_INTERVAL}s 内 doc 未见终端 $addr 在目标 tab 的 root 树里；space=$sp tab=$tb）⇒ 回滚（kill → rm）"
+        warn "  app 的放置是异步的（pending 后由 app 落库）：超时 = app 没认出这两个标签或窗口/版本不对；可用 NAO_APP_ADOPT_TRIES / NAO_APP_ADOPT_INTERVAL 放宽" ;;
+    esac
     _term_app_exec kill "$addr" >/dev/null 2>&1 || true
     _term_app_exec rm "$addr" >/dev/null 2>&1 || true
     return "$SPAWN_RC_FAIL"
@@ -2147,25 +2247,32 @@ _term_app_cleanup() {  # <session> [force]
   return 1
 }
 
-# 前提探测（check · M1）：只在 NAO_TERMINAL=app 时输出；不改变 TUI 用户的输出
-_term_app_check_premise() {  # → 0 齐备 / 1 缺项（打印 `  ! ` 行）
-  local bad=0 rows ver
+# 前提探测（check · M1 + T565/#175 AC4）：只在 app 后端或 app 终端内输出；
+#   **warn-only**：调用方一律 `|| true`（不计入 rc）—— 用户实机的真因常常就藏在这里，
+#   但 check 是静态体检，不能用 rc 把它变成阻塞（真正的阻塞由 ensure 侧 fail loud 自己承担）。
+#   覆盖项（AC4 点名的三项）：herdr-app 在 PATH + status rc=0 + doc 可读（另带 hc / doc 版本）。
+_term_app_check_premise() {  # → 0 齐备 / 1 有问题（打印 `  ! ` 行 + 一行“不计入 rc”）
+  local bad=0 rows ver hc_ok=0
   if ! command -v hc >/dev/null 2>&1; then
     printf '  ! app 后端：hc 不在 PATH（装 herdr desktop app CLI；不想用 app 后端请 unset NAO_TERMINAL）\n'
-    return 1
+    bad=1
+  else
+    hc_ok=1
   fi
   if ! command -v herdr-app >/dev/null 2>&1; then
     printf '  ! app 后端：herdr-app 不在 PATH（无法判断窗口状态）\n'; bad=1
   elif ! herdr-app status >/dev/null 2>&1; then
     printf '  ! app 后端：desktop app 窗口未在运行（ensure 会 exit 3：窗口关闭时终端不会被收养）\n'; bad=1
   fi
-  if command -v hc >/dev/null 2>&1; then
+  if (( hc_ok )); then
     if ! _term_app_exec schema >/dev/null 2>&1; then
       printf '  ! app 后端：hc schema 不可用（core/socket 异常；核对 desktop app 后重试）\n'; bad=1
     fi
   fi
   if [[ -n "${HC_TERMINAL_SOCKET:-}" ]]; then
-    if rows="$(_term_app_doc_rows 2>/dev/null)"; then
+    if (( ! hc_ok )); then
+      printf '  ! app 后端：布局文档不可读（缺 hc；doc.get 无法执行）\n'; bad=1
+    elif rows="$(_term_app_doc_rows 2>/dev/null)"; then
       ver="$(awk -F'\t' '$1=="V"{print $2; exit}' <<< "$rows")"
       if [[ -z "$ver" || "$ver" == "0" ]]; then
         printf '  ! app 后端：布局文档 value=null（窗口未开或版本过旧）\n'; bad=1
@@ -2179,6 +2286,7 @@ _term_app_check_premise() {  # → 0 齐备 / 1 缺项（打印 `  ! ` 行）
     printf '  · app 后端：当前不在 app 终端（三件套缺；ensure/status/close 需在 app 终端内运行）\n'
   fi
   (( bad == 0 )) && return 0
+  printf '  · 以上 app 端前提仅提示，**不计入 rc**（放置类动作会自行 fail loud；先打开窗口再重试）\n'
   return 1
 }
 
@@ -3707,7 +3815,9 @@ cmd_check() {
   if _term_app_backend; then
     echo "== 运行前提（端前提 = herdr desktop app 终端 + pi ≥$MIN_PI_VERSION；app 后端）=="
     echo '  · 生效后端 NAO_TERMINAL=app（第二后端；status/ensure/close/cleanup 走门面；core 由 desktop app 管理；session-start 不适用）'
-    _term_app_check_premise || rc=1
+    # T565/#175 AC4：app 端前提是 **warn-only**（`|| true`）—— 用户实机报阻碍时，这些提示是证据，
+    #   但不该把一个静态体检变成 rc 阻塞（需要阻塞的地方 ensure 自己 exit 3）。
+    _term_app_check_premise || true
   else
   echo "== 运行前提（端前提 = herdr pane + pi ≥$MIN_PI_VERSION；AC1/AC3）=="
   # rc 口径（P3-4 订正）：**缺 herdr 可执行文件** ⇒ rc=1（明确错配，不能装没看见）；
@@ -3735,6 +3845,12 @@ cmd_check() {
     fi
   else
     printf '  ✗ herdr 缺失（status 将 exit 3）—— 装 herdr ≥0.9.1 后重试\n'; rc=1
+  fi
+  # T565/#175 AC4：**在 app 终端内但 NAO_TERMINAL 未设**（用户实机形态）⇒ 也体检 app 端前提。
+  #   仍然 warn-only（`|| true`）且不谎报生效后端（生效后端仍是上面那行 herdr）。
+  if _term_app_context; then
+    echo "  · 检测到 herdr desktop app 终端（HC_* 三件套在场），但 NAO_TERMINAL 未设为 app ⇒ 以下 app 端前提仅供参考"
+    _term_app_check_premise || true
   fi
   fi
   local pi_cur
