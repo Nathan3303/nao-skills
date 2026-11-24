@@ -15,12 +15,18 @@
 #   ⑨ 两张卡已 bump（version/updated）+ 含指向 M1 的指针；`uiux-designer.md` ≤80 行；
 #      PM 卡含开工一问（不答 ⇒ 先灰模）（M2/M3）
 #   ⑩ `checklists/qa.md` 四项判据关键词在位；两份清单/技能只留指针（防双源，M4/M5）
+#   ⑪ §八 重构档入口三处**各自承重**（T564 / ADR 2026-11-24-design-skill-layering §四）：
+#      主入口锚点（rd-fe 卡按需技能块行首，仅留 §四 回声不算）· 节标题（指针目标存在）·
+#      节内条目数下限（整节被删/被掏空即红）。三条各咬一种变异，互不顶替。
 #
 # 负控（在 `$T4_CACHE_DIR` 的机制副本上做，不碰仓库工作区）：
 #   N1 删掉 §四（含黄金律）⇒ 必红并点名 §四（判据非空转）
 #   N2 把一条第三方特征串塞进 M1 ⇒ 版权闸必红
 #   N3 删掉 §三的「- **禁**」条 ⇒ 必红（QA 变异 A 的机械落点）
 #   N4 删掉 §六 的第 ④ 项 ⇒ 必红（四项少一即未过）
+#   N5 只删主入口指针（保留 §四 回声）⇒ 必红（旧判据在此形态下是绿的：QA M1b）
+#   N6 改 §八 标题（正文不动）⇒ 必红（旧判据在此形态下是绿的：QA M2）
+#   N7 整节删 §八 ⇒ 必红（旧判据在此形态下是绿的：QA M3）
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 
 DL_REL=".agents/skills/design-loop.md"
@@ -47,6 +53,7 @@ c42_section() {
 c42_scan() {
   local root="$1"
   local dl="$root/.agents/skills/design-loop.md" uiux="$root/$UIUX_REL" pm="$root/$PM_REL" qa="$root/$QA_REL"
+  local fe="$root/$FE_REL"
   local t n v u s3 s6
 
   if [ ! -f "$dl" ]; then printf '缺失: %s\n' "$DL_REL"; return 0; fi
@@ -116,11 +123,20 @@ c42_scan() {
   done
   grep -qF -- 'design-loop.md' "$root/$DESIGN_REL" || printf 'uiux-design.md 缺指向 design-loop.md 的指针（防双源）\n'
   grep -qF -- 'design-loop.md' "$root/$DOCS_REL" || printf 'deliverable-docs.md §九 缺指向 design-loop.md 的指针（防双源）\n'
+
+  # ⑪ §八 重构档入口（T564）—— 三条各自承重，禁「文件级 grep 到关键词」当判据：
+  #    变异 1 只删主入口留 §四 回声 / 变异 2 改标题 / 变异 3 整节删除，各至少被一条咬住。
+  grep -qE '^> @\.agents/skills/design-loop\.md §八' "$fe" \
+    || printf '§八 入口: rd-fe 卡按需技能块缺主入口指针（仅留 §四 回声不算）\n'
+  grep -qE '^## 八、既有界面的九遍修法' "$dl" \
+    || printf '§八 入口: 节标题「## 八、既有界面的九遍修法」不在位（指针目标缺失或被改名）\n'
+  n="$(c42_section "$dl" '## 八、' | grep -cE '^- \*\*' || true)"
+  [ "$n" -ge 10 ] || printf '§八 内容: 节内条目 %s < 10（整节被删或被掏空）\n' "$n"
 }
 
 # ---------------------------------------------------------------- 真件判据（空 = 全过）
 out="$(c42_scan "$T4_ROOT")"
-t4_assert_eq "" "$out" "①–⑩ 静态契约全过（违规清单为空）"
+t4_assert_eq "" "$out" "①–⑪ 静态契约全过（违规清单为空）"
 if [ -n "$out" ]; then printf '%s\n' "$out" | sed 's/^/     ↳ /'; fi
 
 # 定向断言（回执可读：把契约钉到 AC 编号）
@@ -151,7 +167,10 @@ t4_assert_eq "0" "$(grep -rhoF -- "${C42_NEEDLES[1]}" "$T4_ROOT/.agents" 2>/dev/
 t4_assert_eq "0" "$(grep -rhoF -- "${C42_NEEDLES[2]}" "$T4_ROOT/.agents" 2>/dev/null | wc -l)" "BR5: 第三方原句 3/3 在 .agents 内 0 命中"
 t4_assert_match "$(cat "$DL")" '^方法来源：' "BR5: 方法来源恰为独立一行且带许可证名"
 # T564（ADR 2026-11-24-design-skill-layering §四）：重构档入口靠卡内指针唤起，删指针即失效 ⇒ 咬住它。
-t4_assert_contains "$(cat "$T4_ROOT/$FE_REL")" "design-loop.md §八" "T564: rd-fe 卡指到 design-loop §八（重构档入口，删指针即红）"
+# 但「卡全文含 design-loop.md §八」是文件级判据：§四 回声也能满足它（QA M1b），故拆三条各自承重。
+t4_assert_match "$(cat "$T4_ROOT/$FE_REL")" '^> @\.agents/skills/design-loop\.md §八' "T564: 主入口锚点 = 按需技能块行首指针（仅留 §四 回声 ⇒ 红）"
+t4_assert_match "$(cat "$DL")" '^## 八、既有界面的九遍修法' "T564: §八 节标题在位（指针目标存在，改名/删节 ⇒ 红）"
+t4_assert_eq "12" "$(c42_section "$DL" '## 八、' | grep -cE '^- \*\*' || true)" "T564: §八 节内条目 12 条（整节删除/掏空 ⇒ 红）"
 
 # ---------------------------------------------------------------- 负控（副本改一处 ⇒ 必红）
 LAB="$T4_CACHE_DIR/lab42-$$"
@@ -189,8 +208,62 @@ PY2
 t4_assert_contains "$(c42_scan "$LAB")" "§六 判据数 3 ≠ 4" "⑰ N4 负控（必红）：§六 少一项 ⇒ 判据数不等于 4"
 cp "$T4_ROOT/$DL_REL" "$LAB/$DL_REL"
 
+# N5：只删主入口指针（保留 §四 回声）⇒ 必红。旧判据（卡全文 contains）在此形态下是绿的（QA M1b）。
+# 「互不顶替」用**增量**（变异前后该行数不变）而非「副本无此行」——否则在被变异过的树里会误报。
+c42_cnt() { printf "%s\n" "$1" | grep -cF -- "$2" || true; }
+pre="$(c42_scan "$LAB")"
+python3 - "$LAB/$FE_REL" <<'PY3'
+import sys
+p = sys.argv[1]
+lines = open(p).read().splitlines(True)
+open(p, 'w').write(''.join(l for l in lines if not l.startswith('> @.agents/skills/design-loop.md §八')))
+PY3
+n5="$(c42_scan "$LAB")"
+t4_assert_contains "$n5" "§八 入口: rd-fe 卡" "⑱ N5 负控（必红）：只删主入口指针 ⇒ 主入口锚点咬住"
+t4_assert_eq "$(c42_cnt "$pre" '§八 入口: 节标题')" "$(c42_cnt "$n5" '§八 入口: 节标题')" "⑱ N5 判据互不顶替：§八 标题红点增量为 0"
+t4_assert_eq "$(c42_cnt "$pre" '§八 内容')" "$(c42_cnt "$n5" '§八 内容')" "⑱ N5 判据互不顶替：§八 内容红点增量为 0"
+t4_assert_contains "$(cat "$LAB/$FE_REL")" "去 AI 味按 design-loop.md §八" "⑱ N5 夹具：§四 回声仍在（证明只删了主入口）"
+cp "$T4_ROOT/$FE_REL" "$LAB/$FE_REL"
+
+# N6：改 §八 标题（正文不动）⇒ 必红。旧判据在此形态下是绿的（QA M2）。
+pre="$(c42_scan "$LAB")"
+python3 - "$LAB/$DL_REL" <<'PY3'
+import sys, re
+p = sys.argv[1]
+txt = open(p).read()
+open(p, 'w').write(re.sub(r'(?m)^## 八、.*$', '## 八、既有界面的修法（只给重构档）', txt))
+PY3
+n6="$(c42_scan "$LAB")"
+t4_assert_contains "$n6" "§八 入口: 节标题" "⑲ N6 负控（必红）：改 §八 标题 ⇒ 目标存在性判据咬住"
+t4_assert_eq "$(c42_cnt "$pre" '§八 内容')" "$(c42_cnt "$n6" '§八 内容')" "⑲ N6 判据互不顶替：正文仍在 ⇒ 内容红点增量为 0"
+t4_assert_eq "$(grep -cE '^- \*\*' "$T4_ROOT/$DL_REL" || true)" "$(grep -cE '^- \*\*' "$LAB/$DL_REL" || true)" "⑲ N6 夹具：只改了标题行（条目数不变）"
+cp "$T4_ROOT/$DL_REL" "$LAB/$DL_REL"
+
+# N7：整节删 §八 ⇒ 必红。旧判据在此形态下**全绿**（QA M3：功能面整块消失而门禁不动）。
+python3 - "$LAB/$DL_REL" <<'PY3'
+import sys
+p = sys.argv[1]
+lines = open(p).read().splitlines(True)
+out, skip = [], False
+for l in lines:
+    if l.startswith('## 八、'):
+        skip = True
+        continue
+    if skip and l.startswith('---'):
+        skip = False
+    if not skip:
+        out.append(l)
+open(p, 'w').write(''.join(out))
+PY3
+n7="$(c42_scan "$LAB")"
+t4_assert_contains "$n7" "§八 内容" "⑳ N7 负控（必红）：整节删 §八 ⇒ 节内条目数判据咬住"
+t4_assert_contains "$n7" "§八 入口: 节标题" "⑳ N7 负控：标题判据同时咬住"
+t4_assert_contains "$(cat "$LAB/$DL_REL")" "方法来源：" "⑳ N7 夹具：只删了 §八（文末方法来源仍在）"
+cp "$T4_ROOT/$DL_REL" "$LAB/$DL_REL"
+
 # 复原 ⇒ 复绿（先红后绿闭合）
 cp "$T4_ROOT/$DL_REL" "$LAB/$DL_REL"
+cp "$T4_ROOT/$FE_REL" "$LAB/$FE_REL"
 t4_assert_eq "" "$(c42_scan "$LAB")" "⑮ 复原后副本复绿（禁「红了就算过」）"
 
 t4_exit
