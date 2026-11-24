@@ -655,3 +655,21 @@ RESULT: PASS
 RESULT: PASS（SKIP=0 · DEGRADE=0 · NOTE=0 · NOTE白名单=0）
 ```
 
+## 附录二：push 后在线复核（2026-11-24 · rebase 后二轮）
+
+回执 `head=e4e76fc` 的 `pushed:true` 不是自述 —— 下列输出均为 push 后实跑（`origin` = GitHub 真实远端）：
+
+```text
+$ git ls-remote --heads origin | grep feat/566-queue-receipt
+e4e6bc8dbbd140a52e403260337d112cffa87524	refs/heads/feat/566-queue-receipt
+
+$ node bin/nao-queue validate --queue docs/queue.jsonl --receipts docs/queue
+OK: queue=docs/queue.jsonl（1 行）· receipts=1 份 · push 复核=on(origin)
+
+$ node bin/nao-queue receipt-line --id T566 --queue docs/queue.jsonl --receipts docs/queue
+receipt: T566 rd-infra head=e4e76fcced0360cc9a2fc76f5536faddb1e15a86 gates=ok,ok acs=4/4
+```
+
+- 回执 `head` = 代码交付提交 `e4e76fc`（回执自身在下一提交落盘，故 head 恒为生成时 tip —— 与实际远端 tip `e4e6bc8` 构成祖先关系，`verifyPushed` 判据即「在远端任一 head 上或为其祖先」）。
+- `--no-push-check` 未使用：本条 `validate` 走的就是默认远端复核。
+
