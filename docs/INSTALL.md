@@ -169,7 +169,7 @@ repos:
 
 ## herdr 后端（TUI · 默认形态）
 
-`herdr` 是**唯一**终端后端。`NAO_TERMINAL` 仍可显式赋 `herdr`（未设/空串也是 herdr）；给**其他任何值**（包括已移除的 `tmux`）⇒ `rc=2` + 恰一行 stderr 指路。
+`herdr` 是**默认终端形态**（TUI）。`NAO_TERMINAL` 可显式赋 `herdr`（未设/空串也是 herdr）或 `app`（桌面版，见下节）；给**其他任何值**（包括已移除的 `tmux`）⇒ `rc=2` + 恰一行 stderr 指路。
 
 ```bash
 NAO_TERMINAL=herdr .agents/scripts/nao-fleet.sh status
