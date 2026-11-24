@@ -167,7 +167,7 @@ repos:
 - **暂存改动滞留**：仓库里有超过 `NAO_STASH_WARN_HOURS`（默认 **6**）小时的 `git stash` 时提示 —— 合并后的事实不该长期压在暂存里。当天存取的不会打扰。
 - **卡预算基线**（`-v` 与失败时的完整报告可见）：常驻角色卡最大行数与阈值占比（阈值 `CARD_MAX_LINES`，默认 200）；超阈值只打 `!`，不改 rc。
 
-## herdr 后端（v0.28.0 起为唯一后端）
+## herdr 后端（TUI · 默认形态）
 
 `herdr` 是**唯一**终端后端。`NAO_TERMINAL` 仍可显式赋 `herdr`（未设/空串也是 herdr）；给**其他任何值**（包括已移除的 `tmux`）⇒ `rc=2` + 恰一行 stderr 指路。
 
@@ -192,6 +192,34 @@ NAO_TERMINAL=herdr .agents/scripts/nao-fleet.sh status
 - 自检命令统一为 `herdr --version`（旧的 `herdr --version || tmux -V` 写法随回退面一起作废，见上节自检）。
 - **CI / 自动化**：不要再固定 `NAO_TERMINAL=tmux`；显式 `NAO_TERMINAL=herdr` 或直接不设。
 - **能力边界（已声明退役面）**：tmux 专有用例 12 / 25 退役（宿主窗口显式寻址、列宽算式）；herdr 侧的放置 / 隔离 / 回收由用例 28–33、37–41 覆盖。
+
+## desktop app 后端（`NAO_TERMINAL=app`）
+
+除 herdr TUI 之外，舰队也能跑在 **herdr desktop app** 里。两者是**并列的两种形态**，默认仍是 TUI：
+
+```bash
+export NAO_TERMINAL=app     # 切到桌面版后端；不设 = TUI
+```
+
+三件套前提（缺任一项 ⇒ `exit 3` + 一行指路，不会瞎猜）：
+
+1. **桌面版窗口在跑**（`herdr-app status` 能读到窗口）。窗口没开 ⇒ `ensure` 直接 `exit 3` 并让你先开窗 —— 因为桌面版的 space/tab 由窗口写，窗口不在时**放置永远不成立**。
+2. 在一个 **`hc` 起的终端里**（环境里有 `HC_SCOPE` / `HC_TERMINAL_ID` / `HC_TERMINAL_SOCKET`）。
+3. `hc` 在 PATH（`hc --help` 可用）。
+
+**放置**：space = 仓、tab = 角色/任务。舰队通过给新建终端打 `herdr.space` / `herdr.tab` 两个标签把会话「收养」进目标 space/tab（未知 id 会让桌面版自动新建）。写完之后**读回 `doc.get herdr-app` 结构**确认终端真的在目标 tab 里；对不上就**回滚（关掉刚建的终端）+ 报错**，不会留孤儿。
+
+**状态与忙闲**：读 `hc get <终端> --json` 的 `status`（pi 通过 OSC 7501 上报：`working` / `idle` / `blocked` / `done`）与 `turn`；**就绪判据 = `status.app=pi` 且 `state=idle`**。注意 `turn` 只在完成时 +1，**不是** TUI 的 `state_change_seq` 等价物。
+
+**回收**：`close` 走 `kill` → `rm`（对仍在跑的终端直接 `rm` 会失败）。`--keep` 的语义是「core 丢失后原地换一个 shell、标签保留」——所以它可能留下「看起来在、其实没程序」的终端，`status` 不会仅凭标签就判它活着。
+
+### 两套形态不共享会话（务必知道）
+
+herdr TUI 与 desktop app **各自管理自己的终端**：TUI 里起的舰队，在桌面版的 `status` 里看不到；桌面版起的，TUI 里也看不到。这不是缺陷，是官方设计。所以：
+
+- 同一台机器可以两边各跑一套（互不干扰），也可以只挑一种用。
+- 想换形态 ⇒ 在旧形态里 `close` 收干净，再在新形态里 `ensure`（没有自动迁移）。
+- 测试与 CI 一律建议用 TUI 或**私有 core**（`XDG_RUNTIME_DIR` / `XDG_STATE_HOME` / `HC_SESSION` 指向临时目录），不要连到你自己正在用的桌面版。
 
 ## 旧 tmux 布局去哪了
 
