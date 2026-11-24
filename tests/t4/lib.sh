@@ -602,11 +602,25 @@ t4_scan_app_bare_hc() { # <script>
   #   两向都必须承重（QA P2：旧版只认「语句位 hc」，三种形态全绿）：
   #   ① 调用形态：前置 env 赋值 / `command` / `exec` / `env` 前缀也算调用（`command hc ls`、
   #      `HC_SOCKET=x hc ls` 同样是裸调 —— 它们绕过了唯一入口的 socket/rc 归一化）；
+  #      T563/AC1 补**关键字位**：`if|then|else|elif|while|until|do|!` 之后、`command -<opt>` 之后
+  #      同样是命令位（旧组只认行首/管道/命令替换 ⇒ 写进 `if hc ls` 就静默漏检）。
+  #      T563/P3-2 补三类（QA 探针实测，方向都是**闸静音**而非噪音）：
+  #      ① `sudo` 带选项/参数（`sudo -u root hc ls`；只认「sudo + 选项 + 选项自带的那个参数」，
+  #         不吃任意单词 ⇒ `sudo grep hc file` 不误报）；② case 模式 `)` 前有空格（`* ) hc ls`）；
+  #      ③ `pat) hc` 的 case 分支位（`)` 单独不当分隔符，只认「行首/`case … in` 之后的模式」
+  #         ⇒ 不把 `$()`/`$(( ))` 的 `)` 当命令位，防误报）。
+  #      **已知盲区（不修）**：模式内含空格的交替（`up | down) hc ls`）—— 允许 `|` 进模式字符类
+  #      会把 `(herdr|tmux)` 之类正则字面量误判成 case 臂（T558 已踩），假阳之害 > 漏检之害。
+  #      **分行形态不必特判**：`pat)` 与命令分行时，命令行自身以 `hc` 开头（行首规则已覆盖）
+  #      ⇒ 仍被抓红（QA 复核：上一版注释称其为盲区，是错的）。
   #   ② 入口存在性：`_term_app_exec() {` 必须**恰 1 处**；整删/改名后没有 hc 调用也**不许算绿**
   #      （否则「删掉入口」= 判据空转，是最容易被绕过的一种）。
   local script="$1" lnno body trim execr="" entry_n=""
   local entry_re='^_term_app_exec\(\) \{'
-  local re='(^|[|;&({])[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|exec|command|env|nohup|time)[[:space:]]+)*hc([[:space:]]|$)'
+  local -r sudo_re='sudo([[:space:]]+(-[a-zA-Z]*[ugpChU][[:space:]]+[^[:space:]]+|--(user|group|prompt|close-from|other-user)(=[^[:space:]]+|[[:space:]]+[^[:space:]]+)|-[^[:space:]]+))*'
+  local pre="([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|command[[:space:]]+-[a-zA-Z]|${sudo_re}|exec|command|env|nohup|time|if|then|else|elif|while|until|do|!)"
+  local case_re='^[[:space:]]*(case[[:space:]].*[[:space:]]in[[:space:]]+)?[^()[:space:];&]+[[:space:]]*\)'
+  local re="(^|[|;&({]|${case_re})[[:space:]]*(${pre}[[:space:]]+)*hc([[:space:]]|$)"
   local allow='(command -v hc|t4_require_cmd hc)'
   [ -f "$script" ] || { printf '脚本不存在: %s\n' "$script"; return 0; }
   entry_n="$(grep -cE -- "$entry_re" "$script" || true)"

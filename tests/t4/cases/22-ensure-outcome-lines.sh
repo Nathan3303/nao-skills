@@ -7,7 +7,8 @@
 # 断言映射：
 #   AC1 成功：恰 1 行 `[tmux] 已拉起 …`（逐字 = 旧格式）+ 摘要「成功 1 / 跳过 0 / 失败 0」
 #   AC2 跳过：跳过 warn 在位 · `已拉起` 结果行 = 0 · 摘要「成功 0 / 跳过 1 / 失败 0」· 不新增 pane
-#   AC3 失败：两条诊断 warn 在位 · `已拉起` 结果行 = 0 · 摘要「成功 0 / 跳过 0 / 失败 1」· rc 仍 0（BR4）
+#   AC3 失败：两条诊断 warn 在位 · `已拉起` 结果行 = 0 · 摘要「成功 0 / 跳过 0 / 失败 1」· **全败 ⇒ rc=1**
+#             （T563/AC5 由 PM 裁定取代旧 BR4「失败仍 rc=0」；部分成功仍 rc=0，判据 = 成功数 == 0）
 #   AC4 混合：1 成功 + 1 跳过 + 1 失败 ⇒ 结果行恰 1 条（成功目标）· 摘要三类 = 1/1/1 · 合计 = 3 = 目标数
 #
 # 夹具纪律（沿用 T515/T516/T520 血训）：
@@ -138,12 +139,12 @@ t4_assert_contains "$(summary_text)" "（成功 0 / 跳过 1 / 失败 0）" \
   "AC2 摘要三类计数 = 0/1/0"
 t4_assert_eq "$BEFORE" "$(pane_ids)" "AC2 跳过不新增 pane（零副作用）"
 
-# ============================================================ AC3 失败：零假行 + 桩 + rc 仍 0
+# ============================================================ AC3 失败：零假行 + 桩 + 全败 rc=1（T563/AC5）
 T539_FAIL_NAME="qa(T2)"
 BEFORE="$(pane_ids)"
 run_fleet ensure --task T2 "qa@$LAB"
 T539_FAIL_NAME=""
-t4_assert_eq "0" "$T4_RC" "AC3 失败路径 rc 仍为 0（BR4）"
+t4_assert_eq "1" "$T4_RC" "AC3 失败路径：单目标全败 ⇒ rc=1（T563/AC5 取代旧 BR4「仍 0」）"
 t4_assert_eq "0" "$(launch_lines)" "AC3 失败 ⇒ 0 行 [tmux] 已拉起（零假行，BR2）"
   t4_assert_contains "$T4_ERR_ANSI" "pane run 失败" "AC3 herdr 失败诊断 warn 在位（pane run 失败，指名 pane/name）"
   t4_assert_eq "1" "$(grep -cF -- 'pane run 失败' <<< "$T4_ERR_ANSI" || true)" \
@@ -220,7 +221,7 @@ fs.writeFileSync(p,JSON.stringify(st));' "$SPACE_STATE" "$1" "$2"
   be_ensure_scene || t4_bad "J1 负控：夹具重置失败"
   set_rect 120 0
   run_fleet ensure "rd-infra@$LAB"
-  t4_assert_eq "0" "$T4_RC" "J1 负控 0 尺寸：rc 仍 0（失败只进计数，D3）"
+  t4_assert_eq "1" "$T4_RC" "J1 负控 0 尺寸：单目标全败 ⇒ rc=1（T563/AC5；仍计入 SPAWN_FAIL，非 crash）"
   t4_assert_contains "$T4_ERR_ANSI" "空间不可用" "J1 负控：显式点名「空间不可用」"
   t4_assert_contains "$T4_ERR_ANSI" "行=0" "J1 负控：回显实际行数 0（可定位）"
   t4_assert_contains "$T4_ERR_ANSI" "SPAWN_FAIL" "J1 负控：明说计 SPAWN_FAIL（不半启动）"

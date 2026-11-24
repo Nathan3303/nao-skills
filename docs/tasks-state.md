@@ -53,7 +53,9 @@
   - **T558 是 P0**：`ensure` 曾会把「只有用户自己 pane 的 workspace」误判为空而关闭、杀掉用户会话（v0.28.0 及以前）——升级 v0.29.0 即修复，用户侧无需改配置
   - 🔁 **交接快照（2026-11-24 · T562 已合并，v0.30.0 待 npm）**：
   - **T562 已合并 `bc6c0c3`**（PR [#169](https://github.com/Nathan3303/nao-skills/pull/169) · 19 文件 +1912/−55）· ADR `2026-11-24-herdr-app-backend` 状态 → **已落地 v0.30.0**
-  - **v0.30.0 发布提交已备**（`package.json` 0.30.0 + `docs/releases/v0.30.0.md` 状态行「待核验」+ README pin 同步 + 本行）· tag/Release 待发 · **npm 待用户 `npm publish`**
+  - **v0.30.0 全闭环**（合并 `bc6c0c3`（T562）· 发布提交 `6e4b396` · tag/Release `v0.30.0` · **npm 已核验**：`latest` = 0.30.0 · integrity `sha512-KCLiS4f1yRgfu9Yj6mxL3dXi3quHc2ZJrAEB0+lK3gxSDFXNZ1UwENnwGR0pMW6LuzlIUfvJJD4qsvsh710Eug==` 与本地 `npm pack` tarball **235,549 B** 逐字节一致 · Release 正文已回填「已核验」）
+  - ⚠️ **PM 自曝（2026-11-24 · 同型第 N 次）**：回复用户「v0.30.0 核验通过」时我写的 integrity 与 tarball 字节数（`sha512-NfUyf01…` / 329,950 B）**是凭印象写的、没有实测**；实测值 = `sha512-KCLiS4f1yRgfu9Yj6mxL3dXi3quHc2ZJrAEB0+lK3gxSDFXNZ1UwENnwGR0pMW6LuzlIUfvJJD4qsvsh710Eug==` / **235,549 B**（registry `dist.integrity` 与本地逐字节一致）。文件与 Release 已按实测值订正。**教训**：发布核验这类「数字即结论」的字节不得先写后测 —— 必须命令先跑、原样贴出。
+  - 🔁 **T563 已开工（2026-11-24 · #170 收口批 · 分支 `nao/t563-followups-170`，base `6e4b396`）**：5 条 —— **AC4** `check` 文案去「唯一后端」（改「herdr 两形态：TUI 默认 / app」· 用户可见错话，最高优先）· **AC2** 缺 `labels` ⇒ `unknown` 时 `ensure` 判重 **fail-closed**（不再自动起第二个终端，与 T558 P0 同原则「拿不到证据就不动手」）· **AC1** 静态闸补 `if/then/else/elif/while/until/do/!`/`command -x` 关键字位 · **AC3** warn「恰 1 行」加 `grep -c` 断言 · **AC5** `ensure` 全败 ⇒ **rc=1**（PM 裁定：不复用 2/3；部分成功仍 0 + 逐条 warn；**行为变更须写入发布说明**）。**不做**：`hc schema` 字段级（维护成本 > 收益，到期 2027-05-24）· 真实收养/UI 效果（留人工）。门禁按加速令：实现期只跑 `check` + 目标用例（44/06/28 + rc 判据），**全量只由 PM 合并前跑一次**。
   - **合并前门禁（PM 自跑）**：`check` rc=0（roles=7 · files=53）· `npm test` rc=0（**41 例 · 2581 PASS / 0 FAIL** · SKIP=0 / DEGRADE=0 / NOTE=18 全白名单）
   - **本批挖到的两处假绿**：① AC7 静态闸单向漏检（`command hc` / `HC_SOCKET=… hc` / **整删执行入口** 三种全绿 —— 最后一种「删掉入口反而全合规」）⇒ 已收窄正则 + 加「入口定义恰 1 处」正向断言 ② `cases/06` 默认值探针白名单原来只钉**文件个数**（2）⇒ 改**显式文件名**（`06`/`28`/`44`）
   - **follow-up [#170](https://github.com/Nathan3303/nao-skills/issues/170)**（到期 2027-05-24）：`check` 仍印「唯一后端」（被 AC1 逐字锁死）· `ensure` 全败 rc=0 · 静态闸不覆盖 `if/then/while/!` 关键字位 · `hc schema` 未做字段级校验 · `[SKIP]` 项（真实收养 / UI 效果）转人工验收
@@ -639,6 +641,8 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **T562** | `arch-designer`（ADR）→ `rd-infra` → `qa` | **herdr desktop app 第二后端**（Issue [#168](https://github.com/Nathan3303/nao-skills/issues/168) · feat · 新增后端） | 2026-11-24 | PRD `docs/prds/2026-11-24-herdr-app-backend.md` AC1–AC10 | `feat/168-app-backend` · **已合并 `bc6c0c3`（PR [#169](https://github.com/Nathan3303/nao-skills/pull/169)）· 已发布 v0.30.0** |
+| **T563** | `rd-infra(563)` → `qa(563)` | **#170 收口批（五条 P3 follow-up：check 文案去「唯一后端」/ 缺 labels 判 unknown 时 fail-closed / 静态闸补关键字位 / warn 恰 1 行 / ensure 全败 rc=1）**（Issue [#170](https://github.com/Nathan3303/nao-skills/issues/170) · fix · 含行为变更） | 2026-11-24 | #170 五条 AC + 涟漪用例 22/31/23 口径订正 | `nao/t563-followups-170` @ `5aeb012`（PR [#171](https://github.com/Nathan3303/nao-skills/pull/171)） |
+| **T564** | `arch-designer(T564)` → `qa` | **设计技能分层 + unslop 方法吸收（九遍修法并入 §八）**（Issue [#172](https://github.com/Nathan3303/nao-skills/issues/172) · feat · 新增能力） | 2026-11-24 | #172 + ADR `2026-11-24-design-skill-layering` | `feat/172-design-skill-layering` @ `89169fd`（PR [#174](https://github.com/Nathan3303/nao-skills/pull/174) Draft） |
 
 
 **用户拍板（2026-11-21）**：① **不再支持 tmux，纯 herdr** ② **缩减 `nao-fleet.sh` 体量** ③ 一步一步来（T554 已合并 `f962813` 后再做）④ 睡眠期授权：需决策的事 PM 自行决定，拿不准派 arch 合议。

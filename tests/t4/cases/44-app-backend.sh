@@ -70,7 +70,7 @@ one_addr() { local a; a="$(app_addrs | head -1)"; printf '%s' "$a"; }
 out="$(t4_scan_app_bare_hc "$FLEET")"
 t4_assert_eq "" "$out" "① AC7 静态闸：app 臂裸调 hc = 0（唯一入口 _term_app_exec）"
 t4_assert_eq "1" "$(grep -cE '^_term_app_exec\(\) \{' "$FLEET" || true)" \
-  "① AC7 结构断言：唯一入口 `_term_app_exec` 恰 1 处（删/改名必红，不靠「无命中」冒充绿）"
+  "① AC7 结构断言：唯一入口 \`_term_app_exec\` 恰 1 处（删/改名必红，不靠「无命中」冒充绿）"
 MUT="$T4_CACHE_DIR/c44-barehc-$$.sh"
 python3 - "$FLEET" "$MUT" <<'PY'
 import sys
@@ -87,7 +87,7 @@ src=open(sys.argv[1],encoding='utf-8').read()
 open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BEGIN','# >>> term-impl-app BEGIN\ncommand hc schema >/dev/null',1))
 PY
 out="$(t4_scan_app_bare_hc "$MUT")"
-t4_assert_contains "$out" "command hc schema" "① 正控B：`command hc` 前缀 ⇒ 必红（QA 漏检形态）"
+t4_assert_contains "$out" "command hc schema" "① 正控B：\`command\` 前缀裸调 hc ⇒ 必红（QA 漏检形态）"
 rm -f "$MUT"
 # 变异C：前置 env 赋值（`HC_SOCKET=x hc ls` —— 绕过入口的 socket 归一化）
 python3 - "$FLEET" "$MUT" <<'PY'
@@ -106,6 +106,42 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace('_term_app_exec() {','_
 PY
 out="$(t4_scan_app_bare_hc "$MUT")"
 t4_assert_contains "$out" "MISSING_ENTRY" "① 正控D：删/改名入口 ⇒ 结构断言必红（不靠痕量命中）"
+rm -f "$MUT"
+# 正控E–I（T563/AC1）：**关键字位就是命令位**（旧前缀组只认行首/管道/命令替换 ⇒ 漏检）
+# 正控J–M（T563/P3-2）：`sudo` 前缀（含带选项/参数）、case 分支位（`pat) hc`、`* ) hc`）同样漏检
+for kw in 'if hc ls' 'then hc ls' '! hc ls' 'while hc ls' 'command -p hc ls' 'sudo hc ls' 'up) hc ls' '*) hc ls' \
+          'sudo -u root hc ls' 'sudo -Eu www-data hc ls' '* ) hc ls'; do
+  python3 - "$FLEET" "$MUT" "$kw" <<'PY'
+import sys
+src=open(sys.argv[1],encoding='utf-8').read()
+open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BEGIN','# >>> term-impl-app BEGIN\n'+sys.argv[3]+' >/dev/null',1))
+PY
+  out="$(t4_scan_app_bare_hc "$MUT")"
+  t4_assert_contains "$out" "$kw" "① 正控（命令位）：\`$kw\` ⇒ 必红"
+  rm -f "$MUT"
+done
+# 负控（防空转）：非调用形态 / 存在性探测不得误报
+python3 - "$FLEET" "$MUT" <<'PY'
+import sys
+src=open(sys.argv[1],encoding='utf-8').read()
+add='\n'.join(['hc_ls x >/dev/null','_hc_wrapper ls','command -v hc >/dev/null',
+                't4_require_cmd hc','case "$x" in *) :;; esac'])
+open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BEGIN','# >>> term-impl-app BEGIN\n'+add,1))
+PY
+out="$(t4_scan_app_bare_hc "$MUT")"
+t4_assert_eq "" "$out" "① 负控：\`hc_ls\` / \`_hc_wrapper\` / \`command -v hc\` / \`t4_require_cmd hc\` / 非 hc 的 case 分支 均不得误报（白名单不空转）"
+rm -f "$MUT"
+# 负控2（T563/P3-2 防假阳）：`sudo` 只吃「选项 + 选项自带的那个参数」，不吃任意单词；
+#   模式字符类不含 `(` ⇒ `(herdr|tmux)` 这类正则字面量不得被当成 case 臂（T558 踩过的假阳）
+python3 - "$FLEET" "$MUT" <<'PY'
+import sys
+src=open(sys.argv[1],encoding='utf-8').read()
+add='\n'.join(['sudo grep hc /tmp/f >/dev/null','sudo -u root grep hc /tmp/f >/dev/null',
+                'printf "%s\\n" "(herdr|tmux)"','echo "hc ls"'])
+open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BEGIN','# >>> term-impl-app BEGIN\n'+add,1))
+PY
+out="$(t4_scan_app_bare_hc "$MUT")"
+t4_assert_eq "" "$out" "① 负控2：\`sudo grep hc\` / \`sudo -u root grep hc\` / \`(herdr|tmux)\` 字面量 / 引号内\`hc ls\` 均不得误报（假阳比漏检更有害）"
 rm -f "$MUT"
 
 # ---------------------------------------------------------------- ② M2 身份闸门
@@ -216,7 +252,7 @@ t4_assert_ne "" "$(app_field t0 name)" "⑨ 自身/非舰队终端不动（t0 �
 t4_run_in_dir "$LAB" env -u NAO_TERMINAL -u HC_SCOPE -u HC_TERMINAL_ID -u HC_TERMINAL_SOCKET \
   -u HC_DOUBLE_STATE -u XDG_RUNTIME_DIR bash "${BE_FLEET_SCRIPT:-$LAB/.agents/scripts/nao-fleet.sh}" check
 # <<< default-value-probe END
-t4_assert_contains "$T4_OUT" "生效后端 NAO_TERMINAL=herdr（唯一后端；#96 二期 B4" "⑩ 未设 ⇒ herdr 生效后端子串逐字不变"
+t4_assert_contains "$T4_OUT" "生效后端 NAO_TERMINAL=herdr（形态 TUI；desktop app 走 NAO_TERMINAL=app" "⑩ 未设 ⇒ herdr 生效后端文案 = AC4 新口径（AC1 允许面第 5 类：仅此一行）"
 t4_run_in_dir "$LAB" env NAO_TERMINAL=app bash "${BE_FLEET_SCRIPT:-$LAB/.agents/scripts/nao-fleet.sh}" check
 t4_assert_contains "$T4_OUT" "生效后端 NAO_TERMINAL=app（第二后端" "⑩ app ⇒ 打印第二后端（不谎报唯一）"
 t4_run_in_dir "$LAB" env NAO_TERMINAL=bogus bash "${BE_FLEET_SCRIPT:-$LAB/.agents/scripts/nao-fleet.sh}" status
@@ -238,7 +274,11 @@ rm -f "$BE_APP_STATE/docver"
 # 契约缺字段（无 labels/status）：不得判「在线」，也不得当成空闲
 printf '1' > "$BE_APP_STATE/bare_get"
 run_app ensure rd-fe
-t4_assert_eq "0" "$APP_RC" "⑫ 缺 status 的终端 ⇒ ensure 仍可建（不因解析失败 die）"
+# T563/AC5 后：缺 status ⇒ 就绪门永远验不出 idle ⇒ **全部失败 ⇒ rc=1**（这正是要的 fail loud，
+#   不是 die：终端已建出且保留，属「建了但无法确认就绪」）。
+t4_assert_eq "1" "$APP_RC" "⑫ 缺 status ⇒ 就绪门无法确认 ⇒ rc=1（fail loud，非 die）"
+t4_assert_contains "$APP_ERR" "就绪门超时" "⑫ 点名就绪门超时（不退化空闲、不静默成功）"
+t4_assert_not_contains "$APP_ERR" "版本不支持" "⑫ 不误报「版本不支持」（契约缺字段 ≠ 版本旧）"
 run_app status
 t4_assert_contains "$APP_OUT" "集成缺失" "⑫ status 判「集成缺失 ⇒ 不可投递」（不退化 idle）"
 t4_assert_not_contains "$APP_OUT" "✓ rd-fe" "⑫ 缺 status 不得判在线"
@@ -252,10 +292,61 @@ env HC_DOUBLE_STATE="$BE_APP_STATE" "$FIXT/hc" run --bg --no-parent --keep \
 printf '1' > "$BE_APP_STATE/bare_labels"
 run_app status
 t4_assert_contains "$APP_ERR" "集成缺 labels" "⑫ 子形态：只缺 labels ⇒ warn「无法确认放置归属」"
+t4_assert_eq "1" "$(grep -c '集成缺 labels' <<< "$APP_ERR" || true)" "⑫ 子形态：warn **恰 1 行**（同名被问两次会刷两条）"
 t4_assert_not_contains "$APP_OUT" "✓ rd-fe" "⑫ 子形态：缺 labels 不判在线（unknown，不退化 idle）"
 rm -f "$BE_APP_STATE/bare_labels"
 run_app status
 t4_assert_not_contains "$APP_ERR" "集成缺 labels" "⑫ 负控：labels 齐全 ⇒ 无该 warn（判据不空转）"
+app_reset
+
+# ---------------------------------------------------------------- ⑬ T563/AC2：unknown ⇒ ensure fail-closed
+#   缺 labels 的**在场终端**不得被当成「不在运行」而拉起第二个（否则同名多命中，close 随即拒）。
+app_reset
+env HC_DOUBLE_STATE="$BE_APP_STATE" "$FIXT/hc" run --bg --no-parent --keep \
+  --name rd-fe --cwd "$LAB" --label herdr.space=spx --label herdr.tab=tbx -- true >/dev/null
+n_before="$(app_addrs | grep -c . || true)"
+printf '1' > "$BE_APP_STATE/bare_labels"
+run_app ensure rd-fe
+t4_assert_eq "1" "$APP_RC" "⑬ AC2：unknown（缺 labels）⇒ ensure 拒绝（rc=1，不静默拉第二个）"
+t4_assert_contains "$APP_ERR" "无法确认放置归属" "⑬ AC2：一行指路点名「无法确认放置归属」"
+t4_assert_contains "$APP_ERR" "确需重开请加 --force" "⑬ AC2：指路给 --force 出口"
+t4_assert_eq "$n_before" "$(app_addrs | grep -c . || true)" "⑬ AC2：未新起终端（fail-closed 生效）"
+# 负控：labels 齐全 ⇒ 同一路径不得出现该拒绝（判据不空转）
+rm -f "$BE_APP_STATE/bare_labels"
+run_app ensure rd-fe
+t4_assert_not_contains "$APP_ERR" "无法确认放置归属" "⑬ 负控：labels 齐全 ⇒ 无该拒绝行"
+t4_assert_eq "0" "$APP_RC" "⑬ 负控：labels 齐全 ⇒ 走正常拉起（rc=0，不再判 unknown）"
+
+# ---------------------------------------------------------------- ⑬ 纯跳过（QA P2-1）
+#   旧断言「已在运行 ⇒ 纯跳过 ⇒ rc=0（幂等 effect=0）」是**空转绿**：常驻重复 ensure 会递增槽位
+#   （S3 既有设计，见 cases/22「常驻重复 ensure 会递增槽位」）⇒ 那次 rc=0 实际来自「成功拉起第二个」，
+#   纯跳过分支一条断言都没覆盖。修法 = 按既有口径构造真跳过：**同 role+task 派生**的二次 ensure
+#   （与 cases/22 AC2 同形态），并用「第二次后终端数不变」钉住 effect=0 —— 跳过被改坏时必红。
+app_reset
+run_app ensure --task T1 rd-fe
+t4_assert_eq "0" "$APP_RC" "⑬ 纯跳过夹具：首次 ensure（派生 T1）rc=0"
+t4_assert_eq "1" "$(grep -cF '[app] 已拉起' <<< "$APP_OUT" || true)" "⑬ 纯跳过夹具：首次恰 1 行 [app] 已拉起"
+n_skip="$(app_addrs | grep -c . || true)"
+t4_assert_eq "1" "$n_skip" "⑬ 纯跳过夹具：场面上恰 1 个终端"
+run_app ensure --task T1 rd-fe
+t4_assert_eq "0" "$APP_RC" "⑬ 纯跳过：二次 ensure（同名派生已在运行）⇒ rc=0（幂等重跑不报失败）"
+t4_assert_eq "0" "$(grep -cF '[app] 已拉起' <<< "$APP_OUT" || true)" "⑬ 纯跳过：零假行（不另起第二个终端）"
+t4_assert_contains "$APP_ERR" "已在运行" "⑬ 纯跳过：warn 点名「已在运行」"
+t4_assert_contains "$APP_ERR" "跳过" "⑬ 纯跳过：warn 点名「跳过」"
+t4_assert_contains "$APP_OUT" "（成功 0 / 跳过 1 / 失败 0）" "⑬ 纯跳过：摘要三类 = 0/1/0"
+t4_assert_eq "$n_skip" "$(app_addrs | grep -c . || true)" "⑬ 纯跳过：终端数不变（effect=0）"
+
+# ---------------------------------------------------------------- ⑭ T563/AC5：全败 ⇒ rc=1
+app_reset
+printf '1' > "$BE_APP_STATE/run_fail"
+run_app ensure rd-fe
+t4_assert_eq "1" "$APP_RC" "⑭ AC5：全败（实际拉起成功 0）⇒ rc=1"
+t4_assert_contains "$APP_ERR" "均未拉起" "⑭ AC5：一行汇总「全部 N 个角色均未拉起」"
+rm -f "$BE_APP_STATE/run_fail"
+# 负控：有成功 ⇒ rc=0（不得一律报失败）
+app_reset
+run_app ensure rd-fe
+t4_assert_eq "0" "$APP_RC" "⑭ 负控：有成功 ⇒ rc=0"
 app_reset
 
 # ---------------------------------------------------------------- ⑪ 真 hc（私有 core；无则 SKIP）

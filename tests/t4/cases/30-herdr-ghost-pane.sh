@@ -42,7 +42,7 @@ t4_assert_contains "$BE_OUT" "不可投递" "① 幽灵 pane 判不可投递（B
 
 # ---- ② ensure：不得静默跳过（不判「已在运行」）----
 be_run_fleet "$LAB" ensure --task T1 rd-fe
-t4_assert_eq "0" "$BE_RC" "② ensure rc=0（失败只进计数，D3）"
+t4_assert_eq "0" "$BE_RC" "② ensure rc=0（复用成功：成功 1 / 失败 0 ⇒ 非全败，T563/AC5 不变）"
 # 设计（B2）：幽灵 pane **可寻址**时复用并重跑 agent（而不是新建）；关键是**不得**走「已在运行 ⇒ 跳过」。
 t4_assert_contains "$BE_ERR_ANSI" "幽灵 pane / stale" "② 显式点名幽灵/stale（label 命中 ≠ 在线）"
 t4_assert_contains "$BE_ERR_ANSI" "不判「已在运行」" "② fail loud 点明「不判已在运行」"
