@@ -87,7 +87,7 @@ src=open(sys.argv[1],encoding='utf-8').read()
 open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BEGIN','# >>> term-impl-app BEGIN\ncommand hc schema >/dev/null',1))
 PY
 out="$(t4_scan_app_bare_hc "$MUT")"
-t4_assert_contains "$out" "command hc schema" "① 正控B：`command hc` 前缀 ⇒ 必红（QA 漏检形态）"
+t4_assert_contains "$out" "command hc schema" "① 正控B：\`command\` 前缀裸调 hc ⇒ 必红（QA 漏检形态）"
 rm -f "$MUT"
 # 变异C：前置 env 赋值（`HC_SOCKET=x hc ls` —— 绕过入口的 socket 归一化）
 python3 - "$FLEET" "$MUT" <<'PY'
@@ -108,8 +108,9 @@ out="$(t4_scan_app_bare_hc "$MUT")"
 t4_assert_contains "$out" "MISSING_ENTRY" "① 正控D：删/改名入口 ⇒ 结构断言必红（不靠痕量命中）"
 rm -f "$MUT"
 # 正控E–I（T563/AC1）：**关键字位就是命令位**（旧前缀组只认行首/管道/命令替换 ⇒ 漏检）
-# 正控J–L（T563/P3-2）：`sudo` 前缀与 case 分支位（`pat) hc`）此前同样漏检（QA 探针实测）
-for kw in 'if hc ls' 'then hc ls' '! hc ls' 'while hc ls' 'command -p hc ls' 'sudo hc ls' 'up) hc ls' '*) hc ls'; do
+# 正控J–M（T563/P3-2）：`sudo` 前缀（含带选项/参数）、case 分支位（`pat) hc`、`* ) hc`）同样漏检
+for kw in 'if hc ls' 'then hc ls' '! hc ls' 'while hc ls' 'command -p hc ls' 'sudo hc ls' 'up) hc ls' '*) hc ls' \
+          'sudo -u root hc ls' 'sudo -Eu www-data hc ls' '* ) hc ls'; do
   python3 - "$FLEET" "$MUT" "$kw" <<'PY'
 import sys
 src=open(sys.argv[1],encoding='utf-8').read()
@@ -129,6 +130,18 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BE
 PY
 out="$(t4_scan_app_bare_hc "$MUT")"
 t4_assert_eq "" "$out" "① 负控：\`hc_ls\` / \`_hc_wrapper\` / \`command -v hc\` / \`t4_require_cmd hc\` / 非 hc 的 case 分支 均不得误报（白名单不空转）"
+rm -f "$MUT"
+# 负控2（T563/P3-2 防假阳）：`sudo` 只吃「选项 + 选项自带的那个参数」，不吃任意单词；
+#   模式字符类不含 `(` ⇒ `(herdr|tmux)` 这类正则字面量不得被当成 case 臂（T558 踩过的假阳）
+python3 - "$FLEET" "$MUT" <<'PY'
+import sys
+src=open(sys.argv[1],encoding='utf-8').read()
+add='\n'.join(['sudo grep hc /tmp/f >/dev/null','sudo -u root grep hc /tmp/f >/dev/null',
+                'printf "%s\\n" "(herdr|tmux)"','echo "hc ls"'])
+open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BEGIN','# >>> term-impl-app BEGIN\n'+add,1))
+PY
+out="$(t4_scan_app_bare_hc "$MUT")"
+t4_assert_eq "" "$out" "① 负控2：\`sudo grep hc\` / \`sudo -u root grep hc\` / \`(herdr|tmux)\` 字面量 / 引号内\`hc ls\` 均不得误报（假阳比漏检更有害）"
 rm -f "$MUT"
 
 # ---------------------------------------------------------------- ② M2 身份闸门

@@ -133,7 +133,9 @@ grep -c 未找到命令 /tmp/rd-t563-44b.log = 0
 **硬条件（PM 点名）全部满足**：`hc_ls x` / `_hc_wrapper ls` / `command -v hc` / `t4_require_cmd hc` / `echo "hc ls"` / `hc_count=1` / `ls "$(command -v hc)"` / `case "$x" in *) :;; esac` / 注释里的 `# sudo hc ls` 与 `# up) hc ls` —— **9 类负控全绿**；真件基线 `t4_scan_app_bare_hc .agents/scripts/nao-fleet.sh` = **0 命中**（探针脚本 `/tmp/rd-t563-p32-probe.sh`）。
 `cases/44` ① 已把这三类**固化成正控**（`sudo hc ls` / `up) hc ls` / `*) hc ls`），负控补 `t4_require_cmd hc` 与非 hc 的 case 分支 ⇒ 闸门加严有断言承重，不是一次性探针。
 
-- 已知盲区（**登记，不偷偷放过**）：case 模式与其命令**分行**书写（`pat)` 下一行才是 `hc ls`）仍漏检（本闸逐行）；`)` 前**空模式**（`  ) hc ls`）不匹配 —— 后者是 shell 语法错误，非真实形态。
+- 已知盲区（**登记，不偷偷放过**）—— 第三轮按 QA 复核**订正**（原写「`pat)` 与命令分行仍漏检」是**错的**：命令行自身以 `hc` 开头，行首规则已覆盖）：
+  - ~~分行书写~~ ⇒ **不是盲区**（`pat)` 一行、`hc ls` 下一行：仍红）；`)` 前空模式（`  ) hc ls`）不匹配 —— 那是 shell 语法错误，非真实形态。
+  - 真实残余（方向都是**闸静音**）：`sudo -u root hc ls` · `sudo -Eu www-data hc ls` · `* ) hc ls`（第三轮**已关闭**，见下）；`up | down) hc ls`（**不修**，见第三轮）。
 
 ### 本批遗留红：AC5（全败 ⇒ rc=1）涟漪漏改 3 个用例 —— 已一并订正
 
@@ -162,3 +164,75 @@ grep -c 未找到命令 /tmp/rd-t563-44b.log = 0
 | `--case 23`（涟漪复验） | PASS · 104 / 0 FAIL | `/tmp/rd-t563-23b.log` |
 
 按加速令**未跑全量**，合并前由 PM 跑一次。
+
+## 第三轮（QA 二轮：0 P1 / 0 P2，新 P3-1「合前修」）
+
+基线 `f80a42b`（PM：PRD 取代指针 + QA 报告已入库）。
+
+### 必做 1 · `cases/44:90` 反引号（1 字符）
+
+`"① 正控B：\`command hc\` 前缀 ⇒ 必红…"` 里两个反引号**未转义** ⇒ 断言消息构造时真的执行了 `command hc`（PATH 无 `hc`）⇒ 日志留一条误导残行。已改成 `\`command\``（与 `:118`/`:129` 同写法）。
+
+顺带把**标签文字**从「`command hc` 前缀」改为「`command` 前缀裸调 hc」：否则 PM 的结构判据 `grep -c 'command hc'` 会命中**标签自身**（1 而非 0），结构上就没法区分「残留命令」与「说明文字」。
+
+结构验证（不再是只看「未找到命令」）：
+
+| 判据（`--case 44` 日志 `/tmp/t563r3-c44.log`） | 结果 |
+|---|---|
+| `grep -c 'command hc'` | **0** |
+| `grep -c '未找到命令'` | **0** |
+| `grep -c 'hc: '` | **0** |
+
+范围说明：`tests/` 下同病（双引号串内未转义反引号）**只此一处**（逐文件扫 `tests/t4/cases/*.sh` + `lib.sh`，排除注释行与 `\``）；`44:38` 的反引号在**行尾注释**里，不执行，未动。
+
+### 必做 2 · 错注释订正（原文 → 现文）
+
+**错注释原文**（上一轮写、已删）：
+
+> `#      ⇒ 不把 `$()`/`$(( ))` 的 `)` 当命令位，防误报；多行 case（`pat)` 与命令分行）仍是已知盲区。`
+
+**现文**（`tests/t4/lib.sh::t4_scan_app_bare_hc` 头注释）：
+
+```
+#      **已知盲区（不修）**：模式内含空格的交替（`up | down) hc ls`）—— 允许 `|` 进模式字符类
+#      会把 `(herdr|tmux)` 之类正则字面量误判成 case 臂（T558 已踩），假阳之害 > 漏检之害。
+#      **分行形态不必特判**：`pat)` 与命令分行时，命令行自身以 `hc` 开头（行首规则已覆盖）
+#      ⇒ 仍被抓红（QA 复核：上一版注释称其为盲区，是错的）。
+```
+
+同一份错误说法在**本报告上一轮的小节**里也出现过，已就地划掉并指向真实残余（见上文「已知盲区」条）。
+
+### 必做 3 · 闸门三处（每条给红或登记）
+
+判据/实现（`lib.sh::t4_scan_app_bare_hc`）：
+
+- `sudo` 带参数：新增 `sudo_re='sudo([[:space:]]+(-[a-zA-Z]*[ugpChU][[:space:]]+[^[:space:]]+|--(user|group|prompt|close-from|other-user)(=[^[:space:]]+|[[:space:]]+[^[:space:]]+)|-[^[:space:]]+))*'` —— **只吃「选项 + 该选项自带的那个参数」**，不吃任意单词；`sudo` 本身仍留在前缀组。
+- case 模式 `)` 前空格：`case_re` 的模式后由 `\)` 改为 `[[:space:]]*\)`。
+- `up | down)`：**不修，登记为已知盲区**（PM 裁定 + 本轮实测确认：允许 `|` 会连带把 `(herdr|tmux)` 类字面量当 case 臂）。
+
+| 探针（32 条，`/tmp/t563-probe.log`） | 期望 | 实测 |
+|---|---|---|
+| `sudo -u root hc ls` | 红 | **红** |
+| `sudo --user=x hc ls` | 红 | **红** |
+| `sudo -Eu www-data hc ls` | 红 | **红**（`-Eu` 合并短选项：`-[a-zA-Z]*[ugpChU]` 覆盖） |
+| `* ) hc ls` / `up ) hc ls` | 红 | **红**（两者） |
+| 既有 12 条正控（语句位 / `command` / env 赋值 / `if` / `then` / `!` / `while` / `command -p` / `sudo` 无参 / `up)` / `*)` / `up|down)`） | 红 | **全红（12/12，无回归）** |
+| 负控 12 条（`hc_ls` / `_hc_wrapper` / `command -v hc` / `t4_require_cmd hc` / 注释内 `hc` / 非 hc case 臂 / `echo "hc ls"` / `sudo grep hc` / `sudo -u root grep hc` / 引号整体 / `(herdr|tmux)` 字面量 / 分行 `case "$x" in`） | 绿 | **全绿（12/12，零假阳）** |
+| 真件基线 `t4_scan_app_bare_hc .agents/scripts/nao-fleet.sh` | 空 | **0 命中** |
+| 已知盲区 `up | down) hc ls` | 绿（=盲区成立） | **绿** |
+
+`cases/44` ① 已把**新增能力固化成断言**（不是一次性探针）：正控循环加 `sudo -u root hc ls` / `sudo -Eu www-data hc ls` / `* ) hc ls`；新增「负控2」= `sudo grep hc` / `sudo -u root grep hc` / `(herdr|tmux)` 字面量 / `echo "hc ls"`（任一假阳即红 ⇒ 防「为关洞引噪音」）。
+
+### 门禁（加速令：`check` + 44 + 06；日志先落盘）
+
+| 项 | 结果 | 日志 |
+|---|---|---|
+| `check` | rc=0 · roles=7 · files=53 | `/tmp/t563r3-check.log` |
+| `--case 44` | PASS · **99** / 0 FAIL（95→99：+3 正控 +1 负控块） | `/tmp/t563r3-c44.log` |
+| `--case 06` | PASS · **331** / 0 FAIL（NOTE=2 白名单） | `/tmp/t563r3-c06.log` |
+
+`22/23/31/28` 按 PM 指示未重跑（上一轮已绿，本轮改动只涉 `lib.sh` 的一个闸函数与 `cases/44` 的消息文本；该闸只被 `cases/44` 引用 —— `grep -rn t4_scan_app_bare_hc tests/` 无其他调用点）。
+
+### 顺手发现（未处理，留建议）
+
+`.pi/settings.json`（pi HUD 本机配置）在仓内是 **untracked**，`.gitignore` 只 ignore 了 `.pi/APPEND_SYSTEM.md` ⇒ 每次 `git status` 都会看到 `?? .pi/`，有被误 `git add` 进库的风险（内含本机 UI 偏好，非机密但非共享配置）。建议单开一条把 `.pi/settings.json` 或整个 `.pi/`（除有意入库者）纳入 ignore —— 属新决定，未夹带进本批。
