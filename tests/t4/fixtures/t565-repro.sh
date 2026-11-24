@@ -45,5 +45,6 @@ for a in $(find "$ST/t" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V
     "$a" "$(head -1 "$ST/t/$a/name")" "$(head -1 "$ST/t/$a/space")" "$(head -1 "$ST/t/$a/tab")"
 done
 kill "$NODEPID" 2>/dev/null || true
-rm -rf -- "$CACHE"
+# 留现场（T524 口径：实验根留给证据，不在这里删缓存 —— tests/t4 的删除点唯一性由 cases/14 ⑳ 钉死）
+echo "=== 现场保留：$CACHE ==="
 exit "$rc"
