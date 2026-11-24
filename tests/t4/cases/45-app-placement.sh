@@ -21,7 +21,10 @@
 #   ⑤ AC3-b：收养永不完成 ⇒ 「收养超时」+ 回滚 kill → rm + 无孤儿。
 #   ⑥ AC4：`check` / `check -v` 的 app 端前提（herdr-app 在 PATH / status rc=0 / doc 可读）是 warn，
 #      **不计入 rc**；在 app 终端内即使 NAO_TERMINAL 未设也体检；非 app 环境零新增输出（负控）。
-#   ⑦ 断言射程自证（变异必红）：拆掉 ② 的文档校验 ⇒ 必复现**同一句**报错；拆掉 ④ 的轮询 ⇒ 收养延迟必栽。
+#   ⑦ 断言射程自证（变异必红）：
+#      1b = **两行一起回退**（spawn 的文档校验 + prime 的 cwd 兜底）= 用户实机形态 ⇒ 必红，
+#          且断言只打**失败行**（整段 stderr 会被「陈旧放置标签」warn 行蒙对 —— 单拆守卫时
+#          失败行 `space=` 反而是空的，见 QA 一轮）；拆掉 ④ 的轮询 ⇒ 收养延迟必栽。
 #
 # 夹具：`tests/t4/fixtures/hc-double`（hc + herdr-app 替身；T565 新增 stale_ids / adopt_delay /
 #   adopt_never / space_refuse）。替身只模拟**观测面**（doc/labels/时序），真机 UI 效果仍归人工验收。
@@ -95,6 +98,25 @@ if n != 1:
 open(dst, 'w', encoding='utf-8').write(s.replace(old, new))
 PY
 }
+mutate_many() { # <src> <dst> <old1> <new1> [<old2> <new2> ...] —— 每个锚点在**原文**里各恰 1 次
+  python3 - "$@" <<'PY'
+import sys
+src, dst, *pairs = sys.argv[1:]
+if len(pairs) % 2:
+    print('MUTATION-ANCHOR: 参数须成对')
+    sys.exit(3)
+s = open(src, encoding='utf-8').read()
+for old, new in zip(pairs[::2], pairs[1::2]):
+    n = s.count(old)
+    if n != 1:
+        print(f'MUTATION-ANCHOR: 命中 {n} 次（期望恰 1）: {old}')
+        sys.exit(3)
+    s = s.replace(old, new)
+open(dst, 'w', encoding='utf-8').write(s)
+PY
+}
+# 只取**失败行**（断言射程：整段 stderr 里还有别的行会带同一个 space id）
+fail_lines() { grep -F '放置验证失败' <<< "${1-}" || true; }
 
 STALE_SP="spstale000000000000000000000000a"    # 32 hex 形态（旧 app run 的 space id）
 STALE_TB="tbstale000000000000000000000000a"
@@ -252,22 +274,29 @@ t4_assert_not_contains "$APP_OUT" "desktop app 窗口未在运行" "⑥ 负控�
 t4_assert_not_contains "$APP_OUT" "检测到 herdr desktop app 终端" "⑥ 负控：无三件套 ⇒ 不触发 app 端体检"
 
 # ---------------------------------------------------------------- ⑦ 变异必红（断言射程自证）
-MUT1="$LAB/mut1-nodocguard.sh"
-if mutate "$FLEET_LAB" "$MUT1" '! _term_app_doc_has_space "$sp"' 'false'; then
+# 1b = 用户实机形态：两处一起回退才重现「沿用陈旧 id」（只拆守卫时 sp 解析为空，失败行 `space=`
+#   反而是空的，且整段 stderr 会被「陈旧放置标签」warn 行蒙对 —— QA 一轮实测，故断言只打失败行）。
+MUT1B="$LAB/mut1b-staleform.sh"
+if mutate_many "$FLEET_LAB" "$MUT1B" \
+     '_term_app_doc_has_space "$sp" && continue' 'sid_folder["$sp"]="$cwd"' \
+     '! _term_app_doc_has_space "$sp"' 'false'; then
   app_reset
   stub_hc run --bg --no-parent --keep --name rd-be --cwd "$LAB" \
     --label "herdr.space=$STALE_SP" --label "herdr.tab=$STALE_TB" -- true >/dev/null
   rm -f "$BE_APP_STATE/spaces/$STALE_SP"
   printf '%s\n' "$STALE_SP" > "$BE_APP_STATE/stale_ids"
   APP_OVR=("NAO_SKILLS=$LAB")
-  BE_FLEET_SCRIPT="$MUT1" run_app ensure rd-fe
+  BE_FLEET_SCRIPT="$MUT1B" run_app ensure rd-fe
   BE_FLEET_SCRIPT=""
   APP_OVR=()
-  t4_assert_ne "0" "$APP_RC" "⑦ 变异（拆掉 AC1 文档校验）⇒ ②场景必红（断言射程：只有它能抓住）"
-  t4_assert_contains "$APP_ERR" "放置验证失败" "⑦ 变异必红：拆掉文档校验 ⇒ 放置失败重现"
-  t4_assert_contains "$APP_ERR" "space=$STALE_SP" "⑦ 变异必红且报错里带着**陈旧 id**（证明它又被沿用了）"
+  FAIL1B="$(fail_lines "$APP_ERR")"
+  t4_assert_ne "0" "$APP_RC" "⑦ 变异 1b（守卫 + prime 兜底两行一起回退 = 实机形态）⇒ ②场景必红"
+  t4_assert_contains "$FAIL1B" "放置验证失败" "⑦ 1b：确有失败行（下面三条只在这行上取，不对整段 stderr）"
+  t4_assert_not_contains "$FAIL1B" "陈旧放置标签" "⑦ 1b：射程自证 —— 取到的是失败行，不是那条陈旧 warn（改前正是被 warn 行蒙对）"
+  t4_assert_contains "$FAIL1B" "space=$STALE_SP" "⑦ 1b：失败行带**陈旧 id**（沿用旧 id ⇒ app 新建、请求的 id 无处可去）"
+  t4_assert_contains "$FAIL1B" "目标 space 不存在" "⑦ 1b：落在「目标 space 不存在」分支（= 用户实机那句的位置）"
 else
-  t4_bad "⑦ 变异锚点未命中（AC1 文档校验的实现行变了 ⇒ 用例需同步）"
+  t4_bad "⑦ 变异 1b 锚点未命中（spawn 文档校验 / prime 兜底 的实现行变了 ⇒ 用例需同步）"
 fi
 MUT2="$LAB/mut2-onepass.sh"
 if mutate "$FLEET_LAB" "$MUT2" '_term_app_poll_place "$sp" "$tb" "$addr"' '_term_app_verify_place "$sp" "$tb" "$addr"'; then
@@ -277,8 +306,9 @@ if mutate "$FLEET_LAB" "$MUT2" '_term_app_poll_place "$sp" "$tb" "$addr"' '_term
   BE_FLEET_SCRIPT="$MUT2" run_app ensure rd-fe
   BE_FLEET_SCRIPT=""
   APP_OVR=()
+  FAIL2="$(fail_lines "$APP_ERR")"
   t4_assert_ne "0" "$APP_RC" "⑦ 变异（拆掉轮询）⇒ 收养延迟必栽（断言射程：只有它能抓住）"
-  t4_assert_contains "$APP_ERR" "收养超时" "⑦ 变异必红原因 = 收养超时"
+  t4_assert_contains "$FAIL2" "收养超时" "⑦ 变异必红原因 = 收养超时（同样只取失败行）"
 else
   t4_bad "⑦ 变异锚点未命中（轮询调用点变了 ⇒ 用例需同步）"
 fi
