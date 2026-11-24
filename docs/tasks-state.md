@@ -607,6 +607,13 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 ## 待派发队列（真待办 · 需写代码或改文本）
 
+<!-- nao-queue:begin dispatch -->
+<!-- generated: 由 `bin/nao-queue render` 生成 · 唯一事实源 `docs/queue.jsonl` · 禁手改（下次渲染会覆盖） -->
+- （空）
+<!-- nao-queue:end dispatch -->
+
+> 上方渲染块只含 `docs/queue.jsonl` 的行（`bin/nao-queue render` 生成，禁手改）；下方为迁移前的手写台账，尚未迁入 jsonl。
+
 | 任务编号 | 目标会话 | 概要 | 排队原因 |
 | :--- | :--- | :--- | :--- |
 | **T556**（候选） | `rd-infra`（待 T555 合并后） | **舰队机制配合 herdr desktop app（`hc` + `herdr-core`）**：可行性已判「高」（笔记 `docs/research/2026-11-22-herdr-desktop-app.md`）；难点 = 放置面无 CLI（space/tab 由 `~/.config/herdr-app/layouts/*.json` + `mods/*.js` 决定） | 前置 = T555（纯 herdr）合并且后端抽象收敛后；第一阶段只做「`hc run --bg` 起会话 + `hc ls` 读到 state + 最小 layout 出现在目标 space」三步验证 |
@@ -639,6 +646,13 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 **本批关闭（三出口 = 关闭，2026-11-09 · `M20261109-queue-slim`）**：`T535-O2` —— 早已由 T536 B 项修好（`t4_cli_supports` 现用 here-string，`grep -n 'printf .*| *grep' tests/t4/lib.sh` = 0），台账行陈旧 ⇒ 关闭 · `T536-O2` —— 纪律本已存在（`AGENTS.md:23` 改卡必须 bump `version`+`updated`），本批补「无同批例外」半句 ⇒ 关闭 · `T529-D3` —— 本批交付（`MIN_PI_VERSION` 单一事实）⇒ 关闭 · `M20261102-F3` —— 早已标注关闭却仍占行 ⇒ 删除。
 
 ## 进行中
+
+<!-- nao-queue:begin active -->
+<!-- generated: 由 `bin/nao-queue render` 生成 · 唯一事实源 `docs/queue.jsonl` · 禁手改（下次渲染会覆盖） -->
+- **T566** · working · 编排器阶段 1：队列与回执契约（jsonl 单源 + 渲染器 + 校验器） · prio=P1 · owner=rd-infra · qa=qa · deps=- · acs=AC1,AC2,AC3,AC4 · attempt=0 · branch=feat/566-queue-receipt · updated=2026-11-24
+<!-- nao-queue:end active -->
+
+> 上方渲染块只含 `docs/queue.jsonl` 的行（`bin/nao-queue render` 生成，禁手改）；下方为迁移前的手写交付记录，尚未迁入 jsonl。
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |

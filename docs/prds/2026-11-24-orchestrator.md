@@ -5,6 +5,13 @@
 - 关联：`docs/reports/2026-11-24-task-flow.md`（流程分段图）· T563（`agent_verdict` 三态）· T562（app 后端 · OSC 7501 忙闲）
 - 目标版本：分三阶段，阶段 1 随下个 MINOR；阶段 2/3 另批
 
+## TL;DR（≤5 行）
+
+- **做什么**：把调度从「PM 会话人记得派单」变成机制自己 tick —— 结构化队列 + 回执契约 + 状态机 + 编排 tick + 看板。
+- **给谁**：nao 舰队（PM 与 7 个常驻角色）及其下游使用方。
+- **成功标准**：阶段 2 结束时，PM 会话不在线 30 分钟内，无依赖阻塞、无 `blocked` 的任务仍能推进到 `qa_pass`。
+- **不做什么**：自动合并 / 自动发版（永不）· 自然语言任务拆解 · 会话内容理解。
+
 ## 一、背景与目标
 
 当前「多角色 intercom 协作」的骨架已成立（7 常驻角色 · `ensure/close` · 角色卡注入 · 闸门与回执），但**调度靠 PM 会话单点**：队列是人维护的文档、回执是散文、忙闲靠人看、PM 上下文满了流水线就停。
@@ -42,33 +49,14 @@
 
 **机读首行**：`receipt: <id> <role> head=<sha> gates=<ok|red>,<ok|red> acs=<n>/<n>`。
 
-## 五、验收（AC，机械可判）
-
-**阶段 1（队列与回执）**
-- AC1 回执缺任一必需字段 ⇒ `cases/50` 红
-- AC2 `pushed:true` 与 `git ls-remote` 不一致 ⇒ 红
-- AC3 非法状态转换（如 `queued → merged`）⇒ 红
-- AC4 `tasks-state.md` 由 `queue.jsonl` 渲染，手改后再渲染 ⇒ diff 非空 ⇒ 红
-
-**阶段 2（编排 tick）**
-- AC5 两个 orch 并发 ⇒ 只派一次（`flock` 生效）
-- AC6 目标角色 `working|unknown` ⇒ 不投递、只记等待
-- AC7 派单 15m 无 `ack` ⇒ `blocked(no_ack)` + 追问一次，`attempt` 不递增
-- AC8 崩溃恢复：tick 中途 `kill -9`，下一 tick 重建视图且不重复派单
-- AC9 **绝不能**由 orch 触发 `gh pr merge` / `npm publish` / `git push origin main`（静态闸 + 用例双向）
-
-**阶段 3（看板与多仓）**
-- AC10 两仓同名角色（各有一个 `pm`）⇒ 派单不串仓（回归：三次裸名误投）
-- AC11 `nao-board` 数值与 `queue.jsonl` 一致（同 tick 快照）
-
-## 六、接口与副作用
+## 五、接口与副作用
 
 - 新增 `bin/nao-orch`（`tick|board|dispatch|reap`）· `bin/nao-board` 或子命令
 - `nao-fleet.sh status --json`（只增输出，不改现有文本输出 ⇒ AC1 逐字面不变）
 - 队列与回执写入限定 `docs/queue/**`
 - 副作用边界：orch 会 `ensure`/`close` 会话、写队列；**不会**动 git 远端、不动 `package.json`、不碰 tag/Release
 
-## 七、失败模式
+## 六、失败模式
 
 | 失败 | 处置 |
 |---|---|
@@ -77,6 +65,36 @@
 | 会话被外部杀掉 | `agent_verdict=absent` ⇒ 标 `blocked(absent)`，不自动重派（先让人看原因） |
 | 队列与台账不一致 | 以 `queue.jsonl` 为准，重渲染 `tasks-state.md`；不一致本身记账 |
 | 回执伪造（自述 pass 无日志） | `gates.full.log` 指向不存在/无 `RESULT: PASS` ⇒ 判红 |
+
+## 七、验收（AC，机械可判）
+
+分组依据 `.agents/checklists/deliverable-docs.md` §三（五覆盖）；阶段归属写在每条 AC 前（阶段 1 = 本批）。
+
+### 主路径
+
+- **AC4**（阶段 1）`tasks-state.md` 由 `queue.jsonl` 渲染，手改后再渲染 ⇒ diff 非空 ⇒ 红
+
+### 异常
+
+- **AC6**（阶段 2）目标角色 `working|unknown` ⇒ 不投递、只记等待
+- **AC7**（阶段 2）派单 15m 无 `ack` ⇒ `blocked(no_ack)` + 追问一次，`attempt` 不递增
+- **AC8**（阶段 2）崩溃恢复：tick 中途 `kill -9`，下一 tick 重建视图且不重复派单
+
+### 边界
+
+- **AC5**（阶段 2）两个 orch 并发 ⇒ 只派一次（`flock` 生效）
+- **AC10**（阶段 3）两仓同名角色（各有一个 `pm`）⇒ 派单不串仓（回归：三次裸名误投）
+
+### 负向闭环
+
+- **AC1**（阶段 1）回执缺任一必需字段 ⇒ `tests/t4/cases/46-queue-receipt.sh` 红
+- **AC2**（阶段 1）`pushed:true` 与 `git ls-remote` 不一致 ⇒ 红
+- **AC3**（阶段 1）非法状态转换（如 `queued → merged`）⇒ 红
+- **AC9**（阶段 2）**绝不能**由 orch 触发 `gh pr merge` / `npm publish` / `git push origin main`（静态闸 + 用例双向）
+
+### 设计一致性
+
+- **AC11**（阶段 3）`nao-board` 数值与 `queue.jsonl` 一致（同 tick 快照）
 
 ## 八、依赖与风险
 

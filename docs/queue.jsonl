@@ -1,0 +1,1 @@
+{"id":"T566","kind":"feat","title":"编排器阶段 1：队列与回执契约（jsonl 单源 + 渲染器 + 校验器）","state":"working","prio":"P1","deps":[],"repo":"nao-skills","branch":"feat/566-queue-receipt","owner":"rd-infra","qa":"qa","acs":["AC1","AC2","AC3","AC4"],"attempt":0,"created":"2026-11-24","updated":"2026-11-24","blocked_reason":""}
