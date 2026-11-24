@@ -383,7 +383,7 @@ t4_assert_eq "0" "$(anchor_count "$(capture_of "$PANE_FAIL")")" "AC4① 失败�
   set_knob pi_status '"working"'; set_knob pi_seq 1; set_knob pi_skip true; set_knob pi_session true
   T23_SWITCH=1
   run_fleet ensure "rd-fe@$LAB"
-  t4_assert_eq "0" "$T4_RC" "P2-3① 违反 idle：rc=0（D3，失败只进计数）"
+  t4_assert_eq "1" "$T4_RC" "P2-3① 违反 idle：单目标全败 ⇒ rc=1（T563/AC5；仍只计 SPAWN_FAIL）"
   t4_assert_eq "0" "$(launch_lines)" "P2-3① 违反 idle ⇒ 零成功行（禁把 working 当就绪）"
   t4_assert_contains "$T4_OUT_ANSI" "（成功 0 / 跳过 0 / 失败 1）" "P2-3① 违反 idle ⇒ 摘要计失败 1"
   t4_assert_contains "$T4_ERR_ANSI" "agent_status == idle" "P2-3① 逐条点名缺 idle（删掉该条件 ⇒ 本组翻红）"
@@ -391,7 +391,7 @@ t4_assert_eq "0" "$(anchor_count "$(capture_of "$PANE_FAIL")")" "AC4① 失败�
   set_knob pi_status '"idle"'; set_knob pi_seq 0; set_knob pi_skip true; set_knob pi_session true
   T23_SWITCH=1
   run_fleet ensure "arch-designer@$LAB"
-  t4_assert_eq "0" "$T4_RC" "P2-3② 违反 seq：rc=0"
+  t4_assert_eq "1" "$T4_RC" "P2-3② 违反 seq：单目标全败 ⇒ rc=1（T563/AC5）"
   t4_assert_eq "0" "$(launch_lines)" "P2-3② 违反 seq ⇒ 零成功行（禁把从未迁移当就绪）"
   t4_assert_contains "$T4_OUT_ANSI" "（成功 0 / 跳过 0 / 失败 1）" "P2-3② 违反 seq ⇒ 摘要计失败 1"
   t4_assert_contains "$T4_ERR_ANSI" "state_change_seq ≥ 1" "P2-3② 逐条点名缺 seq（删掉该条件 ⇒ 本组翻红）"
@@ -399,7 +399,7 @@ t4_assert_eq "0" "$(anchor_count "$(capture_of "$PANE_FAIL")")" "AC4① 失败�
   set_knob pi_status '"idle"'; set_knob pi_seq 1; set_knob pi_skip false; set_knob pi_session true
   T23_SWITCH=1
   run_fleet ensure "uiux-designer@$LAB"
-  t4_assert_eq "0" "$T4_RC" "P2-3③ 违反 skip：rc=0"
+  t4_assert_eq "1" "$T4_RC" "P2-3③ 违反 skip：单目标全败 ⇒ rc=1（T563/AC5）"
   t4_assert_eq "0" "$(launch_lines)" "P2-3③ 违反 skip ⇒ 零成功行（禁把屏幕启发式当权威）"
   t4_assert_contains "$T4_OUT_ANSI" "（成功 0 / 跳过 0 / 失败 1）" "P2-3③ 违反 skip ⇒ 摘要计失败 1"
   t4_assert_contains "$T4_ERR_ANSI" "screen_detection_skipped" "P2-3③ 逐条点名缺 skip（删掉该条件 ⇒ 本组翻红）"

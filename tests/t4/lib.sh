@@ -604,11 +604,16 @@ t4_scan_app_bare_hc() { # <script>
   #      `HC_SOCKET=x hc ls` 同样是裸调 —— 它们绕过了唯一入口的 socket/rc 归一化）；
   #      T563/AC1 补**关键字位**：`if|then|else|elif|while|until|do|!` 之后、`command -<opt>` 之后
   #      同样是命令位（旧组只认行首/管道/命令替换 ⇒ 写进 `if hc ls` 就静默漏检）。
+  #      T563/P3-2 补两类（QA 探针实测漏检）：`sudo` 前缀（同 env 族）、`case` 分支位
+  #      （`pat) hc ls` —— `)` 单独不当分隔符，只认「行首/`case … in` 之后的 case 模式 `pat)`」
+  #      ⇒ 不把 `$()`/`$(( ))` 的 `)` 当命令位，防误报；多行 case（`pat)` 与命令分行）仍是已知盲区。
   #   ② 入口存在性：`_term_app_exec() {` 必须**恰 1 处**；整删/改名后没有 hc 调用也**不许算绿**
   #      （否则「删掉入口」= 判据空转，是最容易被绕过的一种）。
   local script="$1" lnno body trim execr="" entry_n=""
   local entry_re='^_term_app_exec\(\) \{'
-  local re='(^|[|;&({])[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|command[[:space:]]+-[a-zA-Z]|exec|command|env|nohup|time|if|then|else|elif|while|until|do|!)[[:space:]]+)*hc([[:space:]]|$)'
+  local pre='([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|command[[:space:]]+-[a-zA-Z]|sudo|exec|command|env|nohup|time|if|then|else|elif|while|until|do|!)'
+  local case_re='^[[:space:]]*(case[[:space:]].*[[:space:]]in[[:space:]]+)?[^()[:space:];&]+\)'
+  local re="(^|[|;&({]|${case_re})[[:space:]]*(${pre}[[:space:]]+)*hc([[:space:]]|$)"
   local allow='(command -v hc|t4_require_cmd hc)'
   [ -f "$script" ] || { printf '脚本不存在: %s\n' "$script"; return 0; }
   entry_n="$(grep -cE -- "$entry_re" "$script" || true)"

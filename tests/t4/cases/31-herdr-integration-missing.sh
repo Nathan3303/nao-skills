@@ -54,7 +54,7 @@ t4_assert_contains "$BE_OUT" "pi-intercom/herdr 集成" "① 给可执行指路�
 
 # ---- ② ensure：不得退化/静默，必须 fail loud 且计数 ----
 be_run_fleet "$LAB" ensure --task T1 rd-fe
-t4_assert_eq "0" "$BE_RC" "② ensure rc=0（失败只进计数，D3）"
+t4_assert_eq "1" "$BE_RC" "② ensure：集成缺失 ⇒ 单目标全败 ⇒ rc=1（T563/AC5；仍只计 SPAWN_FAIL，不 crash）"
 t4_assert_eq "0" "$(grep -cF -- '[herdr] 已拉起' <<< "$BE_OUT" || true)" "② 零假成功行"
 t4_assert_contains "$BE_ERR_ANSI" "不判「已在运行」" "② 显式拒绝「已在运行」判定（fail loud）"
 t4_assert_contains "$BE_OUT" "（成功 0 / 跳过 0 / 失败 1）" "② 摘要计失败 1"

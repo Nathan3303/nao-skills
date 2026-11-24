@@ -70,7 +70,7 @@ one_addr() { local a; a="$(app_addrs | head -1)"; printf '%s' "$a"; }
 out="$(t4_scan_app_bare_hc "$FLEET")"
 t4_assert_eq "" "$out" "① AC7 静态闸：app 臂裸调 hc = 0（唯一入口 _term_app_exec）"
 t4_assert_eq "1" "$(grep -cE '^_term_app_exec\(\) \{' "$FLEET" || true)" \
-  "① AC7 结构断言：唯一入口 `_term_app_exec` 恰 1 处（删/改名必红，不靠「无命中」冒充绿）"
+  "① AC7 结构断言：唯一入口 \`_term_app_exec\` 恰 1 处（删/改名必红，不靠「无命中」冒充绿）"
 MUT="$T4_CACHE_DIR/c44-barehc-$$.sh"
 python3 - "$FLEET" "$MUT" <<'PY'
 import sys
@@ -108,25 +108,27 @@ out="$(t4_scan_app_bare_hc "$MUT")"
 t4_assert_contains "$out" "MISSING_ENTRY" "① 正控D：删/改名入口 ⇒ 结构断言必红（不靠痕量命中）"
 rm -f "$MUT"
 # 正控E–I（T563/AC1）：**关键字位就是命令位**（旧前缀组只认行首/管道/命令替换 ⇒ 漏检）
-for kw in 'if hc ls' 'then hc ls' '! hc ls' 'while hc ls' 'command -p hc ls'; do
+# 正控J–L（T563/P3-2）：`sudo` 前缀与 case 分支位（`pat) hc`）此前同样漏检（QA 探针实测）
+for kw in 'if hc ls' 'then hc ls' '! hc ls' 'while hc ls' 'command -p hc ls' 'sudo hc ls' 'up) hc ls' '*) hc ls'; do
   python3 - "$FLEET" "$MUT" "$kw" <<'PY'
 import sys
 src=open(sys.argv[1],encoding='utf-8').read()
 open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BEGIN','# >>> term-impl-app BEGIN\n'+sys.argv[3]+' >/dev/null',1))
 PY
   out="$(t4_scan_app_bare_hc "$MUT")"
-  t4_assert_contains "$out" "$kw" "① 正控（关键字位）：\`$kw\` ⇒ 必红"
+  t4_assert_contains "$out" "$kw" "① 正控（命令位）：\`$kw\` ⇒ 必红"
   rm -f "$MUT"
 done
 # 负控（防空转）：非调用形态 / 存在性探测不得误报
 python3 - "$FLEET" "$MUT" <<'PY'
 import sys
 src=open(sys.argv[1],encoding='utf-8').read()
-add='\n'.join(['hc_ls x >/dev/null','_hc_wrapper ls','command -v hc >/dev/null'])
+add='\n'.join(['hc_ls x >/dev/null','_hc_wrapper ls','command -v hc >/dev/null',
+                't4_require_cmd hc','case "$x" in *) :;; esac'])
 open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BEGIN','# >>> term-impl-app BEGIN\n'+add,1))
 PY
 out="$(t4_scan_app_bare_hc "$MUT")"
-t4_assert_eq "" "$out" "① 负控：\`hc_ls\` / \`_hc_wrapper\` / \`command -v hc\` 均不得误报（白名单不空转）"
+t4_assert_eq "" "$out" "① 负控：\`hc_ls\` / \`_hc_wrapper\` / \`command -v hc\` / \`t4_require_cmd hc\` / 非 hc 的 case 分支 均不得误报（白名单不空转）"
 rm -f "$MUT"
 
 # ---------------------------------------------------------------- ② M2 身份闸门
@@ -300,7 +302,26 @@ t4_assert_eq "$n_before" "$(app_addrs | grep -c . || true)" "⑬ AC2：未新起
 rm -f "$BE_APP_STATE/bare_labels"
 run_app ensure rd-fe
 t4_assert_not_contains "$APP_ERR" "无法确认放置归属" "⑬ 负控：labels 齐全 ⇒ 无该拒绝行"
-t4_assert_eq "0" "$APP_RC" "⑬ 负控：已在运行 ⇒ 纯跳过 ⇒ rc=0（幂等 effect=0）"
+t4_assert_eq "0" "$APP_RC" "⑬ 负控：labels 齐全 ⇒ 走正常拉起（rc=0，不再判 unknown）"
+
+# ---------------------------------------------------------------- ⑬ 纯跳过（QA P2-1）
+#   旧断言「已在运行 ⇒ 纯跳过 ⇒ rc=0（幂等 effect=0）」是**空转绿**：常驻重复 ensure 会递增槽位
+#   （S3 既有设计，见 cases/22「常驻重复 ensure 会递增槽位」）⇒ 那次 rc=0 实际来自「成功拉起第二个」，
+#   纯跳过分支一条断言都没覆盖。修法 = 按既有口径构造真跳过：**同 role+task 派生**的二次 ensure
+#   （与 cases/22 AC2 同形态），并用「第二次后终端数不变」钉住 effect=0 —— 跳过被改坏时必红。
+app_reset
+run_app ensure --task T1 rd-fe
+t4_assert_eq "0" "$APP_RC" "⑬ 纯跳过夹具：首次 ensure（派生 T1）rc=0"
+t4_assert_eq "1" "$(grep -cF '[app] 已拉起' <<< "$APP_OUT" || true)" "⑬ 纯跳过夹具：首次恰 1 行 [app] 已拉起"
+n_skip="$(app_addrs | grep -c . || true)"
+t4_assert_eq "1" "$n_skip" "⑬ 纯跳过夹具：场面上恰 1 个终端"
+run_app ensure --task T1 rd-fe
+t4_assert_eq "0" "$APP_RC" "⑬ 纯跳过：二次 ensure（同名派生已在运行）⇒ rc=0（幂等重跑不报失败）"
+t4_assert_eq "0" "$(grep -cF '[app] 已拉起' <<< "$APP_OUT" || true)" "⑬ 纯跳过：零假行（不另起第二个终端）"
+t4_assert_contains "$APP_ERR" "已在运行" "⑬ 纯跳过：warn 点名「已在运行」"
+t4_assert_contains "$APP_ERR" "跳过" "⑬ 纯跳过：warn 点名「跳过」"
+t4_assert_contains "$APP_OUT" "（成功 0 / 跳过 1 / 失败 0）" "⑬ 纯跳过：摘要三类 = 0/1/0"
+t4_assert_eq "$n_skip" "$(app_addrs | grep -c . || true)" "⑬ 纯跳过：终端数不变（effect=0）"
 
 # ---------------------------------------------------------------- ⑭ T563/AC5：全败 ⇒ rc=1
 app_reset
