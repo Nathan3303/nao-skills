@@ -49,8 +49,8 @@
 ## PM 接续快照（会话重开后**先读本区**）
 
 - 🔁 **接续快照（2026-11-24 晚 · PM 重开前）**：接手者只需读本区。要点：
-  - **当前唯一在飞任务 = T566 编排器阶段 1**（Issue #177 · 分支 `feat/566-queue-receipt` @ `9c18bd3` · PR #179 · base `origin/main`=49ce447）。QA 一轮 CONDITIONAL（P1-1 rebase+43例 / P2-1 receipt-line 强校验 pushed / P3-1 同态回显 / P3-2 PRD §六对齐 / P3-3 删硬编码 T566）已全部修完并 push。
-  - **全量门禁已过（43/43），待合并**（PM `/tmp/w566` @ `9c18bd3` · `EXIT=0` · `RESULT: PASS` · SKIP=0 DEGRADE=0 NOTE=18 全白名单 · 日志 `/tmp/pm-t566-full.log`）；回执 `gates.full` 已回填，待 PM 复核 diff 后授权 RD squash（禁 PM 自合）。
+  - **T566 编排器阶段 1 已收敛**（Issue #177 已关 · 分支 `feat/566-queue-receipt` **已合并 `b6bb4cb`** · PR #179 · base `origin/main`=49ce447）。QA 二轮全修 → 43/43 全量门禁绿 → squash 合并（无遗留在飞任务）。
+  - **T566 阶段 1 已交付**（`b6bb4cb` · PR #179 · Issue #177 已关）：全量 `npm test` EXIT=0 · 43/43 PASS（SKIP=0 DEGRADE=0 NOTE=18 全白名单 · 日志 `/tmp/pm-t566-full.log`），回执 `gates.full` 已回填；**阶段 2 tick / 阶段 3 看板·多仓 未立项，等 PM 批次决策**。
   - **已发布版本**：v0.31.1（T565 app 放置验证修复，npm 已核验；发布后事实提交 49ce447）。
   - **队列**：阶段 2（`nao-orch tick`）与阶段 3（看板/多仓）尚未立项；PRD `docs/prds/2026-11-24-orchestrator.md` 已接受。
   - **会话体检**：旧 pm 上下文 80%（800k/1000k）触发重开；重开后从本区重建，勿凭记忆调度。
