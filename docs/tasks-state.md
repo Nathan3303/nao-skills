@@ -641,6 +641,8 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **T562** | `arch-designer`（ADR）→ `rd-infra` → `qa` | **herdr desktop app 第二后端**（Issue [#168](https://github.com/Nathan3303/nao-skills/issues/168) · feat · 新增后端） | 2026-11-24 | PRD `docs/prds/2026-11-24-herdr-app-backend.md` AC1–AC10 | `feat/168-app-backend` · **已合并 `bc6c0c3`（PR [#169](https://github.com/Nathan3303/nao-skills/pull/169)）· 已发布 v0.30.0** |
+| **T563** | `rd-infra(563)` → `qa(563)` | **#170 收口批（五条 P3 follow-up：check 文案去「唯一后端」/ 缺 labels 判 unknown 时 fail-closed / 静态闸补关键字位 / warn 恰 1 行 / ensure 全败 rc=1）**（Issue [#170](https://github.com/Nathan3303/nao-skills/issues/170) · fix · 含行为变更） | 2026-11-24 | #170 五条 AC + 涟漪用例 22/31/23 口径订正 | `nao/t563-followups-170` @ `5aeb012`（PR [#171](https://github.com/Nathan3303/nao-skills/pull/171)） |
+| **T564** | `arch-designer(T564)` → `qa` | **设计技能分层 + unslop 方法吸收（九遍修法并入 §八）**（Issue [#172](https://github.com/Nathan3303/nao-skills/issues/172) · feat · 新增能力） | 2026-11-24 | #172 + ADR `2026-11-24-design-skill-layering` | `feat/172-design-skill-layering` @ `89169fd`（PR [#174](https://github.com/Nathan3303/nao-skills/pull/174) Draft） |
 
 
 **用户拍板（2026-11-21）**：① **不再支持 tmux，纯 herdr** ② **缩减 `nao-fleet.sh` 体量** ③ 一步一步来（T554 已合并 `f962813` 后再做）④ 睡眠期授权：需决策的事 PM 自行决定，拿不准派 arch 合议。
