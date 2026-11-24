@@ -355,7 +355,7 @@ function verifyPushed(head, branch, remote) {
 function parseArgs(argv) {
   const opts = {
     queue: DEFAULT_QUEUE, target: DEFAULT_TARGET, receipts: DEFAULT_RECEIPTS,
-    remote: 'origin', check: false, stdout: false, noPushCheck: false, from: '', to: '',
+    remote: 'origin', check: false, stdout: false, noPushCheck: false, from: '', to: '', id: '',
   };
   const positional = [];
   for (let i = 0; i < argv.length; i += 1) {
@@ -374,6 +374,7 @@ function parseArgs(argv) {
     else if (a === '--check') opts.check = true;
     else if (a === '--stdout') opts.stdout = true;
     else if (a === '--no-push-check') opts.noPushCheck = true;
+    else if (a === '--id') opts.id = take(a);
     else if (a === '-h' || a === '--help') opts.help = true;
     else if (a.startsWith('-')) throw new UsageError(`未知选项：${a}`);
     else positional.push(a);
@@ -449,8 +450,10 @@ function cmdTransition(opts) {
   for (const [name, v] of [['--from', from], ['--to', to]]) {
     if (!STATES.includes(v)) throw new UsageError(`${name} 取值非法：${v}（合法值 ${STATES.join('/')}）`);
   }
+  // 同态自转同样非法，回显口径与其它非法转换一致（都给出允许集，P3-1）
   if (from === to) {
-    process.stderr.write(`${PROG}: 非法状态转换 ${from} → ${to}（同一状态不是转换；转换必须改变 state）\n`);
+    const allowedSame = TRANSITIONS[from] || [];
+    process.stderr.write(`${PROG}: 非法状态转换 ${from} → ${to}（同一状态不是转换；从 ${from} 允许：${allowedSame.length ? allowedSame.join('/') : '无（终态）'}）\n`);
     return 1;
   }
   const allowed = TRANSITIONS[from] || [];
@@ -471,16 +474,37 @@ function cmdTransitions() {
 }
 
 function cmdReceiptLine(opts, positional) {
-  const file = positional[0] || path.join(opts.receipts, 'T566.receipt.json');
+  // 不内置默认回执（P3-3）：路径由位置参数给出，或由 --id 拼 `--receipts/<id>.receipt.json`；两者皆缺 ⇒ fail loud。
+  let file = positional[0];
+  if (!file) {
+    if (!opts.id) {
+      throw new UsageError('receipt-line 需要回执文件路径或 --id <任务号>（不再内置默认回执）');
+    }
+    file = path.join(opts.receipts, `${opts.id}.receipt.json`);
+  }
   let obj;
   try {
     obj = JSON.parse(readText(file, '回执文件'));
   } catch (e) {
+    if (e instanceof UsageError) throw e;
     throw new UsageError(`回执文件无法解析：${file}（${e.message}）`);
   }
   const { byId } = loadQueueOrDie(opts);
-  const errors = checkReceipt(obj, file, byId, { ...opts, noPushCheck: true });
+  const errors = checkReceipt(obj, file, byId, opts);
+  // P2-1：机读首行的语义 =「已交付且可复核」⇒ pushed 必须是 true（缺字段已由 schema 报红）。
+  // 不得因为 pushed:false/缺失就静默跳过校验后照样出机读行。
+  if (isPlainObject(obj)) {
+    if (obj.pushed !== true) {
+      errors.push(`${file}: receipt-line 要求 pushed:true（实际 ${short(obj.pushed)}）—— 未推送的回执拒绝出机读首行`);
+    }
+    if (opts.id && obj.id !== opts.id) {
+      errors.push(`${file}: --id=${opts.id} 与回执 id=${short(obj.id)} 不一致`);
+    }
+  }
   if (errors.length) fail([...errors, '回执校验未过 ⇒ 不生成机读首行']);
+  if (opts.noPushCheck) {
+    process.stderr.write(`${PROG}: NOTICE --no-push-check ⇒ 已跳过 pushed:true 的 git ls-remote 复核（机读首行基于回执自述）\n`);
+  }
   const rc = (g) => (obj.gates[g].rc === 0 ? 'ok' : 'red');
   const row = byId.get(obj.id);
   const total = Array.isArray(row.acs) ? row.acs.length : 0;
@@ -494,7 +518,7 @@ function usage() {
   ${PROG} validate    [--queue ${DEFAULT_QUEUE}] [--receipts ${DEFAULT_RECEIPTS}] [--remote origin] [--no-push-check]
   ${PROG} transition  --from <状态> --to <状态>
   ${PROG} transitions
-  ${PROG} receipt-line [<回执.json>] [--queue ...] [--receipts ...]
+  ${PROG} receipt-line (<回执.json> | --id <任务号>) [--queue ...] [--receipts ...] [--remote origin] [--no-push-check]
 
 render 只读 ${DEFAULT_QUEUE}，写 ${DEFAULT_TARGET} 里 <!-- nao-queue:begin|end active|dispatch --> 两个标记区；
 --check 只判「当前文件 == 渲染结果」（rc=1 = 被手改过）。标记缺失/重复 ⇒ rc=2，不静默追加。

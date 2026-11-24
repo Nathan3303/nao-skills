@@ -4,10 +4,11 @@
 # 被测对象 = `bin/nao-queue`（零依赖 Node CLI；单源 `docs/queue.jsonl`）。
 # 断言组（编号 ↔ AC）：
 #   ① AC1 回执 schema：完整回执通过；缺字段 / 空证据 / 自述与计数矛盾 / id 与文件名不一致 / 回执脱离队列 ⇒ 逐条点名必红
+#      机读首行：必须显式给回执路径或 --id（不内置默认回执）；pushed 缺字段/false ⇒ 必红且**零机读行产出**（P2-1/P3-3）
 #   ② AC2 pushed:true 与 `git ls-remote` 一致（正控：head 在远端；负控：未推送的提交 ⇒ 红；空远端 ⇒ 红；
 #      `--no-push-check` 是显式逃生阀，跳过必打 NOTICE —— 防静默假绿）
 #   ③ AC3 状态机：合法链（queued→dispatched · qa→qa_fail · qa_fail→working · merged→released）通过；
-#      跳级（queued→merged · qa→merged）、终态出边（released→queued）、同态自转 ⇒ 必红并给出允许集
+#      跳级（queued→merged · qa→merged）、终态出边（released→queued）、同态自转 ⇒ 必红并给出允许集（P3-1：同态自转也回显）
 #   ④ AC4 渲染单向：jsonl → tasks-state.md 两个标记区（`<!-- generated -->` 头）· 幂等（连跑两次 effect=0）·
 #      手改后 `render --check` 必红 · 再渲染复原 · 标记缺失/重复 ⇒ rc=2 且**不改目标文件** ·
 #      改 jsonl 的 state ⇒ 行在两区之间移动（渲染确由数据驱动）
@@ -141,6 +142,10 @@ for pair in "queued merged" "qa merged" "dispatched qa_pass" "released queued" "
 done
 c46 "$LAB" transition --from queued --to merged
 t4_assert_contains "$T4_ERR" "允许：dispatched" "③ 失败信息给出从 queued 的允许集"
+c46 "$LAB" transition --from queued --to queued
+t4_assert_contains "$T4_ERR" "允许：dispatched" "③ 同态自转也回显允许集（P3-1 · queued → queued）"
+c46 "$LAB" transition --from working --to working
+t4_assert_contains "$T4_ERR" "允许：qa/blocked" "③ 同态自转也回显允许集（P3-1 · working → working）"
 c46 "$LAB" transition --from bogus --to queued
 t4_assert_eq 2 "$T4_RC" "③ 未知状态 ⇒ rc=2（用法错误，与「非法转换」区分）"
 
@@ -155,7 +160,7 @@ cat > "$REC/T701.receipt.json" <<'JSON'
   "pushed": false,
   "gates": {
     "check": { "rc": 0, "log": "check.log" },
-    "full": { "rc": 0, "cases": 42, "pass": 2513, "fail": 0, "note": "" }
+    "full": { "rc": 0, "cases": 43, "pass": 2513, "fail": 0, "note": "" }
   },
   "acs": [
     { "id": "AC1", "how": "case 46 ①", "evidence": "tests/t4/cases/46-queue-receipt.sh:PASS" },
@@ -207,10 +212,22 @@ t4_assert_eq 1 "$T4_RC" "① 回执脱离队列（无对应行）⇒ rc=1"
 c46 "$LAB" validate --queue "$LAB/missing.jsonl" --receipts "$REC"
 t4_assert_eq 2 "$T4_RC" "① 队列文件不存在 ⇒ rc=2（用法错误）"
 
-# 机读首行（PRD §四）：gates 转 ok|red、acs=<回执数>/<队列数>
-c46 "$LAB" receipt-line "$REC/T701.receipt.json" --queue "$Q"
-t4_assert_eq 0 "$T4_RC" "① receipt-line rc=0"
-t4_assert_eq "receipt: T701 rd-infra head=deadbeef gates=ok,ok acs=2/2" "$T4_OUT" "① 机读首行逐字（gates=ok,ok · acs=2/2）"
+# 机读首行（PRD §四）：参数必须显式（P3-3），pushed:false/缺 pushed ⇒ 拒绝出机读行（P2-1）
+c46 "$LAB" receipt-line --queue "$Q"
+t4_assert_eq 2 "$T4_RC" "① receipt-line 缺回执路径与 --id ⇒ rc=2（不再内置 T566 默认）"
+t4_assert_contains "$T4_ERR" "--id" "① 失败文案指路 --id（不静默回落到某个固定回执）"
+
+c46 "$LAB" receipt-line "$REC/T701.receipt.json" --queue "$Q" --receipts "$REC"
+t4_assert_eq 1 "$T4_RC" "① receipt-line 遇 pushed:false ⇒ rc=1（拒绝机读首行）"
+t4_assert_contains "$T4_ERR" "pushed:true" "① 点名 pushed:true 是机读首行的前提"
+t4_assert_not_contains "$T4_OUT" "receipt:" "① pushed:false 时零机读行产出（不产假机读行）"
+
+c46_mut "$REC/T701.receipt.json" "$LAB/r.nopushed.json" 'delete o.pushed'
+mkdir -p "$LAB/rec-nopushed"; cp "$LAB/r.nopushed.json" "$LAB/rec-nopushed/T701.receipt.json"
+c46 "$LAB" receipt-line "$LAB/rec-nopushed/T701.receipt.json" --queue "$Q" --receipts "$LAB/rec-nopushed"
+t4_assert_eq 1 "$T4_RC" "① receipt-line 遇缺 pushed 字段 ⇒ rc=1"
+t4_assert_contains "$T4_ERR" "pushed" "① 缺 pushed 字段被点名"
+t4_assert_not_contains "$T4_OUT" "receipt:" "① 缺 pushed 字段时零机读行产出"
 
 # ================================================================ ② AC2 pushed 复核（本地 bare 仓，零网络）
 REMOTE="$LAB/remote.git"
@@ -231,12 +248,28 @@ c46 "$LAB" validate --queue "$Q" --receipts "$PUSHED" --remote "$REMOTE"
 t4_assert_eq 0 "$T4_RC" "② AC2 pushed:true 且 head 在远端 ⇒ rc=0（$T4_ERR）"
 t4_assert_contains "$T4_OUT" "push 复核=on" "② 摘要声明 push 复核已启用"
 
+# 机读首行（PRD §四）：gates 转 ok|red、acs=<回执数>/<队列数>；pushed:true 必须与远端实测一致（默认复核）
+c46 "$LAB" receipt-line "$PUSHED/T701.receipt.json" --queue "$Q" --receipts "$PUSHED" --remote "$REMOTE"
+t4_assert_eq 0 "$T4_RC" "① receipt-line pushed:true 且 head 在远端 ⇒ rc=0（$T4_ERR）"
+t4_assert_eq "receipt: T701 rd-infra head=$SHA1 gates=ok,ok acs=2/2" "$T4_OUT" "① 机读首行逐字（gates=ok,ok · acs=2/2）"
+c46 "$LAB" receipt-line --id T701 --queue "$Q" --receipts "$PUSHED" --remote "$REMOTE"
+t4_assert_eq 0 "$T4_RC" "① receipt-line --id 拼 --receipts/<id>.receipt.json ⇒ rc=0（P3-3）"
+t4_assert_eq "receipt: T701 rd-infra head=$SHA1 gates=ok,ok acs=2/2" "$T4_OUT" "① --id 形态的机读首行逐字"
+
 UNPUSHED="$LAB/rec-unpushed"; mkdir -p "$UNPUSHED"
 c46_mut "$REC/T701.receipt.json" "$UNPUSHED/T701.receipt.json" "o.head = '$SHA2'; o.pushed = true"
 c46 "$LAB" validate --queue "$Q" --receipts "$UNPUSHED" --remote "$REMOTE"
 t4_assert_eq 1 "$T4_RC" "② AC2 pushed:true 与远端不一致 ⇒ rc=1"
 t4_assert_contains "$T4_ERR" "ls-remote" "② 点名 git ls-remote 复核失败"
 t4_assert_contains "$T4_ERR" "pushed:true" "② 点名是 pushed:true 的断言失败"
+
+# 假机读行负控：回执自述 pushed:true 但 head 未推送 ⇒ 必红且零机读行（receipt-line 默认就做远端复核，不静默跳过）
+c46 "$LAB" receipt-line "$UNPUSHED/T701.receipt.json" --queue "$Q" --receipts "$UNPUSHED" --remote "$REMOTE"
+t4_assert_eq 1 "$T4_RC" "② receipt-line 遇假 pushed（head 未推送）⇒ rc=1"
+t4_assert_not_contains "$T4_OUT" "receipt:" "② 假机读行零产出（stdout 无机读行）"
+c46 "$LAB" receipt-line "$UNPUSHED/T701.receipt.json" --queue "$Q" --receipts "$UNPUSHED" --remote "$REMOTE" --no-push-check
+t4_assert_eq 0 "$T4_RC" "② receipt-line --no-push-check 是显式逃生阀（需人显式加旗标）"
+t4_assert_contains "$T4_ERR" "NOTICE" "② receipt-line 跳过复核必打 NOTICE（不静默）"
 
 c46 "$LAB" validate --queue "$Q" --receipts "$UNPUSHED" --remote "$REMOTE" --no-push-check
 t4_assert_eq 0 "$T4_RC" "② --no-push-check 是显式逃生阀（rc=0）"

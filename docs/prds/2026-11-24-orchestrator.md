@@ -64,7 +64,7 @@
 | 双 orch | `flock` 拒第二实例，返回 rc=1 + 点名持锁 pid |
 | 会话被外部杀掉 | `agent_verdict=absent` ⇒ 标 `blocked(absent)`，不自动重派（先让人看原因） |
 | 队列与台账不一致 | 以 `queue.jsonl` 为准，重渲染 `tasks-state.md`；不一致本身记账 |
-| 回执伪造（自述 pass 无日志） | `gates.full.log` 指向不存在/无 `RESULT: PASS` ⇒ 判红 |
+| 回执伪造（自述 pass 无日志） | `gates.check.log` 指向不存在文件，或 `gates.full` 缺 `rc/cases/pass/fail/note` 任一 ⇒ 判红 |
 
 ## 七、验收（AC，机械可判）
 
