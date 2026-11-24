@@ -632,7 +632,7 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-（无在跑任务；T559 / T560 / T561 均已合并归档 ⇒ 终态见下方「已验收 / 已归档」归档墙）
+| **T562** | `arch-designer`（ADR）→ `rd-infra` → `qa` | **herdr desktop app 第二后端**（Issue [#168](https://github.com/Nathan3303/nao-skills/issues/168) · feat · 新增后端） | 2026-11-24 | PRD `docs/prds/2026-11-24-herdr-app-backend.md` AC1–AC10 | `feat/168-app-backend`（PRD 已落，待 arch ADR） |
 
 
 **用户拍板（2026-11-21）**：① **不再支持 tmux，纯 herdr** ② **缩减 `nao-fleet.sh` 体量** ③ 一步一步来（T554 已合并 `f962813` 后再做）④ 睡眠期授权：需决策的事 PM 自行决定，拿不准派 arch 合议。

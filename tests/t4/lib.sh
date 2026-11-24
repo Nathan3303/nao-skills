@@ -591,6 +591,37 @@ t4_scan_term_herdr_forbidden() { # <script>
   done <<< "$rs"
 }
 
+# T562/AC7 静态闸：**app 臂禁裸调 hc**（唯一入口 `_term_app_exec`）。
+#   缺陷类：app 臂里直接 `hc run …` 会绕过 `HC_SOCKET=$HC_TERMINAL_SOCKET` 注入 ⇒ 连到错 core
+#   （`HC_SESSION` 拼错会静默新建空 core = 假成功），且错误判据（JSON error 字段）不再统一。
+#   判据：全脚本命令位的 `hc`（`(^|[|;&(]|$(|{) [exec] hc`）只允许两处例外：
+#     a) `_term_app_exec` 函数体内（唯一入口）；b) `command -v hc`（存在性探测）。
+#   输出 `行号:内容`（空 = 合规）。
+t4_scan_app_bare_hc() { # <script>
+  # AC7 静态闸（T562）：app 臂**禁裸调 hc**，唯一入口 = `_term_app_exec`。
+  #   两向都必须承重（QA P2：旧版只认「语句位 hc」，三种形态全绿）：
+  #   ① 调用形态：前置 env 赋值 / `command` / `exec` / `env` 前缀也算调用（`command hc ls`、
+  #      `HC_SOCKET=x hc ls` 同样是裸调 —— 它们绕过了唯一入口的 socket/rc 归一化）；
+  #   ② 入口存在性：`_term_app_exec() {` 必须**恰 1 处**；整删/改名后没有 hc 调用也**不许算绿**
+  #      （否则「删掉入口」= 判据空转，是最容易被绕过的一种）。
+  local script="$1" lnno body trim execr="" entry_n=""
+  local entry_re='^_term_app_exec\(\) \{'
+  local re='(^|[|;&({])[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|exec|command|env|nohup|time)[[:space:]]+)*hc([[:space:]]|$)'
+  local allow='(command -v hc|t4_require_cmd hc)'
+  [ -f "$script" ] || { printf '脚本不存在: %s\n' "$script"; return 0; }
+  entry_n="$(grep -cE -- "$entry_re" "$script" || true)"
+  [ "$entry_n" = "1" ] || printf 'MISSING_ENTRY: %s 内 `_term_app_exec() {` 定义数 = %s（唯一入口缺失/重复 ⇒ app 臂可能裸调 hc 或已被删）\n' "$script" "$entry_n"
+  execr="$(awk -F'\t' '$1 == "_term_app_exec" { print $2 "\t" $3; exit }' <<< "$(_t4_term_func_ranges "$script")")"
+  while IFS= read -r ln; do
+    lnno="${ln%%:*}"; body="${ln#*:}"
+    trim="${body#"${body%%[![:space:]]*}"}"
+    case "$trim" in \#*) continue;; esac
+    grep -qE -- "$allow" <<< "$ln" && continue
+    if [ -n "$execr" ] && _t4_in_ranges "$lnno" "$execr"; then continue; fi
+    printf '%s:%s\n' "$lnno" "$trim"
+  done < <(grep -nE -- "$re" "$script")
+}
+
 # T558/#160 静态闸：放置快照 pane 行的**裸 read 消费点 = 0**，且每个消费循环首步必须经单点访问器。
 #   缺陷背景（Issue #160 · P0）：行字段分隔符原为 TAB（IFS 空白类）⇒ 无 label 的 pane 行整体左移，
 #   wsid 位读到 tab_id ⇒ `ensure` 把「只有用户自己 pane 的 workspace」判成空 workspace 并 `workspace close`，

@@ -241,20 +241,30 @@ die()  { printf '\033[1;31m[fleet]\033[0m %s\n' "$*" >&2; exit 1; }
 #         **一律不读终端标题**，也**不把宿主 tmux 的句柄变量当证据** —— 从 tmux shell 起的
 #         herdr server 会把外层句柄渗进 pane（spike 实测），拿来判身份必串台。
 #   rc 语义：1 = 已执行但失败；3 = 前提不满足；2 = 用法守卫（旧调用面：非 herdr 的 NAO_TERMINAL / cleanup -S）。
-term_backend() {  # 守卫（无输出 = 放行）；旧值 ⇒ 单行 stderr + exit 2
+term_backend() {  # 守卫（无输出 = 放行）；非法/已移除值 ⇒ 单行 stderr + exit 2
   case "${NAO_TERMINAL:-}" in
     ''|herdr) return 0 ;;
+    app) return 0 ;;
     tmux)
-      printf '[fleet] 已移除 tmux 后端：本版起 herdr（≥0.9.1）是唯一后端 —— 删掉 NAO_TERMINAL 或置空后重试（迁移见 v0.28.0 发布说明）\n' >&2
+      printf '[fleet] 已移除 tmux 后端：本版后端 = herdr（默认，TUI）/ app（herdr desktop app）—— 删掉 NAO_TERMINAL 或置空后重试（迁移见 v0.28.0 发布说明）\n' >&2
       exit 2 ;;
     *)
-      printf '[fleet] NAO_TERMINAL=%s 非法：本版唯一后端是 herdr（未设/空串 = herdr）\n' "$NAO_TERMINAL" >&2
+      printf '[fleet] NAO_TERMINAL=%s 非法：允许值 = herdr（默认，TUI）/ app（herdr desktop app）；未设/空串 = herdr\n' "$NAO_TERMINAL" >&2
       exit 2 ;;
   esac
 }
 
+# 后端名（输出面用；herdr 路径的文案逐字不变 ⇒ AC1）
+term_label() { if _term_app_backend; then printf 'app\n'; else printf 'herdr\n'; fi; }
+
+# 快照构建分派（缓存/落盘逻辑在 term_snapshot，实现分派在此）
+_term_backend_snapshot() { if _term_app_backend; then _term_app_snapshot; else _term_herdr_snapshot; fi; }
+
 # ---- 1/4 前提闸门 ----
-term_require() { _term_herdr_require; }
+term_require() { if _term_app_backend; then _term_app_require; else _term_herdr_require; fi; }
+
+# ensure 前的后端前提（app = AC3b「窗口不在跑 ⇒ exit 3」；herdr 无此概念 ⇒ 无操作）
+term_spawn_preflight() { if _term_app_backend; then _term_app_spawn_preflight; else return 0; fi; }
 
 # ---- 2/4 快照（每命令 ≤1 次 pane list / agent list；落临时文件，子 shell 复用同一份）----
 # 12 列（TAB）：name pane_id terminal_id cwd foreground_cwd fg_process
@@ -267,7 +277,7 @@ term_snapshot() {
   if [[ -e "$f" ]]; then _TERM_SNAP_FILE="$f"; cat "$f"; return 0; fi
   # 上一轮被 SIGKILL/timeout 杀掉时会留下同名快照（EXIT trap 不执行）⇒ 只在**重建**时清 >2h 的陈迹
   find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'nao-fleet-term-snap.*' -mmin +120 -delete 2>/dev/null || true
-  if ! _term_herdr_snapshot > "$f"; then
+  if ! _term_backend_snapshot > "$f"; then
     rm -f "$f" 2>/dev/null || true; _TERM_SNAP_FILE=""
     return 1
   fi
@@ -281,12 +291,12 @@ term_snapshot() {
 #   integration-missing → online；`hook_authority` = agent list 的 screen_detection_skipped
 #   （1 = 状态来自生命周期 hook（可信）/ 0 = 屏幕启发式或缺失（保守不可投递））。
 term_liveness() {  # <name> [repo]
-  _term_herdr_liveness "${1-}" "${2-}"
+  if _term_app_backend; then _term_app_liveness "${1-}" "${2-}"; else _term_herdr_liveness "${1-}" "${2-}"; fi
 }
 
 # ---- 4/4 前台 argv（取全部前台进程 → 每行 "process-name<TAB>argv"；不得用 ps 兜底）----
 term_argv() {  # <pane_id>
-  _term_herdr_argv "${1-}"
+  if _term_app_backend; then _term_app_argv "${1-}"; else _term_herdr_argv "${1-}"; fi
 }
 
 # ---- 5/8 放置（三期 P1 布局 A）：1 workspace/仓 + 1 tab/角色 ----
@@ -295,11 +305,17 @@ term_argv() {  # <pane_id>
 # 返回三态码（SPAWN_RC_*）：0 成功 · 2 跳过 · 3 失败（含就绪超时 / 0 尺寸 pane；调用方计入 SPAWN_FAIL）。
 # 成功时**必须**回填 `_TERM_SPAWN_PANE`（T548 投递点依赖它）。
 term_spawn() {  # <name> <inner> <repo> [force] [label] [group]
-  _term_herdr_spawn "${1-}" "${2-}" "${3-}" "${4:-false}" "${5-}" "${6-}"
+  if _term_app_backend; then _term_app_spawn "${1-}" "${2-}" "${3-}" "${4:-false}" "${5-}" "${6-}"
+  else _term_herdr_spawn "${1-}" "${2-}" "${3-}" "${4:-false}" "${5-}" "${6-}"; fi
 }
 
 # ---- 6/8 起 server（B2 · BR6）：唯一生产入口 ----
 term_session_start() {  # <session>
+  if _term_app_backend; then
+    # app 无「起 server」：core 归桌面版所有（起/停 core = 操作用户窗口 ⇒ 拒绝）
+    printf '[fleet] session-start 不适用于 app 后端：core 由 herdr desktop app 管理（打开 app 即就绪）—— 本命令只用于 herdr TUI 后端\n' >&2
+    exit 2
+  fi
   _term_herdr_session_start "${1-}"
 }
 
@@ -308,24 +324,43 @@ term_session_start() {  # <session>
 #   契约：0 = 已投递 · 1 = 投递失败（**调用方不计 SPAWN_FAIL**：会话确实可用，自检只读非阻塞）。
 #     失败时 stdout 给一行可粘贴的诊断（error code），供调用方 warn。
 term_deliver() {  # <pane_id> <message>
-  _term_herdr_deliver "${1-}" "${2-}"
+  if _term_app_backend; then _term_app_deliver "${1-}" "${2-}"; else _term_herdr_deliver "${1-}" "${2-}"; fi
 }
 
 # ---- 7/8 回收（B3）：句柄层（定位 / self 判据 / liveness / 忙闲证据 / 回收句柄）----
 #   共用闸门层（tasks-state、subagent 拒收、目标解析、--force）仍在 cmd_close，**不动**。
 #   返回 0 = 已回收 / 未运行（幂等成功）；1 = 拒绝或已执行但失败（含 effect 未达成）。
 term_reclaim() {  # <name> <repo> <force> <core> <scope> <ensure-target>
-  _term_herdr_reclaim "${1-}" "${2-}" "${3-}" "${4-}" "${5-}" "${6-}"
+  if _term_app_backend; then _term_app_reclaim "${1-}" "${2-}" "${3:-false}" "${4-}" "${5-}" "${6-}"
+  else _term_herdr_reclaim "${1-}" "${2-}" "${3-}" "${4-}" "${5-}" "${6-}"; fi
 }
 
 # ---- 8/8 拆场（B3 姊妹入口）：herdr = session stop+delete ----
 #   herdr 的 stop **非幂等**（第二次 rc=1）⇒ 判 **effect** 不看 rc；default 一律拒（BR9）。
 term_cleanup() {  # <herdr-session> [force]
-  _term_herdr_cleanup "${1-}" "${2:-false}"
+  if _term_app_backend; then _term_app_cleanup "${1-}" "${2:-false}"; else _term_herdr_cleanup "${1-}" "${2:-false}"; fi
 }
 
 # ---- 9/9 当前终端会话名（诊断行用）----
-term_session_name() { printf '%s\n' "${HERDR_SESSION:-}"; }
+term_session_name() { if _term_app_backend; then printf '%s\n' "${HC_SCOPE:-}"; else printf '%s\n' "${HERDR_SESSION:-}"; fi; }
+
+# ---- 放置快照门面（ensure 相位 1a）：herdr = workspace/pane list；app = doc.get + hc ls ----
+term_place_prime() {  # → 0 已建快照 / 1 不可用
+  if _term_app_backend; then _term_app_place_prime; else _term_herdr_place_prime; fi
+}
+term_place_reset() { _TERM_PLACE_CACHE=0; _TERM_PLACE_WS_BY_LABEL=(); _TERM_PLACE_WS_ROWS=(); _TERM_PLACE_PANE_ROWS=(); _TERM_APP_GHOST_TABS=(); }
+
+# ---- 状态页的 workspace/space 标签表（每行 "<id>\t<label>"）----
+term_ws_label_rows() {
+  if _term_app_backend; then _term_app_ws_label_rows; return 0; fi
+  local js obj wid label
+  js="$(_term_herdr_exec workspace list 2>/dev/null || true)"
+  while IFS= read -r obj; do
+    wid="$(_term_json_str "$obj" workspace_id)"; [[ -n "$wid" ]] || continue
+    label="$(_term_json_str "$obj" label)"
+    printf '%s\t%s\n' "$wid" "$label"
+  done < <(_term_json_objs <<< "$js")
+}
 
 # ---- BR7 忙闲 → 可投递（纯谓词；事实判定与策略映射分离，B3 close 复用）----
 #   idle/done 可投递；working/blocked 不可；unknown 保守不可。
@@ -937,6 +972,13 @@ _term_place_pane_row() {  # <label> <pane_id> <wsid> <tab_id> <cwd> <fgcwd>
   printf '%s' "${1-}${FS}${2-}${FS}${3-}${FS}${4-}${FS}${5-}${FS}${6-}"
 }
 
+# 放置快照的**唯一 append 点**（两后端 prime 共用；构造仍走 `_term_place_pane_row`）。
+#   T562：app 臂新增第二个 prime ⇒ 若各自 `+=`，行构造点会变 2 处（case 43 ① 断言唯一），
+#   且下次改编码只需改构造器 —— append 也收成一处，防「双写改一处漏一处」。
+_term_place_add_pane() {  # <label> <pane> <wsid> <tab> <cwd> <fgcwd>
+  _TERM_PLACE_PANE_ROWS+=("$(_term_place_pane_row "${1-}" "${2-}" "${3-}" "${4-}" "${5-}" "${6-}")")
+}
+
 # pane 行**唯一解析点**（#160 P0）：所有消费点只准经本函数取值 —— 禁止再出现「直接 `read` 消费
 #   `_TERM_PLACE_PANE_ROWS`」（静态闸 tests/t4/lib.sh::t4_scan_place_pane_rows 断言裸 read = 0）。
 #   空字段保真（`\x1f` 非空白 ⇒ IFS 不折叠）；字段数不足时 `read` 把余下变量置空（不残留上一行）。
@@ -964,7 +1006,7 @@ _term_herdr_place_prime() {  # → 0 已建快照 / 1 后端不可用
     wsid="$(_term_json_str "$obj" workspace_id)"
     cwd="$(_term_json_str "$obj" cwd)"
     fgcwd="$(_term_json_str "$obj" foreground_cwd)"
-    _TERM_PLACE_PANE_ROWS+=("$(_term_place_pane_row "$label" "$pid" "$wsid" "$tid" "$cwd" "$fgcwd")")
+    _term_place_add_pane "$label" "$pid" "$wsid" "$tid" "$cwd" "$fgcwd"
   done < <(_term_json_objs <<< "$js")
   _TERM_PLACE_CACHE=1
   return 0
@@ -987,7 +1029,8 @@ _term_herdr_ws_pane_count_live() {  # <wsid> → stdout 计数
 }
 
 # 快照内新增一条 pane 行（spawn 成功后回填；缓存只服务本命令的后续目标）
-_term_herdr_place_set_pane() {  # <label> <pane> <wsid> <tab> <cwd>
+# 后端中立（herdr/app 两臂共用）：只改 `_TERM_PLACE_*` 数组，不调后端。
+_term_place_set_pane() {  # <label> <pane> <wsid> <tab> <cwd>
   local label="${1-}" pane="${2-}" wsid="${3-}" tab="${4-}" cwd="${5-}"
   local line
   local -a keep=()
@@ -1398,7 +1441,7 @@ _term_herdr_spawn() {  # <name> <inner> <repo> [force] <label> [group] → SPAWN
   if [[ -n "${_TERM_SNAP_FILE:-}" ]]; then rm -f "$_TERM_SNAP_FILE" 2>/dev/null || true; _TERM_SNAP_FILE=""; fi
   # 放置快照回填（T554）：新 pane 进本命令快照（不再为后续目标重查 pane list）
   if (( _TERM_PLACE_CACHE )); then
-    _term_herdr_place_set_pane "$name" "$pane" "$wsid" "$tid" "$repo"
+    _term_place_set_pane "$name" "$pane" "$wsid" "$tid" "$repo"
   fi
 
   # ---- J2 结构收敛（布局 A）：复用路径也跑（旧布局的 pane 在共享 tab 里 ⇒ 迁移到独立 tab）----
@@ -1547,6 +1590,619 @@ _term_herdr_session_start() {  # <session>
   return 0
 }
 # <<< term-facade-herdr END
+
+# =============================================================================
+# app 后端实现（T562 / Issue #168 · ADR 2026-11-24-herdr-app-backend）
+#
+#   身份：HC_SCOPE + HC_TERMINAL_ID + HC_TERMINAL_SOCKET 三件套（缺任一 ⇒ exit 3，不猜）；
+#         socket 必须落在 app core 目录 `$XDG_RUNTIME_DIR/herdr-core/` 下（stale/外贸 env 防串台）。
+#   连接：**唯一入口 `_term_app_exec`** —— 注入 `HC_SOCKET=$HC_TERMINAL_SOCKET`
+#         （`HC_TERMINAL_SOCKET` 不参与路由；`HC_SESSION` 拼错会静默新建空 core ⇒ 不用它路由）。
+#   失败判据：**JSON `error` 字段**，不看 rc（实测 `hc get` 无目标 rc=3 而 `hc get` 缺参 rc=0）。
+#   放置：写标签 `herdr.space`/`herdr.tab` → **读 `doc.get herdr-app` 验证终端是否在该 tab 的 root 树**
+#         → 不成则 kill+rm 回滚 + fail loud。`hc ls` 的 `where` 只是展示 label，**不进断言**。
+#   忙闲：`status.app` + `status.state`（working/blocked = 忙；idle/done = 可投递；缺失 = unknown）；
+#         **无 `state_change_seq` 等价物** ⇒ 快照 seq 位恒 `-`，判据不依赖它。
+#   生命周期：`hc run --bg --no-parent --keep`（`--no-parent` 必须：否则父终端结束会带走子终端）；
+#         close = `hc kill` → `hc rm`（顺序不可反：live 终端 rm ⇒ rc=1 `kind:live`；kill 幂等）。
+#   测试隔离（R1 定论 = ③ 部分隔离）：私有 `XDG_RUNTIME_DIR` + `XDG_STATE_HOME` + `HC_SESSION`
+#         起私有 core；**真实收养 / UI 效果属人工验收**（用例 `[SKIP]` 并给理由）。
+# >>> term-impl-app BEGIN
+# app 契约版本：`hc schema` generation + `doc.get herdr-app` 的 version（低于 10 ⇒ 不支持放置，fail loud）
+TERM_APP_SCHEMA_MIN="1"
+TERM_APP_DOC_MIN="10"
+TERM_APP_LABEL_SPACE="herdr.space"
+TERM_APP_LABEL_TAB="herdr.tab"
+
+_term_app_backend() { [[ "${NAO_TERMINAL:-}" == "app" ]]; }
+
+# 唯一入口：所有 `hc` 调用经此处（静态闸 tests/t4/lib.sh::t4_scan_app_bare_hc 断言区间内裸调 = 0）
+_term_app_exec() {  # <hc 子命令…> → stdout（错误 JSON 也在合流输出里）；rc 原样透传
+  local sock="${HC_TERMINAL_SOCKET:-}" rc=0 out=""
+  if [[ -z "$sock" ]]; then
+    warn "app 后端调用缺 HC_TERMINAL_SOCKET（三件套未齐）—— 拒绝执行（猜 socket 会连错 core）"
+    return 3
+  fi
+  if ! command -v hc >/dev/null 2>&1; then
+    warn "app 后端需要 hc 在 PATH（herdr desktop app 的 CLI；装好后重试）"
+    return 3
+  fi
+  out="$(HC_SOCKET="$sock" command hc "$@" 2>&1)" || rc=$?
+  printf '%s\n' "$out"
+  return "$rc"
+}
+
+# JSON 错误判据（BR：hc 有些错误路径 rc=0 ⇒ 只认 `"error":{…}`）
+_term_app_payload_ok() {  # <输出> → 0 无 error 字段
+  [[ -n "${1-}" ]] || return 1
+  ! grep -qE '"error"[[:space:]]*:[[:space:]]*\{' <<< "${1-}"
+}
+
+# 字段抽取（紧凑 JSON，一行）
+#   **取首个**同名键：`sed '.*"name":"…"'` 是贪婪匹配 ⇒ 会取到 `foreground.name`（= "pi"）而非终端名。
+#   awk 按 `"` 切词后只在 `键` 紧跟 `:` 时取值，语义 = 首次出现。
+_term_app_field() {  # <json> <键> → 首个字符串值（无则空）
+  printf '%s\n' "${1-}" | awk -v k="$2" '{
+    n = split($0, a, "\"")
+    for (i = 1; i <= n - 2; i++) if (a[i] == k && a[i + 1] == ":") { print a[i + 2]; exit }
+  }'
+}
+_term_app_term_state() {  # <json> → live | finished | 空
+  sed -n 's/.*"state":"\(live\|finished\)".*/\1/p' <<< "${1-}" | head -1
+}
+_term_app_status_state() {  # <json> → status.state（无 status/null ⇒ 空）
+  sed -n 's/.*"status":{[^}]*"state":"\([^"]*\)".*/\1/p' <<< "${1-}" | head -1
+}
+_term_app_status_app() {  # <json> → status.app（无 ⇒ 空；不假设 app 是 status 的键序第一位）
+  sed -n 's/.*"status":{[^}]*"app":"\([^"]*\)".*/\1/p' <<< "${1-}" | head -1
+}
+# 前台进程名：真 hc 的 `get` **没有** `foreground` 块（实测），前台程序在顶层 `agent`
+#   （例 `"agent":"pi"`）；替身给 `foreground.name`。两者都认，取首个非空。
+_term_app_fg_name() {  # <json> → 前台程序名（无 ⇒ 空）
+  local v=""
+  v="$(sed -n 's/.*"foreground":{[^}]*"name":"\([^"]*\)".*/\1/p' <<< "${1-}" | head -1)"
+  [[ -n "$v" ]] || v="$(sed -n 's/.*"agent":"\([^"]*\)".*/\1/p' <<< "${1-}" | head -1)"
+  printf '%s' "$v"
+}
+_term_app_fg_cwd() {  # <json> → 前台 cwd（真 hc 无该字段 ⇒ 回落终端 cwd）
+  local v=""
+  v="$(sed -n 's/.*"foreground":{[^}]*"cwd":"\([^"]*\)".*/\1/p' <<< "${1-}" | head -1)"
+  [[ -n "$v" ]] || v="$(_term_app_field "${1-}" cwd)"
+  printf '%s' "$v"
+}
+
+# ---- 前提闸门（M2 / AC3）----
+_term_app_require() {
+  command -v hc >/dev/null 2>&1 || {
+    printf '需要 hc：NAO_TERMINAL=app 要求 herdr desktop app 的 CLI（hc）在 PATH（装好后重试；不想用 app 后端请 unset NAO_TERMINAL）\n' >&2
+    exit 3
+  }
+  local missing=""
+  [[ -n "${HC_SCOPE:-}" ]] || missing="HC_SCOPE"
+  [[ -n "${HC_TERMINAL_ID:-}" ]] || missing="${missing:+$missing、}HC_TERMINAL_ID"
+  [[ -n "${HC_TERMINAL_SOCKET:-}" ]] || missing="${missing:+$missing、}HC_TERMINAL_SOCKET"
+  if [[ -n "$missing" ]]; then
+    printf '需要 desktop app 终端身份：%s 缺失（app 后端只在其终端内运行；缺参不猜）—— 在 herdr desktop app 的终端里重试（不想用 app 后端请 unset NAO_TERMINAL）\n' "$missing" >&2
+    exit 3
+  fi
+  # socket 必须落在 app core 目录下（与 TUI 的 HERDR_SOCKET_PATH 同形守卫）
+  local root="${XDG_RUNTIME_DIR:-}/herdr-core" spp rp
+  spp="$(_term_path_norm "$HC_TERMINAL_SOCKET")"
+  if [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
+    rp="$(_term_path_norm "$root")"
+    if [[ "$spp" != "$rp"/* ]]; then
+      printf '需要 app core socket：HC_TERMINAL_SOCKET=%s 不在 %s/ 下（stale/外贸 env ⇒ 拒绝，防串台）—— 在 app 终端内重试\n' \
+        "$HC_TERMINAL_SOCKET" "$rp" >&2
+      exit 3
+    fi
+  elif [[ "$spp" != */herdr-core/* ]]; then
+    printf '需要 app core socket：HC_TERMINAL_SOCKET=%s 不含 /herdr-core/（无法证明属于 app core ⇒ 拒绝）—— 在 app 终端内重试\n' "$HC_TERMINAL_SOCKET" >&2
+    exit 3
+  fi
+  if [[ ! -S "$spp" ]]; then
+    printf '需要 app core socket：HC_TERMINAL_SOCKET=%s 不是 socket（desktop app 未运行 / core 已退出？）—— 打开 app 后重试\n' "$spp" >&2
+    exit 3
+  fi
+}
+
+# ensure 前的 app 专属前提（AC3b）：窗口不在跑 ⇒ 收养永不成 ⇒ exit 3，**不许先起终端再回滚**
+_term_app_spawn_preflight() {
+  if ! command -v herdr-app >/dev/null 2>&1; then
+    printf '需要 herdr-app：desktop app 的 CLI 不在 PATH（无法判断窗口是否在跑；装好后重试；不想用 app 后端请 unset NAO_TERMINAL）\n' >&2
+    exit 3
+  fi
+  if ! herdr-app status >/dev/null 2>&1; then
+    printf 'desktop app 未在运行：ensure 需要先打开 herdr desktop app 窗口（窗口关闭时新终端永不被收养 ⇒ 本命令不执行）—— 打开后重试（不想用 app 后端请 unset NAO_TERMINAL）\n' >&2
+    exit 3
+  fi
+}
+
+# ---- app 布局文档（doc.get herdr-app）----
+# 输出契约（每行，TAB 分隔）：
+#   V<TAB><version>
+#   S<TAB><space_id><TAB><folder><TAB><space_name>
+#   T<TAB><space_id><TAB><tab_id><TAB><tab_name><TAB><terminals,csv>
+_term_app_doc_rows() {
+  local raw="" rc=0 val="" js=""
+  raw="$(_term_app_exec connect <<< '{"jsonrpc":"2.0","id":1,"method":"doc.get","params":{"name":"herdr-app"}}')" || rc=$?
+  if (( rc != 0 )) || ! _term_app_payload_ok "$raw"; then
+    warn "doc.get 失败：$(printf '%s' "${raw:-<空输出>}" | head -c 200)"
+    return 1
+  fi
+  if ! command -v node >/dev/null 2>&1; then
+    warn "app 后端需要 node 解析布局文档（nao-skill 自带 node 依赖；核验 PATH）"
+    return 1
+  fi
+  js='let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{let j;try{j=JSON.parse(d)}catch(e){console.error("doc.get 输出不可解析");process.exit(1)}let r=j.result||{};let v=r.value;if(!v){console.log("V\t0");return}console.log("V\t"+(r.version||0));const walk=(n,acc)=>{if(!n||typeof n!=="object")return;if(Array.isArray(n)){for(const x of n)walk(x,acc);return}if(typeof n.terminal==="string")acc.push(n.terminal);for(const k of Object.keys(n)){if(k!=="terminal")walk(n[k],acc)}};for(const s of (v.spaces||[])){console.log(["S",s.id,s.folder||"",s.name||""].join("\t"));for(const t of (s.tabs||[])){const acc=[];walk(t.root,acc);console.log(["T",s.id,t.id,t.name||"",acc.join(",")].join("\t"))}}})'
+  if ! val="$(printf '%s' "$raw" | node -e "$js" 2>&1)"; then
+    warn "doc.get 解析失败：$(printf '%s' "${val:-<空>}" | head -c 200)"
+    return 1
+  fi
+  printf '%s\n' "$val"
+}
+
+# doc 契约探测（R2/AC8）：版本不足或无 spaces ⇒ fail loud（不当作「空布局」继续）
+_term_app_doc_guard() {
+  local rows="$1" ver=""
+  ver="$(awk -F'\t' '$1=="V"{print $2; exit}' <<< "$rows")"
+  if [[ -z "$ver" || "$ver" == "0" ]]; then
+    warn "app 布局文档不可用（doc.get 返回 value=null）：desktop app 未打开窗口或版本不支持 —— 打开 app 后重试（不按「空布局」继续）"
+    return 1
+  fi
+  if [[ ! "$ver" =~ ^[0-9]+$ ]] || (( ver < TERM_APP_DOC_MIN )); then
+    warn "app 布局文档 version=${ver:-?} < ${TERM_APP_DOC_MIN}：当前 desktop app 版本不支持放置契约（升级 app 后重试；不降级为「写标签即成功」）"
+    return 1
+  fi
+  return 0
+}
+
+# ---- 快照（12 列，与 herdr 同形，下游零改动）----
+# name pane_id terminal_id cwd fg_cwd fg_process agent_status seq session argv_name hook ws_id
+#   app 语义：pane_id/terminal_id = 终端地址（tN）；agent_status = status.state；
+#   seq 恒 `-`（无 state_change_seq 等价物）；session 位放**终端生命周期**（live/finished）；
+#   hook = 1 表示 `reported:true`（状态由程序 OSC 上报，非保守推断）；ws_id = labels.herdr.space。
+_term_app_snapshot() {
+  local ls="" g addr name cwd tstate st fg fgcwd sp tb hook
+  local nl ncwd nfgcwd nsp ntb nfgp nst nts
+  ls="$(_term_app_exec ls --all --json)" || { warn "hc ls 失败（app core 未就绪？）"; return 1; }
+  if ! _term_app_payload_ok "$ls"; then
+    warn "hc ls 不可用：$(printf '%s' "$ls" | head -c 200)"
+    return 1
+  fi
+  while IFS= read -r addr; do
+    [[ -n "$addr" ]] || continue
+    g="$(_term_app_exec get "$addr" --json)" || { warn "hc get $addr 失败（快照不完整）"; return 1; }
+    if ! _term_app_payload_ok "$g"; then
+      warn "hc get $addr 返回错误：$(printf '%s' "$g" | head -c 200)"
+      return 1
+    fi
+    name="$(_term_app_field "$g" name)"
+    [[ -n "$name" ]] || continue
+    cwd="$(_term_app_field "$g" cwd)"
+    tstate="$(_term_app_term_state "$g")"
+    st="$(_term_app_status_state "$g")"
+    fg="$(_term_app_fg_name "$g")"
+    fgcwd="$(_term_app_fg_cwd "$g")"
+    sp="$(_term_app_field "$g" "$TERM_APP_LABEL_SPACE")"
+    tb="$(_term_app_field "$g" "$TERM_APP_LABEL_TAB")"
+    case "$g" in *'"reported":true'*) hook=1 ;; *) hook=0 ;; esac
+    _term_tsv_norm "$name";  nl="$_TSV_NORM"
+    _term_tsv_norm "$cwd";   ncwd="$_TSV_NORM"
+    _term_tsv_norm "$fgcwd"; nfgcwd="$_TSV_NORM"
+    _term_tsv_norm "$sp";    nsp="$_TSV_NORM"
+    _term_tsv_norm "$tb";    ntb="$_TSV_NORM"
+    _term_tsv_norm "$fg";    nfgp="$_TSV_NORM"
+    _term_tsv_norm "$st";    nst="$_TSV_NORM"
+    _term_tsv_norm "$tstate"; nts="$_TSV_NORM"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$nl" "$addr" "$addr" "$ncwd" "$nfgcwd" "$nfgp" \
+      "$nst" - "$nts" - "$hook" "$nsp"
+  done < <(printf '%s' "$ls" | grep -o '"address":"[^"]*"' | cut -d'"' -f4)
+  return 0
+}
+
+# ---- 在线判定（M4：忙闲表，无 seq）----
+_term_app_liveness() {  # <name> [repo] → verdict/state/seq/hook
+  local name="${1-}" repo="${2-}" rows="" line rp="" filtered="" v="" state="-" cnt=0
+  local _l _p _t c1 c2 fg st seq sess av hook ws live_rows=""
+  [[ -n "$name" ]] || { printf 'absent\t-\t-\t-\n'; return 0; }
+  rows="$(term_snapshot 2>/dev/null | awk -F'\t' -v n="$name" '$1==n')" || rows=""
+  [[ -n "$rows" ]] || { printf 'absent\t-\t-\t-\n'; return 0; }
+  if [[ -n "$repo" ]]; then
+    rp="$(nao_phys_path "$repo")"
+    while IFS= read -r line; do
+      [[ -n "$line" ]] || continue
+      IFS=$'\t' read -r _ _ _ c1 c2 _ <<< "$line"
+      if { [[ "$c1" != "-" ]] && repo_contains_path "$rp" "$(nao_phys_path "$c1")"; } \
+         || { [[ "$c2" != "-" ]] && repo_contains_path "$rp" "$(nao_phys_path "$c2")"; }; then
+        filtered+="$line"$'\n'
+      fi
+    done <<< "$rows"
+    rows="${filtered%$'\n'}"
+    [[ -n "$rows" ]] || { printf 'absent\t-\t-\t-\n'; return 0; }
+  fi
+  # keep 换壳（BR4）：finished 终端 = pi 已退出、只剩 shell（`--keep` 语义）⇒ **不算在线**，
+  #   也不参与同名歧义计数（否则一次 close/退出后的残留会把重建判成 ambiguous）；
+  #   只有残留时给 `ghost`（label 在、agent 无）—— 比 absent 更诚实，status 会单列进证据异常节。
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    IFS=$'\t' read -r _l _p _t _ _ fg st seq sess av hook ws <<< "$line"
+    if [[ "$sess" == "live" ]]; then
+      live_rows+="$line"$'\n'
+    else
+      [[ -z "$v" ]] && { v="ghost"; state="$st"; }
+    fi
+  done <<< "$rows"
+  rows="${live_rows%$'\n'}"
+  [[ -n "$rows" ]] || { printf '%s\t%s\t-\t-\n' "${v:-absent}" "$state"; return 0; }
+  cnt="$(printf '%s\n' "$rows" | grep -c . || true)"
+  if (( cnt > 1 )); then
+    warn "同名命中 $cnt 个终端：$name ⇒ $(printf '%s\n' "$rows" | cut -f2 | paste -sd, -)（不猜：无唯一身份证据）"
+    printf 'ambiguous\t-\t-\t-\n'; return 0
+  fi
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    IFS=$'\t' read -r _l _p _t _ _ fg st seq sess av hook ws <<< "$line"
+    # 缺 `labels`（AC8 子形态，PM 裁定）：真 hc 恒给 `"labels":{}`，**单缺键**不构成「版本不支持」，
+    #   但「有名字、无放置键」⇒ 无法确认归属 ⇒ 判 `unknown`（**不判在线/不可投递**）+ 一行 warn。
+    #   若 labels 与 status **两项都缺** ⇒ 按 AC8 主形态判 `integration-missing`（更强的缺陷），
+    #   不降级成 unknown（否则 status 会把「集成缺失」证据行吞掉）。
+    if [[ "$ws" == "-" ]]; then
+      # 只对**舰队形状的会话名**告警（非舰队终端 —— 如用户自己开的窗口、夹具的 self 终端 —— 不归我们管，
+      #   否则每次 status 都会刷一条无意义告警）。
+      if [[ "$(fleet_name_parse "$name")" == OK* ]]; then
+        warn "集成缺 labels：无法确认放置归属（终端 $name；不判在线、不可投递）"
+      fi
+      if [[ "$st" == "-" || "$hook" != "1" ]]; then
+        [[ -z "$v" ]] && { v="integration-missing"; state="-"; }
+      else
+        [[ -z "$v" ]] && { v="unknown"; state="-"; }
+      fi
+      continue
+    fi
+    if [[ "$st" == "-" || "$hook" != "1" ]]; then
+      [[ -z "$v" ]] && { v="integration-missing"; state="-"; }
+      continue
+    fi
+    printf 'online\t%s\t-\t%s\n' "$st" "$hook"; return 0
+  done <<< "$rows"
+  printf '%s\t%s\t-\t-\n' "${v:-absent}" "$state"
+}
+
+# app 侧前台 argv（每条 "process-name<TAB>argv"；供诊断/复用面）
+_term_app_argv() {  # <addr>
+  local addr="${1-}" g rc=0
+  [[ -n "$addr" ]] || return 0
+  g="$(_term_app_exec get "$addr" --json)" || return 0
+  _term_app_payload_ok "$g" || return 0
+  local nm av
+  nm="$(_term_app_fg_name "$g")"
+  av="$(sed -n 's/.*"argv":\[\([^]]*\)\].*/\1/p' <<< "$g" | head -1 | tr -d '"' | sed 's/,/ /g')"
+  printf '%s\t%s\n' "${nm:-?}" "$av"
+}
+
+# ---- 放置（M3/BR2）：文档优先发现 space，缺则确定性铸造 ----
+_term_sha256() {  # <串> → 64 位 hex（sha256sum / shasum -a 256 两制）
+  if command -v sha256sum >/dev/null 2>&1; then printf '%s' "${1-}" | sha256sum | cut -d' ' -f1
+  else printf '%s' "${1-}" | shasum -a 256 | cut -d' ' -f1; fi
+}
+_term_app_mint_space() {  # <repo> → sp<32hex>
+  printf 'sp%s\n' "$(_term_sha256 "$(_term_path_norm "${1-}")" | cut -c1-32)"
+}
+_term_app_mint_tab() {  # <space> <name> → tb<32hex>
+  printf 'tb%s\n' "$(_term_sha256 "${1-}|${2-}" | cut -c1-32)"
+}
+
+_term_app_place_prime() {  # → 0 已建快照 / 1 后端不可用（fail loud 由调用方）
+  local rows snap sid folder base cand nn kind a b c d
+  local -A sid_folder=() base_folder=() tab_of=()
+  _TERM_PLACE_WS_BY_LABEL=(); _TERM_PLACE_WS_ROWS=(); _TERM_PLACE_PANE_ROWS=()
+  rows="$(_term_app_doc_rows)" || return 1
+  _term_app_doc_guard "$rows" || return 1
+  # ① space 发现：doc 的 folder 是权威（app 持久化）；doc 缺该 space 时才用终端 cwd 兜底
+  #    （M3「读该仓现有终端 label 取 space id」—— label 只存 id，folder 只有 doc 有）
+  while IFS=$'\t' read -r kind a b c; do
+    [[ "$kind" == "S" ]] || continue
+    [[ -n "$a" && -n "$b" ]] && sid_folder["$a"]="$b"
+  done <<< "$rows"
+  snap="$(_term_app_snapshot)" || return 1
+  while IFS=$'\t' read -r label addr _tid cwd fgcwd _fg _st _seq _sess _av _hook sp; do
+    [[ -n "$label" ]] || continue
+    if [[ -n "$sp" && -z "${sid_folder[$sp]:-}" && "$cwd" != "-" ]]; then sid_folder["$sp"]="$cwd"; fi
+  done <<< "$snap"
+  # ② 让号 + label 映射（同基名不同 folder ⇒ base2..9，与 herdr 号段同口径）
+  while IFS= read -r sid; do
+    [[ -n "$sid" ]] || continue
+    folder="${sid_folder[$sid]}"
+    base="$(place_key_label "$folder")"; [[ -n "$base" ]] || continue
+    cand="$base"
+    if [[ -n "${base_folder[$base]:-}" && "${base_folder[$base]}" != "$folder" ]]; then
+      nn=2
+      while [[ -n "${base_folder[${base:0:15}$nn]:-}" ]]; do
+        nn=$((nn + 1)); (( nn > 9 )) && { warn "space 号段已满（base=$base，2..9 全占）"; return 1; }
+      done
+      cand="${base:0:15}$nn"
+    fi
+    base_folder["$cand"]="$folder"
+    _TERM_PLACE_WS_BY_LABEL["$cand"]="$sid"
+    _TERM_PLACE_WS_ROWS+=("$sid"$'\t'"$cand")
+  done < <(printf '%s\n' "${!sid_folder[@]}" | sort)
+  # ③ tab 归属（doc 的 T 行：space / tab / terminals csv）
+  while IFS=$'\t' read -r kind a b c d; do
+    [[ "$kind" == "T" && -n "$d" ]] || continue
+    local addr
+    IFS=',' read -ra __ts <<< "$d"
+    for addr in "${__ts[@]}"; do [[ -n "$addr" ]] && tab_of["$addr"]="$b"; done
+  done <<< "$rows"
+  # ④ pane 行（live）+ ⑤ keep 换壳残留（finished ⇒ 记 ghost，spawn 时清）
+  local line tb
+  local -a ghosts=()
+  while IFS=$'\t' read -r label addr _tid cwd fgcwd _fg _st _seq _sess _av _hook sp; do
+    [[ -n "$label" ]] || continue
+    tb="${tab_of[$addr]:-}"
+    # finished 终端不在 doc（doc 只列 live）⇒ tab id 用与 spawn 同一确定性算法兜底
+    [[ -n "$tb" ]] || tb="$(_term_app_mint_tab "$sp" "$label")"
+    if [[ "$_sess" != "live" ]]; then
+      ghosts+=("$tb"$'\t'"$addr"$'\t'"$label")
+      continue
+    fi
+    _term_place_add_pane "$label" "$addr" "$sp" "$tb" "$cwd" "$fgcwd"
+  done <<< "$snap"
+  _TERM_APP_GHOST_TABS=("${ghosts[@]:-}")
+  _TERM_PLACE_CACHE=1
+  return 0
+}
+
+# 写后读 doc 验证：终端地址必须在目标 tab 的 root 树里（BR2；where 不参与）
+_term_app_verify_place() {  # <space> <tab> <addr>
+  local rows kind a b c d
+  rows="$(_term_app_doc_rows)" || return 1
+  while IFS=$'\t' read -r kind a b c d; do
+    [[ "$kind" == "T" ]] || continue
+    [[ "$a" == "$1" && "$b" == "$2" ]] || continue
+    case ",${d}," in *",$3,"*) return 0 ;; esac
+  done <<< "$rows"
+  return 1
+}
+
+_term_app_wait_ready() {  # <addr> <name> → 0 就绪 / 1 超时（终端保留）
+  local addr="${1-}" name="${2-}" i g st app
+  for i in $(seq 1 50); do
+    g="$(_term_app_exec get "$addr" --json 2>/dev/null)" || { sleep 0.1; continue; }
+    _term_app_payload_ok "$g" || { sleep 0.1; continue; }
+    st="$(_term_app_status_state "$g")"; app="$(_term_app_status_app "$g")"
+    if [[ "$app" == "pi" && "$st" == "idle" ]]; then return 0; fi
+    sleep 0.1
+  done
+  warn "就绪门超时（$name ⇒ $addr：5s 内未见 status.app=pi ∧ state=idle；终端保留，不自动 kill）"
+  warn "  该怎么办：核对 desktop app 内该 tab 的程序是否起在 pi 上；pi 首次启动停在提示框时会一直非 idle"
+  return 1
+}
+
+_term_app_spawn() {  # <name> <inner> <repo> [force] <label> [group] → SPAWN_RC_OK|FAIL
+  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}"
+  local sp tb out addr
+  [[ -n "$name" && -n "$inner" ]] || { warn "app spawn 参数缺失（name/inner）"; return "$SPAWN_RC_FAIL"; }
+  [[ -n "$label" ]] || { warn "app spawn 缺放置键（期望 = 仓基键；repo=$repo）"; return "$SPAWN_RC_FAIL"; }
+  if ! fleet_scope_problem "$label" >/dev/null; then
+    warn "app spawn 的放置键不可用（label=$label；期望 ^[a-z0-9][a-z0-9_-]{0,15}$）"; return "$SPAWN_RC_FAIL"
+  fi
+  # space：快照已含该仓现有 space ⇒ 复用其 id；否则确定性铸造（app 按标签自建）
+  if (( _TERM_PLACE_CACHE )); then sp="${_TERM_PLACE_WS_BY_LABEL[$label]:-}"; else sp=""; fi
+  [[ -n "$sp" ]] || sp="$(_term_app_mint_space "$repo")"
+  tb="$(_term_app_mint_tab "$sp" "$name")"
+  # keep 换壳残留：同 tab 的 finished 终端（pi 已退出、只剩 shell）⇒ 先回收再重建，
+  #   否则一次退出会永久占住该 tab（准确报因：finished = 无 agent 在跑，回收不杀会话）。
+  if (( _TERM_PLACE_CACHE )); then
+    local gline gtb gaddr gname
+    for gline in "${_TERM_APP_GHOST_TABS[@]:-}"; do
+      [[ -n "$gline" ]] || continue
+      IFS=$'\t' read -r gtb gaddr gname <<< "$gline"
+      [[ "$gtb" == "$tb" ]] || continue
+      log "清理残留（finished）：$gname ⇒ $gaddr（该 tab 的旧终端已无 agent；kill → rm 后重建）"
+      _term_app_exec kill "$gaddr" >/dev/null 2>&1 || true
+      _term_app_exec rm "$gaddr" >/dev/null 2>&1 || true
+    done
+  fi
+  # 同 tab 已有终端：本函数语义 = 不新建（ensure 的判重在上层；此处只防并发重复）
+  if (( _TERM_PLACE_CACHE )); then
+    local line
+    for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
+      [[ -n "$line" ]] || continue
+      _term_place_pane_fields "$line"
+      if [[ "$_TP_TAB" == "$tb" && -n "$_TP_PANE" ]]; then
+        warn "目标 tab 已有终端（space=$sp tab=$tb ⇒ $_TP_PANE）：不新建第二个（先 close 该角色再 ensure）"
+        return "$SPAWN_RC_FAIL"
+      fi
+    done
+  fi
+  # --no-parent 是硬护栏（父终端结束会带走子终端）；--keep 按 ADR 保留（core 丢失后原地换 shell）
+  out="$(_term_app_exec run --bg --no-parent --keep --name "$name" --cwd "$repo" \
+        --label "$TERM_APP_LABEL_SPACE=$sp" --label "$TERM_APP_LABEL_TAB=$tb" \
+        -- "${SHELL:-/bin/bash}" -lc "$inner")" || true
+  if ! _term_app_payload_ok "$out"; then
+    warn "hc run 失败（name=$name）：$(printf '%s' "$out" | head -c 200)"
+    return "$SPAWN_RC_FAIL"
+  fi
+  addr="$(_term_app_field "$out" address)"
+  if [[ -z "$addr" ]]; then
+    warn "hc run 未返回终端地址（name=$name）：$(printf '%s' "$out" | head -c 200)"
+    return "$SPAWN_RC_FAIL"
+  fi
+  # BR2/AC4：写后读 doc 验证；不成 ⇒ 回滚自己刚建的终端 + fail loud（不留孤儿）
+  if ! _term_app_verify_place "$sp" "$tb" "$addr"; then
+    warn "放置验证失败：终端 $addr 不在目标 tab 的 root 树里（space=$sp tab=$tb）⇒ 回滚（kill → rm）"
+    warn "  该怎么办：确认 desktop app 窗口在跑且版本支持标签收养；回滚后不会留下孤儿终端"
+    _term_app_exec kill "$addr" >/dev/null 2>&1 || true
+    _term_app_exec rm "$addr" >/dev/null 2>&1 || true
+    return "$SPAWN_RC_FAIL"
+  fi
+  if ! _term_app_wait_ready "$addr" "$name"; then
+    return "$SPAWN_RC_FAIL"
+  fi
+  _TERM_SPAWN_PANE="$addr"; _TERM_SPAWN_WSID="$sp"; _TERM_SPAWN_TID="$tb"
+  if [[ -n "${_TERM_SNAP_FILE:-}" ]]; then rm -f "$_TERM_SNAP_FILE" 2>/dev/null || true; _TERM_SNAP_FILE=""; fi
+  if (( _TERM_PLACE_CACHE )); then
+    _term_place_set_pane "$name" "$addr" "$sp" "$tb" "$repo"
+  fi
+  return "$SPAWN_RC_OK"
+}
+
+_term_app_deliver() {  # <addr> <message> → 0 已投递 / 1 失败（stdout: error code）
+  local addr="${1-}" msg="${2-}" out
+  [[ -n "$addr" ]] || { printf 'terminal_id 缺失\n'; return 1; }
+  out="$(_term_app_exec send "$addr" "$msg" 2>&1)" || true
+  if ! _term_app_payload_ok "$out"; then
+    printf 'code=%s\n' "$(sed -nE 's/.*"code":[[:space:]]*"([^"]+)".*/\1/p' <<< "$out" | head -1)"
+    return 1
+  fi
+  return 0
+}
+
+# ---- 回收（M5/BR4）：kill → rm（顺序固定；kill 幂等；live 直接 rm ⇒ rc=1 kind:live）----
+_term_app_find_by_name() {  # <name> → 每行一个地址（ls --all）
+  local name="${1-}" ls
+  ls="$(_term_app_exec ls --all --json 2>/dev/null)" || return 0
+  _term_app_payload_ok "$ls" || return 0
+  printf '%s' "$ls" | grep -o '"address":"[^"]*"' | cut -d'"' -f4 | while IFS= read -r a; do
+    local g; g="$(_term_app_exec get "$a" --json 2>/dev/null)" || continue
+    [[ "$(_term_app_field "$g" name)" == "$name" ]] && printf '%s\n' "$a"
+  done
+}
+
+_term_app_reclaim() {  # <name> <repo> <force> <core> <scope> <ensure-target> → 0 已回收 / 1 拒绝或失败
+  local name="${1-}" repo="${2-}" force="${3:-false}" addrs=() addr g tstate st
+  mapfile -t addrs < <(_term_app_find_by_name "$name")
+  if (( ${#addrs[@]} == 0 )); then
+    log "未发现 app 终端：$name（已不在运行；幂等成功）"
+    return 0
+  fi
+  if (( ${#addrs[@]} > 1 )); then
+    warn "同名命中多个 app 终端：$name ⇒ ${addrs[*]}（不猜：先人工核对；回收面不静默挑一个）"
+    return 1
+  fi
+  addr="${addrs[0]}"
+  if [[ "$addr" == "${HC_TERMINAL_ID:-}" ]]; then
+    warn "拒绝回收自身终端（$name ⇒ $addr 就是当前终端）"
+    return 1
+  fi
+  g="$(_term_app_exec get "$addr" --json 2>/dev/null)" || { warn "读取终端失败：$addr"; return 1; }
+  _term_app_payload_ok "$g" || { warn "终端信息不可读：$addr（$(printf '%s' "$g" | head -c 160)）"; return 1; }
+  tstate="$(_term_app_term_state "$g")"; st="$(_term_app_status_state "$g")"
+  if [[ "$tstate" == "live" ]]; then
+    case "$st" in
+      working|blocked)
+        if [[ "$force" != true ]]; then
+          warn "拒绝回收 $name：状态=$st（忙）—— 等它空闲，或 --force（会打断当前回合）"
+          return 1
+        fi
+        warn "强制回收 $name（状态=$st）：--force" ;;
+      -|"")
+        if [[ "$force" != true ]]; then
+          warn "拒绝回收 $name：忙闲不可判定（$addr 无 status 上报）—— 确认无用时加 --force"
+          return 1
+        fi ;;
+    esac
+  fi
+  # kill（幂等）→ rm（顺序不可反）
+  if ! _term_app_exec kill "$addr" >/dev/null 2>&1; then
+    warn "hc kill 失败（$name ⇒ $addr）"; return 1
+  fi
+  if ! _term_app_exec rm "$addr" >/dev/null 2>&1; then
+    warn "hc rm 失败（$name ⇒ $addr：kill 后仍不可删？核对 hc ls --all）"; return 1
+  fi
+  # effect 判据（不看 rc）：地址必须从 ls --all 消失
+  if _term_app_exec ls --all --json 2>/dev/null | grep -qF "\"address\":\"$addr\""; then
+    warn "回收未达成：$addr 仍在 hc ls --all 中（effect 判据失败）"; return 1
+  fi
+  log "已回收 app 终端：$name（$addr）"
+  return 0
+}
+
+# 拆场（app）：无「场」语义（core 属桌面版，停 core = 关用户窗口 ⇒ 禁止）；
+#   本命令 = 逐个 kill+rm 带放置标签的舰队终端（跨仓同 core），--force 放行忙闲闸门。
+_term_app_cleanup() {  # <session> [force]
+  local force="${2:-false}" ls n=0 ok=0 busy=0 addr g tstate st
+  ls="$(_term_app_exec ls --all --json 2>/dev/null)" || { warn "hc ls 不可用（desktop app / core 未就绪）"; return 1; }
+  _term_app_payload_ok "$ls" || { warn "hc ls 返回错误：$(printf '%s' "$ls" | head -c 160)"; return 1; }
+  while IFS= read -r addr; do
+    [[ -n "$addr" ]] || continue
+    g="$(_term_app_exec get "$addr" --json 2>/dev/null)" || continue
+    _term_app_payload_ok "$g" || continue
+    [[ -n "$(_term_app_field "$g" "$TERM_APP_LABEL_SPACE")" ]] || continue
+    [[ "$addr" == "${HC_TERMINAL_ID:-}" ]] && { warn "跳过自身终端：$addr"; continue; }
+    n=$((n + 1))
+    tstate="$(_term_app_term_state "$g")"; st="$(_term_app_status_state "$g")"
+    if [[ "$tstate" == "live" && ( "$st" == "working" || "$st" == "blocked" ) && "$force" != true ]]; then
+      warn "跳过忙终端：$addr（状态=$st；--force 可强制）"; busy=$((busy + 1)); continue
+    fi
+    if _term_app_exec kill "$addr" >/dev/null 2>&1 && _term_app_exec rm "$addr" >/dev/null 2>&1; then
+      ok=$((ok + 1))
+    else
+      warn "回收失败：$addr"
+    fi
+  done < <(printf '%s' "$ls" | grep -o '"address":"[^"]*"' | cut -d'"' -f4)
+  log "app 拆场：命中 $n 个舰队终端，回收 $ok 个，跳过忙 $busy 个（core 本身不动：属桌面版）"
+  (( busy == 0 )) && return 0
+  return 1
+}
+
+# 前提探测（check · M1）：只在 NAO_TERMINAL=app 时输出；不改变 TUI 用户的输出
+_term_app_check_premise() {  # → 0 齐备 / 1 缺项（打印 `  ! ` 行）
+  local bad=0 rows ver
+  if ! command -v hc >/dev/null 2>&1; then
+    printf '  ! app 后端：hc 不在 PATH（装 herdr desktop app CLI；不想用 app 后端请 unset NAO_TERMINAL）\n'
+    return 1
+  fi
+  if ! command -v herdr-app >/dev/null 2>&1; then
+    printf '  ! app 后端：herdr-app 不在 PATH（无法判断窗口状态）\n'; bad=1
+  elif ! herdr-app status >/dev/null 2>&1; then
+    printf '  ! app 后端：desktop app 窗口未在运行（ensure 会 exit 3：窗口关闭时终端不会被收养）\n'; bad=1
+  fi
+  if command -v hc >/dev/null 2>&1; then
+    if ! _term_app_exec schema >/dev/null 2>&1; then
+      printf '  ! app 后端：hc schema 不可用（core/socket 异常；核对 desktop app 后重试）\n'; bad=1
+    fi
+  fi
+  if [[ -n "${HC_TERMINAL_SOCKET:-}" ]]; then
+    if rows="$(_term_app_doc_rows 2>/dev/null)"; then
+      ver="$(awk -F'\t' '$1=="V"{print $2; exit}' <<< "$rows")"
+      if [[ -z "$ver" || "$ver" == "0" ]]; then
+        printf '  ! app 后端：布局文档 value=null（窗口未开或版本过旧）\n'; bad=1
+      elif [[ ! "$ver" =~ ^[0-9]+$ ]] || (( ver < TERM_APP_DOC_MIN )); then
+        printf '  ! app 后端：布局文档 version=%s < %s（app 版本过旧，放置契约不支持）\n' "$ver" "$TERM_APP_DOC_MIN"; bad=1
+      fi
+    else
+      printf '  ! app 后端：doc.get 失败（desktop app 未就绪）\n'; bad=1
+    fi
+  else
+    printf '  · app 后端：当前不在 app 终端（三件套缺；ensure/status/close 需在 app 终端内运行）\n'
+  fi
+  (( bad == 0 )) && return 0
+  return 1
+}
+
+# 状态页的 space 标签表（替 herdr 的 workspace list）
+_term_app_ws_label_rows() {  # → 每行 "<space_id>\t<label>"（label = 仓基键，同 herdr 口径）
+  local rows kind a b c base cand nn
+  local -A base_folder=()
+  rows="$(_term_app_doc_rows 2>/dev/null)" || return 0
+  while IFS=$'\t' read -r kind a b c; do
+    [[ "$kind" == "S" ]] || continue
+    [[ -n "$b" ]] || continue
+    base="$(place_key_label "$b")"; [[ -n "$base" ]] || continue
+    cand="$base"
+    if [[ -n "${base_folder[$base]:-}" && "${base_folder[$base]}" != "$b" ]]; then
+      nn=2
+      while [[ -n "${base_folder[${base:0:15}$nn]:-}" ]]; do nn=$((nn + 1)); (( nn > 9 )) && break; done
+      cand="${base:0:15}$nn"
+    fi
+    base_folder["$cand"]="$b"
+    printf '%s\t%s\n' "$a" "$cand"
+  done <<< "$rows"
+}
+# <<< term-impl-app END
+
 # <<< term-facade END
 
 # ---------------------------------------------------------------------------
@@ -2697,7 +3353,9 @@ subagent_in_field() {  # → echo 子代理会话数（0..N）
 
 running() {
   # 门面包装：证据链 = herdr 结构化事实（label + argv + agent_status）
-  [[ "$(term_liveness "${1-}" "${2-}" | cut -f1)" == "online" ]]
+  #   **布尔探针静默**：告警由「专用证据面」（cmd_status 的 hv 预计算）负责，这里只取 verdict，
+  #   否则同一个名字会被问两次、告警刷两条（app 臂的「集成缺 labels」实测如此）。
+  [[ "$(term_liveness "${1-}" "${2-}" 2>/dev/null | cut -f1)" == "online" ]]
 }
 
 # P11（BR8）：`ensure` 判重**三态**（旧二态无法区分「同名不同 scope/仓」⇒ 静默起出第二个会话）
@@ -2814,7 +3472,7 @@ spawn_one() {
   term_spawn "$name" "$inner" "$repo" "$force" "$label" "$group" || rc=$?
   case "$rc" in
     "$SPAWN_RC_OK")   SPAWN_OK=$((SPAWN_OK + 1))
-                      log "[herdr] 已拉起 $name @ $repo${model:+（model=$model）}${_TERM_SPAWN_PANE:+（pane=$_TERM_SPAWN_PANE）}"
+                      log "[$(term_label)] 已拉起 $name @ $repo${model:+（model=$model）}${_TERM_SPAWN_PANE:+（pane=$_TERM_SPAWN_PANE）}"
                       # T548/AC2/AC4：投递点**唯一**（新 pane / 幽灵复用 / --force 重开均经此处恰 1 次）；
                       #   投递失败 ⇒ **rc 仍 0、不计 SPAWN_FAIL**（会话确实可用；计 FAIL 正是本缺陷的假红灯源）
                       #   ！失败必须**默认可见**（一条 warn + error code），`-v` 再补诊断指路。
@@ -3040,6 +3698,11 @@ cmd_check() {
     done
   fi
 
+  if _term_app_backend; then
+    echo "== 运行前提（端前提 = herdr desktop app 终端 + pi ≥$MIN_PI_VERSION；app 后端）=="
+    echo '  · 生效后端 NAO_TERMINAL=app（第二后端；status/ensure/close/cleanup 走门面；core 由 desktop app 管理；session-start 不适用）'
+    _term_app_check_premise || rc=1
+  else
   echo "== 运行前提（端前提 = herdr pane + pi ≥$MIN_PI_VERSION；AC1/AC3）=="
   # rc 口径（P3-4 订正）：**缺 herdr 可执行文件** ⇒ rc=1（明确错配，不能装没看见）；
   #   缺 `HERDR_SESSION`（未在 herdr pane 内，CI 常见）⇒ 只提示不置红（静态体检照跑）；
@@ -3066,6 +3729,7 @@ cmd_check() {
     fi
   else
     printf '  ✗ herdr 缺失（status 将 exit 3）—— 装 herdr ≥0.9.1 后重试\n'; rc=1
+  fi
   fi
   local pi_cur
   if pi_cur="$(pi_version_check)"; then
@@ -3416,7 +4080,11 @@ cmd_status() {
   # B1（BR3/BR7）：身份/归属/忙闲全部来自结构化事实 ⇒ 快照**每命令一次**
   #   （≤1 次 pane list / agent list；逐名查询会 7×2 次 CLI，且同命令内两份快照不一致 = 新 flake 源）
   if ! term_snapshot >/dev/null; then
-    printf '需要 herdr server：pane list / agent list 不可用（核对 `herdr --session %s server` 是否在跑、protocol 是否 22）—— 修好后重试\n' "${HERDR_SESSION:-?}" >&2
+    if _term_app_backend; then
+      printf '需要 desktop app core：hc ls / hc get 不可用（核对 desktop app 是否在运行、HC_TERMINAL_SOCKET 是否有效）—— 修好后重试\n' >&2
+    else
+      printf '需要 herdr server：pane list / agent list 不可用（核对 `herdr --session %s server` 是否在跑、protocol 是否 22）—— 修好后重试\n' "${HERDR_SESSION:-?}" >&2
+    fi
     exit 3
   fi
   # BR8：parse 的角色事实表（常驻 id + 锚根下合法卡 role）；**一次** glob，不再二次 card_role_set
@@ -3444,13 +4112,11 @@ cmd_status() {
   # S13：herdr 快照（12 列）+ workspace label 表（≤1 次 workspace list；快照已由入口建好）
   STATUS_SNAP=""; STATUS_WS_LABEL=()
   STATUS_SNAP="$(term_snapshot 2>/dev/null || true)"
-  local _wjs="" _wobj _wid _wlabel
-  _wjs="$(_term_herdr_exec workspace list 2>/dev/null || true)"
-  while IFS= read -r _wobj; do
-    _wid="$(_term_json_str "$_wobj" workspace_id)"; [[ -n "$_wid" ]] || continue
-    _wlabel="$(_term_json_str "$_wobj" label)"
+  local _wid _wlabel
+  while IFS=$'\t' read -r _wid _wlabel; do
+    [[ -n "${_wid:-}" ]] || continue
     STATUS_WS_LABEL["$_wid"]="$_wlabel"
-  done < <(_term_json_objs <<< "$_wjs")
+  done < <(term_ws_label_rows 2>/dev/null || true)
   # 一次枚举会话名（label 去重）：下面两轮共用，避免多一轮后端/node 调用
   local -a field_names=()
   local dname pout p_kind p_role p_task p_scope p_num
@@ -3507,7 +4173,11 @@ cmd_status() {
     abn_seen["$nm"]=1
     case "${hv[$nm]:-absent}" in
       ghost)
-        term_abn+=("  ! $nm 幽灵 pane：label 在、agent 条目缺（label 命中 ≠ 在线；勿当「已在运行」，回收归 B3）") ;;
+        if _term_app_backend; then
+          term_abn+=("  ! $nm 终端残留：name 在、status 缺（finished 换壳）⇒ 非在线（勿当「已在运行」，回收归 B3）")
+        else
+          term_abn+=("  ! $nm 幽灵 pane：label 在、agent 条目缺（label 命中 ≠ 在线；勿当「已在运行」，回收归 B3）")
+        fi ;;
       dead)
         term_abn+=("  ! $nm 前台非 pi（状态 ${hstate[$nm]}）→ 非在线（可能刚退出/重启回放）") ;;
       mismatch)
@@ -3519,7 +4189,11 @@ cmd_status() {
     esac
   done
   
-  echo "== 角色会话在线状态（本表按 herdr pane label + agent 状态判定；权威源 = pane list / agent list）=="
+  if _term_app_backend; then
+    echo "== 角色会话在线状态（本表按 app 终端 name + status.state 判定；权威源 = hc ls / hc get）=="
+  else
+    echo "== 角色会话在线状态（本表按 herdr pane label + agent 状态判定；权威源 = pane list / agent list）=="
+  fi
   local a_ok a_sc a_nm
   local a_extra=""
   for a in "${ROLE_ORDER[@]}"; do
@@ -3673,7 +4347,11 @@ cmd_status() {
   [[ -f "$TASKS_STATE" ]] || echo "  （$TASKS_STATE 不存在，残留判定已跳过）"
   # B1（herdr）：终端证据异常节 —— 单列、点名、给结论（非在线 / 不可投递），不得静默退化成 unknown
   if (( ${#term_abn[@]} > 0 )); then
-    echo '== 终端证据异常（herdr 后端：label 命中 ≠ 在线）=='
+    if _term_app_backend; then
+      echo '== 终端证据异常（app 后端：name 命中 ≠ 在线）=='
+    else
+      echo '== 终端证据异常（herdr 后端：label 命中 ≠ 在线）=='
+    fi
     printf '%s\n' "${term_abn[@]}"
   fi
   # AC2.2 闭环（B3）：可投递标注 —— **独立节/独立行**，不改任何既有行格式（BR1 md5 仍逐字）
@@ -4251,11 +4929,15 @@ cmd_ensure() {
     MANIFEST_OK=1
   fi
 
-  # ==== 相位 1a：放置快照（T554 查询上限：≤1 workspace list + ≤1 pane list）====
-  _term_herdr_place_reset
-  if [[ "$NAO_TERMINAL" == "herdr" ]]; then
-    _term_herdr_place_prime \
-      || die "ensure 中止：herdr 放置快照不可用（workspace list / pane list 失败；核对 server 后重试）"
+  # ==== 相位 1a：后端前提 + 放置快照（T554 查询上限：≤1 布局/终端列表）====
+  #   app：AC3b 窗口不在跑 ⇒ exit 3（**先于**任何终端创建，不玩「起了再回滚」）
+  term_spawn_preflight
+  term_place_reset
+  if ! term_place_prime; then
+    if _term_app_backend; then
+      die "ensure 中止：app 放置快照不可用（hc ls / doc.get 失败；核对 desktop app 窗口后重试）"
+    fi
+    die "ensure 中止：herdr 放置快照不可用（workspace list / pane list 失败；核对 server 后重试）"
   fi
 
   # ==== 相位 1b：全量解析 + 校验（BR11 两相执行；失败必在建 pane 之前）====
@@ -4406,7 +5088,9 @@ cmd_ensure() {
     if [[ "$force" != "true" ]]; then
       vrd="$(running_verdict "$disp" "$repo")"
       if [[ "$vrd" == "same" ]]; then
-        if [[ "$NAO_TERMINAL" == "herdr" ]]; then
+        if _term_app_backend; then
+          warn "$disp 已在运行（终端 name + status 事实命中），跳过；确需重开请加 --force"
+        elif [[ "$NAO_TERMINAL" == "herdr" ]]; then
           warn "$disp 已在运行（pane label + 结构化事实命中），跳过；确需重开请加 --force"
         else
           warn "$disp 已在运行（终端标题/名册命中），跳过；确需重开请加 --force"
@@ -4421,7 +5105,7 @@ cmd_ensure() {
       spawn_one "$disp" "$repo" "$model" "" "${t_roles[$i]:-}" "${t_prompts[$i]:-}" "$force" "${t_labels[$i]}" ""
     fi
   done
-  _term_herdr_place_reset
+  term_place_reset
   # 恰一行摘要，三类计数（成功/跳过/失败）
   if (( SPAWN_OK + SPAWN_SKIP + SPAWN_FAIL > 0 )); then
     log "已拉起 ${SPAWN_OK} 个会话（成功 ${SPAWN_OK} / 跳过 ${SPAWN_SKIP} / 失败 ${SPAWN_FAIL}）；就绪后在线状态用 nao-fleet.sh status 查看"
@@ -4590,7 +5274,11 @@ case "$CMD" in
       # M20261118：PRD 结构提示也常驻可见（与 codegraph 同口径：**不计入 warn**，可见性由它自己这行承担）
       grep -m1 -E '^  ! PRD 结构' "$REPFILE" || true
       # B1（BR1 六条机械保证之「check 打印生效后端」）：唯一后端 ⇒ 恒打印（与 -v 报告同文案）
-      echo '  · 生效后端 NAO_TERMINAL=herdr（唯一后端；#96 二期 B4：status/ensure/close/cleanup 走门面；session-start 起 server；台账 0 条）'
+      if [[ "$NAO_TERMINAL" == "app" ]]; then
+        echo '  · 生效后端 NAO_TERMINAL=app（第二后端；status/ensure/close/cleanup 走门面；core 由 desktop app 管理；session-start 不适用）'
+      else
+        echo '  · 生效后端 NAO_TERMINAL=herdr（唯一后端；#96 二期 B4：status/ensure/close/cleanup 走门面；session-start 起 server；台账 0 条）'
+      fi
     else
       cat "$REPFILE"
     fi

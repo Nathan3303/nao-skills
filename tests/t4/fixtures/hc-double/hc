@@ -1,0 +1,219 @@
+#!/usr/bin/env bash
+# hc-double —— `hc`（herdr desktop app CLI）的**确定性替身**，只服务 T4 用例（T562/Issue #168）。
+#
+# 为什么需要替身：真 `hc` 连的是**用户真实桌面版 core** ⇒ 起终端会污染用户界面（arch 实测定论：
+#   「真实收养 / UI 效果」不可自动化，见 docs/reports/168-arch-review.md R1）。本替身把
+#   「契约面」（JSON 形状 / 标签 / doc version / 状态机）做成可断言的确定性事实；**真 hc 的
+#   子集往返**另在 cases/44 用私有 core 跑（有 hc 才跑，无则 SKIP）。
+#
+# 契约（与实测 hc 同形，见 arch 报告）：
+#   hc schema                                   → {"schema":1}
+#   hc ls [--all] --json                        → {"terminals":[{address,name,cwd,state[,status]}]}
+#   hc get <addr> --json                        → 单终端（labels / foreground / status / reported / parent）
+#   hc run --bg [--no-parent] [--keep] --name N --cwd D --label K=V … -- <cmd…> → {"address":"tN"}
+#   hc send <addr> <text>                       → {"sent":"tN"} / {"error":{…}} rc=1
+#   hc kill <addr>                              → {"killed":"tN"}（幂等；state→finished）
+#   hc rm <addr>                                → finished ⇒ {"removed":"tN"}；**live ⇒ error kind=live, rc=1**
+#   hc connect  （stdin: JSON-RPC doc.get）      → {"result":{"value":{spaces:[…]},"version":N}}
+#
+# 状态根 = `$HC_DOUBLE_STATE`（**必须**由用例给；缺 ⇒ fail loud，绝不落到用户 core/%HOME% 里）。
+#   调参文件（可选，均在 $HC_DOUBLE_STATE 下）：
+#     docver=N         doc version（默认 10；0 ⇒ value=null）
+#     doc_hide        每行一个 addr ⇒ doc 里省略（模拟「写了标签但未被收养」⇒ 验证失败分支）
+#     ready=never     run 后**永不上报** status（就绪门超时分支）
+#     status_app=X    默认 pi      status_state=X 默认 idle
+#     run_fail=1      run 返回 error（失败分支）
+#     send_fail=1     send 返回 error
+#     app_status_rc=N herdr-app status 的 rc（0=窗口在跑）
+set -uo pipefail
+
+ST="${HC_DOUBLE_STATE:-}"
+if [ -z "$ST" ]; then
+  printf 'HC-DOUBLE-GUARD-FAIL: 未设 HC_DOUBLE_STATE（替身拒绝在无隔离根时运行）\n' >&2
+  exit 3
+fi
+mkdir -p "$ST/t" "$ST/spaces" || exit 3
+LOG="$ST/log"
+
+_cfg() { # <文件名> <默认> → 文件首行或默认
+  if [ -f "$ST/$1" ]; then head -1 "$ST/$1"; else printf '%s' "$2"; fi
+}
+_esc() { printf '%s' "${1-}" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+_addr_ok() { [ -d "$ST/t/$1" ]; }
+_next_addr() {
+  local n=1
+  while [ -d "$ST/t/t$n" ]; do n=$((n + 1)); done
+  printf 't%s' "$n"
+}
+_field() { head -1 "$ST/t/$1/$2" 2>/dev/null; }
+_put() { printf '%s' "$3" > "$ST/t/$1/$2"; }
+_log_call() { printf '%s\n' "$*" >> "$LOG"; }
+
+# 终端 JSON（单行；键序与真 hc 无关 —— 被测脚本的抽取按「首个同名键」，见字段抽取注释）
+_term_json() { # <addr>
+  local a="$1" name cwd state space tab app stt rep par fgname fgargv
+  # bare_get=1 ⇒ 只给最小字段（模拟 app 版本不支持 labels/status 契约：AC8 负控）
+  # bare_labels=1 ⇒ 只缺 labels（status 仍 reported：AC8 子形态 —— 判 unknown + warn）
+  if [ -f "$ST/bare_get" ]; then
+    printf '{"address":"%s","name":"%s","cwd":"%s","state":"%s"}\n' \
+      "$a" "$(_esc "$(_field "$a" name)")" "$(_esc "$(_field "$a" cwd)")" "$(_field "$a" state)"
+    return 0
+  fi
+  name="$(_field "$a" name)"; cwd="$(_field "$a" cwd)"
+  state="$(_field "$a" state)"; space="$(_field "$a" space)"; tab="$(_field "$a" tab)"
+  app="$(_field "$a" app)"; stt="$(_field "$a" stt)"; rep="$(_field "$a" reported)"
+  par="$(_field "$a" parent)"; fgname="$(_field "$a" fg)"
+  printf '{"address":"%s","id":"%s","name":"%s","cwd":"%s","state":"%s","parent":"%s"' \
+    "$a" "$a" "$(_esc "$name")" "$(_esc "$cwd")" "$state" "$(_esc "$par")"
+  if [ ! -f "$ST/bare_labels" ]; then
+    printf ',"labels":{"herdr.space":"%s","herdr.tab":"%s"}' "$(_esc "$space")" "$(_esc "$tab")"
+  fi
+  printf ',"reported":%s' "$([ "$rep" = "1" ] && printf true || printf false)"
+  if [ -n "$app" ]; then
+    printf ',"status":{"app":"%s","state":"%s","state_ms":1}' "$(_esc "$app")" "$(_esc "$stt")"
+  fi
+  printf ',"foreground":{"name":"%s","cwd":"%s","argv":["%s","--name","%s"]}}\n' \
+    "$(_esc "${fgname:-}")" "$(_esc "$cwd")" "$(_esc "${fgname:-}")" "$(_esc "$name")"
+}
+
+cmd="${1:-}"; shift || true
+_log_call "$cmd $*"
+
+case "$cmd" in
+  schema)
+    printf '{"schema":1}\n' ;;
+
+  ls)
+    all=0
+    for a in "$@"; do [ "$a" = "--all" ] && all=1; done
+    printf '{"terminals":['
+    first=1
+    while IFS= read -r d; do
+      [ -n "$d" ] || continue
+      a="$(basename "$d")"
+      [ "$all" = "1" ] || [ "$(_field "$a" state)" = "live" ] || continue
+      [ "$first" = "1" ] || printf ','
+      first=0
+      printf '{"address":"%s","name":"%s","cwd":"%s","state":"%s","status":"%s"}' \
+        "$a" "$(_esc "$(_field "$a" name)")" "$(_esc "$(_field "$a" cwd)")" \
+        "$(_field "$a" state)" "$(_field "$a" stt)"
+    done < <(find "$ST/t" -mindepth 1 -maxdepth 1 -type d | sort -V)
+    printf ']}\n' ;;
+
+  get)
+    a="${1:-}"
+    if ! _addr_ok "$a"; then
+      printf '{"error":{"code":"not-found","message":"terminal not found: %s"}}\n' "$a" >&2
+      exit 3
+    fi
+    _term_json "$a" ;;
+
+  run)
+    # 参数解析（只认被测脚本用到的形态；未知标志 fail loud，防替身悄悄放宽契约）
+    noparent=0 keep=0 name="" cwd="" ; labels=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --bg) shift ;;
+        --no-parent) noparent=1; shift ;;
+        --keep) keep=1; shift ;;
+        --name) name="${2:-}"; shift 2 ;;
+        --cwd) cwd="${2:-}"; shift 2 ;;
+        --label) labels+=("${2:-}"); shift 2 ;;
+        --) shift; break ;;
+        *) printf 'HC-DOUBLE-VIOLATION: run 未知参数 %s\n' "$1" >&2; exit 9 ;;
+      esac
+    done
+    [ -n "$name" ] || { printf 'HC-DOUBLE-VIOLATION: run 缺 --name\n' >&2; exit 9; }
+    if [ -f "$ST/run_fail" ]; then
+      printf '{"error":{"code":"denied","message":"simulated run failure"}}\n'
+      exit 0
+    fi
+    a="$(_next_addr)"
+    mkdir -p "$ST/t/$a"
+    _put "$a" name "$name"; _put "$a" cwd "$cwd"; _put "$a" state live
+    _put "$a" space ""; _put "$a" tab ""; _put "$a" fg pi
+    _put "$a" app ""; _put "$a" stt ""; _put "$a" reported 0
+    # 硬护栏证据：--no-parent ⇒ parent 空；缺它且停在终端内（HC_TERMINAL_ID 有值）⇒ 记为子终端
+    if [ "$noparent" = "1" ]; then _put "$a" parent ""; else _put "$a" parent "${HC_TERMINAL_ID:-}"; fi
+    _put "$a" keep "$keep"
+    for kv in "${labels[@]:-}"; do
+      [ -n "$kv" ] || continue
+      k="${kv%%=*}"; v="${kv#*=}"
+      case "$k" in
+        herdr.space) _put "$a" space "$v"; mkdir -p "$ST/spaces"; [ -f "$ST/spaces/$v" ] || printf '%s' "$cwd" > "$ST/spaces/$v" ;;
+        herdr.tab)   _put "$a" tab "$v" ;;
+        *)           printf 'HC-DOUBLE-VIOLATION: 未知 label %s\n' "$k" >&2; exit 9 ;;
+      esac
+    done
+    # 状态机：默认立即上报 pi/idle（ready=never ⇒ 永不上报）
+    if [ "$(_cfg ready yes)" != "never" ]; then
+      _put "$a" app "$(_cfg status_app pi)"; _put "$a" stt "$(_cfg status_state idle)"; _put "$a" reported 1
+    fi
+    printf '{"address":"%s"}\n' "$a" ;;
+
+  send)
+    a="${1:-}"; _addr_ok "$a" || { printf '{"error":{"code":"not-found"}}\n'; exit 1; }
+    if [ -f "$ST/send_fail" ]; then printf '{"error":{"code":"rejected","message":"simulated"}}\n'; exit 1; fi
+    printf '%s' "${2:-}" >> "$ST/t/$a/sent"
+    printf '{"sent":"%s"}\n' "$a" ;;
+
+  kill)
+    a="${1:-}"; _addr_ok "$a" || { printf '{"error":{"code":"not-found"}}\n'; exit 1; }
+    _put "$a" state finished; _put "$a" app ""; _put "$a" stt ""; _put "$a" reported 0
+    printf '{"killed":"%s"}\n' "$a" ;;
+
+  rm)
+    a="${1:-}"; _addr_ok "$a" || { printf '{"error":{"code":"not-found"}}\n'; exit 1; }
+    if [ "$(_field "$a" state)" = "live" ]; then
+      printf '{"error":{"code":"live","message":"refusing to remove live terminal %s"}}\n' "$a"
+      exit 1
+    fi
+    rm -rf -- "${ST:?}/t/$a"
+    printf '{"removed":"%s"}\n' "$a" ;;
+
+  connect)
+    req="$(cat)"
+    case "$req" in
+      *'"method":"doc.get"'*) ;;
+      *) printf '{"error":{"code":"unsupported","message":"hc-double only implements doc.get"}}\n'; exit 1 ;;
+    esac
+    ver="$(_cfg docver 10)"
+    hide=""
+    [ -f "$ST/doc_hide" ] && hide="$(cat "$ST/doc_hide")"
+    if [ "$ver" = "0" ]; then
+      printf '{"jsonrpc":"2.0","id":1,"result":{"value":null,"version":0}}\n'; exit 0
+    fi
+    printf '{"jsonrpc":"2.0","id":1,"result":{"value":{"spaces":['
+    firstsp=1
+    while IFS= read -r d; do
+      [ -n "$d" ] || continue
+      sid="$(basename "$d")"; folder="$(cat "$d")"
+      [ "$firstsp" = "1" ] || printf ','
+      firstsp=0
+      printf '{"id":"%s","folder":"%s","name":"%s","tabs":[' \
+        "$(_esc "$sid")" "$(_esc "$folder")" "$(_esc "$(basename "$folder")")"
+      firsttb=1
+      while IFS= read -r td; do
+        [ -n "$td" ] || continue
+        ta="$(basename "$td")"
+        [ "$(_field "$ta" space)" = "$sid" ] || continue
+        [ "$(_field "$ta" state)" = "live" ] || continue
+        case "
+$hide
+" in *"
+$ta
+"*) continue ;; esac
+        tb="$(_field "$ta" tab)"
+        [ "$firsttb" = "1" ] || printf ','
+        firsttb=0
+        printf '{"id":"%s","name":"%s","root":{"content":{"terminal":"%s"}}}' \
+          "$(_esc "$tb")" "$(_esc "$(_field "$ta" name)")" "$ta"
+      done < <(find "$ST/t" -mindepth 1 -maxdepth 1 -type d | sort -V)
+      printf ']}'
+    done < <(find "$ST/spaces" -mindepth 1 -maxdepth 1 -type f | sort)
+    printf ']},"version":%s}}\n' "$ver" ;;
+
+  *)
+    printf 'HC-DOUBLE-VIOLATION: 未实现子命令 %s\n' "${cmd:-<空>}" >&2
+    exit 9 ;;
+esac

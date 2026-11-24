@@ -26,7 +26,10 @@ nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，�
 除 pi 之外还需要：
 
 - **pi ≥ 1.4.0** —— 舰队依赖它的多会话能力，版本低了体检直接报红。
-- **herdr ≥ 0.9.1（唯一终端后端）** —— 7 个角色会话落在 herdr 的专用 session 里，每个角色一个 tab。还需装 pi 集成：`herdr integration install pi`。前提链、空间判据与 pin 回旧版的说明见 [docs/INSTALL.md](docs/INSTALL.md) 的「herdr 后端」一节。
+- **herdr ≥ 0.9.1，两种终端形态任选** —— 7 个角色会话落在 herdr 里，每个角色一个 tab：
+  - **herdr TUI（默认）**：专用 session 里跑，还要装 pi 集成 `herdr integration install pi`。
+  - **herdr desktop app**：桌面版窗口里跑，`export NAO_TERMINAL=app` 切换（需要桌面版开着 + `hc` CLI）。
+  - 两者**不共享会话**：TUI 里起的舰队在桌面版里看不到，反之亦然。前提链、空间判据、pin 回旧版的说明见 [docs/INSTALL.md](docs/INSTALL.md) 的「herdr 后端」与「desktop app 后端」两节。
 - **Node.js ≥ 18** —— 命令入口是 Node 脚本。
 - **git**（建议顺手装 **GitHub CLI `gh`**）—— 分支、PR、发版都走它；没有 `gh` 时这些步骤降级成手动/本地操作，流程不变。
 
