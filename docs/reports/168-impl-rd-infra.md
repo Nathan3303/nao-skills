@@ -80,7 +80,8 @@
 ## 六、门禁（数字取自落盘日志）
 
 - `check`：rc=0（`check: OK · roles=7 · files=53`）· 日志 `/tmp/rd-168-check.log`。
-- `--case 44`：**PASS · 58 条断言**（SKIP=0/DEGRADE=0/NOTE=0）· 日志 `/tmp/rd-168-c44.log`。
+- `--case 44`：**PASS · 65 条断言**（SKIP=1 真 `hc` 缺席时的分支；本机有 `hc` ⇒ ⑪ 6 条已跑）· 日志 `/tmp/t562d-44.log`。
+- `--case 06`：PASS · 331 条断言（NOTE=2 均在白名单）· 日志 `/tmp/t562d-06.log`。
 - `npm test` 全量：rc=0 · 全 44 例 PASS · SKIP=0 · DEGRADE=0 · NOTE=18（全白名单）· 日志 `/tmp/rd-168-full5.log`。
 - **AC1 两树 diff**：`AC1-DIFF: EMPTY`（显式 `NAO_TERMINAL=herdr`）与 `AC1-UNSET-DIFF: EMPTY`（**未设**，验默认值），
   四命令 × 两路径逐字一致 · 日志 `/tmp/rd-168-ac1.log`、diff 文件 `/tmp/ac1-cache/ac1*.diff`。
@@ -93,7 +94,6 @@
      `lib.sh::_t4_rm_cache_dir`（唯一删除点），没给 14 加路径白名单。
 
 ## 七、`[SKIP]` 清单与理由
-
 - **真实收养 / ensure-close 的 UI 效果**：`[SKIP]`。理由（arch R1 定论 ③）：私有 core 能测契约面（三件套、run/kill/rm、
   标签落库、doc version），但「标签被**真实 app 窗口**收养成可见 tab」只有真窗口能验，自动化会污染用户桌面。
   ⇒ 归人工验收（PM 真机复核一次；本批报告已写明「起 1 个、30 秒内 kill+rm」的纪律）。
@@ -106,3 +106,44 @@
   与 herdr 的「停整个 session」不同，因为 core 属桌面版（停它 = 关用户窗口）。已写进用法头与本节。
 - **转办（建议单开）**：`hc schema` 的**字段级**校验（arch 报告要求「必备方法/字段」）。当前只做「`hc schema` 可执行 +
   `doc.version ≥ 10`」；逐方法/字段探测（`run/get/ls/kill/rm/send` 是否存在）未做 —— 本批按最小可用不扩面。
+
+## 九、QA 整改（一轮收口 · 加速档）
+
+### 1（P2）AC7 静态闸单向漏检 —— 已加严（非放宽）
+- **根因**：旧判据只认「语句位 `hc`」且**没有入口存在性断言** ⇒ `command hc ls` / `HC_SOCKET=x hc ls` 不命中，
+  **整删或改名 `_term_app_exec`** 后「无命中 = 绿」。
+- **修法**（`tests/t4/lib.sh::t4_scan_app_bare_hc`）：
+  ① 正则加前置 `env` 赋值 / `command` / `exec` / `env` / `nohup` / `time` 前缀；
+  ② 加结构断言 `grep -cE '^_term_app_exec\(\) \{' == 1`（缺失/重复 ⇒ 输出 `MISSING_ENTRY:`，必红）。
+- **先红后绿**（`/tmp/ac7-redgreen.sh`，旧闸 = 首版实现，仅作对照）：
+
+  | 变异样本 | 旧闸 | 新闸 | 新闸点名 |
+  |---|---|---|---|
+  | A 语句位 `hc schema` | RED | RED | `1611:hc schema >/dev/null` |
+  | B `command hc schema` | **GREEN（漏）** | RED | `1611:command hc schema >/dev/null` |
+  | C `HC_SOCKET=/tmp/x.sock hc ls` | **GREEN（漏）** | RED | `1611:HC_SOCKET=/tmp/x.sock hc ls >/dev/null` |
+  | D 入口改名（删唯一入口） | **GREEN（漏）** | RED | `MISSING_ENTRY: … 定义数 = 0` |
+  | 基线（未变异） | GREEN | GREEN | —— |
+
+- `cases/44` ① 已补四条正控（A/B/C/D 各必须红）+「入口恰 1 处」正向断言。
+
+### 2（AC8 子形态）只缺 `labels` ⇒ `unknown` + 一行 warn，不判在线
+- 判据：快照 `ws_id` 为 `-`（有名字、无放置键）⇒ `verdict=unknown`（**不入在线、不可投递**），
+  且仅当名字是**舰队形状**（`fleet_name_parse` = `OK…`）时打一行
+  「集成缺 labels：无法确认放置归属（终端 `<name>`；不判在线、不可投递）」。
+- **两项都缺**（无 `labels` 且无 `status`）⇒ 仍按 AC8 主形态判 `integration-missing`（更强的缺陷），
+  不降级成 `unknown` —— 否则 `status` 的「集成缺失」证据行会被吞掉。
+- **告警只一行**：`running()` 是布尔探针（可投递列），已改为 `2>/dev/null`；告警由证据面负责，
+  否则同一名字被问两次会刷两条（实测复现后修）。
+- 夹具两面：`bare_labels=1` ⇒ warn + 无 ✓；移除后 ⇒ **无该 warn** + ✓（负控）。实测
+  「恰一行」/「0 行」见 `/tmp/dbg44.sh` 输出。
+
+### 3（P3）`cases/06` 白名单改**显式文件名**
+- 原「文件数 = 3」⇒ 现「文件清单 = `06-contract-guards.sh 28-naming-contract.sh 44-app-backend.sh`」，
+  新增文件必须显式改断言，不再随计数漂移悄悄变长。
+- 维护约束不变：若 `44` 的 marker 块改成「非默认值断言」，须移出白名单（marker 处有注释）。
+
+### 4 本批不做（已登记 follow-up，未顺手改）
+- `check` 仍印「唯一后端」：被 AC1 逐字锁死，需单独批次改允许面。
+- `ensure` 全败仍 `rc=0`：v0.29.1 同形，非本批回归（AC4 只要求 fail loud + 回滚）。
+- `hc schema` 字段级校验：当前只判可执行 + `doc.version ≥ 10`。

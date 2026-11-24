@@ -61,13 +61,16 @@ app_reset() {
   : > "$BE_APP_STATE/log"
   rm -f "$BE_APP_STATE"/docver "$BE_APP_STATE"/doc_hide "$BE_APP_STATE"/ready \
         "$BE_APP_STATE"/status_app "$BE_APP_STATE"/status_state "$BE_APP_STATE"/run_fail \
-        "$BE_APP_STATE"/send_fail "$BE_APP_STATE"/app_status_rc
+        "$BE_APP_STATE"/send_fail "$BE_APP_STATE"/app_status_rc "$BE_APP_STATE"/bare_get \
+        "$BE_APP_STATE"/bare_labels
 }
 one_addr() { local a; a="$(app_addrs | head -1)"; printf '%s' "$a"; }
 
 # ---------------------------------------------------------------- ① AC7 静态闸（两向）
 out="$(t4_scan_app_bare_hc "$FLEET")"
 t4_assert_eq "" "$out" "① AC7 静态闸：app 臂裸调 hc = 0（唯一入口 _term_app_exec）"
+t4_assert_eq "1" "$(grep -cE '^_term_app_exec\(\) \{' "$FLEET" || true)" \
+  "① AC7 结构断言：唯一入口 `_term_app_exec` 恰 1 处（删/改名必红，不靠「无命中」冒充绿）"
 MUT="$T4_CACHE_DIR/c44-barehc-$$.sh"
 python3 - "$FLEET" "$MUT" <<'PY'
 import sys
@@ -75,7 +78,34 @@ src=open(sys.argv[1],encoding='utf-8').read()
 open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BEGIN','# >>> term-impl-app BEGIN\nhc schema >/dev/null',1))
 PY
 out="$(t4_scan_app_bare_hc "$MUT")"
-t4_assert_contains "$out" "hc schema" "① 正控：注入裸调 ⇒ 静态闸必红（防回潮）"
+t4_assert_contains "$out" "hc schema" "① 正控A：语句位注入裸调 ⇒ 静态闸必红（原形态不回归）"
+rm -f "$MUT"
+# 变异B：`command hc` 前缀（QA P2 漏检形态① —— env/`command` 前缀同样是绕过唯一入口）
+python3 - "$FLEET" "$MUT" <<'PY'
+import sys
+src=open(sys.argv[1],encoding='utf-8').read()
+open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BEGIN','# >>> term-impl-app BEGIN\ncommand hc schema >/dev/null',1))
+PY
+out="$(t4_scan_app_bare_hc "$MUT")"
+t4_assert_contains "$out" "command hc schema" "① 正控B：`command hc` 前缀 ⇒ 必红（QA 漏检形态）"
+rm -f "$MUT"
+# 变异C：前置 env 赋值（`HC_SOCKET=x hc ls` —— 绕过入口的 socket 归一化）
+python3 - "$FLEET" "$MUT" <<'PY'
+import sys
+src=open(sys.argv[1],encoding='utf-8').read()
+open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BEGIN','# >>> term-impl-app BEGIN\nHC_SOCKET=/tmp/x.sock hc ls >/dev/null',1))
+PY
+out="$(t4_scan_app_bare_hc "$MUT")"
+t4_assert_contains "$out" "HC_SOCKET=/tmp/x.sock hc ls" "① 正控C：env 前缀 ⇒ 必红（QA 漏检形态）"
+rm -f "$MUT"
+# 变异D：整删/改名唯一入口（「无命中即绿」的根因）
+python3 - "$FLEET" "$MUT" <<'PY'
+import sys
+src=open(sys.argv[1],encoding='utf-8').read()
+open(sys.argv[2],'w',encoding='utf-8').write(src.replace('_term_app_exec() {','_term_app_exec_gone() {',1))
+PY
+out="$(t4_scan_app_bare_hc "$MUT")"
+t4_assert_contains "$out" "MISSING_ENTRY" "① 正控D：删/改名入口 ⇒ 结构断言必红（不靠痕量命中）"
 rm -f "$MUT"
 
 # ---------------------------------------------------------------- ② M2 身份闸门
@@ -213,6 +243,20 @@ run_app status
 t4_assert_contains "$APP_OUT" "集成缺失" "⑫ status 判「集成缺失 ⇒ 不可投递」（不退化 idle）"
 t4_assert_not_contains "$APP_OUT" "✓ rd-fe" "⑫ 缺 status 不得判在线"
 rm -f "$BE_APP_STATE/bare_get"
+# 子形态（PM 裁定）：只缺 labels、status 仍 idle ⇒ **unknown + 一行 warn，不判在线/不可投递**。
+#   理由：真 hc 恒给 `"labels":{}`，单缺键不构成「版本不支持」；但「同名未放置终端」会让 close
+#   因同名多命中而拒 —— 残余风险必须显式喊出（warn），不得静默当作可投递。
+app_reset
+env HC_DOUBLE_STATE="$BE_APP_STATE" "$FIXT/hc" run --bg --no-parent --keep \
+  --name rd-fe --cwd "$LAB" --label herdr.space=spx --label herdr.tab=tbx -- true >/dev/null
+printf '1' > "$BE_APP_STATE/bare_labels"
+run_app status
+t4_assert_contains "$APP_ERR" "集成缺 labels" "⑫ 子形态：只缺 labels ⇒ warn「无法确认放置归属」"
+t4_assert_not_contains "$APP_OUT" "✓ rd-fe" "⑫ 子形态：缺 labels 不判在线（unknown，不退化 idle）"
+rm -f "$BE_APP_STATE/bare_labels"
+run_app status
+t4_assert_not_contains "$APP_ERR" "集成缺 labels" "⑫ 负控：labels 齐全 ⇒ 无该 warn（判据不空转）"
+app_reset
 
 # ---------------------------------------------------------------- ⑪ 真 hc（私有 core；无则 SKIP）
 if [ -z "$REAL_HC" ]; then

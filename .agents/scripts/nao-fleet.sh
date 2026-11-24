@@ -1843,6 +1843,23 @@ _term_app_liveness() {  # <name> [repo] → verdict/state/seq/hook
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
     IFS=$'\t' read -r _l _p _t _ _ fg st seq sess av hook ws <<< "$line"
+    # 缺 `labels`（AC8 子形态，PM 裁定）：真 hc 恒给 `"labels":{}`，**单缺键**不构成「版本不支持」，
+    #   但「有名字、无放置键」⇒ 无法确认归属 ⇒ 判 `unknown`（**不判在线/不可投递**）+ 一行 warn。
+    #   若 labels 与 status **两项都缺** ⇒ 按 AC8 主形态判 `integration-missing`（更强的缺陷），
+    #   不降级成 unknown（否则 status 会把「集成缺失」证据行吞掉）。
+    if [[ "$ws" == "-" ]]; then
+      # 只对**舰队形状的会话名**告警（非舰队终端 —— 如用户自己开的窗口、夹具的 self 终端 —— 不归我们管，
+      #   否则每次 status 都会刷一条无意义告警）。
+      if [[ "$(fleet_name_parse "$name")" == OK* ]]; then
+        warn "集成缺 labels：无法确认放置归属（终端 $name；不判在线、不可投递）"
+      fi
+      if [[ "$st" == "-" || "$hook" != "1" ]]; then
+        [[ -z "$v" ]] && { v="integration-missing"; state="-"; }
+      else
+        [[ -z "$v" ]] && { v="unknown"; state="-"; }
+      fi
+      continue
+    fi
     if [[ "$st" == "-" || "$hook" != "1" ]]; then
       [[ -z "$v" ]] && { v="integration-missing"; state="-"; }
       continue
@@ -3336,7 +3353,9 @@ subagent_in_field() {  # → echo 子代理会话数（0..N）
 
 running() {
   # 门面包装：证据链 = herdr 结构化事实（label + argv + agent_status）
-  [[ "$(term_liveness "${1-}" "${2-}" | cut -f1)" == "online" ]]
+  #   **布尔探针静默**：告警由「专用证据面」（cmd_status 的 hv 预计算）负责，这里只取 verdict，
+  #   否则同一个名字会被问两次、告警刷两条（app 臂的「集成缺 labels」实测如此）。
+  [[ "$(term_liveness "${1-}" "${2-}" 2>/dev/null | cut -f1)" == "online" ]]
 }
 
 # P11（BR8）：`ensure` 判重**三态**（旧二态无法区分「同名不同 scope/仓」⇒ 静默起出第二个会话）

@@ -53,6 +53,7 @@ _log_call() { printf '%s\n' "$*" >> "$LOG"; }
 _term_json() { # <addr>
   local a="$1" name cwd state space tab app stt rep par fgname fgargv
   # bare_get=1 ⇒ 只给最小字段（模拟 app 版本不支持 labels/status 契约：AC8 负控）
+  # bare_labels=1 ⇒ 只缺 labels（status 仍 reported：AC8 子形态 —— 判 unknown + warn）
   if [ -f "$ST/bare_get" ]; then
     printf '{"address":"%s","name":"%s","cwd":"%s","state":"%s"}\n' \
       "$a" "$(_esc "$(_field "$a" name)")" "$(_esc "$(_field "$a" cwd)")" "$(_field "$a" state)"
@@ -64,7 +65,9 @@ _term_json() { # <addr>
   par="$(_field "$a" parent)"; fgname="$(_field "$a" fg)"
   printf '{"address":"%s","id":"%s","name":"%s","cwd":"%s","state":"%s","parent":"%s"' \
     "$a" "$a" "$(_esc "$name")" "$(_esc "$cwd")" "$state" "$(_esc "$par")"
-  printf ',"labels":{"herdr.space":"%s","herdr.tab":"%s"}' "$(_esc "$space")" "$(_esc "$tab")"
+  if [ ! -f "$ST/bare_labels" ]; then
+    printf ',"labels":{"herdr.space":"%s","herdr.tab":"%s"}' "$(_esc "$space")" "$(_esc "$tab")"
+  fi
   printf ',"reported":%s' "$([ "$rep" = "1" ] && printf true || printf false)"
   if [ -n "$app" ]; then
     printf ',"status":{"app":"%s","state":"%s","state_ms":1}' "$(_esc "$app")" "$(_esc "$stt")"
