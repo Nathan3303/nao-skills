@@ -30,3 +30,4 @@
 | 2026-11-22 | [herdr 唯一后端（删除 tmux 回退面）](2026-11-22-herdr-only.md) | 唯一后端 = herdr，旧面 fail loud | 已落地（v0.28.0） |
 | 2026-11-24 | [herdr desktop app 作为第二后端](2026-11-24-herdr-app-backend.md) | 双后端并存，放置读 doc 验证 | 已落地 v0.30.0 |
 | 2026-11-24 | [设计技能的职责分层（新建 vs 重构）](2026-11-24-design-skill-layering.md) | 新建与重构分读两只技能 | 已接受（待落地） |
+| 2026-11-24 | [编排器阶段 2 落点 + `nao-fleet.sh` 拆分边界](2026-11-24-orch-stage2-and-script-split.md) | orch 独立 Node + 一次性 tick；按层拆 12 模块 | 已接受（待落地） |
