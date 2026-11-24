@@ -29,3 +29,4 @@
 | 2026-11-20 | [workspace 为绑定单位（取消 fleet · 名字不含位置）](2026-11-20-workspace-as-binding-unit.md) | 放置键 = 仓，名字去 @ | 已接受（待落地） |
 | 2026-11-22 | [herdr 唯一后端（删除 tmux 回退面）](2026-11-22-herdr-only.md) | 唯一后端 = herdr，旧面 fail loud | 已落地（v0.28.0） |
 | 2026-11-24 | [herdr desktop app 作为第二后端](2026-11-24-herdr-app-backend.md) | 双后端并存，放置读 doc 验证 | 已落地 v0.30.0 |
+| 2026-11-24 | [设计技能的职责分层（新建 vs 重构）](2026-11-24-design-skill-layering.md) | 新建与重构分读两只技能 | 已接受（待落地） |

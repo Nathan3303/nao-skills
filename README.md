@@ -169,6 +169,11 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 
 `$NAO_SKILLS` 指机制包根目录（会话里 fleet 会自动注入该变量），也就是 npm 包 `@nathan33/nao-skill` 的安装位置。
 
+## 设计技能与致谢
+
+设计方法吸收了 `oil-oil/oil-ui`、`gustavo-henriq/antislop-ui-ux-skill` 与 [heydamir/unslop](https://github.com/heydamir/unslop)（作者 Damir Sokolovsky，CC-BY-4.0）的思路 —— 本仓只取方法、用中文重写，未复制其文本、图片或脚本（访问日期 2026-11-24）。
+`.agents/skills/frontend-design/SKILL.md` 来自 [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/frontend-design)，条款见其 `LICENSE.txt`。
+
 ## License
 
 MIT © 2026 Nathan Lee

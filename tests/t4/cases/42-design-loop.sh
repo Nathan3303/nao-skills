@@ -29,6 +29,7 @@ PM_REL=".agents/prompts/product-manager.md"
 QA_REL=".agents/checklists/qa.md"
 DOCS_REL=".agents/checklists/deliverable-docs.md"
 DESIGN_REL=".agents/skills/uiux-design.md"
+FE_REL=".agents/prompts/frontend-developer.md"
 
 # 版权闸特征串（来源：两个参考仓的 README/SKILL 原句；**只在此处作「禁出现」判据**，不入任何机制文件）
 C42_NEEDLES=(
@@ -149,6 +150,8 @@ t4_assert_eq "0" "$(grep -rhoF -- "${C42_NEEDLES[0]}" "$T4_ROOT/.agents" 2>/dev/
 t4_assert_eq "0" "$(grep -rhoF -- "${C42_NEEDLES[1]}" "$T4_ROOT/.agents" 2>/dev/null | wc -l)" "BR5: 第三方原句 2/3 在 .agents 内 0 命中"
 t4_assert_eq "0" "$(grep -rhoF -- "${C42_NEEDLES[2]}" "$T4_ROOT/.agents" 2>/dev/null | wc -l)" "BR5: 第三方原句 3/3 在 .agents 内 0 命中"
 t4_assert_match "$(cat "$DL")" '^方法来源：' "BR5: 方法来源恰为独立一行且带许可证名"
+# T564（ADR 2026-11-24-design-skill-layering §四）：重构档入口靠卡内指针唤起，删指针即失效 ⇒ 咬住它。
+t4_assert_contains "$(cat "$T4_ROOT/$FE_REL")" "design-loop.md §八" "T564: rd-fe 卡指到 design-loop §八（重构档入口，删指针即红）"
 
 # ---------------------------------------------------------------- 负控（副本改一处 ⇒ 必红）
 LAB="$T4_CACHE_DIR/lab42-$$"
