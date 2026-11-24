@@ -561,10 +561,77 @@ be_scene_signature() { # 现场签名（排序后逐行）：pane + 会话/works
 }
 
 be_fleet_handles() { # 打印运行生产脚本所需的后端句柄（每行 VAR=VAL），供 `env` 直接展开
-  # #96 三期 P2（默认翻 herdr）：**两后端都显式给 NAO_TERMINAL** —— 测试不得依赖生产默认值
-  #   （否则同一用例在不同默认下走不同后端）。
+  # **两后端都显式给 NAO_TERMINAL** —— 测试不得依赖生产默认值（否则同一用例在不同默认下走不同后端）。
+  if [ "${BE_BACKEND:-herdr}" = "app" ]; then be_app_handles; return 0; fi
     printf 'NAO_TERMINAL=herdr\nHERDR_ENV=1\nHERDR_SESSION=%s\nHERDR_SOCKET_PATH=%s/herdr/sessions/%s/herdr.sock\nXDG_CONFIG_HOME=%s\n' \
       "$BE_SESSION" "$BE_CFGROOT" "$BE_SESSION" "$BE_CFGROOT" 
+}
+
+# ---------------------------------------------------------------- app 后端（T562 / Issue #168）
+# 隔离模型（arch R1 定论 ③ 部分隔离）：
+#   私有 `XDG_RUNTIME_DIR`（socket 必须落在其 `herdr-core/` 下，被测脚本按此守卫）+ 私有
+#   `HC_DOUBLE_STATE`（hc 替身状态根）+ 三件套（HC_SCOPE/HC_TERMINAL_ID/HC_TERMINAL_SOCKET）。
+#   **绝不读用户真实 app core**：socket 由本夹具自建（node unix server），三件套全部指向私有根。
+be_app_init() { # <lab-root> [session]
+  local lab="${1:-}" sess="${2:-nao-t4-app-$$}" i
+  [ -n "$lab" ] || { be_init_fail "缺 lab 根"; return 1; }
+  be_init "$lab" "$sess" || return 1          # 复用 lab/cache/轮询/清理参数（herdr 用例零影响）
+  BE_BACKEND="app"
+  BE_APP_RT="${BE_APP_RT:-$T4_CACHE_DIR/apprt.$$}"
+  BE_APP_STATE="${BE_APP_STATE:-$T4_CACHE_DIR/appstate.$$}"
+  BE_APP_SOCK="$BE_APP_RT/herdr-core/$sess.sock"
+  mkdir -p "$BE_APP_RT/herdr-core" "$BE_APP_STATE/t" "$BE_APP_STATE/spaces" \
+    || { be_init_fail "无法建 app 隔离根: $BE_APP_RT"; return 1; }
+  command -v node >/dev/null 2>&1 || { be_init_fail "app 夹具需要 node（建 unix socket）"; return 1; }
+  node -e 'const net=require("net");const s=net.createServer();s.on("error",()=>process.exit(1));s.listen(process.argv[1])' "$BE_APP_SOCK" &
+  BE_APP_NODE_PID=$!
+  # 轮询单点：间隔取 BE_POLL_INT（禁裸 `sleep <数字>` —— cases/27 静态③ 钉死）
+  for i in $(seq 1 "${BE_POLL_MAX:-50}"); do [ -S "$BE_APP_SOCK" ] && break; sleep "${BE_POLL_INT:-0.1}"; done
+  [ -S "$BE_APP_SOCK" ] || { be_init_fail "app 夹具 socket 未就绪: $BE_APP_SOCK"; return 1; }
+  # 当前终端（self 判据）：HC_TERMINAL_ID=t0，名字故意不形如任何舰队会话
+  mkdir -p "$BE_APP_STATE/t/t0"
+  printf 't0' > "$BE_APP_STATE/t/t0/name"
+  printf '%s' "${BE_APP_RT}/self" > "$BE_APP_STATE/t/t0/cwd"
+  printf 'live' > "$BE_APP_STATE/t/t0/state"
+  printf 'pi' > "$BE_APP_STATE/t/t0/fg"
+  return 0
+}
+
+be_app_handles() { # 三件套 + 替身状态根 + 私有 XDG_RUNTIME_DIR
+  printf 'NAO_TERMINAL=app\n'
+  printf 'HC_SCOPE=%s\n' "$BE_SESSION"
+  printf 'HC_TERMINAL_ID=t0\n'
+  printf 'HC_TERMINAL_SOCKET=%s\n' "$BE_APP_SOCK"
+  printf 'XDG_RUNTIME_DIR=%s\n' "$BE_APP_RT"
+  printf 'HC_DOUBLE_STATE=%s\n' "$BE_APP_STATE"
+}
+
+# 替身调参（用例侧只经此函数写配置，不手写状态文件路径）
+be_app_cfg() { # <名> [值]（无值 ⇒ 删除）
+  local k="$1" v="${2-}"
+  [ -n "$BE_APP_STATE" ] || { be_guard_fail "be_app_cfg：未 be_app_init"; return 1; }
+  if [ -n "$v" ]; then printf '%s' "$v" > "$BE_APP_STATE/$k"; else rm -f "$BE_APP_STATE/$k"; fi
+}
+
+be_app_teardown() {
+  if [ -n "${BE_APP_NODE_PID:-}" ]; then
+    kill "$BE_APP_NODE_PID" 2>/dev/null || true
+    wait "$BE_APP_NODE_PID" 2>/dev/null || true
+    BE_APP_NODE_PID=""
+  fi
+  # 删除一律走 lib.sh 的**唯一删除点**（cases/14 ⑳ 断言 tests/t4 下 `rm -rf --` 只在 lib.sh）
+  [ -n "${BE_APP_RT:-}" ] && _t4_rm_cache_dir "$BE_APP_RT" || true
+  [ -n "${BE_APP_STATE:-}" ] && _t4_rm_cache_dir "$BE_APP_STATE" || true
+  return 0
+}
+
+be_app_arm_cleanup() {
+  [ "${BE_APP_CLEANUP_ARMED:-0}" = "1" ] && return 0
+  BE_APP_CLEANUP_ARMED=1
+  local prev=""
+  prev="$(trap -p EXIT 2>/dev/null || true)"
+  # 链式保留既有 EXIT trap（be_arm_cleanup 可能已挂过）
+  trap 'be_app_teardown; '"${prev:+$(printf %s "$prev" | sed -e "s/^trap -- '//" -e "s/' EXIT$//")}" EXIT
 }
 
 # HERDR_* 清理参数（单点派生 · #130 D2）：默认 = lib.sh 单源**全集**，减去调用方**显式声明**要故意注入的变量。
@@ -629,7 +696,7 @@ be_env_kept() { # <变量名> → 0 = 保留
 # 当前进程 env 里命中的宿主面变量名（排序去重；`env` 自身是子进程，不污染本 shell）
 be_env_ambient_names() {
   env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' \
-      | grep -E '^(HERDR_|TMUX|NAO_)' | sort -u || true
+      | grep -E '^(HERDR_|HC_|TMUX|NAO_)' | sort -u || true
 }
 
 # 净化参数：每行一个 argv（`-u` / 变量名 交替），供 `env` 直接展开

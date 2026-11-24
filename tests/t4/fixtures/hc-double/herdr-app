@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# herdr-app-double —— `herdr-app` 的确定性替身（T562/#168 用例专用）。
+#   只实现被测脚本用到的 `status`：rc 由 `$HC_DOUBLE_STATE/app_status_rc` 控制
+#   （0 = 窗口在跑；非 0 = 未运行 ⇒ ensure 的 AC3b 前提应 exit 3）。
+set -uo pipefail
+ST="${HC_DOUBLE_STATE:-}"
+if [ -z "$ST" ]; then
+  printf 'HERDR-APP-DOUBLE-GUARD-FAIL: 未设 HC_DOUBLE_STATE\n' >&2
+  exit 3
+fi
+case "${1:-}" in
+  status)
+    rc="0"; [ -f "$ST/app_status_rc" ] && rc="$(head -1 "$ST/app_status_rc")"
+    if [ "$rc" = "0" ]; then printf '{"running":true}\n'; else
+      printf '{"running":false}\n'; fi
+    exit "$rc" ;;
+  *)
+    printf 'HERDR-APP-DOUBLE-VIOLATION: 未实现子命令 %s\n' "${1:-<空>}" >&2
+    exit 9 ;;
+esac

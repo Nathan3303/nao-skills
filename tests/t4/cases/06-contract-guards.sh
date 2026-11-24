@@ -1033,17 +1033,33 @@ exit3_hint_scan() { # <script> → 逐站点检查前 3 行报文是否带指路
 }
 EXIT3_STANDALONE="$(grep -cE '^[[:space:]]*exit 3[[:space:]]*$' "$FLEET_B1" || true)"
 EXIT3_TOKEN="$(exit3_token_sites "$FLEET_B1" | grep -c . || true)"
-t4_assert_eq "7" "$EXIT3_STANDALONE" "P2② 独占行形态 exit 3 = 7（T555：tmux 前置 1 条随后端删除；herdr 侧 7 条不变）"
-t4_assert_eq "7" "$EXIT3_TOKEN" "P2② token 级 exit 3 站点 = 7（含「; exit 3」「|| exit 3」等命令位形态，排除注释行）"
+# T562：第二后端（app）**结构上需要自己的 exit 3 闸门**（三件套/窗口/socket/放置文档）。
+#   判据零放松：按「**app 区间内 / 外**」二分（不是按 herdr 区间 —— 旧面第 7 条本来就在区间外的 cmd_status）：
+#     ① app 区间外（旧面）token 位站点仍**恰 7**（T555 原句不变量逐字保留）；
+#     ② 两轴总数相加 == 站点总数（无游离站点）；③ 每条都带指路（下面全扫断言覆盖两侧）。
+_app_r="$(_t4_term_ranges "$FLEET_B1" term-impl-app)"
+_exit3_in() { # <script> <ranges> → 该区间内的 exit 3 token 位行号
+  local script="$1" ln
+  while IFS= read -r ln; do
+    [ -n "$ln" ] || continue
+    _t4_in_ranges "$ln" "$2" && printf '%s\n' "$ln"
+  done < <(exit3_token_sites "$script" | cut -f1)
+}
+EXIT3_APP="$(_exit3_in "$FLEET_B1" "$_app_r" | grep -c . || true)"
+EXIT3_LEGACY=$((EXIT3_STANDALONE - EXIT3_APP))
+t4_assert_eq "7" "$EXIT3_LEGACY" "P2② app 区间**外**（旧面）token 位 exit 3 = 7（T555 原句不变量；app 侧单列）"
+t4_assert_ge "1" "$EXIT3_APP" "P2② app 区间内 exit 3 闸门存在（三件套/窗口/socket/文档前置）"
+t4_assert_eq "$EXIT3_TOKEN" "$((EXIT3_LEGACY + EXIT3_APP))" \
+  "P2② token 位站点总数 = 旧面(7) + app($EXIT3_APP)（无区间外游离站点）"
 t4_assert_eq "$EXIT3_STANDALONE" "$EXIT3_TOKEN" \
-  "P2② 两轴相等（当前无「非独占行」形态）；若有人写成「cmd || exit 3」，本断言会把差异摆出来"
+  "P2② 两轴相等（独占行与 token 位当前同值；若有人写成「cmd || exit 3」本断言会把差异摆出来）"
 t4_assert_eq "" "$(exit3_hint_scan "$FLEET_B1")" \
   "P2② 每条 exit 3 文案都给后续动作（重试 / pin 回旧版；T555：tmux 回退指路已随后端删除）"
 EXIT3_HINTED="$(exit3_token_sites "$FLEET_B1" | cut -f1 | while IFS= read -r ln; do
   body="$(awk -v n="$ln" 'NR >= n - 3 && NR <= n { buf = buf "\n" $0 } END { print buf }' "$FLEET_B1")"
   case "$body" in *"重试"*|*"pin 回"*) printf 'x\n' ;; esac
 done | grep -c . || true)"
-t4_assert_eq "7" "$EXIT3_HINTED" "P2② 含后续动作的 exit 3 = 7 条（全数）"
+t4_assert_eq "$EXIT3_TOKEN" "$EXIT3_HINTED" "P2② 含后续动作的 exit 3 = 全数（herdr 7 + app $EXIT3_APP）"
 
 # 负控 A：摘掉一条 herdr 文案的回退指路 ⇒ hint 扫描恰 1 条必红（判据非空转）
 NEG_EXIT3="$T4_CACHE_DIR/p2-neg-exit3-$$.sh"
@@ -1057,16 +1073,28 @@ rm -f "$NEG_EXIT3"
 NEG_EXIT3B="$T4_CACHE_DIR/p2-neg-exit3b-$$.sh"
 awk '{ if ($0 ~ /^[[:space:]]*exit 3[[:space:]]*$/ && !done) { sub(/^[[:space:]]*exit 3[[:space:]]*$/, "    : || exit 3"); done = 1 } print }' \
   "$FLEET_B1" > "$NEG_EXIT3B"
-t4_assert_eq "6" "$(grep -cE '^[[:space:]]*exit 3[[:space:]]*$' "$NEG_EXIT3B" || true)" \
-  "P2② 负控B：改成「cmd || exit 3」后独占行数 7→6（旧判据会漏掉它）"
-t4_assert_eq "7" "$(exit3_token_sites "$NEG_EXIT3B" | grep -c . || true)" \
-  "P2② 负控B：token 级计数仍为 7 ⇒ 新写法被计入（≠ 旧判据的 6）"
+t4_assert_eq "$((EXIT3_STANDALONE - 1))" "$(grep -cE '^[[:space:]]*exit 3[[:space:]]*$' "$NEG_EXIT3B" || true)" \
+  "P2② 负控B：改成「cmd || exit 3」后独占行数 -1（旧判据会漏掉它）"
+t4_assert_eq "$EXIT3_TOKEN" "$(exit3_token_sites "$NEG_EXIT3B" | grep -c . || true)" \
+  "P2② 负控B：token 级计数不变 ⇒ 新写法被计入（≠ 旧判据）"
 t4_assert_eq "" "$(exit3_hint_scan "$NEG_EXIT3B")" \
   "P2② 负控B：该形态同样受报文指路判据约束（hint 仍在 ⇒ 0 命中）"
 sed -i 's/—— 在该 herdr 会话的 pane 内重试（旧版 tmux 后端已移除）//' "$NEG_EXIT3B"
 t4_assert_eq "1" "$(exit3_hint_scan "$NEG_EXIT3B" | grep -c . || true)" \
   "P2② 负控B2：该形态缺指路时 hint 扫描必红（覆盖到位，不是只计数）"
 rm -f "$NEG_EXIT3B"
+
+# 负控 C（T562 · app 轴防空转）：把 **app 区间内**第一条独占行改成 `cmd || exit 3`
+#   ⇒ 独占行总数 −1、app 区间 token 位**不变**（证明 app 轴真的按区间在算，不是空转）。
+NEG_EXIT3C="$T4_CACHE_DIR/p2-neg-exit3c-$$.sh"
+awk -v s="$(_t4_term_ranges "$FLEET_B1" term-impl-app | cut -f1)" '
+  NR >= s && !done && $0 ~ /^[[:space:]]*exit 3[[:space:]]*$/ { sub(/^[[:space:]]*exit 3[[:space:]]*$/, "    : || exit 3"); done = 1 }
+  { print }' "$FLEET_B1" > "$NEG_EXIT3C"
+t4_assert_eq "$((EXIT3_STANDALONE - 1))" "$(grep -cE '^[[:space:]]*exit 3[[:space:]]*$' "$NEG_EXIT3C" || true)" \
+  "P2② 负控C：app 区间内改「cmd || exit 3」⇒ 独占行总数 −1"
+t4_assert_eq "$EXIT3_APP" "$(_exit3_in "$NEG_EXIT3C" "$_app_r" | grep -c . || true)" \
+  "P2② 负控C：app 区间 token 位计数不变（app 轴不是空转）"
+rm -f "$NEG_EXIT3C"
 
 # ---- ② 测试不依赖默认值（静态面）----
 CASES_DIR="$T4_ROOT/tests/t4/cases"
@@ -1082,8 +1110,8 @@ t4_assert_eq "$(sed -n '/^CASE_IDS=(/,/)/p' "$T4_ROOT/tests/t4/run.sh" | grep -o
 t4_assert_eq "$(sed -n '/^CASE_IDS=(/,/)/p' "$T4_ROOT/tests/t4/run.sh" | grep -oE '"[0-9]+"' | tail -1 | tr -d '"')" \
   "$(ls -1 "$CASES_DIR"/*.sh | tail -1 | sed -E 's#.*/([0-9]+)-.*#\1#')" \
   "P2③ 最大用例编号 = run.sh CASE_IDS 末位（退役编号不复用）"
-t4_assert_eq "2" "$(grep -l 'default-value-probe BEGIN' "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" \
-  "P2③ 默认值探针块白名单 = 2 个文件（cases/06 默认值段 · cases/28 B1① 反向断言）"
+t4_assert_eq "3" "$(grep -l 'default-value-probe BEGIN' "$CASES_DIR"/*.sh | wc -l | tr -d ' ')" \
+  "P2③ 默认值探针块白名单 = 3 个文件（06 默认值段 · 28 B1① 反向断言 · 44 AC1「默认=herdr」反向断言）"
 # 负控：块外注入 unset ⇒ 必被扫到（并点名行号与形态）
 #   注：本段用 printf **构造**违规样本（不是执行默认值探针）；构造串里必然出现被扫关键字，
 #   故一并包在标记块内（否则用例 06 会「自我举报」—— 判据只白名单标记块内文本）。
