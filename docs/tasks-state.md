@@ -657,7 +657,7 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 <!-- nao-queue:begin active -->
 <!-- generated: 由 `bin/nao-queue render` 生成 · 唯一事实源 `docs/queue.jsonl` · 禁手改（下次渲染会覆盖） -->
-- **T566** · qa_pass · 编排器阶段 1：队列与回执契约（jsonl 单源 + 渲染器 + 校验器） · prio=P1 · owner=rd-infra · qa=qa · deps=- · acs=AC1,AC2,AC3,AC4 · attempt=0 · branch=feat/566-queue-receipt · updated=2026-11-24
+- （空）
 <!-- nao-queue:end active -->
 
 > 上方渲染块只含 `docs/queue.jsonl` 的行（`bin/nao-queue render` 生成，禁手改）；下方为迁移前的手写交付记录，尚未迁入 jsonl。
