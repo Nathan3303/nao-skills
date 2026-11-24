@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "id": "T566",
+  "author": "rd-infra",
+  "at": "2026-11-24T23:12:00+08:00",
+  "head": "e4e76fcced0360cc9a2fc76f5536faddb1e15a86",
+  "pushed": true,
+  "gates": {
+    "check": {
+      "rc": 0,
+      "log": "docs/reports/566-impl-rd-infra.md"
+    },
+    "full": {
+      "rc": 0,
+      "cases": 43,
+      "pass": 43,
+      "fail": 0,
+      "note": "PM 全量实测：EXIT=0 · RESULT: PASS · SKIP=0 DEGRADE=0 NOTE=18(全白名单) · 日志 /tmp/pm-t566-full.log"
+    }
+  },
+  "acs": [
+    {
+      "id": "AC1",
+      "how": "回执缺字段/空证据/自述矛盾/脱离队列 ⇒ 红",
+      "evidence": "tests/t4/cases/46-queue-receipt.sh ①（5 变异负控）"
+    },
+    {
+      "id": "AC2",
+      "how": "pushed:true 与 git ls-remote 一致（head 在远端任一 head 或其祖先）",
+      "evidence": "tests/t4/cases/46-queue-receipt.sh ②（本地 bare 仓正/负控 + 空远端 + 不可达远端）"
+    },
+    {
+      "id": "AC3",
+      "how": "非法状态转换 fail loud（跳级/终态出边/自态自转）",
+      "evidence": "tests/t4/cases/46-queue-receipt.sh ③（queued→merged 等 5 例 + 允许集回显）"
+    },
+    {
+      "id": "AC4",
+      "how": "jsonl → md 单向渲染 + 幂等 + 手改必红",
+      "evidence": "tests/t4/cases/46-queue-receipt.sh ④（手改 --check rc=1 · 标记缺失 rc=2 不改盘）"
+    }
+  ],
+  "blocked": false,
+  "artifacts": [
+    "bin/nao-queue",
+    "docs/queue.jsonl",
+    "docs/queue/T566.receipt.json",
+    "docs/tasks-state.md",
+    "docs/prds/2026-11-24-orchestrator.md",
+    "tests/t4/cases/46-queue-receipt.sh",
+    "tests/t4/run.sh",
+    "tests/README.md",
+    "AGENTS.md",
+    "docs/reports/566-impl-rd-infra.md"
+  ],
+  "deviation": "① PRD 结构对齐（机械）：加 TL;DR · AC 节移到 §七 并按五覆盖拆 ### 组 · 原六/七顺移；AC1–AC11 文本与编号不变，§四/§十 编号不动（原文档不满足 checklists/deliverable-docs §三 ⇒ 基线 case 06/36 本红）。② AC1 的 cases/50 按派单改指 tests/t4/cases/46-queue-receipt.sh。③ tasks-state.md 只加两对渲染标记 + 两行说明，既有手写台账一行未删（迁移归 PM）。④ package.json 未动 ⇒ bin/nao-queue 未注册 PATH，调用为 node bin/nao-queue。⑤ 二轮（QA 裁定）：receipt-line 对 pushed 选「fail loud（rc=1）且零机读行产出」而非「NOTICE+拒绝」——pushed 缺字段/false 一律判红；pushed:true 默认做 git ls-remote 复核（--no-push-check 为显式逃生阀，跳过必打 NOTICE）。⑥ 二轮 rebase 到 origin/main(49ce447)：run.sh 三处冲突按并集解，用例 42 → 43（并入 main 的 case 45）。"
+}
