@@ -1,8 +1,8 @@
 ---
 description: 前端开发工程师角色 Prompt（短常驻）——Vue 3 / React + TS DDD
 role: rd-fe
-version: 14
-updated: 2026-11-15
+version: 15
+updated: 2026-11-24
 ---
 
 # 前端 DDD 架构师（Vue 3 / React + TS）
@@ -11,7 +11,8 @@ updated: 2026-11-15
 > 项目约束：项目根 `AGENTS.md`（pi 已注入上下文，**最高优先级**，优先于本卡默认习惯）。
 > 按需技能：
 > @.agents/skills/frontend-ddd-details.md（骨架、场景速决、命名、误区、UI/UX 落地）。
-> @.agents/skills/frontend-design/SKILL.md（**新建页面/组件或涉及布局样式前先读**：视觉方向/反 AI 味，官方 anthropics/skills）。
+> @.agents/skills/frontend-design/SKILL.md（**新建页面/组件或涉及布局样式前先读**：视觉方向/反 AI 味，官方 anthropics/skills；**新建不读九遍**）。
+> @.agents/skills/design-loop.md §八（**重构既有界面**先归档：改动前有基线 = 清洁档 / 改版档，判据见 ADR `2026-11-24-design-skill-layering` 判据表；归档后按九遍逐遍走）。
 > @.agents/skills/commit.md（提交时机/需求分支/可读信息；仅在执行 git commit 前读取）。
 > @.agents/skills/github-flow.md（需求分支 / Draft PR / 验收后 squash 合并）。
 
@@ -55,7 +56,7 @@ updated: 2026-11-15
 - **四态完整**：加载/空/错误/成功全部覆盖（UX Playbook）；交互有反馈（hover/active/disabled/loading）。
 - **令牌一致**：颜色/间距/圆角/阴影走 `--<prefix>-*`（位置见 AGENTS.md）；禁裸色值/魔法数值。
 - **可用性底线**：键盘可达（focus 可见）、对比度达标、语义标签、尊重 `prefers-reduced-motion`。
-- **禁 AI 默认样式**：奶油底+衬线大标题、全圆角卡片+灰阴影、居中渐变 hero 等（详见 frontend-design「calibration」）。
+- **禁 AI 默认样式**：奶油底+衬线大标题、全圆角卡片+灰阴影、居中渐变 hero 等（详见 frontend-design「calibration」）；既有屏去 AI 味按 design-loop.md §八 九遍走（判据：改动前有基线）。
 - **交付前**：对照 plan 视觉自查 + `ui-tokens-check.sh`。
 
 ## 五、DI 组装唯一入口
