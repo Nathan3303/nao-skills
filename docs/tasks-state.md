@@ -50,7 +50,7 @@
 
 - 🔁 **接续快照（2026-11-24 晚 · PM 重开前）**：接手者只需读本区。要点：
   - **当前唯一在飞任务 = T566 编排器阶段 1**（Issue #177 · 分支 `feat/566-queue-receipt` @ `9c18bd3` · PR #179 · base `origin/main`=49ce447）。QA 一轮 CONDITIONAL（P1-1 rebase+43例 / P2-1 receipt-line 强校验 pushed / P3-1 同态回显 / P3-2 PRD §六对齐 / P3-3 删硬编码 T566）已全部修完并 push。
-  - **合并门禁（全量 `npm test`）正在 `/tmp/w566`（worktree @ 9c18bd3，node_modules 软链）后台跑**，日志 `/tmp/pm-t566-full.log`。**接手者第一动作**：`grep EXIT= /tmp/pm-t566-full.log` 看是否跑完；绿则把实测 pass 数回填 `docs/queue/T566.receipt.json` 的 `gates.full.pass` 与 PR #179 body，再授权 RD squash（禁 PM 自合）。
+  - **全量门禁已过（43/43），待合并**（PM `/tmp/w566` @ `9c18bd3` · `EXIT=0` · `RESULT: PASS` · SKIP=0 DEGRADE=0 NOTE=18 全白名单 · 日志 `/tmp/pm-t566-full.log`）；回执 `gates.full` 已回填，待 PM 复核 diff 后授权 RD squash（禁 PM 自合）。
   - **已发布版本**：v0.31.1（T565 app 放置验证修复，npm 已核验；发布后事实提交 49ce447）。
   - **队列**：阶段 2（`nao-orch tick`）与阶段 3（看板/多仓）尚未立项；PRD `docs/prds/2026-11-24-orchestrator.md` 已接受。
   - **会话体检**：旧 pm 上下文 80%（800k/1000k）触发重开；重开后从本区重建，勿凭记忆调度。
@@ -657,7 +657,7 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 <!-- nao-queue:begin active -->
 <!-- generated: 由 `bin/nao-queue render` 生成 · 唯一事实源 `docs/queue.jsonl` · 禁手改（下次渲染会覆盖） -->
-- **T566** · working · 编排器阶段 1：队列与回执契约（jsonl 单源 + 渲染器 + 校验器） · prio=P1 · owner=rd-infra · qa=qa · deps=- · acs=AC1,AC2,AC3,AC4 · attempt=0 · branch=feat/566-queue-receipt · updated=2026-11-24
+- **T566** · qa_pass · 编排器阶段 1：队列与回执契约（jsonl 单源 + 渲染器 + 校验器） · prio=P1 · owner=rd-infra · qa=qa · deps=- · acs=AC1,AC2,AC3,AC4 · attempt=0 · branch=feat/566-queue-receipt · updated=2026-11-24
 <!-- nao-queue:end active -->
 
 > 上方渲染块只含 `docs/queue.jsonl` 的行（`bin/nao-queue render` 生成，禁手改）；下方为迁移前的手写交付记录，尚未迁入 jsonl。

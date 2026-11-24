@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "T566",
   "author": "rd-infra",
-  "at": "2026-11-24T22:41:01+08:00",
+  "at": "2026-11-24T23:12:00+08:00",
   "head": "e4e76fcced0360cc9a2fc76f5536faddb1e15a86",
   "pushed": true,
   "gates": {
@@ -13,9 +13,9 @@
     "full": {
       "rc": 0,
       "cases": 43,
-      "pass": 0,
+      "pass": 43,
       "fail": 0,
-      "note": "全量归 PM 验收跑（本批只跑 check+46/06/36）；pass 计数待 PM 全量回填"
+      "note": "PM 全量实测：EXIT=0 · RESULT: PASS · SKIP=0 DEGRADE=0 NOTE=18(全白名单) · 日志 /tmp/pm-t566-full.log"
     }
   },
   "acs": [
