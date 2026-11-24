@@ -5,6 +5,7 @@
 # 断言组（编号 ↔ AC）：
 #   ① AC1 回执 schema：完整回执通过；缺字段 / 空证据 / 自述与计数矛盾 / id 与文件名不一致 / 回执脱离队列 ⇒ 逐条点名必红
 #      机读首行：必须显式给回执路径或 --id（不内置默认回执）；pushed 缺字段/false ⇒ 必红且**零机读行产出**（P2-1/P3-3）
+#      `gates.check.log` 存在性（T566-F2 · PRD §六）：非空字符串不够，必须指向真实文件；锚点 = 仓库根（cwd 不在 git 仓内 + 相对路径 ⇒ fail closed）
 #   ② AC2 pushed:true 与 `git ls-remote` 一致（正控：head 在远端；负控：未推送的提交 ⇒ 红；空远端 ⇒ 红；
 #      `--no-push-check` 是显式逃生阀，跳过必打 NOTICE —— 防静默假绿）
 #   ③ AC3 状态机：合法链（queued→dispatched · qa→qa_fail · qa_fail→working · merged→released）通过；
@@ -151,7 +152,8 @@ t4_assert_eq 2 "$T4_RC" "③ 未知状态 ⇒ rc=2（用法错误，与「非法
 
 # ================================================================ ① AC1 回执 schema
 REC="$LAB/rec"; mkdir -p "$REC"
-cat > "$REC/T701.receipt.json" <<'JSON'
+printf 'check: OK · 夹具日志\n' > "$LAB/check.log"
+cat > "$REC/T701.receipt.json" <<JSON
 {
   "id": "T701",
   "author": "rd-infra",
@@ -159,7 +161,7 @@ cat > "$REC/T701.receipt.json" <<'JSON'
   "head": "deadbeef",
   "pushed": false,
   "gates": {
-    "check": { "rc": 0, "log": "check.log" },
+    "check": { "rc": 0, "log": "$LAB/check.log" },
     "full": { "rc": 0, "cases": 43, "pass": 2513, "fail": 0, "note": "" }
   },
   "acs": [
@@ -174,6 +176,29 @@ JSON
 c46 "$LAB" validate --queue "$Q" --receipts "$REC"
 t4_assert_eq 0 "$T4_RC" "① AC1 完整回执通过（$T4_ERR）"
 t4_assert_match "$T4_OUT" "receipts=1 份" "① 校验摘要给出回执份数（不静默 0 份）"
+
+# gates.check.log 存在性（T566-F2 · PRD §六）：非空字符串不够，必须指向真实文件
+c46_mut "$REC/T701.receipt.json" "$LAB/r.nologfile.json" "o.gates.check.log = '$LAB/no-such-566.log'"
+mkdir -p "$LAB/rec-m7"; cp "$LAB/r.nologfile.json" "$LAB/rec-m7/T701.receipt.json"
+c46 "$LAB" validate --queue "$Q" --receipts "$LAB/rec-m7"
+t4_assert_eq 1 "$T4_RC" "① check.log 指向不存在文件 ⇒ rc=1（PRD §六「回执伪造」）"
+t4_assert_contains "$T4_ERR" "no-such-566.log" "① 点名不存在的日志路径"
+t4_assert_contains "$T4_ERR" "不存在的文件" "① 报错语义点名「指向不存在的文件」"
+
+# 空 log 仍按原口径红（存在性校验不得放宽「非空字符串」这条）
+c46_mut "$REC/T701.receipt.json" "$LAB/r.emptylog.json" 'o.gates.check.log = ""'
+mkdir -p "$LAB/rec-m8"; cp "$LAB/r.emptylog.json" "$LAB/rec-m8/T701.receipt.json"
+c46 "$LAB" validate --queue "$Q" --receipts "$LAB/rec-m8"
+t4_assert_eq 1 "$T4_RC" "① check.log 为空 ⇒ rc=1（原口径保留）"
+t4_assert_contains "$T4_ERR" "gates.check.log" "① 空 log 点名字段"
+
+# 锚点 fail closed：cwd 不在 git 仓内 + 相对路径 ⇒ 判红（不静默按调用 cwd 解析）
+git -C "$LAB" rev-parse --show-toplevel >/dev/null 2>&1   && t4_bad "① 夹具前提：$LAB 不应在 git 仓内（锚点 fail-closed 可测）"   || t4_ok "① 夹具前提：$LAB 不在 git 仓内（锚点 fail-closed 可测）"
+c46_mut "$REC/T701.receipt.json" "$LAB/r.rellog.json" 'o.gates.check.log = "relative-only.log"'
+mkdir -p "$LAB/rec-m9"; cp "$LAB/r.rellog.json" "$LAB/rec-m9/T701.receipt.json"
+c46 "$LAB" validate --queue "$Q" --receipts "$LAB/rec-m9"
+t4_assert_eq 1 "$T4_RC" "① 相对路径 + 非 git cwd ⇒ rc=1（锚点不确定即 fail closed）"
+t4_assert_contains "$T4_ERR" "无法按仓库根锚定" "① 报错点名锚点不可判定（不静默按 cwd）"
 
 # 逐条变异负控：改坏一处 ⇒ 必红并点名
 c46_mut "$REC/T701.receipt.json" "$LAB/r.nodeviation.json" 'delete o.deviation'
@@ -255,6 +280,14 @@ t4_assert_eq "receipt: T701 rd-infra head=$SHA1 gates=ok,ok acs=2/2" "$T4_OUT" "
 c46 "$LAB" receipt-line --id T701 --queue "$Q" --receipts "$PUSHED" --remote "$REMOTE"
 t4_assert_eq 0 "$T4_RC" "① receipt-line --id 拼 --receipts/<id>.receipt.json ⇒ rc=0（P3-3）"
 t4_assert_eq "receipt: T701 rd-infra head=$SHA1 gates=ok,ok acs=2/2" "$T4_OUT" "① --id 形态的机读首行逐字"
+
+# receipt-line 也执行 check.log 存在性（同一条判据面；此处 pushed/head/远端全绿，唯一红因 = log 不存在）
+mkdir -p "$LAB/rec-pushed-nolog"
+c46_mut "$PUSHED/T701.receipt.json" "$LAB/rec-pushed-nolog/T701.receipt.json" "o.gates.check.log = '$LAB/no-such-566.log'"
+c46 "$LAB" receipt-line "$LAB/rec-pushed-nolog/T701.receipt.json" --queue "$Q" --receipts "$LAB/rec-pushed-nolog" --remote "$REMOTE"
+t4_assert_eq 1 "$T4_RC" "② receipt-line 也校验 check.log 存在性（rc=1）"
+t4_assert_contains "$T4_ERR" "no-such-566.log" "② receipt-line 点名不存在的日志路径"
+t4_assert_not_contains "$T4_OUT" "receipt:" "② 日志不存在时零机读行产出"
 
 UNPUSHED="$LAB/rec-unpushed"; mkdir -p "$UNPUSHED"
 c46_mut "$REC/T701.receipt.json" "$UNPUSHED/T701.receipt.json" "o.head = '$SHA2'; o.pushed = true"

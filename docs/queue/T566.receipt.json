@@ -3,7 +3,7 @@
   "id": "T566",
   "author": "rd-infra",
   "at": "2026-11-24T23:12:00+08:00",
-  "head": "e4e76fcced0360cc9a2fc76f5536faddb1e15a86",
+  "head": "b6bb4cb40e39d2095e078bc244ee8498f1671f24",
   "pushed": true,
   "gates": {
     "check": {
@@ -53,5 +53,5 @@
     "AGENTS.md",
     "docs/reports/566-impl-rd-infra.md"
   ],
-  "deviation": "① PRD 结构对齐（机械）：加 TL;DR · AC 节移到 §七 并按五覆盖拆 ### 组 · 原六/七顺移；AC1–AC11 文本与编号不变，§四/§十 编号不动（原文档不满足 checklists/deliverable-docs §三 ⇒ 基线 case 06/36 本红）。② AC1 的 cases/50 按派单改指 tests/t4/cases/46-queue-receipt.sh。③ tasks-state.md 只加两对渲染标记 + 两行说明，既有手写台账一行未删（迁移归 PM）。④ package.json 未动 ⇒ bin/nao-queue 未注册 PATH，调用为 node bin/nao-queue。⑤ 二轮（QA 裁定）：receipt-line 对 pushed 选「fail loud（rc=1）且零机读行产出」而非「NOTICE+拒绝」——pushed 缺字段/false 一律判红；pushed:true 默认做 git ls-remote 复核（--no-push-check 为显式逃生阀，跳过必打 NOTICE）。⑥ 二轮 rebase 到 origin/main(49ce447)：run.sh 三处冲突按并集解，用例 42 → 43（并入 main 的 case 45）。"
+  "deviation": "① PRD 结构对齐（机械）：加 TL;DR · AC 节移到 §七 并按五覆盖拆 ### 组 · 原六/七顺移；AC1–AC11 文本与编号不变，§四/§十 编号不动（原文档不满足 checklists/deliverable-docs §三 ⇒ 基线 case 06/36 本红）。② AC1 的 cases/50 按派单改指 tests/t4/cases/46-queue-receipt.sh。③ tasks-state.md 只加两对渲染标记 + 两行说明，既有手写台账一行未删（迁移归 PM）。④ package.json 未动 ⇒ bin/nao-queue 未注册 PATH，调用为 node bin/nao-queue。⑤ 二轮（QA 裁定）：receipt-line 对 pushed 选「fail loud（rc=1）且零机读行产出」而非「NOTICE+拒绝」——pushed 缺字段/false 一律判红；pushed:true 默认做 git ls-remote 复核（--no-push-check 为显式逃生阀，跳过必打 NOTICE）。⑥ 二轮 rebase 到 origin/main(49ce447)：run.sh 三处冲突按并集解，用例 42 → 43（并入 main 的 case 45）。⑦ 回执 head 由 e4e76fc 改为 squash 交付提交 b6bb4cb（本 PR）：squash 合并丢弃分支祖先链 ⇒ 原值合并后不在远端任何 head 的祖先里 ⇒ `validate`（真远端）必红；head 语义订正为「已合并的交付提交」。"
 }

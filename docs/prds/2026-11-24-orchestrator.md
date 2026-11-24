@@ -66,6 +66,8 @@
 | 队列与台账不一致 | 以 `queue.jsonl` 为准，重渲染 `tasks-state.md`；不一致本身记账 |
 | 回执伪造（自述 pass 无日志） | `gates.check.log` 指向不存在文件，或 `gates.full` 缺 `rc/cases/pass/fail/note` 任一 ⇒ 判红 |
 
+> 锚点（T566-F2）：`gates.check.log` 为相对路径时一律按**仓库根**解析（`git rev-parse --show-toplevel`，以调用 cwd 为起点）；绝对路径原样使用；仓库根不可判定（调用 cwd 不在任何 git 仓内）⇒ 判红（fail closed），不静默跳过。
+
 ## 七、验收（AC，机械可判）
 
 分组依据 `.agents/checklists/deliverable-docs.md` §三（五覆盖）；阶段归属写在每条 AC 前（阶段 1 = 本批）。
