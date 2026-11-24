@@ -1,6 +1,6 @@
 # 编排器 nao-orch（把人工调度变成机制自己转）
 
-- 状态：待批准
+- 状态：已接受（2026-11-24 · §十 三问已拍板）
 - 日期：2026-11-24
 - 关联：`docs/reports/2026-11-24-task-flow.md`（流程分段图）· T563（`agent_verdict` 三态）· T562（app 后端 · OSC 7501 忙闲）
 - 目标版本：分三阶段，阶段 1 随下个 MINOR；阶段 2/3 另批
@@ -91,8 +91,10 @@
 - 阶段 3：MINOR
 - 回滚：删 `bin/nao-orch` 无副作用（队列文件保留、可人读）；`status --json` 回退不影响旧调用
 
-## 十、开放问题
+## 十、开放问题（已拍板 2026-11-24）
 
-1. 队列与 `tasks-state.md` 的渲染方向是否要反向（人改 md ⇒ 解析回 jsonl）？倾向**否**（单向）。
-2. 阶段 2 是否提供 systemd user unit 模板？倾向**是**（附卸载说明）。
-3. `blocked` 通知 PM 走 intercom 还是写文件？倾向**两者**（intercom 唤醒 + 文件留证）。
+1. 台账方向 = **单向**（`queue.jsonl` → `tasks-state.md`）：jsonl 是唯一事实源，md 是渲染产物；手改 md 会在下次渲染被覆盖（AC4 即此判据）。
+2. systemd = **要**：阶段 2 随交付出 `nao-orch.service` / `nao-orch.timer` + 安装/卸载命令，安装须幂等（连装两次 effect=0），日志走 journald。理由：orch 的价值前提是「PM 会话不在时也能推进」，`cron` 不保证登录后仍在跑。
+3. `blocked` 通知 = **两者都做**：写 `queue.jsonl` / receipt 留证，同时 intercom 唤醒 PM 会话（消息带会话 id + cwd，禁裸名）。
+
+以上三条不再是开放问题；后续变更须改本节并 bump 版本。
