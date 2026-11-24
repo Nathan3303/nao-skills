@@ -17,7 +17,7 @@
 一件 ADR 覆盖两件事（耦合点 = `status --json` 契约 + 静态闸的文件集迁移）：D1/D2/D4/D5 为 orch 面，D3 为拆分面，D6/D7 两面共用。
 
 - **D1 落点 = `bin/nao-orch`**（Node ≥18 零依赖，与 `bin/nao-queue` 同构）：`tick|board|dispatch|reap|doctor|install-systemd|uninstall-systemd`；队列解析/校验/状态机从 `nao-queue` 抽成共享模块 `bin/lib/queue.mjs`（纯函数，两处同引），**禁复制状态表**（复制 = 状态机双源）。
-- **D1 瞬时态只有两样，全部在 `docs/queue/.orch/`**（该目录自带只含 `*` 的 `.gitignore`，不动根 `.gitignore` 以免与 `chore/566-followups` 撞）：`wal.jsonl` = 派单账（append-only，逐条 fsync：`<id>#attempt=<n>#at=<ISO>` + 目标会话 id/cwd + 写时 row sha），`lock` = 整 tick 独占锁（D4）。**不新增 `dispatch_at` 字段**（`updated` 会被手改重置 15m 计时），**不建 last-tick 文件**（上次 tick 从 journald 读，board 现算）。
+- **D1 瞬时态只有两样，全部在 `docs/queue/.orch/`**（该目录自带两行 `.gitignore` = `*` + `!.gitignore`：目录随库存在、内容全忽略；**只写 `*` 会把 `.gitignore` 自身也忽略** ⇒ clone 后目录不存在、`文件不存在` 与 `被忽略` 两种状态混淆。不动根 `.gitignore` 以免与 `chore/566-followups` 撞；`wal.jsonl`/`lock` 已被 `*` 覆盖）：`wal.jsonl` = 派单账（append-only，逐条 fsync：`<id>#attempt=<n>#at=<ISO>` + 目标会话 id/cwd + 写时 row sha），`lock` = 整 tick 独占锁（D4）。**不新增 `dispatch_at` 字段**（`updated` 会被手改重置 15m 计时），**不建 last-tick 文件**（上次 tick 从 journald 读，board 现算）。
 - **D1 防双源（硬判据）与反选**：状态事实只在 `queue.jsonl`；WAL 只回答「这次派单的意图/时刻/目标」，**从它不得推断任何 row 的 `state`**；WAL 有 intent 而 row 仍 `queued` ⇒ 不重派、标 `blocked(dispatch_desync)` 交人。反选 shell：JSONL 校验与状态表已在 Node（阶段 1），bash 版 = 双实现双源 + 15m/90m 计时不可单测。
 - **D2 与 fleet 的边界 = 子进程**（不同进程、不同语言）：唯一接口 `nao-fleet.sh status --json`（阶段 2 新增，`schema:1`）+ `ensure <role>[@<repo>] [--task <id>]` + `close <name>` + `session-start --session <名>`，一律 `execFile` + argv 数组 + 子命令白名单。理由：身份/放置键/槽位逻辑必须留 fleet 单点（三次裸名误投的成因），orch 只消费 JSON；进程边界可用 PATH 桩单测。**失败面**：① fleet 解析不到（PATH/包内路径）⇒ tick rc=1 **零队列写入**；② 前提不满足（fleet rc=3：pane/socket/protocol）⇒ 环境级失败，**不写 `blocked`**（`blocked` 是任务级判断），只 journald + 下 tick 重试；③ herdr 挂起 ⇒ 单次调用硬超时 30s / 整 tick 120s，杀子进程 + 零写入。`boot`/`doctor` 用同一判据自建终端上下文（`HERDR_ENV=1`、显式 `--session`、socket 由 `session-start` 后实测发现，**禁猜会话名**）。
 - **D3 切法 = 层 × 后端**（不按动词：放置/回收共用快照与私有解析，按动词切只会把单体耦合换成文件耦合）。目标模块（括号 = 现函数体实测行数）：入口 `nao-fleet.sh` **永久保留**（197 行前导，含 `usage()` 用 awk 读 `$0` 的头部块 —— **不可搬走**）+ CLI 解析 ≈330 · `fleet/lib/core.sh` 250（路径锚/`die`/版本/codegraph 文案）· `term.sh` 140（门面 18 函数 + `NAO_TERMINAL` 唯一赋值点）· `term-herdr.sh` 1250（44 函数）· `term-app.sh` 680（31）· `manifest.sh` 660（19：roles.yaml/fleet.yaml/命名契约/卡）· `session.sh` 660（22：名册/cwd/身份/派生名）· `check.sh` 740（14 + `cmd_check`：审计面）· `status.sh` 320 · `close.sh` 440 · `cleanup.sh` 130（`cmd_cleanup`+`session-start`）· `ensure.sh` 600。
@@ -62,7 +62,9 @@
 
 - 非范围：自动合并/发版（AC9 永远禁）· 自然语言拆解 · 会话内容理解 · `blocked` 的自动出口（只到「留证 + 通知」，重新排队是人）。
 - 定时精度 = timer interval（默认 2 分钟）：AC7 的 15m/90m 判据按 tick 采样，误差 ≤1 interval；不做 inotify/事件驱动（多一条守护面，换不来必要精度）。
-- 拆分不重命名函数、不改行为（纯搬迁 + 依赖倒置）；`174` 是拆分时刻基线，之后新增函数须同步 `fleet/functions.txt`（一处 diff）。
+- 拆分不重命名函数、不改行为（纯搬迁 + 依赖倒置）；`174` 是拆分时刻基线，之后新增函数须同步 `fleet/functions.txt`（一处 diff）—— 且此保护是**用例断言**而非文档约定（`cases/06` 或新例：总数不符/漏登记即红，新增函数必须同行改 `functions.txt`）。
+- **实施分两批且顺序 = 先拆分（批次 A）后 orch（批次 B）**：A = 11 模块纯搬迁 + `fleet/functions.txt` + 5 个静态闸改文件集 + `NAO_TERMINAL` 唯一性 lint 跨模块总和=1，判据 = `status`/`check`/`--help` 拆分前后**逐字 diff 为空** + 174 并集守恒 + `check` rc=0 ×2 + 全量 `npm test` 绿；B = `bin/nao-orch` + `bin/lib/queue.mjs` + `fleet/status.sh` 的 `--json` + WAL/flock/CAS + AC9 双闸 + `cases/47` + systemd 单元。理由：先拆把「文件集静态闸 + 模块边界」一次到位，orch 的 AC9 lint 直接落在新结构上、不做二次迁移；且 `status --json` 落在 `fleet/status.sh` 比落在单体再搬更省。
+- 批次 A/B 各自一个 PR、各自可 `git revert` 回滚（A 回滚后入口路径与行为不变）。
 - 本文不含实施闸门 / 用例全文 / 接线清单（属 rd-infra 的实施报告）。
 
 ## 相关指针
