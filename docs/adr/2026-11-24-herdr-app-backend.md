@@ -1,6 +1,6 @@
 # ADR：herdr desktop app 作为第二后端（`NAO_TERMINAL=app`）
 
-- 状态：已接受（待落地 v0.30.0）
+- 状态：已落地 v0.30.0（2026-11-24 随 PR #169 合并）
 - 更新：2026-11-24
 - Owner：arch-designer
 - 指针：Issue [#168](https://github.com/Nathan3303/nao-skills/issues/168) · PRD `docs/prds/2026-11-24-herdr-app-backend.md` · 评审报告 `docs/reports/168-arch-review.md` · 证据 `docs/research/2026-11-22-herdr-desktop-app.md` · 前置 ADR `2026-11-22-herdr-only.md`
