@@ -9,7 +9,7 @@
 //
 // 零依赖 / 零网络：只有 `pushed:true` 会显式调用 `git ls-remote`（可用 `--no-push-check` 显式跳过，跳过必打 NOTICE）。
 // 退出码：0 = 通过 · 1 = 契约违规 / 非法转换 · 2 = 用法错误（缺命令、缺标记、文件不存在等）。
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
@@ -237,6 +237,42 @@ function firstDiffLines(a, b, limit = 12) {
 
 // ---------------------------------------------------------------- 回执校验
 
+// gates.check.log 的路径锚点（PRD §六）：绝对路径原样；相对路径按**仓库根**解析
+// （`git rev-parse --show-toplevel`，以调用 cwd 为起点）；仓库根不可判定 ⇒ 判红（fail closed，不静默跳过）。
+let repoRootCache;
+function repoRootOrNull() {
+  if (repoRootCache !== undefined) return repoRootCache;
+  try {
+    repoRootCache = git(['rev-parse', '--show-toplevel'], { stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null;
+  } catch {
+    repoRootCache = null;
+  }
+  return repoRootCache;
+}
+
+function checkLogError(where, logPath) {
+  let file;
+  if (path.isAbsolute(logPath)) {
+    file = logPath;
+  } else {
+    const root = repoRootOrNull();
+    if (!root) {
+      return `${where}: gates.check.log 是相对路径（${logPath}）但调用 cwd 不在 git 仓内 ⇒ 无法按仓库根锚定（PRD §六 锚点）`;
+    }
+    file = path.join(root, logPath);
+  }
+  let isFile = false;
+  try {
+    isFile = statSync(file).isFile();
+  } catch {
+    isFile = false;
+  }
+  if (!isFile) {
+    return `${where}: gates.check.log 指向不存在的文件：${logPath}（按仓库根解析为 ${file}）—— 自述 pass 无日志 ⇒ 判红（PRD §六）`;
+  }
+  return null;
+}
+
 function checkReceipt(obj, file, queueById, opts) {
   const errors = [];
   const base = path.basename(file);
@@ -274,6 +310,11 @@ function checkReceipt(obj, file, queueById, opts) {
         if (!(f in gate)) errors.push(`${where}: gates.${g} 缺少字段 \`${f}\``);
       }
       if (g === 'check' && 'log' in gate && !nonEmptyString(gate.log)) errors.push(`${where}: gates.check.log 必须指向日志（非空字符串）`);
+      // 非空还不够：必须指向真实文件（PRD §六「回执伪造」条 · 锚点见 PRD 六後注）。
+      if (g === 'check' && nonEmptyString(gate.log)) {
+        const logErr = checkLogError(where, gate.log);
+        if (logErr) errors.push(logErr);
+      }
       if (g === 'full') {
         for (const f of ['cases', 'pass', 'fail']) {
           if (f in gate && (!Number.isInteger(gate[f]) || gate[f] < 0)) errors.push(`${where}: gates.full.${f} 必须是 >=0 的整数（实际 ${short(gate[f])}）`);
@@ -328,6 +369,7 @@ function git(args, opts = {}) {
 
 // pushed:true 的判据 =「该 head 已在远端任一 head 上（或为其祖先）」。
 //   为什么不是「等于某分支 tip」：回执文件本身要进下一次提交 ⇒ head 恒落后 tip；分支合并后被删也不该翻红。
+//   squash 合并例外：祖先链被丢弃 ⇒ 原分支提交不再可达，head 须取**squash 交付提交**（回执 head 语义 = 已合并的交付提交）。
 function verifyPushed(head, branch, remote) {
   let out;
   try {
