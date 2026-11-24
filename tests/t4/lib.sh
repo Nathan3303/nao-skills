@@ -602,11 +602,13 @@ t4_scan_app_bare_hc() { # <script>
   #   两向都必须承重（QA P2：旧版只认「语句位 hc」，三种形态全绿）：
   #   ① 调用形态：前置 env 赋值 / `command` / `exec` / `env` 前缀也算调用（`command hc ls`、
   #      `HC_SOCKET=x hc ls` 同样是裸调 —— 它们绕过了唯一入口的 socket/rc 归一化）；
+  #      T563/AC1 补**关键字位**：`if|then|else|elif|while|until|do|!` 之后、`command -<opt>` 之后
+  #      同样是命令位（旧组只认行首/管道/命令替换 ⇒ 写进 `if hc ls` 就静默漏检）。
   #   ② 入口存在性：`_term_app_exec() {` 必须**恰 1 处**；整删/改名后没有 hc 调用也**不许算绿**
   #      （否则「删掉入口」= 判据空转，是最容易被绕过的一种）。
   local script="$1" lnno body trim execr="" entry_n=""
   local entry_re='^_term_app_exec\(\) \{'
-  local re='(^|[|;&({])[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|exec|command|env|nohup|time)[[:space:]]+)*hc([[:space:]]|$)'
+  local re='(^|[|;&({])[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|command[[:space:]]+-[a-zA-Z]|exec|command|env|nohup|time|if|then|else|elif|while|until|do|!)[[:space:]]+)*hc([[:space:]]|$)'
   local allow='(command -v hc|t4_require_cmd hc)'
   [ -f "$script" ] || { printf '脚本不存在: %s\n' "$script"; return 0; }
   entry_n="$(grep -cE -- "$entry_re" "$script" || true)"

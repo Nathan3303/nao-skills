@@ -3,8 +3,8 @@
 # nao-fleet.sh — 按角色一键拉起 pi 会话窗口（nao 团队工具箱）
 #
 # 运行前提（端前提 = herdr pane 内 + pi ≥ MIN_PI_VERSION；ADR 2026-11-22-herdr-only
-#   supersede 2026-10-27-strict-tmux-pi：**herdr 是唯一后端**，旧 tmux 后端与 -S 调用面已删除，见 §退出码）
-#   **唯一后端 = herdr**：`NAO_TERMINAL` 只用于**拒绝**旧值（非空且非 herdr ⇒ stderr 1 行 + exit 2，命令未执行）；
+#   supersede 2026-10-27-strict-tmux-pi：**herdr 是唯一后端程序**（形态：TUI 默认 / desktop app），旧 tmux 后端与 -S 调用面已删除，见 §退出码）
+#   **唯一后端程序 = herdr**（形态 herdr=TUI 默认 / app=desktop app）：`NAO_TERMINAL` 只接受这两个值（其他值 ⇒ stderr 1 行 + exit 2，命令未执行）；
 #     未设/空串/herdr 均放行。**不自动回落、不静默降级**（ADR 决策 3）。
 #   前提 = 「herdr pane 内 + HERDR_SESSION 有效 + protocol 22」；ensure/status/close 任一项不满足 ⇒
 #     fail loud exit 3 + 一行提示，不建 session/pane/lock、不写状态。
@@ -74,7 +74,7 @@
 #   NAO_SKILLS=<dir>                          nao 机制包根目录（默认 <脚本>/../..；项目内 shim 会显式指向包根）
 #   NAO_MODEL_WHITELIST=<glob,...>            -m 白名单（默认空=不校验，支持 glob）
 #   NAO_CLOSE_BUSY_PATTERN=<ERE>             close 的在跑 turn 判定正则（默认内置 pi 状态行标记）
-#   NAO_TERMINAL=<值>                        唯一后端 = herdr（未设/空串 = herdr）；给**其他任何值**（含已移除的 tmux）
+#   NAO_TERMINAL=<值>                        后端形态：herdr（TUI，默认）/ app（desktop app）；给**其他任何值**（含已移除的 tmux）
 #                                            ⇒ stderr 1 行 + exit 2（命令未执行）。status/ensure/close/cleanup 走门面，
 #                                            ensure 须先 `session-start` 起专用 session 并在其 pane 内运行
 #   NAO_HERDR_READY_TIMEOUT_MS=<ms>          herdr 就绪门 wall-clock 上限（默认 5000；只对 herdr 后端生效）
@@ -114,7 +114,7 @@ MIN_PI_MINOR="${MIN_PI_MINOR%%.*}"
 # ---- 终端后端（#96 二期 B1 · PRD 附二「门面 + 双实现并存」）----
 # 默认值**唯一赋值点**：全脚本 `grep -cE '^NAO_TERMINAL='` 必须恰 1 处（tests/t4 静态 lint 断言）。
 # 三期 P2（2026-11-11）：**herdr 转默认**只改这一行（B1 立的 lint 就是为这一步准备的）。
-#   `:-` 语义 ⇒ 未设与空串都落 herdr；本版起 herdr 是唯一后端（旧回退面已删，其他值 ⇒ 守卫 exit 2）。
+#   `:-` 语义 ⇒ 未设与空串都落 herdr；本版起**唯一后端程序 = herdr**（形态 TUI / app；旧回退面已删，其他值 ⇒ 守卫 exit 2）。
 NAO_TERMINAL="${NAO_TERMINAL:-herdr}"
 # herdr 破坏性变更的唯一硬判据（version 只打印不比较：版本串比较脆）
 TERM_HERDR_PROTOCOL="22"
@@ -228,8 +228,8 @@ die()  { printf '\033[1;31m[fleet]\033[0m %s\n' "$*" >&2; exit 1; }
 #         herdr server 会把外层句柄渗进 pane（spike 实测），拿来判身份必串台。
 #   rc 语义：4 = 保留（B3 后无未实现子命令）；1 = 已执行但失败；3 = 前提不满足；2 = 用法守卫。
 # >>> term-facade BEGIN
-# 唯一后端（ADR 2026-11-22-herdr-only · supersede 2026-10-27-strict-tmux-pi）
-#   后端身份 = **常量而非分支**：herdr 是唯一后端。`NAO_TERMINAL` 只用于**拒绝**旧值（fail loud，不静默降级）：
+# 唯一后端程序 = herdr（形态 TUI / desktop app）（ADR 2026-11-22-herdr-only · supersede 2026-10-27-strict-tmux-pi）
+#   后端身份 = **常量而非分支**：herdr 是唯一后端程序。`NAO_TERMINAL` 只接受 herdr/app（其他值 fail loud，不静默降级）：
 #   未设/空串/herdr ⇒ 放行；其余（含旧回退值）⇒ stderr 恰 1 行 + exit 2（命令未执行，零副作用）。
 #   契约：**业务区只调** term_require / term_snapshot / term_liveness / term_argv /
 #         term_spawn / term_deliver / term_session_start / term_reclaim / term_cleanup（+ 纯谓词 term_deliverable）。
@@ -1198,7 +1198,7 @@ _term_herdr_space_check() {  # <pane_id> <name> → 0 可继续 / 1 不可用（
     warn "空间不可用：$name（pane=$pid）列=$w 行=$h —— 0 尺寸 pane 读不了内容 ⇒ 计 SPAWN_FAIL（摘要不再算成功）"
     warn "  该怎么办：① 调 [server] headless_cols/headless_rows（config.toml）放大后重启会话（cleanup + session-start）"
     warn "            ② attach 后重排：herdr session attach ${HERDR_SESSION:-<session>}，再调整窗口/分屏"
-    warn "            ③ 换更大窗口/显示器后 attach（唯一后端 = herdr：旧版 tmux 后端已移除）"
+    warn "            ③ 换更大窗口/显示器后 attach（后端 = herdr：旧版 tmux 后端已移除）"
     warn "  文档：docs/INSTALL.md「herdr 后端」· docs/prds/2026-11-10-herdr-base.md AC3.2（J1–J5）"
     return 1
   fi
@@ -1206,7 +1206,7 @@ _term_herdr_space_check() {  # <pane_id> <name> → 0 可继续 / 1 不可用（
     warn "空间不足：$name（pane=$pid）列=$w < ${TERM_MIN_COLS} 或 行=$h < ${TERM_MIN_ROWS} —— 仅 warn，不中断（rc 语义跨后端一致）"
     warn "  该怎么办：① 调 [server] headless_cols/headless_rows（config.toml）放大后重启会话（cleanup + session-start）"
     warn "            ② attach 后重排：herdr session attach ${HERDR_SESSION:-<session>}，再调整窗口/分屏"
-    warn "            ③ 换更大窗口/显示器后 attach（唯一后端 = herdr：旧版 tmux 后端已移除）"
+    warn "            ③ 换更大窗口/显示器后 attach（后端 = herdr：旧版 tmux 后端已移除）"
     warn "  文档：docs/INSTALL.md「herdr 后端」· docs/prds/2026-11-10-herdr-base.md AC3.2（J1–J5）"
   fi
   return 0
@@ -2357,7 +2357,7 @@ check_backend_premise() {
         printf '  ! 端前提行未给出可比对的后端声明：%s:%s（若该行与终端后端无关，可忽略；或在 AGENTS.md 中删去该行的「运行前提」字样以免被纳入比对）—— 实现默认 = %s（%s 的唯一赋值点）\n' \
           "$rel" "$n" "$actual" "nao-fleet.sh"
       elif [[ "$decl" == "tmux" ]]; then
-        printf '  ! 端前提声明不一致：%s:%s 声明默认后端 = tmux，而本版**已移除 tmux 后端**（唯一后端 = %s，见 %s 的唯一赋值点）—— 改声明为「运行前提（仅 pi · 默认 herdr）」\n' \
+        printf '  ! 端前提声明不一致：%s:%s 声明默认后端 = tmux，而本版**已移除 tmux 后端**（唯一后端程序 = %s，见 %s 的唯一赋值点）—— 改声明为「运行前提（仅 pi · 默认 herdr）」\n' \
           "$rel" "$n" "$actual" "nao-fleet.sh"
       else
         printf '  ! 端前提声明不一致：%s:%s 声明默认后端 = %s，而实现默认 = %s（%s 的唯一赋值点）—— 改声明或改实现，同一事实勿双源\n' \
@@ -3363,11 +3363,17 @@ running() {
 #   conflict = 同 core 但 scope 或仓不同 ⇒ **die + 指路**（列候选），禁静默拉起
 #   absent   = 拉起
 #   repo 未知（pane/名册均无 cwd）时不得凭空判冲突 ⇒ 落 absent（与旧行为一致，不新增误拒）。
-running_verdict() {  # <name> [repo] → same | absent
-  local name="$1" repo="${2:-}"
+running_verdict() {  # <name> [repo] → same | unknown | absent
+  local name="$1" repo="${2:-}" v
   # T554：跨 workspace 同名合法 ⇒ **不再有 conflict 态**（判重域 = 目标 workspace；槽位由 ensure 相位 1 算定）。
-  if running "$name" "$repo"; then printf 'same\n'; return 0; fi
-  printf 'absent\n'
+  # T563/AC2：`unknown`（集成缺 labels ⇒ 无法确认放置归属）**不得**落 absent —— 落 absent 会静默起第二个终端
+  #   并与既有终端同名多命中（close 随即因同名拒）。判重必须 fail-closed，由 ensure 拒绝并给一行指路。
+  v="$(term_liveness "$name" "$repo" 2>/dev/null | cut -f1)"
+  case "$v" in
+    online) printf 'same\n' ;;
+    unknown) printf 'unknown\n' ;;
+    *) printf 'absent\n' ;;
+  esac
 }
 
 # ---- 共享投影（无后端调用）：会话名从门面快照取（label 即会话名；名册不参与身份判定 —— BR3/BR7）----
@@ -3707,7 +3713,7 @@ cmd_check() {
   # rc 口径（P3-4 订正）：**缺 herdr 可执行文件** ⇒ rc=1（明确错配，不能装没看见）；
   #   缺 `HERDR_SESSION`（未在 herdr pane 内，CI 常见）⇒ 只提示不置红（静态体检照跑）；
   #   `protocol≠22` ⇒ rc=1（唯一可置红的机械项）。
-  echo '  · 生效后端 NAO_TERMINAL=herdr（唯一后端；#96 二期 B4：status/ensure/close/cleanup 走门面；session-start 起 server；台账 0 条）'
+  echo '  · 生效后端 NAO_TERMINAL=herdr（形态 TUI；desktop app 走 NAO_TERMINAL=app；#96 二期 B4：status/ensure/close/cleanup 走门面；session-start 起 server；台账 0 条）'
   if command -v herdr >/dev/null 2>&1; then
     printf '  ✓ herdr 可用\n'
     if [[ -n "${HERDR_SESSION:-}" && "${HERDR_SESSION}" != "default" ]]; then
@@ -5098,6 +5104,14 @@ cmd_ensure() {
         SPAWN_SKIP=$((SPAWN_SKIP + 1))
         continue
       fi
+      # T563/AC2（fail-closed）：`unknown` = 名字命中但**放置归属无法确认**（集成缺 labels）。
+      #   此时既不能判「已在运行」也不能判「可拉起」：自动拉起会造出同名第二个终端，后续 close 因同名拒。
+      #   ⇒ 拒绝 + **恰一行指路**（不静默：本分支不重定向 stderr；`--force` 是明确的人工确认）。
+      if [[ "$vrd" == "unknown" ]]; then
+        warn "$disp 无法确认放置归属（集成缺 labels）⇒ 不自动拉起；人工核对该终端后在 herdr desktop app 确认，确需重开请加 --force 重试"
+        SPAWN_FAIL=$((SPAWN_FAIL + 1))
+        continue
+      fi
     fi
     if [[ -n "${t_cards[$i]}" ]]; then
       spawn_one "$disp" "$repo" "$model" "${t_cards[$i]}" "${t_roles[$i]:-}" "" "$force" "${t_labels[$i]}" ""
@@ -5109,6 +5123,14 @@ cmd_ensure() {
   # 恰一行摘要，三类计数（成功/跳过/失败）
   if (( SPAWN_OK + SPAWN_SKIP + SPAWN_FAIL > 0 )); then
     log "已拉起 ${SPAWN_OK} 个会话（成功 ${SPAWN_OK} / 跳过 ${SPAWN_SKIP} / 失败 ${SPAWN_FAIL}）；就绪后在线状态用 nao-fleet.sh status 查看"
+  fi
+  # T563/AC5（行为契约变更，PM 裁定 rc=1）：判据 = **实际拉起成功数 == 0 且确有失败**。
+  #   ① 纯跳过（全都在运行）⇒ rc=0：幂等重跑 effect=0 不得报失败；
+  #   ② 全败 / 失败且零成功 ⇒ rc=1（调用方/CI 能据此判红），并给一行汇总；
+  #   ③ 不复用 rc=2（用法/后端拒绝）与 rc=3（前置不可用）—— 三者语义互斥。
+  if (( SPAWN_OK == 0 && SPAWN_FAIL > 0 )); then
+    warn "全部 ${#t_names[@]} 个角色均未拉起（成功 0 / 跳过 ${SPAWN_SKIP} / 失败 ${SPAWN_FAIL}）；逐条原因见上"
+    return 1
   fi
 }
 
@@ -5273,11 +5295,11 @@ case "$CMD" in
       grep -m1 -E '^  . codegraph ' "$REPFILE" || true
       # M20261118：PRD 结构提示也常驻可见（与 codegraph 同口径：**不计入 warn**，可见性由它自己这行承担）
       grep -m1 -E '^  ! PRD 结构' "$REPFILE" || true
-      # B1（BR1 六条机械保证之「check 打印生效后端」）：唯一后端 ⇒ 恒打印（与 -v 报告同文案）
+      # B1（BR1 六条机械保证之「check 打印生效后端」）：herdr 形态（默认）⇒ 恒打印（与 -v 报告同文案）
       if [[ "$NAO_TERMINAL" == "app" ]]; then
         echo '  · 生效后端 NAO_TERMINAL=app（第二后端；status/ensure/close/cleanup 走门面；core 由 desktop app 管理；session-start 不适用）'
       else
-        echo '  · 生效后端 NAO_TERMINAL=herdr（唯一后端；#96 二期 B4：status/ensure/close/cleanup 走门面；session-start 起 server；台账 0 条）'
+        echo '  · 生效后端 NAO_TERMINAL=herdr（形态 TUI；desktop app 走 NAO_TERMINAL=app；#96 二期 B4：status/ensure/close/cleanup 走门面；session-start 起 server；台账 0 条）'
       fi
     else
       cat "$REPFILE"

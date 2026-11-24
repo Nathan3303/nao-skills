@@ -107,6 +107,27 @@ PY
 out="$(t4_scan_app_bare_hc "$MUT")"
 t4_assert_contains "$out" "MISSING_ENTRY" "① 正控D：删/改名入口 ⇒ 结构断言必红（不靠痕量命中）"
 rm -f "$MUT"
+# 正控E–I（T563/AC1）：**关键字位就是命令位**（旧前缀组只认行首/管道/命令替换 ⇒ 漏检）
+for kw in 'if hc ls' 'then hc ls' '! hc ls' 'while hc ls' 'command -p hc ls'; do
+  python3 - "$FLEET" "$MUT" "$kw" <<'PY'
+import sys
+src=open(sys.argv[1],encoding='utf-8').read()
+open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BEGIN','# >>> term-impl-app BEGIN\n'+sys.argv[3]+' >/dev/null',1))
+PY
+  out="$(t4_scan_app_bare_hc "$MUT")"
+  t4_assert_contains "$out" "$kw" "① 正控（关键字位）：\`$kw\` ⇒ 必红"
+  rm -f "$MUT"
+done
+# 负控（防空转）：非调用形态 / 存在性探测不得误报
+python3 - "$FLEET" "$MUT" <<'PY'
+import sys
+src=open(sys.argv[1],encoding='utf-8').read()
+add='\n'.join(['hc_ls x >/dev/null','_hc_wrapper ls','command -v hc >/dev/null'])
+open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BEGIN','# >>> term-impl-app BEGIN\n'+add,1))
+PY
+out="$(t4_scan_app_bare_hc "$MUT")"
+t4_assert_eq "" "$out" "① 负控：\`hc_ls\` / \`_hc_wrapper\` / \`command -v hc\` 均不得误报（白名单不空转）"
+rm -f "$MUT"
 
 # ---------------------------------------------------------------- ② M2 身份闸门
 APP_OVR=("HC_SCOPE=")
@@ -216,7 +237,7 @@ t4_assert_ne "" "$(app_field t0 name)" "⑨ 自身/非舰队终端不动（t0 �
 t4_run_in_dir "$LAB" env -u NAO_TERMINAL -u HC_SCOPE -u HC_TERMINAL_ID -u HC_TERMINAL_SOCKET \
   -u HC_DOUBLE_STATE -u XDG_RUNTIME_DIR bash "${BE_FLEET_SCRIPT:-$LAB/.agents/scripts/nao-fleet.sh}" check
 # <<< default-value-probe END
-t4_assert_contains "$T4_OUT" "生效后端 NAO_TERMINAL=herdr（唯一后端；#96 二期 B4" "⑩ 未设 ⇒ herdr 生效后端子串逐字不变"
+t4_assert_contains "$T4_OUT" "生效后端 NAO_TERMINAL=herdr（形态 TUI；desktop app 走 NAO_TERMINAL=app" "⑩ 未设 ⇒ herdr 生效后端文案 = AC4 新口径（AC1 允许面第 5 类：仅此一行）"
 t4_run_in_dir "$LAB" env NAO_TERMINAL=app bash "${BE_FLEET_SCRIPT:-$LAB/.agents/scripts/nao-fleet.sh}" check
 t4_assert_contains "$T4_OUT" "生效后端 NAO_TERMINAL=app（第二后端" "⑩ app ⇒ 打印第二后端（不谎报唯一）"
 t4_run_in_dir "$LAB" env NAO_TERMINAL=bogus bash "${BE_FLEET_SCRIPT:-$LAB/.agents/scripts/nao-fleet.sh}" status
@@ -238,7 +259,11 @@ rm -f "$BE_APP_STATE/docver"
 # 契约缺字段（无 labels/status）：不得判「在线」，也不得当成空闲
 printf '1' > "$BE_APP_STATE/bare_get"
 run_app ensure rd-fe
-t4_assert_eq "0" "$APP_RC" "⑫ 缺 status 的终端 ⇒ ensure 仍可建（不因解析失败 die）"
+# T563/AC5 后：缺 status ⇒ 就绪门永远验不出 idle ⇒ **全部失败 ⇒ rc=1**（这正是要的 fail loud，
+#   不是 die：终端已建出且保留，属「建了但无法确认就绪」）。
+t4_assert_eq "1" "$APP_RC" "⑫ 缺 status ⇒ 就绪门无法确认 ⇒ rc=1（fail loud，非 die）"
+t4_assert_contains "$APP_ERR" "就绪门超时" "⑫ 点名就绪门超时（不退化空闲、不静默成功）"
+t4_assert_not_contains "$APP_ERR" "版本不支持" "⑫ 不误报「版本不支持」（契约缺字段 ≠ 版本旧）"
 run_app status
 t4_assert_contains "$APP_OUT" "集成缺失" "⑫ status 判「集成缺失 ⇒ 不可投递」（不退化 idle）"
 t4_assert_not_contains "$APP_OUT" "✓ rd-fe" "⑫ 缺 status 不得判在线"
@@ -252,10 +277,42 @@ env HC_DOUBLE_STATE="$BE_APP_STATE" "$FIXT/hc" run --bg --no-parent --keep \
 printf '1' > "$BE_APP_STATE/bare_labels"
 run_app status
 t4_assert_contains "$APP_ERR" "集成缺 labels" "⑫ 子形态：只缺 labels ⇒ warn「无法确认放置归属」"
+t4_assert_eq "1" "$(grep -c '集成缺 labels' <<< "$APP_ERR" || true)" "⑫ 子形态：warn **恰 1 行**（同名被问两次会刷两条）"
 t4_assert_not_contains "$APP_OUT" "✓ rd-fe" "⑫ 子形态：缺 labels 不判在线（unknown，不退化 idle）"
 rm -f "$BE_APP_STATE/bare_labels"
 run_app status
 t4_assert_not_contains "$APP_ERR" "集成缺 labels" "⑫ 负控：labels 齐全 ⇒ 无该 warn（判据不空转）"
+app_reset
+
+# ---------------------------------------------------------------- ⑬ T563/AC2：unknown ⇒ ensure fail-closed
+#   缺 labels 的**在场终端**不得被当成「不在运行」而拉起第二个（否则同名多命中，close 随即拒）。
+app_reset
+env HC_DOUBLE_STATE="$BE_APP_STATE" "$FIXT/hc" run --bg --no-parent --keep \
+  --name rd-fe --cwd "$LAB" --label herdr.space=spx --label herdr.tab=tbx -- true >/dev/null
+n_before="$(app_addrs | grep -c . || true)"
+printf '1' > "$BE_APP_STATE/bare_labels"
+run_app ensure rd-fe
+t4_assert_eq "1" "$APP_RC" "⑬ AC2：unknown（缺 labels）⇒ ensure 拒绝（rc=1，不静默拉第二个）"
+t4_assert_contains "$APP_ERR" "无法确认放置归属" "⑬ AC2：一行指路点名「无法确认放置归属」"
+t4_assert_contains "$APP_ERR" "确需重开请加 --force" "⑬ AC2：指路给 --force 出口"
+t4_assert_eq "$n_before" "$(app_addrs | grep -c . || true)" "⑬ AC2：未新起终端（fail-closed 生效）"
+# 负控：labels 齐全 ⇒ 同一路径不得出现该拒绝（判据不空转）
+rm -f "$BE_APP_STATE/bare_labels"
+run_app ensure rd-fe
+t4_assert_not_contains "$APP_ERR" "无法确认放置归属" "⑬ 负控：labels 齐全 ⇒ 无该拒绝行"
+t4_assert_eq "0" "$APP_RC" "⑬ 负控：已在运行 ⇒ 纯跳过 ⇒ rc=0（幂等 effect=0）"
+
+# ---------------------------------------------------------------- ⑭ T563/AC5：全败 ⇒ rc=1
+app_reset
+printf '1' > "$BE_APP_STATE/run_fail"
+run_app ensure rd-fe
+t4_assert_eq "1" "$APP_RC" "⑭ AC5：全败（实际拉起成功 0）⇒ rc=1"
+t4_assert_contains "$APP_ERR" "均未拉起" "⑭ AC5：一行汇总「全部 N 个角色均未拉起」"
+rm -f "$BE_APP_STATE/run_fail"
+# 负控：有成功 ⇒ rc=0（不得一律报失败）
+app_reset
+run_app ensure rd-fe
+t4_assert_eq "0" "$APP_RC" "⑭ 负控：有成功 ⇒ rc=0"
 app_reset
 
 # ---------------------------------------------------------------- ⑪ 真 hc（私有 core；无则 SKIP）

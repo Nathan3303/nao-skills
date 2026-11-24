@@ -967,7 +967,7 @@ t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" HERDR_STUB_ONRUN
   NAO_HERDR_READY_TIMEOUT_MS=400 NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 rd-fe2
 T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
 T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
-t4_assert_eq "0" "$T4_RC" "B2① 就绪超时 ⇒ ensure rc 仍 0（D3：跨后端 rc 语义一致）"
+t4_assert_eq "1" "$T4_RC" "B2① 就绪超时 ⇒ ensure rc=1（T563/AC5 全败契约；跨后端一致）"
 t4_assert_contains "$T4_OUT_ANSI$T4_ERR_ANSI" "就绪门超时" "B2① 就绪超时 fail loud（打「就绪门超时」，不是静默）"
 t4_assert_contains "$T4_OUT_ANSI$T4_ERR_ANSI" "wall-clock 上限 400ms" \
   "B2①/P3-3 超时按 **wall-clock 上限**报口径（且 NAO_HERDR_READY_TIMEOUT_MS 可覆盖）"
@@ -1009,7 +1009,7 @@ t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=her
   "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 rd-fe2
 B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
 B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
-t4_assert_eq "0" "$T4_RC" "B2③ 同名歧义：ensure rc=0（失败计 SPAWN_FAIL，不是 crash）"
+t4_assert_eq "1" "$T4_RC" "B2③ 同名歧义：ensure rc=1（T563/AC5 全败；仍是 SPAWN_FAIL 不是 crash）"
 t4_assert_contains "$B2_ERR" "同名 label 命中多个 pane" "B2③ 命中多个 ⇒ warn 点名（不猜）"
 t4_assert_contains "$B2_ERR" "w1:p1 w1:p2" "B2③ warn 回显全部命中的 pane（可定位）"
 t4_assert_not_contains "$B2_OUT" "[herdr] 已拉起" "B2③ 歧义下不得擅自挑一个启动（无成功行）"
@@ -1050,7 +1050,7 @@ for b2fg in cat vim sleep; do
     NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 rd-fe2
   B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
   B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
-  t4_assert_eq "0" "$T4_RC" "P2-2 前台=$b2fg：ensure rc=0（失败计 SPAWN_FAIL，不是 crash）"
+  t4_assert_eq "1" "$T4_RC" "P2-2 前台=$b2fg：ensure rc=1（T563/AC5 全败；仍是 SPAWN_FAIL 不是 crash）"
   t4_assert_contains "$B2_ERR" "前台非 shell" "P2-2 前台=$b2fg：必须点名「前台非 shell」（不得注入用户程序）"
   t4_assert_contains "$B2_ERR" "$b2fg" "P2-2 前台=$b2fg：诊断回显实际前台进程名"
   t4_assert_contains "$B2_ERR" "--force" "P2-2 前台=$b2fg：给出 --force 指路"
@@ -1087,7 +1087,7 @@ for b2bad in internal empty; do
     NAO_TERMINAL=herdr timeout 60 "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 rd-fe2
   B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
   B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
-  t4_assert_eq "0" "$T4_RC" "P3-6 $b2bad：ensure rc=0（失败计 SPAWN_FAIL，不是 crash）"
+  t4_assert_eq "1" "$T4_RC" "P3-6 $b2bad：ensure rc=1（T563/AC5 全败；仍是 SPAWN_FAIL 不是 crash）"
   if [ "$b2bad" = "internal" ]; then
     t4_assert_contains "$B2_ERR" "process-info 错误" "P3-6 internal_error：fail loud 点名 process-info 错误"
     t4_assert_contains "$B2_ERR" "internal_error" "P3-6 internal_error：回显错误类别（可定位）"
@@ -1169,7 +1169,7 @@ t4_run_in_dir "$LAB" "${B2_ENV[@]}" HERDR_STUB_STATE="$B2ST_ST" NAO_TERMINAL=her
   "$BASH_BIN" "$LAB/.agents/scripts/nao-fleet.sh" ensure --task T1 --force rd-fe2
 B2_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
 B2_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
-t4_assert_eq "0" "$T4_RC" "P2-1① 角色 tab 被占 + --force：ensure rc=0（失败只进计数）"
+t4_assert_eq "1" "$T4_RC" "P2-1① 角色 tab 被占 + --force：ensure rc=1（T563/AC5 全败；失败只进计数）"
 t4_assert_contains "$B2_ERR" "角色 tab 已在场但无 pane 命中该角色" "P2-1① 新文案点名「角色 tab 已在场但无 pane 命中」"
 t4_assert_contains "$B2_ERR" '先回收该角色（nao-fleet.sh close rd-fe2(T1)）再重跑 ensure' \
   "P2-1① 指路 = 先 close 该角色再 ensure（不再说「新建 pane」）"

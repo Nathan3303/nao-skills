@@ -912,10 +912,10 @@ t4_assert_ne "$OUT_B1_TMUX_CHECK" "$out" \
 # >>> default-value-probe END
 
 # B2（#96 二期）：ensure 已接 —— 不再是 exit 4；但桩夹具（pane/workspace 都为空）下必须 **fail loud**
-#   （逐目标 warn + 失败计数），且 **零 tmux 调用**；rc 仍 0（PM 裁定 D3：跨后端 rc 语义一致）。
+#   （逐目标 warn + 失败计数），且 **零 tmux 调用**；T563/AC5 起**全败 ⇒ rc=1**（不再恒 0）。
 : > "$B1_LOG"
 out="$(cd "$T4_ROOT" && "${B1_ENV[@]}" bash .agents/scripts/nao-fleet.sh ensure rd-fe 2>&1)"; rc=$?
-t4_assert_eq "0" "$rc" "B2④ herdr 模式 ensure 不再是 exit 4（spawn 已接；失败也只计 SPAWN_FAIL）"
+t4_assert_eq "1" "$rc" "B2④ herdr 模式 ensure 全败 ⇒ rc=1（T563/AC5；仍是 SPAWN_FAIL 而非 crash）"
 t4_assert_not_contains "$out" "在 herdr 后端未实现" "B2④ herdr 模式 ensure 不再点名「未实现」"
 t4_assert_contains "$out" "失败 1" "B2④ herdr 模式 ensure 失败计入摘要（逐目标 fail loud，不冒充成功）"
 t4_assert_contains "$out" "herdr" "B2④ herdr 模式 ensure 走 herdr 分支（桩有调用）"
