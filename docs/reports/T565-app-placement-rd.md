@@ -65,7 +65,14 @@ T562 的实现是「`hc run` 返回后**一次** `doc.get` 定生死」⇒ 窗�
 
 ## 四、先红后绿（同一夹具，两侧日志）
 
-复现台：`/tmp/t565/repro.sh <nao-fleet.sh>`（预置「陈旧 space 标签 + app 不认该 id」夹具，跑 `ensure rd-fe`）。
+复现台（**随仓提交，可随时重放**）：`tests/t4/fixtures/t565-repro.sh <nao-fleet.sh>` —— 预置「陈旧 space 标签 +
+app 不认该 id」夹具，跑一次 `ensure rd-fe`。
+
+```bash
+git show 1567991:.agents/scripts/nao-fleet.sh > /tmp/head-fleet.sh
+bash tests/t4/fixtures/t565-repro.sh /tmp/head-fleet.sh                 # 红：rc=1 + 用户实机那句
+bash tests/t4/fixtures/t565-repro.sh .agents/scripts/nao-fleet.sh       # 绿：rc=0 + 陈旧 id 不沿用
+```
 
 | 侧 | 脚本 | 结果 | 日志 |
 | --- | --- | --- | --- |
