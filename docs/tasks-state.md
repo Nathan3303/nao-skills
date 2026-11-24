@@ -48,7 +48,15 @@
 
 ## PM 接续快照（会话重开后**先读本区**）
 
-- 🔁 **交接快照（2026-11-23 晚 · T555/T557/T558 全闭环，v0.29.0 待 npm）**：接手者只需读本文件。要点：
+- 🔁 **接续快照（2026-11-24 晚 · PM 重开前）**：接手者只需读本区。要点：
+  - **当前唯一在飞任务 = T566 编排器阶段 1**（Issue #177 · 分支 `feat/566-queue-receipt` @ `9c18bd3` · PR #179 · base `origin/main`=49ce447）。QA 一轮 CONDITIONAL（P1-1 rebase+43例 / P2-1 receipt-line 强校验 pushed / P3-1 同态回显 / P3-2 PRD §六对齐 / P3-3 删硬编码 T566）已全部修完并 push。
+  - **合并门禁（全量 `npm test`）正在 `/tmp/w566`（worktree @ 9c18bd3，node_modules 软链）后台跑**，日志 `/tmp/pm-t566-full.log`。**接手者第一动作**：`grep EXIT= /tmp/pm-t566-full.log` 看是否跑完；绿则把实测 pass 数回填 `docs/queue/T566.receipt.json` 的 `gates.full.pass` 与 PR #179 body，再授权 RD squash（禁 PM 自合）。
+  - **已发布版本**：v0.31.1（T565 app 放置验证修复，npm 已核验；发布后事实提交 49ce447）。
+  - **队列**：阶段 2（`nao-orch tick`）与阶段 3（看板/多仓）尚未立项；PRD `docs/prds/2026-11-24-orchestrator.md` 已接受。
+  - **会话体检**：旧 pm 上下文 80%（800k/1000k）触发重开；重开后从本区重建，勿凭记忆调度。
+  - **已知纪律（今日踩坑）**：跨会话动作必须贴 `intercom send`/`ensure` 原始返回，禁「已派」自述；回执数字必须命令输出，禁凭记忆（同日五次同型）。
+
+- ⚠️ **旧快照（历史备查，勿再当现行状态）**：- 🔁 **交接快照（2026-11-23 晚 · T555/T557/T558 全闭环，v0.29.0 待 npm）**：接手者只需读本文件。要点：
   - **v0.29.0 全闭环**（合并 `d8e4d09`（T557）+ `0bc7b3c`（T558 P0）· 发布提交 `acc451e` · tag/Release `v0.29.0` · **npm 已核验**：`latest` = 0.29.0 · integrity 与本地 `npm pack` tarball **222,034 B** 逐字节一致）
   - **T558 是 P0**：`ensure` 曾会把「只有用户自己 pane 的 workspace」误判为空而关闭、杀掉用户会话（v0.28.0 及以前）——升级 v0.29.0 即修复，用户侧无需改配置
   - 🔁 **交接快照（2026-11-24 · T562 已合并，v0.30.0 待 npm）**：
