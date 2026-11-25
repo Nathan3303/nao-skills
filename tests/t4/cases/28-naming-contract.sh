@@ -187,6 +187,85 @@ ln_argv="$(printf '%s\n' "$id_body" | grep -n '_term_argv_name' | head -1 | cut 
 t4_assert_eq "1" "$([ -n "$ln_label" ] && [ -n "$ln_name" ] && [ -n "$ln_argv" ] && (( ln_label < ln_name && ln_name < ln_argv )) && echo 1 || echo 0)" \
   "C3⑤ 身份还原顺序 = nao.name → name → argv --name"
 
+# C3② 名字拼接 lint（构造器外出现 `name/core = role-task` ⇒ 必红）
+lint2() {
+  awk -v b="$CONTRACT_BEGIN" -v e="$CONTRACT_END" '
+    $0 ~ b { f=1; next } $0 ~ e { f=0; next } f { next } { print }' "$1" \
+    | grep -cE '(^|[^A-Za-z0-9_])(name|disp|core)="?(\$\{[^}]+\}|\$[A-Za-z_][A-Za-z0-9_]*)?-\$(\{)?(task|TASK)' || true
+}
+t4_assert_eq "0" "$(lint2 "$SUBJECT_BUNDLE")" "C3② 真脚本：契约块外 0 处手写名字/core 拼接"
+NEG_A="$T4_CACHE_DIR/c28-c3-neg-a.sh"
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_A" '  local force="$1" task="$2" target="${3:-}"' \
+     '  local force="$1" task="$2" target="${3:-}"
+  name="${NAME}-${task}"'; then
+  t4_assert_ne "0" "$(lint2 "$NEG_A")" "C3② 负控A：注入 name=\"\${NAME}-\${task}\" ⇒ 必红"
+else t4_bad "C3② 负控A 锚点未命中"; fi
+NEG_A2="$T4_CACHE_DIR/c28-c3-neg-a2.sh"
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_A2" '  local force="$1" task="$2" target="${3:-}"' \
+     '  local force="$1" task="$2" target="${3:-}"
+  core="$NAME-$task"'; then
+  t4_assert_ne "0" "$(lint2 "$NEG_A2")" "C3② 负控A2：注入 core=\"\$NAME-\$task\"（无花括号形，历史缺陷同形）⇒ 必红"
+else t4_bad "C3② 负控A2 锚点未命中"; fi
+NEG_MX="$T4_CACHE_DIR/c28-c3-neg-matrix.sh"
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_MX" '  local force="$1" task="$2" target="${3:-}"' \
+     '  local force="$1" task="$2" target="${3:-}"
+  core="${NAME}-${task}"
+  core="$NAME-$task"
+  core="$NAME-${task}"
+  core="${NAME}-$task"
+  name="$NAME-$task"
+  disp="$NAME-$task"
+  core="${t_names[$i]}-${task}"
+  core="$card_role-$task"'; then
+  t4_assert_eq "8" "$(lint2 "$NEG_MX")" "C3② 形态矩阵：8 种拼接写法全抓（判据与声明一致）"
+else t4_bad "C3② 形态矩阵锚点未命中"; fi
+CORE_BODY="$T4_CACHE_DIR/c28-core-body.sh"
+awk '/^fleet_core_build\(\)/{f=1} f{print} f&&/^}/{exit}' "$SUBJECT_BUNDLE" > "$CORE_BODY"
+t4_assert_eq "0" "$(lint2 "$CORE_BODY")" "C3② 正控：唯一构造点自身 0 命中（不误判合法拼法）"
+
+# C3④ herdr 放置键 lint（spawn 内不得取会话名 / 重算仓基键）
+spawn_body() { awk '/^_term_herdr_spawn\(\)/,/^}/' "$1"; }
+lint4()  { spawn_body "$1" | grep -c 'HERDR_SESSION' || true; }
+lint4b() { spawn_body "$1" | grep -c 'place_key_label' || true; }
+t4_assert_eq "0" "$(lint4 "$SUBJECT_BUNDLE" || true)" "C3④ 真脚本：spawn 内不取 HERDR_SESSION（放置键只认入参 label）"
+t4_assert_eq "0" "$(lint4b "$SUBJECT_BUNDLE" || true)" "C3④ 真脚本：spawn 内不重算 place_key_label"
+NEG_D="$T4_CACHE_DIR/c28-c3-neg-d.sh"
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_D" \
+     '  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" task="${7-}" pl="" obj js line' \
+     '  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" task="${7-}" pl="" obj js line; : "${HERDR_SESSION:-}"'; then
+  t4_assert_eq "1" "$(lint4 "$NEG_D" || true)" "C3④ 负控：spawn 内注入 HERDR_SESSION ⇒ 命中 1（判据非空转）"
+else t4_bad "C3④ 负控锚点未命中"; fi
+NEG_D2="$T4_CACHE_DIR/c28-c3-neg-d2.sh"
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_D2" \
+     '  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" task="${7-}" pl="" obj js line' \
+     '  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="$(place_key_label "$repo")" group="${6-}" task="${7-}" pl="" obj js line'; then
+  t4_assert_eq "1" "$(lint4b "$NEG_D2" || true)" "C3④ 负控2：spawn 内重算 slug ⇒ 命中 1（D1 零调用判据不空转）"
+else t4_bad "C3④ 负控2 锚点未命中"; fi
+
+# C3⑤ 起 server 身份禁读环境变量（T544）
+lint5() { grep -nE '\$\{?_TERM_HERDR_SERVER_START|^[[:space:]]*(\([[:space:]]*)?_TERM_HERDR_SERVER_START=' "$1" || true; }
+t4_assert_eq "" "$(lint5 "$SUBJECT_BUNDLE")" "C3⑤ 真脚本：不读 _TERM_HERDR_SERVER_START（唯一形态 = -u 迁移带）"
+NEG_E="$T4_CACHE_DIR/c28-c3-neg-e.sh"
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_E" '  local s="${HERDR_SESSION:-}" v ss=0' \
+     '  local s="${HERDR_SESSION:-}" v ss=0
+  if [[ "${_TERM_HERDR_SERVER_START:-0}" == "1" ]]; then :; fi'; then
+  t4_assert_match "$(lint5 "$NEG_E")" '^[0-9]+:.*_TERM_HERDR_SERVER_START' "C3⑤ 负控1：历史读取形 ⇒ 必红并点名行号"
+else t4_bad "C3⑤ 负控1 锚点未命中"; fi
+NEG_F="$T4_CACHE_DIR/c28-c3-neg-f.sh"
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_F" '  local s="${HERDR_SESSION:-}" v ss=0' \
+     '  local s="${HERDR_SESSION:-}" v ss=0
+  : "$_TERM_HERDR_SERVER_START"'; then
+  t4_assert_match "$(lint5 "$NEG_F")" '^[0-9]+:.*_TERM_HERDR_SERVER_START' "C3⑤ 负控2：裸变量读取形 ⇒ 必红"
+else t4_bad "C3⑤ 负控2 锚点未命中"; fi
+NEG_G="$T4_CACHE_DIR/c28-c3-neg-g.sh"
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_G" '  local s="${HERDR_SESSION:-}" v ss=0' \
+     '  local s="${HERDR_SESSION:-}" v ss=0
+  _TERM_HERDR_SERVER_START=1 :'; then
+  t4_assert_match "$(lint5 "$NEG_G")" '^[0-9]+:.*_TERM_HERDR_SERVER_START=1' "C3⑤ 负控3：命令行位前置赋值形 ⇒ 必红"
+else t4_bad "C3⑤ 负控3 锚点未命中"; fi
+t4_assert_eq "1" "$(grep -c -- '-u _TERM_HERDR_SERVER_START' "$SUBJECT_BUNDLE" || true)" \
+  "C3⑤ 正控：迁移带「-u _TERM_HERDR_SERVER_START」仍在场（不是靠删干净凑绿）"
+
 # ============================================================================
 # 夹具：app 臂（hc-double）
 # ============================================================================
