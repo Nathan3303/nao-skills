@@ -150,6 +150,13 @@ t4_assert_ge "2" "$(grep -cF '_term_app_check_premise || true' "$FLEET_BUNDLE" |
 t4_assert_eq "0" "$(grep -cF '_term_app_check_premise || rc=1' "$FLEET_BUNDLE" || true)" \
   "⓪ AC4：旧的 || rc=1 接线已不存在（否则前提 warn 会改 rc）"
 
+# ⓪ AC2 补（2026-11-25 实机事故）：空 tab name 会让 bash `read` 压缩连续 TAB ⇒ terminals 左移
+#   ⇒ 收养判据假失败（真机 app 的 space/tab 默认没有名字）。实现必须给空 name 填占位符 `-`。
+t4_assert_eq "1" "$(grep -cF '(t.name||"-")' "$FLEET_BUNDLE" || true)" \
+  "⓪ AC2：空 tab name 必须填占位符 `-`（否则 terminals 字段左移、收养判据假失败）"
+t4_assert_eq "0" "$(grep -cF '(t.name||"")' "$FLEET_BUNDLE" || true)" \
+  "⓪ AC2：不得退回「空 name 留空」的写法"
+
 # ---------------------------------------------------------------- ① AC1：目标 space 存在 ⇒ 复用
 app_reset
 printf '%s' "$LAB" > "$BE_APP_STATE/spaces/$KEEP_SP"   # app 里本仓的 space（doc 权威）

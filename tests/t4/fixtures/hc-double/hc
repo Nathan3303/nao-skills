@@ -265,13 +265,16 @@ $ta
         [ -n "$tb" ] || continue
         [ "$firsttb" = "1" ] || printf ','
         firsttb=0
+        # 真机形态（2026-11-25 实机）：app 的 tab 默认**没有名字**；夹具默认同样为空，
+        #   仅当 `$ST/t/<addr>/tab_name` 存在时才非空（供「name 非空」变体对照）。
+        _tab_name=""; [ -f "$ST/t/$ta/tab_name" ] && _tab_name="$(cat "$ST/t/$ta/tab_name" 2>/dev/null || true)"
         if _adopt_pending "$ta"; then
           printf '{"id":"%s","name":"%s","root":{"content":{"terminal":"%s"}}}' \
-            "$(_esc "$tb")" "$(_esc "$(_field "$ta" name)")" "$ta"
+            "$(_esc "$tb")" "$(_esc "$_tab_name")" "$ta"
         else
           # 标签已写、app 还没把终端挂进该 tab 的 root 树（真 app 的 pending 收养）：tab 在、终端不在
           printf '{"id":"%s","name":"%s","root":{}}' \
-            "$(_esc "$tb")" "$(_esc "$(_field "$ta" name)")"
+            "$(_esc "$tb")" "$(_esc "$_tab_name")"
         fi
       done < <(find "$ST/t" -mindepth 1 -maxdepth 1 -type d | sort -V)
       printf ']}'

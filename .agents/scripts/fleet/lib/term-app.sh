@@ -157,7 +157,11 @@ _term_app_spawn_preflight() {
 # 输出契约（每行，TAB 分隔）：
 #   V<TAB><version>
 #   S<TAB><space_id><TAB><folder><TAB><space_name>
-#   T<TAB><space_id><TAB><tab_id><TAB><tab_name><TAB><terminals,csv>
+#   T<TAB><space_id><TAB><tab_id><TAB><tab_name|-><TAB><terminals,csv>
+#     ⚠️ tab_name 为空时必须输出占位符 `-`（不能留空）：bash `read` 对 IFS 里的空白字符
+#     （TAB）会**压缩连续分隔符** ⇒ 空 name 会让 terminals 左移一格、第 5 字段读成空，
+#     收养判据随即假失败（真机 app 的 space/tab 默认没有名字，2026-11-25 实机踩到：
+#     doc 里 space/tab/终端全对，verify 仍判 no-term ⇒ 每次 ensure 都回滚）。
 _term_app_doc_rows() {
   local raw="" rc=0 val="" js=""
   raw="$(_term_app_exec connect <<< '{"jsonrpc":"2.0","id":1,"method":"doc.get","params":{"name":"herdr-app"}}')" || rc=$?
@@ -169,7 +173,7 @@ _term_app_doc_rows() {
     warn "app 后端需要 node 解析布局文档（nao-skill 自带 node 依赖；核验 PATH）"
     return 1
   fi
-  js='let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{let j;try{j=JSON.parse(d)}catch(e){console.error("doc.get 输出不可解析");process.exit(1)}let r=j.result||{};let v=r.value;if(!v){console.log("V\t0");return}console.log("V\t"+(r.version||0));const walk=(n,acc)=>{if(!n||typeof n!=="object")return;if(Array.isArray(n)){for(const x of n)walk(x,acc);return}if(typeof n.terminal==="string")acc.push(n.terminal);for(const k of Object.keys(n)){if(k!=="terminal")walk(n[k],acc)}};for(const s of (v.spaces||[])){console.log(["S",s.id,s.folder||"",s.name||""].join("\t"));for(const t of (s.tabs||[])){const acc=[];walk(t.root,acc);console.log(["T",s.id,t.id,t.name||"",acc.join(",")].join("\t"))}}})'
+  js='let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{let j;try{j=JSON.parse(d)}catch(e){console.error("doc.get 输出不可解析");process.exit(1)}let r=j.result||{};let v=r.value;if(!v){console.log("V\t0");return}console.log("V\t"+(r.version||0));const walk=(n,acc)=>{if(!n||typeof n!=="object")return;if(Array.isArray(n)){for(const x of n)walk(x,acc);return}if(typeof n.terminal==="string")acc.push(n.terminal);for(const k of Object.keys(n)){if(k!=="terminal")walk(n[k],acc)}};for(const s of (v.spaces||[])){console.log(["S",s.id,s.folder||"",s.name||""].join("\t"));for(const t of (s.tabs||[])){const acc=[];walk(t.root,acc);console.log(["T",s.id,t.id,(t.name||"-"),acc.join(",")].join("\t"))}}})'
   if ! val="$(printf '%s' "$raw" | node -e "$js" 2>&1)"; then
     warn "doc.get 解析失败：$(printf '%s' "${val:-<空>}" | head -c 200)"
     return 1
