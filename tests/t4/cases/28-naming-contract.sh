@@ -162,6 +162,10 @@ M="$T4_CACHE_DIR/c28-m3.sh"
 if mutate_file "$C1_BASE" "$M" 'core="${core:0:$(( 32 - ${#num} ))}"' 'core="$core"'; then
   mutation_neg "M3 合法名不截 32" "$M"
 else t4_bad "M3 锚点未命中"; fi
+M="$T4_CACHE_DIR/c28-m4.sh"
+if mutate_file "$C1_BASE" "$M" 'fleet_scope_problem "$scope" >/dev/null || { printf '"'"'ERR\n'"'"'; return 0; }' ':'; then
+  mutation_neg "M4 非法 legacy scope 放行" "$M"
+else t4_bad "M4 锚点未命中"; fi
 
 # ---------------------------------------------------------------- C3 静态闸
 t4_assert_eq "1" "$(grep -c 'exec pi --name' "$SUBJECT_BUNDLE" || true)" "C3① 唯一 exec pi --name 点"
@@ -295,6 +299,71 @@ BE_CACHE_ROOT="$T4_CACHE_DIR"
 be_init "$HLAB" "lab28h-$$" || { t4_bad "herdr be_init 失败"; t4_exit; }
 be_start_server || { t4_bad "herdr server 起不来"; t4_exit; }
 [ -n "$(be_panes)" ] || be_new_pane "$HLAB" >/dev/null
+
+# ---------------------------------------------------------------- herdr golden + 默认值反向断言（T555 / P2①）
+# 旧 cases/28 C2 的 tmux golden 组已随 T555 退役；等价覆盖 = 本组 herdr golden：
+#   未设 NAO_TERMINAL == 显式 =herdr（默认值唯一）· ≠ 冻结的旧 tmux golden ·
+#   缺 herdr 前提 ⇒ exit 3（不静默回落）· 变异「默认改回 tmux」⇒ 未设 golden 必红（先红后绿）。
+GOLD_TMUX_MD5="144f3447c9ff406d6aed828d9c9720e5"
+GOLD_HERDR_MD5_RECORDED="4b7f47b28a141521ec262b2d727348f8"
+# >>> default-value-probe BEGIN（T555 P2①：未设探针 —— 全仓唯一允许 unset NAO_TERMINAL 的位置）
+gold_md5() { printf '%s' "$1" | md5sum | awk '{print $1}'; }
+gold_run() { # <explicit|unset> <script> [extra env...] → GOLD_RC / GOLD_OUT / GOLD_ERR
+  local mode="$1" script="$2"; shift 2
+  local kv
+  local -a clean=() handles=() envs=()
+  mapfile -t clean < <(be_clean_env)
+  mapfile -t handles < <(be_fleet_handles)
+  for kv in "${handles[@]}"; do [[ "$kv" == NAO_TERMINAL=* ]] || envs+=("$kv"); done
+  if [[ "$mode" == "explicit" ]]; then
+    t4_run_in_dir "$HLAB" env "${clean[@]}" "${envs[@]}" "NAO_SKILLS=$HLAB" NAO_TERMINAL=herdr \
+      timeout 180 bash "$script" status "$@"
+  else
+    t4_run_in_dir "$HLAB" env -u NAO_TERMINAL "${clean[@]}" "${envs[@]}" "NAO_SKILLS=$HLAB" \
+      timeout 180 bash "$script" status "$@"
+  fi
+  GOLD_RC=$T4_RC
+  GOLD_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  GOLD_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+}
+gold_run explicit "$HLAB/.agents/scripts/nao-fleet.sh"
+GOLD_HERDR_MD5="$(gold_md5 "$GOLD_OUT")"
+t4_assert_eq "0" "$GOLD_RC" "P2① 显式 =herdr ⇒ status rc=0"
+t4_assert_contains "$GOLD_OUT" "本表按 herdr pane label" "P2① herdr golden 确为 herdr 渲染（后端专有头行）"
+t4_assert_eq "$GOLD_HERDR_MD5_RECORDED" "$GOLD_HERDR_MD5" \
+  "P2① herdr golden == 记录值（渲染零漂移；实际=$GOLD_HERDR_MD5）"
+t4_assert_ne "$GOLD_TMUX_MD5" "$GOLD_HERDR_MD5" "P2① 反向断言：herdr golden ≠ 旧 tmux golden"
+t4_info "P2① golden：tmux=$GOLD_TMUX_MD5 · herdr=$GOLD_HERDR_MD5"
+# 未设探针（同一 default-value-probe 块内）
+gold_run unset "$HLAB/.agents/scripts/nao-fleet.sh"
+t4_assert_eq "0" "$GOLD_RC" "P2① 未设 NAO_TERMINAL（herdr 场）⇒ status rc=0（默认已翻 herdr）"
+t4_assert_eq "$GOLD_HERDR_MD5" "$(gold_md5 "$GOLD_OUT")" \
+  "P2① 未设 == herdr golden（默认值唯一：未设与显式 =herdr 不可分叉）"
+t4_assert_ne "$GOLD_TMUX_MD5" "$(gold_md5 "$GOLD_OUT")" "P2① 未设 ≠ 旧 tmux golden（旧口径已失效）"
+# 反向负控 A：未设 + HERDR_* 全缺 ⇒ exit 3（点名 HERDR_ENV；不静默回落）
+mapfile -t GOLD_CLEAN < <(be_clean_env)
+t4_run_in_dir "$HLAB" env -u NAO_TERMINAL "${GOLD_CLEAN[@]}" "NAO_SKILLS=$HLAB" \
+  timeout 180 bash "$HLAB/.agents/scripts/nao-fleet.sh" status
+t4_assert_eq "3" "$T4_RC" "P2① 反向负控A：未设 NAO_TERMINAL 且 herdr 前提全缺 ⇒ exit 3"
+t4_assert_contains "$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')" "HERDR_ENV=1 缺失" \
+  "P2① 反向负控A：点名 herdr 前提（HERDR_ENV）"
+# 变异自证：默认改回 tmux ⇒ 未设 golden 必红（判据非空转）；复原后复绿（先红后绿）
+GOLD_MUT_ROOT="$HLAB/mut-default-$$"
+GOLD_MUT="$(t4_fleet_clone "$HLAB/.agents/scripts" "$GOLD_MUT_ROOT")"
+GOLD_MUT_MOD="$(t4_fleet_file_for "$GOLD_MUT_ROOT" term_backend)"
+sed 's/^NAO_TERMINAL="${NAO_TERMINAL:-herdr}"$/NAO_TERMINAL="${NAO_TERMINAL:-tmux}"/' \
+  "$GOLD_MUT_MOD" > "$GOLD_MUT_MOD.mut" && mv "$GOLD_MUT_MOD.mut" "$GOLD_MUT_MOD"
+t4_assert_eq "1" "$(grep -cE '^NAO_TERMINAL="\$\{NAO_TERMINAL:-tmux\}"$' "$GOLD_MUT_MOD" || true)" \
+  "P2① 变异锚点有效：副本默认已改回 tmux"
+gold_run unset "$GOLD_MUT"
+t4_assert_ne "0" "$GOLD_RC" "P2① 变异自证：默认改回 tmux ⇒ 未设 rc≠0"
+t4_assert_ne "$GOLD_HERDR_MD5" "$(gold_md5 "$GOLD_OUT")" \
+  "P2① 变异自证：默认改回 tmux ⇒ 未设不再等于 herdr golden（必红，不是空转）"
+gold_run unset "$HLAB/.agents/scripts/nao-fleet.sh"
+t4_assert_eq "$GOLD_HERDR_MD5" "$(gold_md5 "$GOLD_OUT")" "P2① 复原后复绿：未设 == herdr golden"
+rm -rf "$GOLD_MUT_ROOT"
+# >>> default-value-probe END
+
 meta_root() { printf '%s/.local/state/nao-fleet/session-meta\n' "$HLAB/.t4-home"; }
 ws_of_label() { be_herdr "$BE_SESSION" pane list 2>/dev/null | _be_json_lines "(r.panes||[]).filter(p=>p.label==='$1').map(p=>p.workspace_id)" | sed -n '1p'; }
 sidecar_for() { # <label> → path（当前会话 + 该 label 的 workspace）
