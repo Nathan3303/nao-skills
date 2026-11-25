@@ -55,7 +55,7 @@ _close_adopt_repo() {  # <name> <roster_ok>
 # 回收已完成会话：闸门（tasks-state 已推进 + 无在跑 turn）+ 落地（pane/session）
 cmd_close() {
   local force="$1" task="$2" target="${3:-}"
-  [[ -n "$target" ]] || die "close 需要目标：角色别名或会话名（如 rd-be / qa(T1) / 旧形 qa-T1）"
+  [[ -n "$target" ]] || die "close 需要目标：角色别名或会话名（如 rd-be / rd-be2；旧形 qa(T1) / qa-T1 只读）"
   # T525 BR1/BR2/BR4：子代理会话显式拒绝（判定只针对 $target 位置名；--force 不旁路）
   if [[ "$target" == subagent-* ]]; then
     die "拒绝回收 $target：这是 pi-subagents 子代理会话（subagent-*），其生命周期不归 nao 回收（请用 pi-subagents 的 stop / retention 管理）"
@@ -67,6 +67,10 @@ cmd_close() {
   local -A close_pw=()
   intercom_list_json >/dev/null 2>&1 || true   # 预热名册缓存
   fleet_roles_init --cards                     # BR8：parse 的角色事实表（常驻 + 卡 role）
+  fleet_task_map_init                          # v3：task 元数据映射（快照第 13 列）
+  if ! _term_app_backend; then
+    term_snapshot 2>/dev/null | awk -F'\t' 'NF{print $2}' | fleet_meta_gc
+  fi
   # D7：manifest `slug:` 弃用告警在 close 读入口也要出现（即使本命令不需要 manifest 做仓回退）
   local _mnr_w="" _mnj_w=""
   _mnr_w="$(fleet_manifest_root "$PWD")"
@@ -79,14 +83,18 @@ cmd_close() {
     "OK "*)
       parsed=1
       IFS=',' read -r p_kind p_role p_task p_num <<< "${pout#OK }"
-      if [[ -n "$task" && -n "$p_task" && "$task" != "$p_task" ]]; then
-        die "目标名与 --task 不一致：$target（名字里是 $p_task，--task 是 $task；该怎么办：二选一）"
+      # v3：名字里没有 task；--task 只按元数据匹配（effective = 元数据优先，v2 名字解析值回落）。
+      local _nt="${p_task}"
+      [[ -n "$_nt" ]] || _nt="$(fleet_effective_task "$target")"
+      if [[ -n "$task" && -n "$_nt" && "$task" != "$_nt" ]]; then
+        die "目标名与 --task 不一致：$target（元数据是 $_nt，--task 是 $task；该怎么办：二选一）"
       fi
-      [[ -n "$p_task" ]] && task="$p_task"
+      [[ -n "$_nt" ]] && task="$_nt"
       role="$p_role"; kindc="$p_kind"
-      # 裸名/带槽位名 + --task ⇒ 别名重建（新形）；否则精确名原样
+      case "$p_kind" in card) kindc="card" ;; *) [[ -n "$task" ]] && kindc="derived" ;; esac
+      # 名字里带 task（v2 只读）⇒ 精确名原样；v3 的 task 在元数据 ⇒ 由候选集合解析（不写进名字）
       if [[ -n "$task" && -z "$p_task" ]]; then
-        exact="$(fleet_name_build "$( [[ "$p_kind" == "card" ]] && printf card || printf derived )" "$p_role" "$p_num" "$task")"
+        exact=""
       else
         exact="$target"
       fi
@@ -163,7 +171,7 @@ cmd_close() {
       fi
     fi
     if [[ -z "$tgt" && "$is_resident" == "1" ]]; then
-      die "未知角色或会话名: $target（可用角色: ${ROLE_ORDER[*]}；常驻名 = <角色>[N]（N=2..9）；派生名 = <角色>(<任务号>)；旧形（<角色>-<任务号> / <角色>@<scope>）仍可回收；亦可用 close --task <编号> <角色>；下游卡角色需在本仓锚下存在 .agents/prompts/<role>.md）"
+      die "未知角色或会话名: $target（可用角色: ${ROLE_ORDER[*]}；常驻名 = <角色>[N]（N=2..9）；派生名 = <角色>[N]（task 用 --task 元数据匹配；v2 <角色>(<任务号>) / 旧形 <角色>-<任务号> / <角色>@<scope> 只读）；亦可用 close --task <编号> <角色>；下游卡角色需在本仓锚下存在 .agents/prompts/<role>.md）"
     fi
     if [[ "$is_resident" == "1" ]]; then
       resolve_role "$tgt"; role="$NAME"; kindc="resident"
@@ -174,7 +182,11 @@ cmd_close() {
       fallback_repo="${card_path%/.agents/prompts/*}"
       [[ -n "$fallback_repo" ]] || fallback_repo="$PWD"
     fi
-    exact="$(fleet_name_build "$kindc" "$role" "" "$task")"
+    if [[ -n "$task" ]]; then
+      exact=""   # v3：task 不进名字 ⇒ 交给候选（同 role + 元数据 task）解析
+    else
+      exact="$(fleet_name_build "$kindc" "$role" "")"
+    fi
   fi
   [[ -n "$role" ]] || die "close 内部错误：未能解析角色（target=$target）"
 
@@ -198,6 +210,7 @@ cmd_close() {
   # 名字是否落在锚内（名册 cwd 或 pane cwd 任一命中）
   _close_in_anchor() {  # <name>
     local nm="${1-}" c
+    [[ -n "$nm" ]] || return 1
     # 名册不可用且 pane cwd 也不可知 ⇒ 无归属证据，不得据此隐藏会话（交给句柄层过滤/拒绝）
     [[ "$roster_ok" == "1" || -n "${close_pw[$nm]:-}" ]] || return 0
     if [[ "$roster_ok" == "1" ]]; then
@@ -261,15 +274,37 @@ cmd_close() {
           "LEGACY OK "*) IFS=',' read -r _ _ _ scope <<< "${pout#LEGACY OK }" ;;
           *) scope="" ;;
         esac
+        # v3：task 候选的名字可能同名（同一槽位）多 pane ⇒ 与精确名分支同口径，不猜
+        if [[ "$force" != true ]]; then
+          local _d2p=0 _d2r=0 _d2n _d2pane _d2c _d2f _d2cc
+          while IFS=$'\t' read -r _d2n _d2pane _ _d2c _d2f _; do
+            [[ "$_d2n" == "$name" ]] || continue
+            _d2c="${_d2c:--}"; [[ "$_d2c" == "-" || -z "$_d2c" ]] && _d2c="$_d2f"
+            [[ "$_d2c" == "-" || -z "$_d2c" ]] || repo_contains_path "$anchor" "$(nao_phys_path "$_d2c")" || continue
+            _d2p=$((_d2p + 1))
+          done < <(term_snapshot 2>/dev/null || true)
+          if [[ "$roster_ok" == "1" ]]; then
+            while IFS= read -r _d2cc; do [[ -n "$_d2cc" ]] && _d2r=$((_d2r + 1)); done < <(intercom_cwds_for "$name" "$anchor")
+          fi
+          if (( _d2p > 1 || _d2r > 1 )); then
+            die "close 目标歧义：同名 label 命中 $(( _d2p > _d2r ? _d2p : _d2r )) 个 pane（$name 在本仓锚 $anchor 内）：不猜（该怎么办：先 intercom({action:'list'}) 人工核对并关掉多余的会话）"
+          fi
+        fi
       elif (( ${#cands_in[@]} > 1 )); then
-        die "close 目标歧义：$exact 在本仓锚（$anchor）内有 ${#cands_in[@]} 个同 (角色,任务) 的会话：$(printf '%s ' "${cands_in[@]}")（该怎么办：先 intercom({action:'list'}) 人工核对并关掉多余的会话；或显式写带槽位号的名字）"
+        die "close 目标歧义：${exact:-$role} 在本仓锚（$anchor）内有 ${#cands_in[@]} 个同 (角色,任务) 的会话：$(printf '%s ' "${cands_in[@]}")（该怎么办：先 intercom({action:'list'}) 人工核对并关掉多余的会话；或显式写带槽位号的名字）"
       else
         # 本仓锚内无候选：若场里有同 (role,task) 的非本仓会话 ⇒ D4：不回收 + 指路（禁全局首命中）
         if (( ${#cands[@]} > 0 )); then
-          log "$exact 未运行（本仓锚内无该会话；场内有同名/同 core 会话：$(printf '%s ' "${cands[@]}")）→ 不在本仓回收；如确需回收请到对应仓执行 close"
+          log "${exact:-$role} 未运行（本仓锚内无该会话；场内有同名/同 core 会话：$(printf '%s ' "${cands[@]}")）→ 不在本仓回收；如确需回收请到对应仓执行 close"
           return 0
         fi
-        name="$exact"; scope=""
+        # v3：task 不进名字 ⇒ 无元数据匹配时**不得**回落到裸 role（会误杀同名常驻会话）。
+        #   用只读旧形 `<role>(<task>)` 作定位占位：它只会命中 v2 会话（已由候选覆盖）⇒ 此处必为空。
+        if [[ -z "$exact" ]]; then
+          name="$role($task)"; scope=""
+        else
+          name="$exact"; scope=""
+        fi
       fi
     fi
   fi

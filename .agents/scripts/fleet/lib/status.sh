@@ -30,9 +30,9 @@ _status_scope_tag() {  # <legacy scope> → "·code=…[ ·path=…]"
 #   数据源 = status 已建的快照（STATUS_SNAP，12 列含 workspace_id）+ workspace list（≤1 次）。
 #   own 判据 = 该行 cwd/foreground_cwd 落在目标仓内（与 term_liveness 的 repo 过滤同源）。
 _status_other_same() {  # <name> <repo_phys>
-  local name="${1-}" repo="${2-}" line _n _p _t _c _f _fg _st _sq _sess _av _hk wsid c n=0 labels=""
+  local name="${1-}" repo="${2-}" line _n _p _t _c _f _fg _st _sq _sess _av _hk wsid _task c n=0 labels=""
   [[ -n "$name" && -n "${STATUS_SNAP:-}" ]] || return 0
-  while IFS=$'\t' read -r _n _p _t _c _f _fg _st _sq _sess _av _hk wsid; do
+  while IFS=$'\t' read -r _n _p _t _c _f _fg _st _sq _sess _av _hk wsid _task; do
     [[ "$_n" == "$name" ]] || continue
     c="$_c"; [[ "$c" == "-" || -z "$c" ]] && c="$_f"
     if [[ -n "$repo" && -n "$c" && "$c" != "-" ]] && repo_contains_path "$repo" "$(_fleet_phys "$c")"; then
@@ -47,6 +47,8 @@ _status_other_same() {  # <name> <repo_phys>
 
 cmd_status() {
   local a
+  # BR8：parse 的角色事实表必须先灌入（身份还原的 argv 回退要用 fleet_name_parse 验名）
+  fleet_roles_init --cards
   # B1（BR3/BR7）：身份/归属/忙闲全部来自结构化事实 ⇒ 快照**每命令一次**
   #   （≤1 次 pane list / agent list；逐名查询会 7×2 次 CLI，且同命令内两份快照不一致 = 新 flake 源）
   if ! term_snapshot >/dev/null; then
@@ -57,8 +59,11 @@ cmd_status() {
     fi
     exit 3
   fi
-  # BR8：parse 的角色事实表（常驻 id + 锚根下合法卡 role）；**一次** glob，不再二次 card_role_set
-  fleet_roles_init --cards
+  # v3 元数据：task 映射 + 当前会话 sidecar 孤儿清理（快照已建好，零新增后端调用）
+  fleet_task_map_init
+  if ! _term_app_backend; then
+    term_snapshot 2>/dev/null | awk -F'\t' 'NF{print $2}' | fleet_meta_gc
+  fi
   # M5（#139）：manifest 读面（只在 manifest 可读时追加字段；无 manifest / 不可读不动既有行格式）
   #   可读 ⇒ `fleet=<slug>` + `code=<code>`；非法/不可读 ⇒ `fleet=?`（显式不可知，禁空值）。
   STATUS_MN_OK=0; STATUS_MN_ROOT=""; STATUS_MN_CODES=""; STATUS_MN_PATHS=()
@@ -107,6 +112,10 @@ cmd_status() {
         ;;
       *) continue ;;
     esac
+    # v3：task 只在元数据里 ⇒ 名字解析为 resident 但有 task ⇒ 实为派生会话
+    if [[ "$p_kind" == "resident" && -n "${FLEET_TASK_BY_NAME[$dname]:-}" ]]; then
+      p_kind="derived"; p_task="${FLEET_TASK_BY_NAME[$dname]}"
+    fi
     if [[ "$pout" == "LEGACY OK "* ]]; then
       [[ -n "$p_scope" ]] && any_scoped=1
       [[ "$p_kind" == "resident" && -n "$p_scope" ]] || continue
@@ -203,9 +212,9 @@ cmd_status() {
   done
   # D5：分节标题示例带上全名写法 —— **仅当在场确有带 scope 的会话**（scope 为空时逐字保留旧标题 ⇒ BR1）
   if (( any_scoped )); then
-    echo "== 任务派生会话（--task 拉起，如 rd-be(T1) / rd-be2(T1)；含旧式 @ 名）=="
+    echo "== 任务派生会话（--task 拉起，如 rd-be / rd-be2；task 仅在尾注；含旧式 @ 名）=="
   else
-    echo "== 任务派生会话（--task 拉起，如 rd-fe(T1) / rd-infra(T1)）=="
+    echo "== 任务派生会话（--task 拉起，如 rd-fe / rd-infra；task 仅在尾注）=="
   fi
   # T534：先建归属快照（本仓锚 / pane cwd / 名册 cwd），再逐会话**先定归属、后判本仓台账**
   #   （他仓不查本仓 tasks-state，杜绝误读；本仓行 cls tag 逐字不变）
@@ -234,6 +243,8 @@ cmd_status() {
       "OK "*)        IFS=',' read -r p_kind p_role p_task p_num <<< "${pout#OK }" ;;
       "LEGACY OK "*) IFS=',' read -r p_kind p_role p_task p_scope <<< "${pout#LEGACY OK }" ;;
     esac
+    p_task="$(fleet_effective_task "$dname")"
+    [[ -n "$p_task" && "$p_kind" == "resident" ]] && p_kind="derived"
     scope_tag=""
     [[ -n "$p_scope" ]] && scope_tag=" $(_status_scope_tag "$p_scope")"   # 只追加字段，既有行格式不动（BR1）
     # 非在线证据类**单列**（下方「终端证据异常」节），此处不重复渲染成残留/进行态
@@ -265,7 +276,7 @@ cmd_status() {
           mentioned) tag="  ? $id 仅散文提及（非表内记录）→ 核对后 close --task $id $role" ;;
           absent)    tag="  ! 残留（tasks-state 无 $id 记录）→ 核对后 close --task $id $role" ;;
         esac
-        printf '  · %s%s%s\n' "$dname" "$tag" "$scope_tag"
+        printf '  · %s%s%s task=%s\n' "$dname" "$tag" "$scope_tag" "${p_task:--}"
         found=1
         ;;
       card)
@@ -295,7 +306,11 @@ cmd_status() {
           mentioned) tag="  ? $p_task 仅散文提及（非表内记录）→ 核对后 close --task $p_task $role" ;;
           absent)    tag="  ! 残留（tasks-state 无 $p_task 记录）→ 核对后 close --task $p_task $role" ;;
         esac
-        printf '  · %s（一次性会话 · 下游卡 %s）%s%s\n' "$dname" "$role" "$tag" "$scope_tag"
+        if [[ -n "$p_task" ]]; then
+          printf '  · %s（一次性会话 · 下游卡 %s）%s%s task=%s\n' "$dname" "$role" "$tag" "$scope_tag" "$p_task"
+        else
+          printf '  · %s（一次性会话 · 下游卡 %s）%s%s\n' "$dname" "$role" "$tag" "$scope_tag"
+        fi
         found=1
         ;;
       *)
@@ -411,6 +426,8 @@ process.stdin.on("end", () => {
 
 cmd_status_json() {
   local be root snap nm k r t num sc po vline vd st seq hk ws verdict obase repo_c
+  fleet_roles_init --cards
+
   local own online agent busy dl cwd pid
   local -a names=()
   local -A seen=() cwds=() pids=()
@@ -423,7 +440,10 @@ cmd_status_json() {
     fi
     exit 3
   fi
-  fleet_roles_init --cards
+  fleet_task_map_init
+  if ! _term_app_backend; then
+    term_snapshot 2>/dev/null | awk -F'\t' 'NF{print $2}' | fleet_meta_gc
+  fi
   be="$(term_label)"
   root="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || true)"
   [[ -n "$root" ]] || root="$(nao_phys_path "$PWD")"
@@ -456,6 +476,8 @@ cmd_status_json() {
       "LEGACY OK "*) IFS=',' read -r k r t sc <<< "${po#LEGACY OK }" ;;
       *)             k="other"; r="$nm" ;;
     esac
+    t="$(fleet_effective_task "$nm")"
+    [[ -n "$t" && "$k" == "resident" ]] && k="derived"
     # 与文本路径同一判据（常驻角色带所属 workspace 作 repo 过滤；其余不带）
     if [[ -n "${ROLE_CARDS[$nm]:-}" ]]; then
       vline="$(term_liveness "$nm" "${ROLE_WS[$nm]:-}")"
