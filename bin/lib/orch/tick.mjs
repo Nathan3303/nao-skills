@@ -1,0 +1,414 @@
+// bin/lib/orch/tick.mjs —— 一次性 tick（T567-B · ADR D4 · AC5–AC8）
+//
+// 形态（ADR D4）：**一次性 tick + systemd timer**，无常驻循环 ⇒ 没有内存态，「daemon 半死」整类消失。
+// 三段式（D4）：写 intent（fsync）→ 副作用（ensure + 通知）→ 提交 row；崩在任一段由下一 tick 用 WAL 恢复。
+// 铁律（PRD §六 / D4）：
+//   · 目标角色 working / unknown（含 absent）⇒ **零 ensure**、只记等待（AC6）
+//   · 有 intent 而 row 仍 queued ⇒ 先探（session_id + cwd）再判：命中 ⇒ 补提交；未命中 ⇒ blocked(dispatch_unknown)，**绝不自动重派**（AC8）
+//   · 派单 15m 无回执 ⇒ blocked(no_ack) + 追问一次，attempt 不递增（AC7）
+//   · 写盘 CAS：落盘前重读 queue.jsonl 比对 sha，变了 ⇒ rc=1 零写入（不覆盖人的编辑）
+// 时钟注入：`--now <ISO>` 或 `NAO_ORCH_NOW`（AC7 的 15m 判据一律走注入时钟，**禁 sleep 等真实时间**）。
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import path from 'node:path';
+import { parseQueue, validateQueue, renderRegion, spliceRegion } from '../queue.mjs';
+import { fleetExec, notifyPm, gitExec, runTool } from './fleet.mjs';
+import {
+  walPath, lockPath, ensureOrchDir, appendWal, readWal, indexWal, intentKey, sha256,
+} from './wal.mjs';
+
+export const ACK_TIMEOUT_MS = 15 * 60 * 1000;
+export const TICK_BUDGET_MS = 120 * 1000;
+const DONE_STATES = new Set(['qa_pass', 'merging', 'merged', 'released']);
+
+export class OrchError extends Error {}
+
+export function resolveNow(opts = {}) {
+  const raw = opts.now || process.env.NAO_ORCH_NOW || '';
+  if (raw) {
+    const ms = Date.parse(raw);
+    if (!Number.isFinite(ms)) throw new OrchError(`时钟注入非法（--now / NAO_ORCH_NOW）：${raw}`);
+    return ms;
+  }
+  return Date.now();
+}
+
+export function isoSeconds(ms) {
+  return new Date(Math.floor(ms / 1000) * 1000).toISOString().replace('.000Z', 'Z');
+}
+
+export function resolveRoot(explicit) {
+  if (explicit) return path.resolve(explicit);
+  const r = gitExec(['rev-parse', '--show-toplevel']);
+  if (r.rc === 0 && r.out.trim()) return r.out.trim();
+  return process.cwd();
+}
+
+export function resolveCtx(opts = {}) {
+  const root = resolveRoot(opts.root);
+  return {
+    root,
+    queuePath: opts.queue ? path.resolve(opts.queue) : path.join(root, 'docs', 'queue.jsonl'),
+    receiptsDir: path.join(root, 'docs', 'queue'),
+    targetPath: path.join(root, 'docs', 'tasks-state.md'),
+    wal: walPath(root),
+    lock: lockPath(root),
+  };
+}
+
+function readQueueFile(queuePath) {
+  if (!existsSync(queuePath)) throw new OrchError(`队列文件不存在：${queuePath}`);
+  const text = readFileSync(queuePath, 'utf8');
+  const { rows, errors: parseErrors } = parseQueue(queuePath);
+  const { errors, byId } = validateQueue(queuePath, rows, parseErrors);
+  return { text, sha: sha256(text), rows, errors, byId };
+}
+
+// 行替换只改目标行（其余行**逐字保留**），避免整表重排把人的排版/键序冲掉。
+function rewriteRow(text, id, patch) {
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i += 1) {
+    const raw = lines[i].trim();
+    if (raw === '') continue;
+    let row;
+    try {
+      row = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    if (!row || row.id !== id) continue;
+    lines[i] = JSON.stringify({ ...row, ...patch });
+    return lines.join('\n');
+  }
+  throw new OrchError(`队列里找不到行 ${id}（CAS 拒绝整表重写）`);
+}
+
+function casWrite(queuePath, expectedSha, nextText) {
+  const current = readFileSync(queuePath, 'utf8');
+  if (sha256(current) !== expectedSha) return { ok: false, why: 'queue.jsonl 在本次 tick 内被外部修改（sha 不符）⇒ 零写入' };
+  writeFileSync(queuePath, nextText);
+  return { ok: true, sha: sha256(nextText) };
+}
+
+function loadStatus(ctx) {
+  const r = fleetExec('status', ['--json'], { repoRoot: ctx.root });
+  if (r.rc === 127) return { ok: false, rc: 1, why: `nao-fleet.sh 不可达：${r.err.trim()}` };
+  if (r.rc === 3) return { ok: false, rc: 3, why: 'fleet 前提不满足（rc=3：pane/socket/protocol）⇒ 环境级失败，本 tick 不写 blocked' };
+  if (r.rc !== 0) return { ok: false, rc: 1, why: `nao-fleet.sh status --json 失败（rc=${r.rc}）：${r.err.trim().split('\n')[0]}` };
+  let st;
+  try {
+    st = JSON.parse(r.out);
+  } catch (e) {
+    return { ok: false, rc: 1, why: `status --json 不是合法 JSON：${e.message}` };
+  }
+  if (!st || st.schema !== 1 || !Array.isArray(st.sessions)) {
+    return { ok: false, rc: 1, why: `status --json 契约不符（schema=${st && st.schema}）` };
+  }
+  return { ok: true, status: st };
+}
+
+function sessionsFor(status, role) {
+  return status.sessions.filter((s) => s && s.role === role);
+}
+
+// 目标角色的忙闲：多会话时「任一 working ⇒ working」；否则「任一 online+idle ⇒ idle」；否则 unknown（fail-closed）。
+export function roleState(status, role) {
+  const list = sessionsFor(status, role);
+  if (list.some((s) => s.online && s.agent === 'working')) return { online: true, agent: 'working', deliverable: false };
+  const idle = list.find((s) => s.online && s.agent === 'idle');
+  if (idle) return { online: true, agent: 'idle', deliverable: idle.deliverable !== false, session: idle };
+  const online = list.find((s) => s.online);
+  if (online) return { online: true, agent: 'unknown', deliverable: false, session: online };
+  return { online: false, agent: 'unknown', deliverable: false };
+}
+
+function findSession(status, name, cwd) {
+  if (!name) return null;
+  return status.sessions.find((s) => {
+    if (!s || s.name !== name) return false;
+    if (!s.online) return false;
+    if (!cwd) return true;
+    return path.resolve(s.cwd || '') === path.resolve(cwd);
+  }) || null;
+}
+
+function findRoleTask(status, role, id) {
+  return status.sessions.find((s) => s && s.online && s.role === role && s.task === id) || null;
+}
+
+function pmTarget(status) {
+  const pm = status.sessions.find((s) => s && s.online && s.role === 'pm');
+  return pm ? { name: pm.name, cwd: pm.cwd || '' } : null;
+}
+
+function notify(ctx, status, text) {
+  const t = pmTarget(status);
+  if (!t) return { skipped: 'pm-offline' };
+  // 消息带会话 id + cwd（PRD §十.3：禁裸名）
+  return notifyPm(`${text}（pm=${t.name} cwd=${t.cwd || '?'}）`, t.name);
+}
+
+// 测试注入点（**只在显式 env 下运行**）：`NAO_ORCH_HOOK` = 可执行文件，参数 = 相位名。
+//   用于 AC8「intent 后、提交前被 kill -9」与 CAS「提交前队列被外部改」两类崩溃/竞态的机械复现。
+function runHook(phase) {
+  const hook = process.env.NAO_ORCH_HOOK;
+  if (!hook) return;
+  process.env.NAO_ORCH_TICK_PID = String(process.pid);
+  runTool(hook, [phase], { timeout: 20_000 });
+}
+
+function receiptExists(ctx, id) {
+  return existsSync(path.join(ctx.receiptsDir, `${id}.receipt.json`));
+}
+
+function depsSatisfied(row, byId) {
+  const deps = Array.isArray(row.deps) ? row.deps : [];
+  return deps.every((d) => {
+    const dep = byId.get(d);
+    return dep && DONE_STATES.has(dep.state);
+  });
+}
+
+function sortRows(rows) {
+  return [...rows].sort((a, b) => {
+    const pa = String(a.prio);
+    const pb = String(b.prio);
+    if (pa !== pb) return pa < pb ? -1 : 1;
+    return String(a.id) < String(b.id) ? -1 : 1;
+  });
+}
+
+function renderTarget(ctx, rows) {
+  if (!existsSync(ctx.targetPath)) return { rendered: false, why: 'tasks-state 不存在' };
+  try {
+    let text = readFileSync(ctx.targetPath, 'utf8');
+    if (!text.endsWith('\n')) text += '\n';
+    let next = spliceRegion(text, 'active', renderRegion('active', rows), ctx.targetPath);
+    next = spliceRegion(next, 'dispatch', renderRegion('dispatch', rows), ctx.targetPath);
+    if (next !== text) writeFileSync(ctx.targetPath, next);
+    return { rendered: true, changed: next !== text };
+  } catch (e) {
+    return { rendered: false, why: e.message };
+  }
+}
+
+// 恢复相位（AC8）：WAL 有 intent 而 row 仍 queued ⇒ 先探再判，**绝不自动重派**。
+function recoverPhase(ctx, st, queue, wal, opts, counters) {
+  const { rows, byId } = queue;
+  let text = queue.text;
+  let sha = queue.sha;
+  for (const row of sortRows(rows)) {
+    if (opts.only && row.id !== opts.only) continue;
+    const rowNow = byId.get(row.id);
+    if (!rowNow || rowNow.state !== 'queued') continue;
+    const e = wal.get(row.id);
+    if (!e || !e.intent) continue;
+    const target = e.ensured
+      ? { name: e.ensured.session_id, cwd: e.ensured.cwd }
+      : { name: e.intent.session_id, cwd: e.intent.cwd };
+    const hit = findSession(st, target.name, target.cwd);
+    if (hit) {
+      const next = rewriteRow(text, row.id, { state: 'dispatched', updated: opts.nowIso });
+      const w = casWrite(ctx.queuePath, sha, next);
+      if (!w.ok) return { rc: 1, why: w.why, text, sha };
+      text = next;
+      sha = w.sha;
+      appendWal(ctx.wal, { type: 'recovered', id: row.id, key: e.intent.key, session_id: hit.name, cwd: hit.cwd || target.cwd });
+      counters.recovered += 1;
+      counters.dispatched += 1;
+      continue;
+    }
+    const next = rewriteRow(text, row.id, { state: 'blocked', blocked_reason: 'dispatch_unknown', updated: opts.nowIso });
+    const w = casWrite(ctx.queuePath, sha, next);
+    if (!w.ok) return { rc: 1, why: w.why, text, sha };
+    text = next;
+    sha = w.sha;
+    appendWal(ctx.wal, { type: 'dispatch_unknown', id: row.id, key: e.intent.key, session_id: target.name, cwd: target.cwd });
+    notify(ctx, st, `orch: ${row.id} 派单未知（WAL 有 intent 但找不到会话 ${target.name} @ ${target.cwd}）⇒ blocked(dispatch_unknown)，不自动重派，请人工核对`);
+    counters.blocked += 1;
+  }
+  return { rc: 0, text, sha };
+}
+
+// 追问相位（AC7）：派单 15m 无回执 ⇒ blocked(no_ack) + 追问一次，attempt 不变。
+function ackPhase(ctx, st, queue, wal, opts, counters) {
+  const { rows, byId } = queue;
+  let text = queue.text;
+  let sha = queue.sha;
+  for (const row of sortRows(rows)) {
+    if (opts.only && row.id !== opts.only) continue;
+    const rowNow = byId.get(row.id);
+    if (!rowNow || rowNow.state !== 'dispatched') continue;
+    const at = Date.parse(rowNow.updated);
+    if (!Number.isFinite(at)) continue;
+    if (opts.nowMs - at < ACK_TIMEOUT_MS) continue;
+    if (receiptExists(ctx, row.id)) continue;
+    const e = wal.get(row.id);
+    if (e && e.nudges > 0) continue;
+    const next = rewriteRow(text, row.id, { state: 'blocked', blocked_reason: 'no_ack', updated: opts.nowIso });
+    const w = casWrite(ctx.queuePath, sha, next);
+    if (!w.ok) return { rc: 1, why: w.why, text, sha };
+    text = next;
+    sha = w.sha;
+    appendWal(ctx.wal, { type: 'nudge', id: row.id, key: `${row.id}#no_ack`, attempt: rowNow.attempt });
+    notify(ctx, st, `orch: ${row.id} 派单 15m 无回执 ⇒ blocked(no_ack)（追问一次，attempt 不递增），请核对 ${rowNow.owner} 会话`);
+    counters.blocked += 1;
+    counters.nudged += 1;
+  }
+  return { rc: 0, text, sha };
+}
+
+// 派单相位：AC6 闸门（working/unknown ⇒ 零 ensure）→ WAL intent → ensure → ensured → 提交。
+function dispatchPhase(ctx, st, queue, opts, counters) {
+  const { rows, byId } = queue;
+  let text = queue.text;
+  let sha = queue.sha;
+  for (const row of sortRows(rows)) {
+    if (opts.only && row.id !== opts.only) continue;
+    const rowNow = byId.get(row.id);
+    if (!rowNow || rowNow.state !== 'queued') continue;
+    if (!depsSatisfied(rowNow, byId)) { counters.waiting += 1; continue; }
+    const role = typeof rowNow.owner === 'string' ? rowNow.owner.trim() : '';
+    if (!role) { counters.skipped += 1; continue; }
+    const rs = roleState(st, role);
+    // AC6：working / unknown（含 absent）⇒ 零 ensure，只记等待
+    if (!rs.online || rs.agent !== 'idle' || rs.deliverable === false) {
+      counters.waiting += 1;
+      continue;
+    }
+    const at = opts.nowIso;
+    const key = intentKey(rowNow.id, rowNow.attempt, at);
+    const predicted = `${role}(${rowNow.id})`;
+    appendWal(ctx.wal, {
+      type: 'intent', id: rowNow.id, key, attempt: rowNow.attempt, at, role,
+      session_id: predicted, cwd: ctx.root, row_sha: sha,
+    });
+    const ens = fleetExec('ensure', ['--task', rowNow.id, role], { repoRoot: ctx.root });
+    if (ens.rc === 3) {
+      appendWal(ctx.wal, { type: 'aborted', id: rowNow.id, key, reason: 'fleet_premise', rc: ens.rc });
+      counters.envFail += 1;
+      continue;
+    }
+    if (ens.rc !== 0) {
+      appendWal(ctx.wal, { type: 'aborted', id: rowNow.id, key, reason: 'ensure_failed', rc: ens.rc });
+      counters.failed += 1;
+      continue;
+    }
+    // ensure 可能落槽位（`rd-infra2(T567)`）⇒ 重新取一次 status 拿真实身份（探针与 WAL 都对得上）
+    const st2 = loadStatus(ctx);
+    const real = (st2.ok && findRoleTask(st2.status, role, rowNow.id)) || null;
+    const ident = real ? { name: real.name, cwd: real.cwd || ctx.root } : { name: predicted, cwd: ctx.root };
+    appendWal(ctx.wal, { type: 'ensured', id: rowNow.id, key, session_id: ident.name, cwd: ident.cwd });
+    runHook('before-commit');
+    const next = rewriteRow(text, rowNow.id, { state: 'dispatched', updated: at });
+    const w = casWrite(ctx.queuePath, sha, next);
+    if (!w.ok) return { rc: 1, why: w.why, text, sha };
+    text = next;
+    sha = w.sha;
+    appendWal(ctx.wal, { type: 'committed', id: rowNow.id, key, session_id: ident.name, cwd: ident.cwd });
+    notify(ctx, st, `orch: 已派单 ${rowNow.id} → ${role}（会话 ${ident.name} cwd=${ident.cwd}）`);
+    counters.dispatched += 1;
+  }
+  return { rc: 0, text, sha };
+}
+
+export function tick(opts = {}) {
+  const ctx = resolveCtx(opts);
+  ensureOrchDir(ctx.root);
+  const nowMs = opts.nowMs ?? resolveNow(opts);
+  const nowIso = isoSeconds(nowMs);
+  const counters = { scanned: 0, dispatched: 0, blocked: 0, skipped: 0, waiting: 0, recovered: 0, nudged: 0, failed: 0, envFail: 0 };
+  let queue;
+  try {
+    queue = readQueueFile(ctx.queuePath);
+  } catch (e) {
+    return { rc: 1, counters, journal: { why: e.message } };
+  }
+  const { errors, byId } = queue;
+  counters.scanned = byId.size;
+  if (errors.length) {
+    // D7：队列被手改或非法 ⇒ rc=1 零写入（不尽力而为、不渲染）
+    return { rc: 1, counters, queuePath: ctx.queuePath, errors };
+  }
+  const st = loadStatus(ctx);
+  if (!st.ok) return { rc: st.rc, counters, why: st.why };
+  const wal = indexWal(readWal(ctx.wal).records);
+  const opts2 = { ...opts, nowMs, nowIso, only: opts.only || '' };
+
+  const r1 = recoverPhase(ctx, st.status, queue, wal, opts2, counters);
+  if (r1.rc !== 0) return { rc: r1.rc, counters, why: r1.why };
+  const q1 = { ...queue, text: r1.text, sha: r1.sha };
+  // 提交后行状态已变：重读表格视图（只用于判定，不再落盘）
+  const q1View = { ...readRowsFromText(q1.text), sha: q1.sha };
+  const r2 = ackPhase(ctx, st.status, q1View, wal, opts2, counters);
+  if (r2.rc !== 0) return { rc: r2.rc, counters, why: r2.why };
+  const q2 = { ...q1, text: r2.text, sha: r2.sha };
+  const q2View = { ...readRowsFromText(q2.text), sha: q2.sha };
+  const r3 = dispatchPhase(ctx, st.status, q2View, opts2, counters);
+  if (r3.rc !== 0) return { rc: r3.rc, counters, why: r3.why };
+  const render = renderTarget(ctx, readRowsFromText(r3.text).rows);
+  return { rc: 0, counters, render, queuePath: ctx.queuePath, walPath: ctx.wal };
+}
+
+// 内存视图：文本 → 行（不落盘）
+function readRowsFromText(text) {
+  const rows = [];
+  const byId = new Map();
+  for (const line of text.split('\n')) {
+    const raw = line.trim();
+    if (!raw) continue;
+    let row;
+    try {
+      row = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    if (!row || typeof row.id !== 'string') continue;
+    rows.push(row);
+    byId.set(row.id, row);
+  }
+  return { rows, byId, text };
+}
+
+export function journalLine(ctx, nowIso, counters, rc) {
+  const repo = path.basename(ctx.root);
+  return `orch tick=${nowIso} repo=${repo} scanned=${counters.scanned} dispatched=${counters.dispatched} blocked=${counters.blocked} skipped=${counters.skipped} waiting=${counters.waiting} recovered=${counters.recovered} nudged=${counters.nudged} rc=${rc}`;
+}
+
+// ---------------------------------------------------------------- board / reap
+export function board(opts = {}) {
+  const ctx = resolveCtx(opts);
+  const nowMs = opts.nowMs ?? resolveNow(opts);
+  const queue = readQueueFile(ctx.queuePath);
+  if (queue.errors.length) return { rc: 1, errors: queue.errors };
+  const wal = indexWal(readWal(ctx.wal).records);
+  const rows = sortRows(queue.rows).map((r) => {
+    const at = Date.parse(r.updated);
+    const ageMin = Number.isFinite(at) ? Math.max(0, Math.round((nowMs - at) / 60000)) : null;
+    const e = wal.get(r.id);
+    return {
+      id: r.id, state: r.state, owner: r.owner, prio: r.prio, deps: r.deps,
+      attempt: r.attempt, updated: r.updated, age_min: ageMin,
+      blocked_reason: r.blocked_reason || '',
+      wal: e && e.intent ? 'intent' : e && e.committed ? 'committed' : '',
+    };
+  });
+  const counts = {};
+  for (const r of rows) counts[r.state] = (counts[r.state] || 0) + 1;
+  return { rc: 0, ctx, rows, counts, walBad: readWal(ctx.wal).bad };
+}
+
+export function reap(opts = {}) {
+  const ctx = resolveCtx(opts);
+  const queue = readQueueFile(ctx.queuePath);
+  if (queue.errors.length) return { rc: 1, errors: queue.errors };
+  const { records, bad } = readWal(ctx.wal);
+  const wal = indexWal(records);
+  const terminal = new Set(['merged', 'released']);
+  const out = [];
+  for (const [id, e] of wal) {
+    const row = queue.byId.get(id);
+    if (!row) out.push({ id, why: '队列已无此行（WAL 孤儿意图，人工核对后可忽略）', key: e.intent && e.intent.key });
+    else if (terminal.has(row.state)) out.push({ id, why: `状态 ${row.state}（终态）仍留 WAL 记录`, key: (e.intent && e.intent.key) || '' });
+  }
+  return { rc: 0, ctx, reapable: out, walBad: bad, records: records.length };
+}

@@ -8,12 +8,15 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
 // 状态机（PRD §四 逐字）：queued → dispatched → working → qa → (qa_fail → working) → qa_pass → merging → merged → released
-//   `blocked` 入口 = no_ack(15m，派单后) / stalled(90m，working 中) / attempt>2（qa 侧）。
+//   `blocked` 入口 = no_ack(15m，派单后) / stalled(90m，working 中) / attempt>2（qa 侧）
+//                   / dispatch_unknown（T567-B：WAL 有派单意图但探不到目标会话 ⇒ 冻结 + 交人，禁自动重派）。
 //   `blocked → queued` = 人工看原因后重新排队（PRD 未逐字定义出口；取最小可恢复出口，单点在本表）。
 //   **唯一事实源**：`bin/nao-queue` 与 `bin/nao-orch` 都从这里取（复制本表 = 双源 = 违规，ADR D1）。
 const STATES = ['queued', 'dispatched', 'working', 'qa', 'qa_fail', 'qa_pass', 'merging', 'merged', 'released', 'blocked'];
 const TRANSITIONS = {
-  queued: ['dispatched'],
+  // T567-B 契约补记（ADR D4）：`queued → blocked` = 派单意图已落盘、但恢复期探不到目标会话
+  //   （dispatch_unknown）⇒ 冻结交人。没有这条边，恢复只能「重派」或「留一个无人知道的 queued」。
+  queued: ['dispatched', 'blocked'],
   dispatched: ['working', 'blocked'],
   working: ['qa', 'blocked'],
   qa: ['qa_pass', 'qa_fail', 'blocked'],
