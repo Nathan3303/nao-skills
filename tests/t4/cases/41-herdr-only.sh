@@ -29,6 +29,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
 
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+FLEET_BUNDLE="$(t4_fleet_bundle "$T4_ROOT/.agents/scripts")"   # T567-A：只读内容断言按文件集（入口 + fleet/lib）
 PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
 LAB="$T4_CACHE_DIR/lab41-$$"; mkdir -p "$LAB/bin"
 cp -r "$T4_ROOT/.agents" "$LAB/.agents" || { t4_bad "夹具复制 .agents 失败"; t4_exit; }
@@ -112,16 +113,16 @@ t4_assert_absent "$T4_ROOT/tests/t4/backends" "⑩ 登记集目录 tests/t4/back
 t4_assert_absent "$T4_ROOT/tests/t4/run-dual.sh" "⑩ run-dual.sh 已删（单后端后双跑编排无对象）"
 t4_assert_eq "0" "$(node -e 'const p=require(process.argv[1]);process.stdout.write(Object.keys(p.scripts).includes("test:t4:full:dual")?"1":"0")' "$T4_ROOT/package.json")" \
   "⑩ package.json 无 test:t4:full:dual script（防复活）"
-t4_assert_eq "0" "$(grep -c 'term-impl-tmux' "$FLEET" || true)" "⑩ 脚本内 term-impl-tmux 区间标记 0 处"
+t4_assert_eq "0" "$(grep -c 'term-impl-tmux' "$FLEET_BUNDLE" || true)" "⑩ 脚本内 term-impl-tmux 区间标记 0 处"
 t4_assert_eq "0" "$(grep -vE '^[[:space:]]*#' "$T4_ROOT/tests/t4/run.sh" | grep -cE 'PENDING|TMUX-ONLY' || true)" \
   "⑩ run.sh 逻辑面无 PENDING/TMUX-ONLY（注释里的历史注记允许保留）"
 t4_assert_absent "$T4_ROOT/tests/t4/cases/12-derived-pane-window.sh" "⑩ 用例 12 文件已删（退役不复用编号）"
 t4_assert_absent "$T4_ROOT/tests/t4/cases/25-layout-guard-capacity.sh" "⑩ 用例 25 文件已删（D3 整组删）"
 
 # ---------------------------------------------------------------- ⑪⑫⑬ AC8 静态 lint 双向
-t4_assert_eq "" "$(t4_scan_tmux_residue "$FLEET")" "⑭ 正控（真件）：nao-fleet.sh 0 处旧面残留"
+t4_assert_eq "" "$(t4_scan_tmux_residue "$T4_ROOT/.agents/scripts")" "⑭ 正控（真件）：入口 + fleet/lib 文件集 0 处旧面残留"
 t4_assert_eq "" "$(t4_scan_tmux_residue "$T4_ROOT/tests/t4/run.sh")" "⑭ 正控（真件）：run.sh 0 处旧面残留"
-for _s in "$T4_ROOT"/.agents/scripts/*.sh; do
+for _s in "$T4_ROOT"/.agents/scripts/*.sh "$T4_ROOT"/.agents/scripts/fleet/lib/*.sh; do
   t4_assert_eq "" "$(t4_scan_tmux_residue "$_s")" "⑭ 正控（真件）：$(basename "$_s") 0 处旧面残留"
 done
 # --- ⑪ 正控：三种**真实复活形态**（T555/QA P2-2；旧 lint 只认命令位与赋值字面量 ⇒ 全放过）---
@@ -161,13 +162,13 @@ t4_assert_ne "" "$(t4_scan_tmux_residue "$NEG41")" '⑪-f 已声明边界（必�
 
 # ⑫ 守卫臂白名单（P3-1：文案 + 真出口 exit/return 2，且先剥注释、截到 `;;`）
 NEG41B="$T4_CACHE_DIR/c41-neg-b.sh"
-sed 's/^    tmux)$/    NAO_TERMINAL=tmux) :/' "$FLEET" > "$NEG41B"
+sed 's/^    tmux)$/    NAO_TERMINAL=tmux) :/' "$(t4_fleet_file_for "$T4_ROOT/.agents/scripts" term_backend)" > "$NEG41B"
 out="$(t4_scan_tmux_residue "$NEG41B")"
 t4_assert_ne "" "$out" "⑫ 正控②（必红）：守卫改回赋值式分支 ⇒ 命中规则②"
 t4_assert_match "$out" 'NAO_TERMINAL=tmux' "⑫ 命中并回显该字面量"
-t4_assert_eq "" "$(t4_scan_tmux_residue "$FLEET")" "⑫ 守卫臂（原样，含「已移除」文案）⇒ 白名单放行（真件 0 命中）"
+t4_assert_eq "" "$(t4_scan_tmux_residue "$T4_ROOT/.agents/scripts")" "⑫ 守卫臂（原样，含「已移除」文案）⇒ 白名单放行（真件 0 命中）"
 NEG41D="$T4_CACHE_DIR/c41-neg-d.sh"
-sed "s/已移除 tmux 后端/旧后端/" "$FLEET" > "$NEG41D"
+sed "s/已移除 tmux 后端/旧后端/" "$(t4_fleet_file_for "$T4_ROOT/.agents/scripts" term_backend)" > "$NEG41D"
 out="$(t4_scan_tmux_residue "$NEG41D")"
 t4_assert_ne "" "$out" "⑫-b 正控（必红）：守卫臂摘掉「已移除」文案 ⇒ \`tmux)\` 臂立刻命中（白名单非恒放行）"
 t4_assert_match "$out" '^[0-9]+:tmux\)' "⑫-b 命中点正是守卫臂（行号 + 原文）"
@@ -206,10 +207,10 @@ t4_assert_eq "" "$(t4_scan_tmux_residue "$NEG41")" '⑬-f 负控（不红）：`
 rm -f "$NEG41"
 
 # ---------------------------------------------------------------- ⑮ D3 删除面
-t4_assert_eq "0" "$(grep -cE 'NAO_TMUX_LAYOUT|NAO_TMUX_MAIN_WIDTH|NAO_TMUX_MIN_PANE_WIDTH' "$FLEET" || true)" \
+t4_assert_eq "0" "$(grep -cE 'NAO_TMUX_LAYOUT|NAO_TMUX_MAIN_WIDTH|NAO_TMUX_MIN_PANE_WIDTH' "$FLEET_BUNDLE" || true)" \
   "⑮ 死配置整组删：脚本内 NAO_TMUX_LAYOUT / MAIN_WIDTH / MIN_PANE_WIDTH 0 处（D3）"
-t4_assert_eq "0" "$(grep -c '== tmux 布局 ==' "$FLEET" || true)" "⑮ check 的「== tmux 布局 ==」节已删（D3）"
-t4_assert_eq "0" "$(grep -cE 'main_row2_geom|_layout_checksum|build_main_row2_layout' "$FLEET" || true)" \
+t4_assert_eq "0" "$(grep -c '== tmux 布局 ==' "$FLEET_BUNDLE" || true)" "⑮ check 的「== tmux 布局 ==」节已删（D3）"
+t4_assert_eq "0" "$(grep -cE 'main_row2_geom|_layout_checksum|build_main_row2_layout' "$FLEET_BUNDLE" || true)" \
   "⑮ tmux 布局几何函数（checksum / main-row2 算式）已整组删"
 
 t4_exit

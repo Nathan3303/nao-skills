@@ -37,6 +37,7 @@ set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+FLEET_BUNDLE="$(t4_fleet_bundle "$T4_ROOT/.agents/scripts")"   # T567-A：只读内容断言按文件集（入口 + fleet/lib）
 t4_assert_file "$FLEET" "被测脚本存在（nao-fleet.sh）"
 t4_require_cmd git
 
@@ -300,21 +301,21 @@ t4_assert_eq "0" "$(git -C "$T4_ROOT" stash list 2>/dev/null | grep -c 'c35-sent
 t4_info "真实仓库 stash：前=${REAL_BEFORE} 后=${REAL_AFTER}；临时仓 ${GITROOT#"$T4_CACHE_DIR"/} 已造/弹/丢 stash"
 
 # ============================================================ J 静态面（单点 + warn-only + 只读 + 年龄口径）
-t4_assert_eq "2" "$(grep -c 'check_stash_residue' "$FLEET" || true)" \
+t4_assert_eq "2" "$(t4_fleet_count 'check_stash_residue' "$T4_ROOT/.agents/scripts")" \
   "J1 单点实现 + 单点调用（定义 1 + 调用 1）"
-t4_assert_eq "1" "$(grep -c 'check_stash_residue || true' "$FLEET" || true)" \
+t4_assert_eq "1" "$(t4_fleet_count 'check_stash_residue [|][|] true' "$T4_ROOT/.agents/scripts")" \
   "J2 调用点 warn-only（\`|| true\` ⇒ 不改 check rc）"
-t4_assert_eq "1" "$(grep -cE 'NAO_STASH_ROOT:-\$SKILLS_DIR' "$FLEET" || true)" \
+t4_assert_eq "1" "$(t4_fleet_count 'NAO_STASH_ROOT:-\$SKILLS_DIR' "$T4_ROOT/.agents/scripts")" \
   "J3 默认根 = \$SKILLS_DIR，且可被 \`NAO_STASH_ROOT\` 注入（测试只碰临时仓）"
-t4_assert_eq "1" "$(grep -cE 'NAO_STASH_WARN_HOURS:-6' "$FLEET" || true)" \
+t4_assert_eq "1" "$(t4_fleet_count 'NAO_STASH_WARN_HOURS:-6' "$T4_ROOT/.agents/scripts")" \
   "J4 阈值默认 6 小时，且可被 \`NAO_STASH_WARN_HOURS\` 覆盖（单点读取）"
-t4_assert_eq "1" "$(grep -c -- "--format='%ct' 2>/dev/null" "$FLEET" || true)" \
+t4_assert_eq "1" "$(t4_fleet_count "--format='%ct' 2>/dev/null" "$T4_ROOT/.agents/scripts")" \
   "J5 年龄取自 \`stash list --format='%ct'\` 的最小值（单点，非 reflog）"
-t4_assert_eq "0" "$(grep -cE 'git .*stash (push|pop|apply|drop|save|clear)' "$FLEET" || true)" \
+t4_assert_eq "0" "$(t4_fleet_count 'git .*stash (push|pop|apply|drop|save|clear)' "$T4_ROOT/.agents/scripts")" \
   "J6 机制脚本只读 stash（无 push/pop/apply/drop/save/clear ⇒ 闸门绝不自行改写滞留事实）"
-t4_assert_eq "1" "$(grep -c '10#$hours' "$FLEET" || true)" \
+t4_assert_eq "1" "$(t4_fleet_count '10#\$hours' "$T4_ROOT/.agents/scripts")" \
   "J7 前导零按十进制解析（算术前 10#；否则 08 会让 check 硬红）（#130 返修 P2-1）"
-t4_assert_eq "1" "$(grep -c '暂存滞留检查跳过' "$FLEET" || true)" \
+t4_assert_eq "1" "$(t4_fleet_count '暂存滞留检查跳过' "$T4_ROOT/.agents/scripts")" \
   "J8 取不到 %ct 时留降级注记（单点，与「无 stash」可区分）（#130 返修 P2-2）"
 
 t4_exit

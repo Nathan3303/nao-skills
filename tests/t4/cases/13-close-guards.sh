@@ -28,6 +28,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
 
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+FLEET_BUNDLE="$(t4_fleet_bundle "$T4_ROOT/.agents/scripts")"   # T567-A：静态面按文件集（入口 + fleet/lib）
 C13_T="T4C13$$"                                      # 唯一任务编号（--task 合法字符集）
 TASKS_NONE="$T4_CACHE_DIR/c13-none.md"               # 不存在 ⇒ 跳过 tasks-state 闸门（不污染本题证据）
 EMPTY_PI="$(mktemp -d "$T4_CACHE_DIR/c13-pi.XXXXXX")"  # 空 PI dir ⇒ intercom_list_json 失败
@@ -44,11 +45,11 @@ t4_assert_match "$T4_ERR" '已移除 tmux 后端.*herdr' "③ stderr 点名「�
 t4_assert_eq "1" "$(printf '%s\n' "$T4_ERR" | grep -c .)" "③ 提示恰为单行（可复制，不刷屏）"
 
 # ---------------------------------------------------------------- ④⑤ 静态归零
-t4_assert_eq "0" "$(grep -c '无法确认在线' "$FLEET" 2>/dev/null || true)" \
+t4_assert_eq "0" "$(grep -c '无法确认在线' "$FLEET_BUNDLE" 2>/dev/null || true)" \
   "④ AC4：nao-fleet.sh 内「无法确认在线状态」分支已删（grep=0）"
-t4_assert_eq "0" "$(grep -cE 'xdg-terminal-exec|hyprctl|swaymsg|xdotool|wmctrl|screen_present|screen_token_for|spawn_screen|spawn_xdg_window|spawn_tmux_attach|wait_for_tmux_client|app_class_visible|wait_for_app_class|spawn_fork_window' "$FLEET" 2>/dev/null || true)" \
+t4_assert_eq "0" "$(grep -cE 'xdg-terminal-exec|hyprctl|swaymsg|xdotool|wmctrl|screen_present|screen_token_for|spawn_screen|spawn_xdg_window|spawn_tmux_attach|wait_for_tmux_client|app_class_visible|wait_for_app_class|spawn_fork_window' "$FLEET_BUNDLE" 2>/dev/null || true)" \
   "⑤ AC2：宿主阶梯删除面在脚本内 grep=0（#96 B1 起 NAO_TERMINAL 已改作后端开关，移出本交替式）"
-t4_assert_eq "0" "$(grep -cE 'NAO_TERMINAL=(screen|xdg|hypr|sway|foot|ghostty|ptyxis|kitty|alacritty|wezterm|wmctrl|xdotool)' "$FLEET" 2>/dev/null || true)" \
+t4_assert_eq "0" "$(grep -cE 'NAO_TERMINAL=(screen|xdg|hypr|sway|foot|ghostty|ptyxis|kitty|alacritty|wezterm|wmctrl|xdotool)' "$FLEET_BUNDLE" 2>/dev/null || true)" \
   "⑤ AC2：旧宿主阶梯的 NAO_TERMINAL 取值域仍为 0（原语义不被改名带走；含历史真实值 ghostty/ptyxis）"
 # 负控（P3-3 · QA 第二轮）：历史真实值来自 cda59b0 的 NAO_TERMINAL_ALLOWED=(tmux foot ghostty ptyxis screen)
 #   ⇒ 注入 ghostty / ptyxis 必须被上面那条断言抓到（否则「旧值域仍为 0」是空话）。

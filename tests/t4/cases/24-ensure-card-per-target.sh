@@ -50,6 +50,8 @@ PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
 cp -r "$T4_ROOT/.agents" "$LAB/.agents" || { t4_bad "夹具复制 .agents 失败"; t4_exit; }
 # 被测脚本默认取夹具副本（与仓库工作区逐字节一致 ⇒ 变异只在副本上做，仓库只读）
 FLEET_BIN="${T524_FLEET:-$LAB/.agents/scripts/nao-fleet.sh}"
+# T567-A：实现分布 fleet/lib ⇒ 内容断言用文件集合并视图（入口只含 CLI）
+fleet_bundle() { t4_fleet_bundle "$(dirname "$FLEET_BIN")"; }
 REPO_MD5="$(md5sum "$T4_ROOT/.agents/scripts/nao-fleet.sh" | awk '{print $1}')"
 if [ -z "${T524_FLEET:-}" ]; then
   t4_assert_eq "$REPO_MD5" "$(md5sum "$FLEET_BIN" | awk '{print $1}')" \
@@ -171,11 +173,11 @@ expected_wrapped() {
 }
 
 # ============================================================ 静态接线（修复形状）
-t4_assert_eq "0" "$(grep -cF -- '${PROMPT:-}' "$FLEET_BIN" || true)" \
+t4_assert_eq "0" "$(grep -cF -- '${PROMPT:-}' "$(fleet_bundle)" || true)" \
   "AC1 静态：spawn_one 不再回落全局 \${PROMPT:-}（缺陷机制已移除）"
-t4_assert_eq "1" "$(grep -cF -- 't_prompts+=("$PROMPT")' "$FLEET_BIN" || true)" \
+t4_assert_eq "1" "$(grep -cF -- 't_prompts+=("$PROMPT")' "$(fleet_bundle)" || true)" \
   "AC1 静态：cmd_ensure 按目标把**当次解析出的**卡名收进 t_prompts"
-t4_assert_eq "1" "$(grep -cF -- 'card="$PROMPTS_DIR/${card_name:-}"' "$FLEET_BIN" || true)" \
+t4_assert_eq "1" "$(grep -cF -- 'card="$PROMPTS_DIR/${card_name:-}"' "$(fleet_bundle)" || true)" \
   "AC1 静态：常驻卡通道 = PROMPTS_DIR/<相对名>（与 override 的完整路径分参数）"
 
 # ============================================================ AC1① 3 目标（README 标准用法）
@@ -265,20 +267,23 @@ fi
 if [ "$MUT_CHILD" != "1" ]; then
   MUT_DIR="$T4_CACHE_DIR/mut24-$$"
   mkdir -p "$MUT_DIR"
-  MD5_BEFORE="$(md5sum "$FLEET_BIN" | awk '{print $1}')"
+  MD5_BEFORE="$(t4_fleet_md5 "$(dirname "$FLEET_BIN")")"
   GS_BEFORE="$(git -C "$T4_ROOT" status --porcelain 2>/dev/null | sort || true)"
-  MUT="$MUT_DIR/global-prompt.sh"
-  if cp "$FLEET_BIN" "$MUT"; then
+  MUT_ROOT="$MUT_DIR/scripts"
+  MUT="$(t4_fleet_clone "$(dirname "$FLEET_BIN")" "$MUT_ROOT")"
+  MUT_ENSURE=""
+  if [ -n "${MUT:-}" ]; then
+    MUT_ENSURE="$(t4_fleet_file_with "$MUT_ROOT" 'card="$PROMPTS_DIR/${card_name:-}"')"
     # 复原缺陷 = 两处：① spawn_one 取卡回落全局 PROMPT ② 调用点不再按目标传卡名
     sed -i -e 's|card="$PROMPTS_DIR/${card_name:-}"|card="$PROMPTS_DIR/${PROMPT:-}"|' \
-           -e 's|"${t_prompts\[\$i\]:-}"|""|' "$MUT"
-    t4_assert_eq "1" "$(grep -cF -- 'card="$PROMPTS_DIR/${PROMPT:-}"' "$MUT" || true)" \
+           -e 's|"${t_prompts\[\$i\]:-}"|""|' "$MUT_ENSURE"
+    t4_assert_eq "1" "$(grep -cF -- 'card="$PROMPTS_DIR/${PROMPT:-}"' "$MUT_ENSURE" || true)" \
       "AC3 变异已写入副本（spawn_one 回落全局 PROMPT）"
-    t4_assert_eq "0" "$(grep -cF -- '"${t_prompts[$i]:-}"' "$MUT" || true)" \
+    t4_assert_eq "0" "$(grep -cF -- '"${t_prompts[$i]:-}"' "$MUT_ENSURE" || true)" \
       "AC3 变异已写入副本（调用点不再按目标传卡名）"
-    t4_assert_eq "0" "$("$BASH_BIN" -n "$MUT" 2>&1 | grep -c . || true)" \
+    t4_assert_eq "0" "$("$BASH_BIN" -n "$MUT_ENSURE" 2>&1 | grep -c . || true)" \
       "AC3 变异副本语法有效（bash -n 无输出）"
-    t4_assert_ne "$MD5_BEFORE" "$(md5sum "$MUT" | awk '{print $1}')" \
+    t4_assert_ne "$MD5_BEFORE" "$(t4_fleet_md5 "$MUT_ROOT")" \
       "AC3 副本 md5 ≠ 真脚本（确在副本上变异）"
     run_child() {  # <fleet 脚本> ⇒ CHILD_OUT / CHILD_RC / CHILD_FAILS
       CHILD_OUT="$(env T524_FLEET="$1" T524_MUTATION_CHILD=1 \
@@ -304,10 +309,10 @@ if [ "$MUT_CHILD" != "1" ]; then
     t4_assert_eq "0" "$CHILD_RC" "AC3 还原后（原脚本）复绿：rc=0"
     t4_assert_contains "$CHILD_OUT" "RESULT: PASS" "AC3 还原后（原脚本）复绿：RESULT: PASS"
   else
-    t4_bad "AC3 变异副本创建失败（$MUT_DIR/global-prompt.sh）"
+    t4_bad "AC3 变异副本创建失败（$MUT_ROOT）"
   fi
 
-  t4_assert_eq "$MD5_BEFORE" "$(md5sum "$FLEET_BIN" | awk '{print $1}')" \
+  t4_assert_eq "$MD5_BEFORE" "$(t4_fleet_md5 "$(dirname "$FLEET_BIN")")" \
     "AC3 被测脚本 md5 前后一致（变异只在副本）"
   t4_assert_eq "$GS_BEFORE" "$(git -C "$T4_ROOT" status --porcelain 2>/dev/null | sort || true)" \
     "AC3 真仓库 git status 前后一致（零新增脏改）"

@@ -50,6 +50,8 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 SUBJECT="${T4_28_SUBJECT:-$T4_ROOT/.agents/scripts/nao-fleet.sh}"
+# T567-A：实现分布 fleet/lib ⇒ 只读断言（抽取/计数/变异源）一律走**文件集合并视图**
+SUBJECT_BUNDLE="$(t4_fleet_bundle "$T4_ROOT/.agents/scripts")"
 BASH_BIN="$(command -v bash)"
 CONTRACT_BEGIN='^# >>> fleet-name-contract BEGIN'
 CONTRACT_END='^# <<< fleet-name-contract END'
@@ -168,7 +170,7 @@ run_c1() { # <contract-file> → 0 = C1 全绿；$C1_DETAIL 明细
 
 [ -f "$SUBJECT" ] || { t4_bad "被测脚本不存在：$SUBJECT"; t4_exit; }
 C1_BASE="$T4_CACHE_DIR/c1-contract.sh"
-extract_contract "$SUBJECT" > "$C1_BASE"
+extract_contract "$SUBJECT_BUNDLE" > "$C1_BASE"
 t4_assert_ne "0" "$(wc -l < "$C1_BASE" | tr -d ' ')" \
   "C1 契约块可在脚本内抽取（标记 $CONTRACT_BEGIN … $CONTRACT_END，非空 ⇒ 否则四符号无从单测）"
 
@@ -216,17 +218,17 @@ lint2() {                                                              # ② 契
 lint3() { grep -c 'fleet_name_parse' "$1" || true; }                   # ③ 接线可见面（含说明行）
 lint3c() { grep -cE 'fleet_name_parse "' "$1" || true; }               # ③ 代码调用点数
 
-t4_assert_eq "1" "$(lint1 "$SUBJECT")" "C3① 全脚本恰 1 处 \`exec pi --name\`（唯一 exec 点）"
-t4_assert_eq "0" "$(lint2 "$SUBJECT")" \
+t4_assert_eq "1" "$(lint1 "$SUBJECT_BUNDLE")" "C3① 全脚本恰 1 处 \`exec pi --name\`（唯一 exec 点）"
+t4_assert_eq "0" "$(lint2 "$SUBJECT_BUNDLE")" \
   "C3② 契约块外 0 处手写名字/core 拼接（(name|disp|core)=\${…}-\${task} 形态）"
-N3="$(lint3 "$SUBJECT")"; N3C="$(lint3c "$SUBJECT")"
+N3="$(lint3 "$SUBJECT_BUNDLE")"; N3C="$(lint3c "$SUBJECT_BUNDLE")"
 t4_assert_ge "11" "$N3" "C3③ \`grep -c fleet_name_parse\` ≥ 11（11 解析点全接线的可见面；实际 $N3）"
 t4_info "C3③ 代码调用点数（fleet_name_parse \"…\"）= $N3C"
 t4_assert_ge "6" "$N3C" "C3③ 代码调用点数 ≥ 6（status/close/derived/running_verdict 等实点；实际 $N3C）"
 
 # ---- C3 负控 A：close 里手写 name 拼接 ⇒ ②必须红 ----
 NEG_A="$T4_CACHE_DIR/c3-neg-a.sh"
-if mutate_file "$SUBJECT" "$NEG_A" \
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_A" \
     '  local force="$1" task="$2" target="${3:-}"' \
     '  local force="$1" task="$2" target="${3:-}"
   name="${NAME}-${task}"'; then
@@ -238,7 +240,7 @@ fi
 #   **必须用无花括号形**：历史缺陷（7b08214 的 :2277/:2282/:2552）就是 `core="$NAME-$task"` 这种写法；
 #   用花括号形做负控 = 「只证明能抓到自己写得出的那种」，正是 P3-a 判「声明比判据强」的根因。
 NEG_A2="$T4_CACHE_DIR/c3-neg-a2.sh"
-if mutate_file "$SUBJECT" "$NEG_A2" \
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_A2" \
     '  local force="$1" task="$2" target="${3:-}"' \
     '  local force="$1" task="$2" target="${3:-}"
   core="$NAME-$task"'; then
@@ -249,7 +251,7 @@ else
 fi
 # ---- C3② 形态矩阵（P3-a）：拼接写法必须**全抓**（修复前：花括号形 1/1、无括号形全 0）----
 NEG_MX="$T4_CACHE_DIR/c3-neg-matrix.sh"
-if mutate_file "$SUBJECT" "$NEG_MX" \
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_MX" \
     '  local force="$1" task="$2" target="${3:-}"' \
     '  local force="$1" task="$2" target="${3:-}"
   core="${NAME}-${task}"
@@ -262,20 +264,20 @@ if mutate_file "$SUBJECT" "$NEG_MX" \
   core="$card_role-$task"'; then
   t4_assert_eq "8" "$(lint2 "$NEG_MX")" \
     "C3② 形态矩阵：8 种拼接写法全抓（花括号 2 · 无括号 3 · 混合 1 · 数组下标 1 · 卡 role 1）⇒ 判据与声明一致"
-  t4_assert_eq "0" "$(lint2 "$SUBJECT")" "C3② 形态矩阵对照：真脚本仍 0（不误报合法构造）"
+  t4_assert_eq "0" "$(lint2 "$SUBJECT_BUNDLE")" "C3② 形态矩阵对照：真脚本仍 0（不误报合法构造）"
 else
   t4_bad "C3② 形态矩阵锚点未命中（用例锚点须跟随实现）"
 fi
 # ---- C3② 正控：唯一构造点自身 / 合法赋值不得被误判 ----
 t4_assert_eq "0" \
-  "$(awk '/^fleet_core_build\(\)/{f=1} f{print} f&&/^}/{exit}' "$SUBJECT" | lint2 /dev/stdin)" \
+  "$(awk '/^fleet_core_build\(\)/{f=1} f{print} f&&/^}/{exit}' "$SUBJECT_BUNDLE" | lint2 /dev/stdin)" \
   "C3② 正控 fleet_core_build 自身 0 命中（判据只认拼接形态，不误判 printf 里的合法拼法）"
 # ---- C3 负控 B：删一条 parse 调用 ⇒ ③代码调用点数必须掉 ----
 NEG_B="$T4_CACHE_DIR/c3-neg-b.sh"
 if MUT_RE='^[[:space:]]*out="\$\(fleet_name_parse "\$n"\)"[[:space:]]*$' \
    awk '/^# >>> fleet-name-contract BEGIN/{f=1} /^# <<< fleet-name-contract END/{f=0}
         !f && $0 ~ ENVIRON["MUT_RE"] && !d { d=1; next } { print } END { exit (d?0:1) }' \
-     "$SUBJECT" > "$NEG_B"; then
+     "$SUBJECT_BUNDLE" > "$NEG_B"; then
   t4_assert_eq "$(($N3C - 1))" "$(lint3c "$NEG_B")" "C3 负控B 删一条 parse 调用 ⇒ ③代码调用点数 -1（负控有效）"
   t4_assert_ne "$N3C" "$(lint3c "$NEG_B")" "C3 负控B 删调用后 ③ 可见面变化（不是恒量）"
 else
@@ -293,11 +295,11 @@ spawn_body() { awk '/^_term_herdr_spawn\(\)/,/^}/' "$1"; }
 lint4() { spawn_body "$1" | grep -c 'HERDR_SESSION' || true; }
 lint4b() { spawn_body "$1" | grep -c 'place_key_label' || true; }
 T545_MSG='herdr 放置键只认入参 label=fleet：禁取会话名、禁在 spawn 内重算 slug（ADR 2026-11-17-fleet-identity-source D1）'
-t4_assert_eq "0" "$(lint4 "$SUBJECT")" "C3④ ${T545_MSG}（_term_herdr_spawn 内 HERDR_SESSION 命中 = 0）"
-t4_assert_eq "0" "$(lint4b "$SUBJECT")" "C3④ ${T545_MSG}（_term_herdr_spawn 内 place_key_label 命中 = 0）"
+t4_assert_eq "0" "$(lint4 "$SUBJECT_BUNDLE")" "C3④ ${T545_MSG}（_term_herdr_spawn 内 HERDR_SESSION 命中 = 0）"
+t4_assert_eq "0" "$(lint4b "$SUBJECT_BUNDLE")" "C3④ ${T545_MSG}（_term_herdr_spawn 内 place_key_label 命中 = 0）"
 # ---- C3④ 负控：往 spawn 里注入一行 HERDR_SESSION ⇒ 必红 - 并且计数变 1（lint 不是恒 0）----
 NEG_D="$T4_CACHE_DIR/c3-neg-d.sh"
-if mutate_file "$SUBJECT" "$NEG_D" \
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_D" \
     '  if ! fleet_scope_problem "$label" >/dev/null; then' \
     '  : "${HERDR_SESSION:-}"   # C3④ 负控注入
   if ! fleet_scope_problem "$label" >/dev/null; then'; then
@@ -307,7 +309,7 @@ else
 fi
 # ---- C3④ 负控 2：spawn 内重新调用 fleet_scope_slug ⇒ 必红（第二数据源不得回来）----
 NEG_D2="$T4_CACHE_DIR/c3-neg-d2.sh"
-if mutate_file "$SUBJECT" "$NEG_D2" \
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_D2" \
     'local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" pl="" obj js line' \
     'local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="$(place_key_label "$repo")" group="${6-}" pl="" obj js line'; then
   t4_assert_eq "1" "$(lint4b "$NEG_D2")" "C3④ 负控 2：spawn 内重算 slug ⇒ 命中 1（D1 零调用判据不空转）"
@@ -337,10 +339,10 @@ lint5() { # <script> → 违规行 "行号:内容"（空 = 合规）
 T544_MSG='起 server 的身份请用 `_term_herdr_exec --server-start`，禁读 _TERM_HERDR_SERVER_START 环境变量（ADR/T544 · Issue #116）'
 # 历史读取形的**原文**（单引号书写 ⇒ 不展开、不当命令替换）：消息里要用它点名，不能直接写进双引号
 T544_READ_FORM='[[ "${_TERM_HERDR_SERVER_START:-0}" == "1" ]]'
-t4_assert_eq "" "$(lint5 "$SUBJECT")" "C3⑤ ${T544_MSG}（真脚本 0 命中）"
+t4_assert_eq "" "$(lint5 "$SUBJECT_BUNDLE")" "C3⑤ ${T544_MSG}（真脚本 0 命中）"
 # ---- C3⑤ 负控 1：历史读取形（花括号 + `:-0` 比较）⇒ 必红并点名行号 ----
 NEG_E="$T4_CACHE_DIR/c3-neg-e.sh"
-if mutate_file "$SUBJECT" "$NEG_E" \
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_E" \
     '  local s="${HERDR_SESSION:-}" v ss=0' \
     '  local s="${HERDR_SESSION:-}" v ss=0
   if [[ "${_TERM_HERDR_SERVER_START:-0}" == "1" ]]; then :; fi'; then
@@ -352,7 +354,7 @@ else
 fi
 # ---- C3⑤ 负控 2：裸变量读取形（无花括号）⇒ 同样必红（不只认一个写法）----
 NEG_F="$T4_CACHE_DIR/c3-neg-f.sh"
-if mutate_file "$SUBJECT" "$NEG_F" \
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_F" \
     '  local s="${HERDR_SESSION:-}" v ss=0' \
     '  local s="${HERDR_SESSION:-}" v ss=0
   : "$_TERM_HERDR_SERVER_START"'; then
@@ -363,7 +365,7 @@ else
 fi
 # ---- C3⑤ 负控 3：命令行位前置赋值形（旧泄漏写法）⇒ 必红 ----
 NEG_G="$T4_CACHE_DIR/c3-neg-g.sh"
-if mutate_file "$SUBJECT" "$NEG_G" \
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_G" \
     '  local s="${HERDR_SESSION:-}" v ss=0' \
     '  local s="${HERDR_SESSION:-}" v ss=0
   _TERM_HERDR_SERVER_START=1 :'; then
@@ -374,7 +376,7 @@ else
 fi
 # ---- C3⑤ 正控（不误伤）：迁移带 `-u _TERM_HERDR_SERVER_START` 必须仍在场且被本闸放行 ----
 #   为何要正控：否则「删干净」（连 `-u` 一起删）也能让 C3⑤ 绿 —— 而 `-u` 是迁移期承重件。
-t4_assert_eq "1" "$(grep -c -- '-u _TERM_HERDR_SERVER_START' "$SUBJECT" || true)" \
+t4_assert_eq "1" "$(grep -c -- '-u _TERM_HERDR_SERVER_START' "$SUBJECT_BUNDLE" || true)" \
   "C3⑤ 正控：迁移带「-u _TERM_HERDR_SERVER_START」仍在场（与本闸零命中并存 ⇒ 不是靠删干净凑绿）"
 
 # ============================================================================
@@ -652,10 +654,12 @@ t4_assert_match "$T4_ERR_ANSI" '重试|pin 回' "P2① 反向负控A：exit 3 �
 
 # 变异自证：把默认改回 tmux ⇒ 上面的「未设 == herdr golden」必红（判据非空转）
 #   （本段仍在默认值探针块内：它跑的就是「未设」状态，只是换了一份变异脚本）
-MUT_DEF="$T4_CACHE_DIR/p2-mut-default-$$.sh"
+MUT_DEF_ROOT="$T4_CACHE_DIR/p2-mut-default-$$"
+MUT_DEF="$(t4_fleet_clone "$LAB/.agents/scripts" "$MUT_DEF_ROOT")"
+MUT_DEF_MOD="$(t4_fleet_file_for "$MUT_DEF_ROOT" term_backend)"   # NAO_TERMINAL 唯一赋值点在 term.sh
 sed 's/^NAO_TERMINAL="${NAO_TERMINAL:-herdr}"$/NAO_TERMINAL="${NAO_TERMINAL:-tmux}"/' \
-  "$LAB/.agents/scripts/nao-fleet.sh" > "$MUT_DEF"
-t4_assert_eq "1" "$(grep -cE '^NAO_TERMINAL="\$\{NAO_TERMINAL:-tmux\}"$' "$MUT_DEF" || true)" \
+  "$MUT_DEF_MOD" > "$MUT_DEF_MOD.mut" && mv "$MUT_DEF_MOD.mut" "$MUT_DEF_MOD"
+t4_assert_eq "1" "$(grep -cE '^NAO_TERMINAL="\$\{NAO_TERMINAL:-tmux\}"$' "$MUT_DEF_MOD" || true)" \
   "P2① 变异：副本确已把默认改回 tmux（变异锚点有效）"
 t4_run_in_dir "$LAB" env -u NAO_TERMINAL "${HENV[@]:1}" NAO_SKILLS="$LAB" TMPDIR="$LAB/tmp" \
   PI_CODING_AGENT_DIR="$LAB/pi-empty" NAO_TASKS_STATE="$TASKS_FIX" PATH="$LAB/bin:$PATH" \
@@ -1222,8 +1226,12 @@ t4_assert_contains "$B2_OUT" "（成功 1 / 跳过 0 / 失败 0）" "P2-1② 摘
 
 # ---- ④ BR7 忙闲映射 + 阶梯单测（抽取门面区到子进程；只灌纯依赖，不启 tmux）----
 FACADE_SRC="$T4_CACHE_DIR/b1-facade.sh"
-awk '/^# >>> term-facade BEGIN/{f=1; next} /^# <<< term-facade END/{f=0} f' \
-  "$LAB/.agents/scripts/nao-fleet.sh" > "$FACADE_SRC"
+# T567-A：门面区 = term.sh（门面 + 常量）+ term-herdr.sh + term-app.sh（两个实现同层）
+{
+  cat "$(t4_fleet_file_for "$LAB/.agents/scripts" term_backend)" || exit 1
+  cat "$(t4_fleet_file_for "$LAB/.agents/scripts" _term_herdr_exec)" || exit 1
+  cat "$(t4_fleet_file_for "$LAB/.agents/scripts" _term_app_backend)" || exit 1
+} > "$FACADE_SRC"
 t4_assert_ne "0" "$(wc -l < "$FACADE_SRC" | tr -d ' ')" \
   "B1④ 门面区可抽取（# >>> term-facade BEGIN … END，非空 ⇒ 四函数可独立单测）"
 {
@@ -1231,10 +1239,10 @@ t4_assert_ne "0" "$(wc -l < "$FACADE_SRC" | tr -d ' ')" \
   printf 'warn() { printf "[warn] %%s\\n" "$*" >&2; }\n'
   printf 'die() { printf "[die] %%s\\n" "$*" >&2; exit 1; }\n'
   printf 'require_tmux() { return 0; }\n'
-  printf 'TERM_HERDR_PROTOCOL=%s\n' "$(sed -n 's/^TERM_HERDR_PROTOCOL="\([^"]*\)"$/\1/p' "$LAB/.agents/scripts/nao-fleet.sh" | head -1)"
+  printf 'TERM_HERDR_PROTOCOL=%s\n' "$(sed -n 's/^TERM_HERDR_PROTOCOL="\([^"]*\)"$/\1/p' "$(t4_fleet_file_for "$LAB/.agents/scripts" term_backend)" | head -1)"
   printf 'VERBOSE=false\n'
-  awk '/^nao_phys_path\(\)/{f=1} f{print} f&&/^}/{exit}' "$LAB/.agents/scripts/nao-fleet.sh"
-  awk '/^repo_contains_path\(\)/{print; exit}' "$LAB/.agents/scripts/nao-fleet.sh"
+  awk '/^nao_phys_path\(\)/{f=1} f{print} f&&/^}/{exit}' "$(t4_fleet_file_for "$LAB/.agents/scripts" nao_phys_path)"
+  awk '/^repo_contains_path\(\)/{print; exit}' "$(t4_fleet_file_for "$LAB/.agents/scripts" repo_contains_path)"
   cat "$FACADE_SRC"
   cat <<'CHILD'
 # P3-5（QA 第二轮 · 测试卫生）：子进程显式给快照路径 + EXIT trap ⇒ 不在 /tmp 留
@@ -1324,6 +1332,7 @@ t4_ok "C2②（退役留痕）：命名契约的 ensure 级覆盖已移交 cases
 # ============================================================================
 
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+FLEET_BUNDLE="$(t4_fleet_bundle "$T4_ROOT/.agents/scripts")"   # T567-A：只读内容断言按文件集
 BASH_BIN="$(command -v bash)"
 B3_LAB="$T4_CACHE_DIR/c28b3-$$"
 B3_ST="$B3_LAB/st"
@@ -1542,11 +1551,11 @@ t4_ok "BR1 tmux 逐字 golden（退役留痕）：三处 tmux 源码对象已删
 # ---- 结构：门面调用单点（T555 收窄：tmux 标记区与 6 个 tmux 函数已整组删除）----
 #   原 7 条（「tmux 标记区存在」+ 6 个函数位于区内）随后端删除而退役；
 #   保留并强化「业务区只经门面」这条（同一意图、单后端后仍然承重）。
-t4_assert_eq "0" "$(grep -c '^# >>> term-impl-tmux BEGIN' "$FLEET" || true)" \
+t4_assert_eq "0" "$(grep -c '^# >>> term-impl-tmux BEGIN' "$FLEET_BUNDLE" || true)" \
   "B3 tmux 标记区 0 处（回收/自身判定/忙闲的 tmux 副本已删 —— ADR herdr-only）"
-t4_assert_eq "1" "$(grep -cE '^  term_reclaim "\$name" "\$repo" "\$force" "\$role" "\$scope" "\$\{tgt:-\$role\}"$' "$FLEET" || true)" \
+t4_assert_eq "1" "$(grep -cE '^  term_reclaim "\$name" "\$repo" "\$force" "\$role" "\$scope" "\$\{tgt:-\$role\}"$' "$FLEET_BUNDLE" || true)" \
   "B3 cmd_close 只调门面 term_reclaim（共用闸门层原地不动）"
-t4_assert_eq "1" "$(grep -cE '^  term_cleanup "\$\{SESSION_ARG:-\}" "\$FORCE"$' "$FLEET" || true)" \
+t4_assert_eq "1" "$(grep -cE '^  term_cleanup "\$\{SESSION_ARG:-\}" "\$FORCE"$' "$FLEET_BUNDLE" || true)" \
   "B3 cmd_cleanup 只调门面 term_cleanup（T555：-S 面已删，入参仅 session+force）"
 
 # ============================================================================

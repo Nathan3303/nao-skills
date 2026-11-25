@@ -23,6 +23,8 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
 
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+FLEET_SCRIPTS="$T4_ROOT/.agents/scripts"                     # T567-A：文件集（入口 + fleet/lib）
+FLEET_APP_MOD="$(t4_fleet_file_for "$FLEET_SCRIPTS" _term_app_exec)"   # app 实现模块（变异/注入的源）
 FIXT="$T4_ROOT/tests/t4/fixtures/hc-double"
 REAL_HC="$(command -v hc 2>/dev/null || true)"   # 必须在 PATH 前置替身**之前**取（否则拿到替身）
 [ -x "$FIXT/hc" ] || { t4_bad "夹具缺失可执行: $FIXT/hc"; t4_exit; }
@@ -67,12 +69,12 @@ app_reset() {
 one_addr() { local a; a="$(app_addrs | head -1)"; printf '%s' "$a"; }
 
 # ---------------------------------------------------------------- ① AC7 静态闸（两向）
-out="$(t4_scan_app_bare_hc "$FLEET")"
+out="$(t4_scan_app_bare_hc "$FLEET_SCRIPTS")"
 t4_assert_eq "" "$out" "① AC7 静态闸：app 臂裸调 hc = 0（唯一入口 _term_app_exec）"
-t4_assert_eq "1" "$(grep -cE '^_term_app_exec\(\) \{' "$FLEET" || true)" \
+t4_assert_eq "1" "$(t4_fleet_count '^_term_app_exec\(\) \{' "$FLEET_SCRIPTS")" \
   "① AC7 结构断言：唯一入口 \`_term_app_exec\` 恰 1 处（删/改名必红，不靠「无命中」冒充绿）"
 MUT="$T4_CACHE_DIR/c44-barehc-$$.sh"
-python3 - "$FLEET" "$MUT" <<'PY'
+python3 - "$FLEET_APP_MOD" "$MUT" <<'PY'
 import sys
 src=open(sys.argv[1],encoding='utf-8').read()
 open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BEGIN','# >>> term-impl-app BEGIN\nhc schema >/dev/null',1))
@@ -81,7 +83,7 @@ out="$(t4_scan_app_bare_hc "$MUT")"
 t4_assert_contains "$out" "hc schema" "① 正控A：语句位注入裸调 ⇒ 静态闸必红（原形态不回归）"
 rm -f "$MUT"
 # 变异B：`command hc` 前缀（QA P2 漏检形态① —— env/`command` 前缀同样是绕过唯一入口）
-python3 - "$FLEET" "$MUT" <<'PY'
+python3 - "$FLEET_APP_MOD" "$MUT" <<'PY'
 import sys
 src=open(sys.argv[1],encoding='utf-8').read()
 open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BEGIN','# >>> term-impl-app BEGIN\ncommand hc schema >/dev/null',1))
@@ -90,7 +92,7 @@ out="$(t4_scan_app_bare_hc "$MUT")"
 t4_assert_contains "$out" "command hc schema" "① 正控B：\`command\` 前缀裸调 hc ⇒ 必红（QA 漏检形态）"
 rm -f "$MUT"
 # 变异C：前置 env 赋值（`HC_SOCKET=x hc ls` —— 绕过入口的 socket 归一化）
-python3 - "$FLEET" "$MUT" <<'PY'
+python3 - "$FLEET_APP_MOD" "$MUT" <<'PY'
 import sys
 src=open(sys.argv[1],encoding='utf-8').read()
 open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BEGIN','# >>> term-impl-app BEGIN\nHC_SOCKET=/tmp/x.sock hc ls >/dev/null',1))
@@ -99,7 +101,7 @@ out="$(t4_scan_app_bare_hc "$MUT")"
 t4_assert_contains "$out" "HC_SOCKET=/tmp/x.sock hc ls" "① 正控C：env 前缀 ⇒ 必红（QA 漏检形态）"
 rm -f "$MUT"
 # 变异D：整删/改名唯一入口（「无命中即绿」的根因）
-python3 - "$FLEET" "$MUT" <<'PY'
+python3 - "$FLEET_APP_MOD" "$MUT" <<'PY'
 import sys
 src=open(sys.argv[1],encoding='utf-8').read()
 open(sys.argv[2],'w',encoding='utf-8').write(src.replace('_term_app_exec() {','_term_app_exec_gone() {',1))
@@ -111,7 +113,7 @@ rm -f "$MUT"
 # 正控J–M（T563/P3-2）：`sudo` 前缀（含带选项/参数）、case 分支位（`pat) hc`、`* ) hc`）同样漏检
 for kw in 'if hc ls' 'then hc ls' '! hc ls' 'while hc ls' 'command -p hc ls' 'sudo hc ls' 'up) hc ls' '*) hc ls' \
           'sudo -u root hc ls' 'sudo -Eu www-data hc ls' '* ) hc ls'; do
-  python3 - "$FLEET" "$MUT" "$kw" <<'PY'
+  python3 - "$FLEET_APP_MOD" "$MUT" "$kw" <<'PY'
 import sys
 src=open(sys.argv[1],encoding='utf-8').read()
 open(sys.argv[2],'w',encoding='utf-8').write(src.replace('# >>> term-impl-app BEGIN','# >>> term-impl-app BEGIN\n'+sys.argv[3]+' >/dev/null',1))
@@ -121,7 +123,7 @@ PY
   rm -f "$MUT"
 done
 # 负控（防空转）：非调用形态 / 存在性探测不得误报
-python3 - "$FLEET" "$MUT" <<'PY'
+python3 - "$FLEET_APP_MOD" "$MUT" <<'PY'
 import sys
 src=open(sys.argv[1],encoding='utf-8').read()
 add='\n'.join(['hc_ls x >/dev/null','_hc_wrapper ls','command -v hc >/dev/null',
@@ -133,7 +135,7 @@ t4_assert_eq "" "$out" "① 负控：\`hc_ls\` / \`_hc_wrapper\` / \`command -v 
 rm -f "$MUT"
 # 负控2（T563/P3-2 防假阳）：`sudo` 只吃「选项 + 选项自带的那个参数」，不吃任意单词；
 #   模式字符类不含 `(` ⇒ `(herdr|tmux)` 这类正则字面量不得被当成 case 臂（T558 踩过的假阳）
-python3 - "$FLEET" "$MUT" <<'PY'
+python3 - "$FLEET_APP_MOD" "$MUT" <<'PY'
 import sys
 src=open(sys.argv[1],encoding='utf-8').read()
 add='\n'.join(['sudo grep hc /tmp/f >/dev/null','sudo -u root grep hc /tmp/f >/dev/null',

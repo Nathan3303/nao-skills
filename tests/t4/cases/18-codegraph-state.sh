@@ -27,6 +27,7 @@ set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+FLEET_BUNDLE="$(t4_fleet_bundle "$T4_ROOT/.agents/scripts")"   # T567-A：只读内容断言按文件集
 SKILL="$T4_ROOT/.agents/skills/codegraph.md"
 BINJS="$T4_ROOT/bin/nao-skill.js"
 PKG='@sean_pedersen/pi-codegraph'
@@ -149,7 +150,7 @@ t4_assert_contains "$C18_OUT" "✓ codegraph 齐备" "B2 默认 check：pending 
 run_cg_check stub pending -v
 t4_assert_eq "1" "$(cg_calls)" "B3 check -v：codegraph 调用 1 次（每仓一次 status）"
 # B4 ensure 调用点静态：必须是 full=1（否则 ensure 看不到 pending）
-t4_assert_match "$(grep -n 'codegraph_state "\$repo"' "$FLEET" | head -1)" 'codegraph_state "\$repo" 1' \
+t4_assert_match "$(grep -n 'codegraph_state "\$repo"' "$FLEET_BUNDLE" | head -1)" 'codegraph_state "\$repo" 1' \
   "B4 ensure 调用点用 full=1（静态）"
 
 # ============================================================ C full=1 文本契约三态
@@ -193,7 +194,7 @@ run_cg_check stub up -v
 t4_assert_contains "$C18_OUT" "✓ codegraph 齐备" "D2 还原 .codegraph：恢复「齐备」"
 
 # ============================================================ E 单源（BR5）+ 遥测（BR10）
-T4_PKG_FLEET="$(grep -m1 -oE '^CODEGRAPH_PKG="[^"]+"' "$FLEET" | sed -e 's/^CODEGRAPH_PKG="//' -e 's/"$//')"
+T4_PKG_FLEET="$(grep -m1 -oE '^CODEGRAPH_PKG="[^"]+"' "$FLEET_BUNDLE" | sed -e 's/^CODEGRAPH_PKG="//' -e 's/"$//')"
 T4_PKG_BIN="$(node -e '
   const fs = require("fs");
   const s = fs.readFileSync(process.argv[1], "utf8");
@@ -202,7 +203,7 @@ T4_PKG_BIN="$(node -e '
 ' "$BINJS" 2>/dev/null || echo '<node-error>')"
 t4_assert_eq "$T4_PKG_BIN" "$T4_PKG_FLEET" "E1 包名单源等值（fleet CODEGRAPH_PKG ↔ bin/nao-skill.js PI_PLUGINS.codegraph）"
 
-SPAWN_BODY="$(awk '/^spawn_one\(\) \{/{f=1} f{print} f&&/^\}/{exit}' "$FLEET")"
+SPAWN_BODY="$(awk '/^spawn_one\(\) \{/{f=1} f{print} f&&/^\}/{exit}' "$FLEET_BUNDLE")"
 t4_assert_contains "$SPAWN_BODY" 'export CODEGRAPH_TELEMETRY=0' "E2 spawn_one 注入 CODEGRAPH_TELEMETRY=0（字面量）"
 t4_assert_not_contains "$SPAWN_BODY" 'DO_NOT_TRACK' "E2 不注入 DO_NOT_TRACK（过宽，BR10）"
 
@@ -214,7 +215,7 @@ if git -C "$T4_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
 else
   t4_note static-contract "F2 非 git 工作区：入库零命中改由 F1 的 .gitignore 断言替代"
 fi
-t4_assert_eq "" "$(grep -nE 'APPEND_SYSTEM|pkill .*codegraph|kill .*codegraph' "$FLEET" || true)" \
+t4_assert_eq "" "$(grep -nE 'APPEND_SYSTEM|pkill .*codegraph|kill .*codegraph' "$FLEET_BUNDLE" || true)" \
   "F3 机制侧不写/不删副产物、不杀 daemon（脚本零命中）"
 
 # ============================================================ G 文档口径（AC3/AC4 可测面）

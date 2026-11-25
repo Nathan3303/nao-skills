@@ -25,6 +25,7 @@ PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
 LAB="$T4_CACHE_DIR/lab29-$$"; mkdir -p "$LAB"
 cp -r "$T4_ROOT/.agents" "$LAB/.agents" || { t4_bad "夹具复制 .agents 失败"; t4_exit; }
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+FLEET_BUNDLE="$(t4_fleet_bundle "$T4_ROOT/.agents/scripts")"   # T567-A：只读内容断言按文件集
 
 nyi() { t4_note backend-gate "$1"; t4_exit; }
 
@@ -75,12 +76,12 @@ t4_assert_contains "$BE_OUT_ANSI" "（成功 1 / 跳过 0 / 失败 0）" "② �
 
 # ============================================================ ③ 静态：禁 agent wait 作就绪门 + 全条件与
 # 只数**代码行**（注释里写着禁令本身不算违规）
-t4_assert_eq "0" "$(grep -nE '(^|[^a-z])agent[[:space:]]+wait' "$FLEET" | grep -vc '^[0-9]*:[[:space:]]*#' || true)" \
+t4_assert_eq "0" "$(grep -nE '(^|[^a-z])agent[[:space:]]+wait' "$FLEET_BUNDLE" | grep -vc '^[0-9]*:[[:space:]]*#' || true)" \
   "③ 就绪门禁用「agent wait --until idle」（已 idle 时 6ms 返回 = 假阳性）"
 t4_assert_eq "" "$(t4_scan_term_herdr_forbidden "$FLEET")" \
   "③ herdr 实现区不读终端标题/不碰 tmux 句柄（BR2/BR6 机械兜）"
 for cond in "pane 存在" "前台进程 name==pi" "argv --name" "agent_session != null" "agent_status == idle" "state_change_seq ≥ 1" "screen_detection_skipped"; do
-  t4_assert_contains "$(grep -cF -- "$cond" "$FLEET" >/dev/null && echo "$cond")" "$cond" \
+  t4_assert_contains "$(grep -cF -- "$cond" "$FLEET_BUNDLE" >/dev/null && echo "$cond")" "$cond" \
     "③ 就绪门逐条可点名：$cond"
 done
 

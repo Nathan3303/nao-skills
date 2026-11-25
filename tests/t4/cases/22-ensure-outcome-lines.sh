@@ -229,13 +229,13 @@ fs.writeFileSync(p,JSON.stringify(st));' "$SPACE_STATE" "$1" "$2"
     "J1 负控：摘要计失败 1（不得说「成功 1」而实际读不了）"
 
   # ---- J3 静态证明：herdr 实现区禁 tmux 布局算式字样（0 命中）+ 变异必报 ----
-  t4_assert_eq "" "$(t4_scan_term_herdr_forbidden "$LAB/.agents/scripts/nao-fleet.sh")" \
+  t4_assert_eq "" "$(t4_scan_term_herdr_forbidden "$LAB/.agents/scripts")" \
     "J3 herdr 实现区 0 处 tmux 布局算式字样（TMUX_MIN_PANE_WIDTH / main_row2_min_col / 137 / 184）"
-  cp "$LAB/.agents/scripts/nao-fleet.sh" "$LAB/mut-herdr-region.sh"
+  cp "$(t4_fleet_file_for "$LAB/.agents/scripts" _term_herdr_exec)" "$LAB/mut-herdr-region.sh"
   sed -i '/^# >>> term-facade-herdr BEGIN/a TMUX_MIN_PANE_WIDTH=30  # 变异：tmux 列宽闸门混入 herdr 区' "$LAB/mut-herdr-region.sh"
   t4_assert_contains "$(t4_scan_term_herdr_forbidden "$LAB/mut-herdr-region.sh")" "TMUX_MIN_PANE_WIDTH" \
     "J3 变异负控：herdr 区混入 TMUX_MIN_PANE_WIDTH 必被同一判据点名（判据不空转）"
-  cp "$LAB/.agents/scripts/nao-fleet.sh" "$LAB/mut-herdr-region2.sh"
+  cp "$(t4_fleet_file_for "$LAB/.agents/scripts" _term_herdr_exec)" "$LAB/mut-herdr-region2.sh"
   sed -i '/^# >>> term-facade-herdr BEGIN/a x=184  # 变异：tmux 布局容量常量混入 herdr 区' "$LAB/mut-herdr-region2.sh"
   t4_assert_contains "$(t4_scan_term_herdr_forbidden "$LAB/mut-herdr-region2.sh")" "184" \
     "J3 变异负控：184（tmux 容量常量）混入 herdr 区必被点名"
@@ -245,7 +245,7 @@ fs.writeFileSync(p,JSON.stringify(st));' "$SPACE_STATE" "$1" "$2"
 #   判据：① 脚本里确实写了该指针；② 文档里**真能 grep 到**稳定片段（不写死整行标题，避免改措辞即假红）；
 #        ③ 变异负控：把章节名改掉 ⇒ 同一判据必红（证明不是空转）。
 INSTALL_DOC="$T4_ROOT/docs/INSTALL.md"
-FLEET_SRC="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+FLEET_SRC="$(t4_fleet_bundle "$T4_ROOT/.agents/scripts")"   # T567-A：J5 warn 文案在 fleet/lib（只读断言用合并视图）
 t4_assert_contains "$(grep -F 'docs/INSTALL.md' "$FLEET_SRC" || true)" "docs/INSTALL.md" \
   "P2-2 J5 warn 的文档指针写在脚本里（docs/INSTALL.md）"
 t4_assert_file "$INSTALL_DOC" "P2-2 文档指针落点存在（docs/INSTALL.md）"

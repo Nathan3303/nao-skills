@@ -26,6 +26,7 @@ source "$T4_ROOT/tests/t4/lib-backend.sh"
 
 BE_NAME="herdr"   # T555：唯一后端（be_backend 已删）
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+FLEET_BUNDLE="$(t4_fleet_bundle "$T4_ROOT/.agents/scripts")"   # T567-A：常量/函数体在 fleet/lib，只读断言按文件集
 BASH_BIN="$(command -v bash)"
 REAL_TMUX="${NAO_T23_REAL_TMUX:-$(command -v tmux || true)}"
 LAB="$T4_CACHE_DIR/lab23-$$"
@@ -189,11 +190,11 @@ no_anchor_within() { # <pane> <secs> → 0 = 窗口内确实没有
 }
 
 # ---- 注入常量：从脚本原样抽出（R3「常量便于 grep 自证」）----
-MSG_START="$(grep -n "^NAO_UPDATE_MSG='" "$FLEET" | cut -d: -f1)"
-MSG_END="$(awk -v s="${MSG_START:-0}" 'NR>s && /'"'"'[[:space:]]*$/ {print NR; exit}' "$FLEET")"
+MSG_START="$(grep -n "^NAO_UPDATE_MSG='" "$FLEET_BUNDLE" | cut -d: -f1)"
+MSG_END="$(awk -v s="${MSG_START:-0}" 'NR>s && /'"'"'[[:space:]]*$/ {print NR; exit}' "$FLEET_BUNDLE")"
 t4_assert_ne "" "$MSG_START" "R3 注入文本是脚本内常量（\$NAO_UPDATE_MSG 可 grep 定位）"
 t4_assert_ne "" "$MSG_END" "R3 常量边界可解析（起始行 ${MSG_START:-?} → 结束行 ${MSG_END:-?}）"
-sed -n "${MSG_START:-1},${MSG_END:-1}p" "$FLEET" > "$LAB/msg.sh"
+sed -n "${MSG_START:-1},${MSG_END:-1}p" "$FLEET_BUNDLE" > "$LAB/msg.sh"
 # shellcheck disable=SC1090
 MSG="$(. "$LAB/msg.sh" && printf '%s' "$NAO_UPDATE_MSG")"
 t4_assert_ne "" "$MSG" "R3 常量可解析为实际文本（$(printf '%s' "$MSG" | wc -c) 字节 / $(printf '%s' "$MSG" | wc -l) 行）"
@@ -224,35 +225,35 @@ check_msg "若提示安装脚本授权" "⑥授权提示须停下交用户确认
 
 # ============================================================ AC7 零网络：常量块外不得出现网络命令
 OUTSIDE="$LAB/fleet-outside-msg.sh"
-awk -v s="${MSG_START:-0}" -v e="${MSG_END:-0}" 'NR<s || NR>e' "$FLEET" > "$OUTSIDE"
+awk -v s="${MSG_START:-0}" -v e="${MSG_END:-0}" 'NR<s || NR>e' "$FLEET_BUNDLE" > "$OUTSIDE"
 NET_HITS="$(grep -nE 'npm[[:space:]]+view|gh[[:space:]]+release|curl|wget' "$OUTSIDE" || true)"
 t4_assert_eq "" "$NET_HITS" "AC7 fleet 内除常量块外无网络/外部命令（npm view / gh release / curl / wget）"
 t4_assert_eq "0" "$(grep -cE '^\s*(npm|gh|curl|wget)\b' <<< "$MSG" || true)" \
   "AC7 常量块内也无「行首即命令」形态（只是给 PM 的文本）"
 
 # ============================================================ AC3/AC4 静态面：自检不进 argv + 两通道形态
-t4_assert_eq "0" "$(grep -cF -- 'inner+=" -- $(printf %q "$NAO_UPDATE_MSG")"' "$FLEET" || true)" \
+t4_assert_eq "0" "$(grep -cF -- 'inner+=" -- $(printf %q "$NAO_UPDATE_MSG")"' "$FLEET_BUNDLE" || true)" \
   "AC3 静态：spawn_one 不再把自检拼进 pi argv（缺陷根因已移除）"
-t4_assert_ge "1" "$(grep -cF -- 'term_deliver "$_TERM_SPAWN_PANE" "$NAO_UPDATE_MSG"' "$FLEET" || true)" \
+t4_assert_ge "1" "$(grep -cF -- 'term_deliver "$_TERM_SPAWN_PANE" "$NAO_UPDATE_MSG"' "$FLEET_BUNDLE" || true)" \
   "AC2/AC4 静态：投递点唯一 = spawn 成功后（term_deliver）"
-t4_assert_ge "1" "$(grep -cF -- 'agent prompt "$pane" "$msg"' "$FLEET" || true)" \
+t4_assert_ge "1" "$(grep -cF -- 'agent prompt "$pane" "$msg"' "$FLEET_BUNDLE" || true)" \
   "AC2 静态：herdr 通道 = agent prompt（自带提交 + bracketed-paste 包裹）"
-t4_assert_eq "0" "$(grep -cE 'agent[[:space:]]+prompt.*--wait' "$FLEET" || true)" \
+t4_assert_eq "0" "$(grep -cE 'agent[[:space:]]+prompt.*--wait' "$FLEET_BUNDLE" || true)" \
   "AC2 静态：herdr 投递不带 --wait（不把「已投递」耦合到「自检 turn 跑完」）"
 # T555 退役（4 条）：tmux 投递通道（paste-buffer / send-keys / bracket_paste_flag / 换行归一）
 #   随 tmux 后端整组删除（ADR 2026-11-22-herdr-only）⇒ 断言对象不存在，不计入断言强度下降
 #   （herdr 通道的三条静态断言在上方逐字保留；投递行为由本用例 ①②③ 的动态断言覆盖）。
-t4_assert_eq "0" "$(grep -cE 'paste-buffer|send-keys|bracket_paste_flag' "$FLEET" || true)" \
+t4_assert_eq "0" "$(grep -cE 'paste-buffer|send-keys|bracket_paste_flag' "$FLEET_BUNDLE" || true)" \
   "AC2 静态（T555 反向）：tmux 投递通道字样 0 处（旧面不复活，ADR herdr-only）"
-t4_assert_contains "$(grep -F '版本自检投递失败' "$FLEET" || true)" "不计失败" \
+t4_assert_contains "$(grep -F '版本自检投递失败' "$FLEET_BUNDLE" || true)" "不计失败" \
   "AC4 静态：投递失败不计 SPAWN_FAIL（失败语义 = rc 0 + warn）"
-t4_assert_eq "0" "$(grep -cE 'agent[[:space:]]+wait' <(grep -vE '^[[:space:]]*#' "$FLEET") || true)" \
+t4_assert_eq "0" "$(grep -cE 'agent[[:space:]]+wait' <(grep -vE '^[[:space:]]*#' "$FLEET_BUNDLE") || true)" \
   "AC4 静态：就绪门仍禁用 agent wait（七条件语义不放宽）"
 for cond in "state_change_seq ≥ 1" "agent_status == idle" "screen_detection_skipped" "agent_session != null"; do
-  t4_assert_contains "$(grep -F -- "$cond" "$FLEET" || true)" "$cond" "AC4 静态：就绪门条件仍逐条可点名：$cond"
+  t4_assert_contains "$(grep -F -- "$cond" "$FLEET_BUNDLE" || true)" "$cond" "AC4 静态：就绪门条件仍逐条可点名：$cond"
 done
 # P2-3：七条件在**就绪探针函数体内**逐条成关（不只存在 warn 文案），且最终是与关系
-READY_BODY="$(awk '/^_term_herdr_ready_state\(\)/{f=1} f{print} f&&/^}/{exit}' "$FLEET")"
+READY_BODY="$(awk '/^_term_herdr_ready_state\(\)/{f=1} f{print} f&&/^}/{exit}' "$FLEET_BUNDLE")"
 for cond in '_TR_PANE' '_TR_FG" == "pi' '_TR_ARGV" == "$want' '_TR_SESS" == "1' '_TR_STAT" == "idle' '_TR_SEQ" =~ ^[0-9]+$' '_TR_SKIP" == "1'; do
   t4_assert_contains "$READY_BODY" "$cond" "AC4 静态：就绪探针体内成关：$cond"
 done

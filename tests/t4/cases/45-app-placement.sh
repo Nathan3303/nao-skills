@@ -32,6 +32,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
 
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+FLEET_BUNDLE="$(t4_fleet_bundle "$T4_ROOT/.agents/scripts")"   # T567-A：只读内容断言按文件集
 FIXT="$T4_ROOT/tests/t4/fixtures/hc-double"
 [ -x "$FIXT/hc" ] || { t4_bad "夹具缺失可执行: $FIXT/hc"; t4_exit; }
 PATH="$FIXT:$PATH"; export PATH
@@ -86,6 +87,16 @@ doc_spaces() { stub_hc connect <<< '{"jsonrpc":"2.0","id":1,"method":"doc.get","
   | grep -o '"id":"sp[^"]*"' | cut -d'"' -f4 | sort; }
 doc_of() { stub_hc connect <<< '{"jsonrpc":"2.0","id":1,"method":"doc.get","params":{"name":"herdr-app"}}'; }
 run_calls() { grep -c '^run ' <<< "$(app_log)" || true; }
+# T567-A：变异副本必须**整集可跑**（入口 + fleet/lib）—— 克隆后改模块，BE_FLEET_SCRIPT 指向克隆入口
+clone_for_mut() { # <name> <anchor-string> → 置 MUT_ENTRY / MUT_MOD（禁在 $() 里调：子 shell 丢变量）
+  local name="$1" anchor="$2"
+  local root="$LAB/$name"
+  MUT_ENTRY=""; MUT_MOD=""
+  MUT_ENTRY="$(t4_fleet_clone "$LAB/.agents/scripts" "$root")" || return 1
+  MUT_MOD="$(t4_fleet_file_with "$root" "$anchor")"
+  [ -n "$MUT_MOD" ] || return 1
+  return 0
+}
 mutate() { # <src> <dst> <old> <new>  —— 锚点必须**恰 1 次**（否则报锚点问题，不当绿）
   python3 - "$1" "$2" "$3" "$4" <<'PY'
 import sys
@@ -124,19 +135,19 @@ KEEP_SP="spkeeper0000000000000000000000000"
 KEEP_TB="tbkeeper0000000000000000000000000"
 
 # ---------------------------------------------------------------- ⓪ 单点静态
-t4_assert_eq "1" "$(grep -cE '^TERM_APP_ADOPT_TRIES="\$\{NAO_APP_ADOPT_TRIES:-10\}"' "$FLEET" || true)" \
+t4_assert_eq "1" "$(grep -cE '^TERM_APP_ADOPT_TRIES="\$\{NAO_APP_ADOPT_TRIES:-10\}"' "$FLEET_BUNDLE" || true)" \
   "⓪ AC2：轮询次数默认 10 单点（改默认必红）"
-t4_assert_eq "1" "$(grep -cE '^TERM_APP_ADOPT_INTERVAL="\$\{NAO_APP_ADOPT_INTERVAL:-0\.5\}"' "$FLEET" || true)" \
+t4_assert_eq "1" "$(grep -cE '^TERM_APP_ADOPT_INTERVAL="\$\{NAO_APP_ADOPT_INTERVAL:-0\.5\}"' "$FLEET_BUNDLE" || true)" \
   "⓪ AC2：轮询间隔默认 0.5s 单点"
-t4_assert_eq "1" "$(grep -cE '^_term_app_poll_place\(\) \{' "$FLEET" || true)" \
+t4_assert_eq "1" "$(grep -cE '^_term_app_poll_place\(\) \{' "$FLEET_BUNDLE" || true)" \
   "⓪ AC2：轮询**唯一**实现点（不能有第二个各自 sleep 的循环）"
-t4_assert_eq "1" "$(grep -cF '_term_app_poll_place "$sp" "$tb" "$addr"' "$FLEET" || true)" \
+t4_assert_eq "1" "$(grep -cF '_term_app_poll_place "$sp" "$tb" "$addr"' "$FLEET_BUNDLE" || true)" \
   "⓪ AC2：spawn 侧调用轮询（且只此一处）"
-t4_assert_eq "1" "$(grep -cE '^_term_app_doc_has_space\(\) \{' "$FLEET" || true)" \
+t4_assert_eq "1" "$(grep -cE '^_term_app_doc_has_space\(\) \{' "$FLEET_BUNDLE" || true)" \
   "⓪ AC1：doc 校验有唯一实现点"
-t4_assert_ge "2" "$(grep -cF '_term_app_check_premise || true' "$FLEET" || true)" \
+t4_assert_ge "2" "$(grep -cF '_term_app_check_premise || true' "$FLEET_BUNDLE" || true)" \
   "⓪ AC4：check 侧 app 前提用 || true（app 后端臂 + app 终端臂各一处，warn 不计入 rc）"
-t4_assert_eq "0" "$(grep -cF '_term_app_check_premise || rc=1' "$FLEET" || true)" \
+t4_assert_eq "0" "$(grep -cF '_term_app_check_premise || rc=1' "$FLEET_BUNDLE" || true)" \
   "⓪ AC4：旧的 || rc=1 接线已不存在（否则前提 warn 会改 rc）"
 
 # ---------------------------------------------------------------- ① AC1：目标 space 存在 ⇒ 复用
@@ -276,10 +287,14 @@ t4_assert_not_contains "$APP_OUT" "检测到 herdr desktop app 终端" "⑥ 负�
 # ---------------------------------------------------------------- ⑦ 变异必红（断言射程自证）
 # 1b = 用户实机形态：两处一起回退才重现「沿用陈旧 id」（只拆守卫时 sp 解析为空，失败行 `space=`
 #   反而是空的，且整段 stderr 会被「陈旧放置标签」warn 行蒙对 —— QA 一轮实测，故断言只打失败行）。
-MUT1B="$LAB/mut1b-staleform.sh"
-if mutate_many "$FLEET_LAB" "$MUT1B" \
+MUT1B=""; MUT1B_MOD=""
+if clone_for_mut mut1b '_term_app_doc_has_space "$sp" && continue'; then
+  MUT1B="$MUT_ENTRY"; MUT1B_MOD="$MUT_MOD"
+fi
+if [ -n "$MUT1B" ] && mutate_many "$MUT1B_MOD" "$MUT1B_MOD.mut" \
      '_term_app_doc_has_space "$sp" && continue' 'sid_folder["$sp"]="$cwd"' \
      '! _term_app_doc_has_space "$sp"' 'false'; then
+  mv "$MUT1B_MOD.mut" "$MUT1B_MOD"
   app_reset
   stub_hc run --bg --no-parent --keep --name rd-be --cwd "$LAB" \
     --label "herdr.space=$STALE_SP" --label "herdr.tab=$STALE_TB" -- true >/dev/null
@@ -298,8 +313,12 @@ if mutate_many "$FLEET_LAB" "$MUT1B" \
 else
   t4_bad "⑦ 变异 1b 锚点未命中（spawn 文档校验 / prime 兜底 的实现行变了 ⇒ 用例需同步）"
 fi
-MUT2="$LAB/mut2-onepass.sh"
-if mutate "$FLEET_LAB" "$MUT2" '_term_app_poll_place "$sp" "$tb" "$addr"' '_term_app_verify_place "$sp" "$tb" "$addr"'; then
+MUT2=""; MUT2_MOD=""
+if clone_for_mut mut2 '_term_app_poll_place "$sp" "$tb" "$addr"'; then
+  MUT2="$MUT_ENTRY"; MUT2_MOD="$MUT_MOD"
+fi
+if [ -n "$MUT2" ] && mutate "$MUT2_MOD" "$MUT2_MOD.mut" '_term_app_poll_place "$sp" "$tb" "$addr"' '_term_app_verify_place "$sp" "$tb" "$addr"'; then
+  mv "$MUT2_MOD.mut" "$MUT2_MOD"
   app_reset
   printf '2' > "$BE_APP_STATE/adopt_delay"
   APP_OVR=("NAO_SKILLS=$LAB")

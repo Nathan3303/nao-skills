@@ -184,24 +184,32 @@ t4_assert_contains "$BE_ERR_ANSI" "48" "AC12 显式 tier：点名总长预算（
 t4_assert_eq "$AC12E_BEFORE" "$(be_pane_count)" "AC12 显式 tier：零 pane"
 
 # ---------------------------------------------------------------- 负控 N1/N2（真跑）
-mutate_copy() { # <dst-dir> <old-literal> <new-literal>
-  local dst="$1" old="$2" new="$3"
+# T567-A：变异落在**所有含该锚的模块**（实现不在入口；同锚可能在两个后端模块里各有一份）
+#   生效判据 = 副本 scripts 文件集的整集 md5 与真件不同（单文件 md5 会漏「改了另一个模块」）。
+MAIN_DIR_MD5="$(t4_fleet_md5 "$T4_ROOT/.agents/scripts")"
+mutate_copy() { # <dst-dir> <old-literal> <new-literal> → 打印「改动文件数」
+  local dst="$1" old="$2" new="$3" f n=0
   mkdir -p "$dst" || return 1
   cp -r "$T4_ROOT/.agents" "$dst/.agents" || return 1
-  MUT_OLD="$old" MUT_NEW="$new" awk '
-    BEGIN { n = 0 }
-    { i = index($0, ENVIRON["MUT_OLD"])
-      if (i > 0) { print substr($0, 1, i - 1) ENVIRON["MUT_NEW"] substr($0, i + length(ENVIRON["MUT_OLD"])); n++ }
-      else print }
-    END { exit (n ? 0 : 1) }' "$T4_ROOT/.agents/scripts/nao-fleet.sh" > "$dst/.agents/scripts/nao-fleet.sh" || return 1
-  md5sum < "$dst/.agents/scripts/nao-fleet.sh" | awk '{print $1}'
+  while IFS= read -r f; do
+    grep -qF -- "$old" "$f" || continue
+    MUT_OLD="$old" MUT_NEW="$new" awk '
+      BEGIN { n = 0 }
+      { i = index($0, ENVIRON["MUT_OLD"])
+        if (i > 0) { print substr($0, 1, i - 1) ENVIRON["MUT_NEW"] substr($0, i + length(ENVIRON["MUT_OLD"])); n++ }
+        else print }
+      END { exit (n ? 0 : 1) }' "$f" > "$f.new" || return 1
+    mv "$f.new" "$f" || return 1
+    n=$((n + 1))
+  done < <(t4_fleet_files "$dst/.agents/scripts")
+  printf '%s\n' "$n"
 }
 LABEL_ANCHOR='label="${5-}"'
-MAIN_MD5="$(md5sum < "$FLEET_MAIN" | awk '{print $1}')"
 
 NEG1="$LAB/neg1"; mkdir -p "$NEG1/repo-neg1"
-N1_MD5="$(mutate_copy "$NEG1" "$LABEL_ANCHOR" 'label="$name"')" || N1_MD5=""
-if [ -n "$N1_MD5" ] && [ "$N1_MD5" != "$MAIN_MD5" ]; then
+N1_N="$(mutate_copy "$NEG1" "$LABEL_ANCHOR" 'label="$name"')" || N1_N=0
+N1_MD5="$(t4_fleet_md5 "$NEG1/.agents/scripts")"
+if [ "${N1_N:-0}" -ge 1 ] && [ "$N1_MD5" != "$MAIN_DIR_MD5" ]; then
   t4_ok "N1 变异：副本忽略入参 label、回退会话名"
   BE_FLEET_SCRIPT="$NEG1/.agents/scripts/nao-fleet.sh"
   fleet ensure --task N1 "rd-fe@$NEG1/repo-neg1"
@@ -214,8 +222,9 @@ fi
 
 NEG2="$LAB/neg2"; mkdir -p "$NEG2/repo-neg2"
 # 变异 = 把归一结果清空（`slug` 停在空 ⇒ 函数末尾回落 repo；改为在中途返回空 ⇒ 调用方 fail loud）
-N2_MD5="$(mutate_copy "$NEG2" '[[ -n "$slug" ]] || slug="repo"' 'slug=""')" || N2_MD5=""
-if [ -n "$N2_MD5" ] && [ "$N2_MD5" != "$MAIN_MD5" ]; then
+N2_N="$(mutate_copy "$NEG2" '[[ -n "$slug" ]] || slug="repo"' 'slug=""')" || N2_N=0
+N2_MD5="$(t4_fleet_md5 "$NEG2/.agents/scripts")"
+if [ "${N2_N:-0}" -ge 1 ] && [ "$N2_MD5" != "$MAIN_DIR_MD5" ]; then
   t4_ok "N2 变异：副本放置键返回空"
   BE_FLEET_SCRIPT="$NEG2/.agents/scripts/nao-fleet.sh"
   fleet ensure --task N2 "qa@$NEG2/repo-neg2"
@@ -245,9 +254,9 @@ t4_assert_eq "$((AC13_CNT + 1))" "$(be_pane_count)" "AC13 重复 ensure 走槽�
 unset HERDR_DOUBLE_SERVER_CWD
 
 # ---------------------------------------------------------------- 静态面
-t4_assert_eq "0" "$(awk '/^_term_herdr_spawn\(\)/,/^}/' "$FLEET_MAIN" | grep -c 'HERDR_SESSION' || true)" \
+t4_assert_eq "0" "$(awk '/^_term_herdr_spawn\(\)/,/^}/' "$(t4_fleet_file_for "$T4_ROOT/.agents/scripts" _term_herdr_spawn)" | grep -c 'HERDR_SESSION' || true)" \
   "静态：_term_herdr_spawn 函数体 0 处取会话名"
-t4_assert_eq "0" "$(awk '/^_term_herdr_spawn\(\)/,/^}/' "$FLEET_MAIN" | grep -c 'place_key_label' || true)" \
+t4_assert_eq "0" "$(awk '/^_term_herdr_spawn\(\)/,/^}/' "$(t4_fleet_file_for "$T4_ROOT/.agents/scripts" _term_herdr_spawn)" | grep -c 'place_key_label' || true)" \
   "静态：函数体内仓基键调用点 0 处（放置键只认入参 label）"
 
 be_teardown >/dev/null 2>&1 || true

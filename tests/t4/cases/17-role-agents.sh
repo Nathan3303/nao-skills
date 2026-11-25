@@ -25,6 +25,9 @@ EVENTS_JS="$SUBAGENT_PKG/src/agents/runtime-agent-events.js"
 REGISTRY_JS="$SUBAGENT_PKG/src/agents/runtime-agent-registry.js"
 EXT_FILE="$T4_ROOT/.agents/extensions/nao-role-agents.mjs"
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+FLEET_ANCHOR_MOD="$(t4_fleet_file_for "$T4_ROOT/.agents/scripts" build_system_prompt)"   # T567-A：锚点行在 ensure 模块
+# fail loud：锚点模块定位不到时点名模块（而不是让 Node 探针抛 TypeError）
+t4_assert_ne "" "${FLEET_ANCHOR_MOD:-}" "T567-A：环境锚点行所在模块可定位（build_system_prompt @ fleet/lib/ensure.sh）"
 
 # ---- 能力门：node + pi-subagents（缺则整例 SKIP，不 FAIL/不计 DEGRADE）----
 command -v node >/dev/null 2>&1 \
@@ -200,7 +203,7 @@ run_probe() {
   PROBE_OUT="$T4_CACHE_DIR/probe17-$mode.out"
   PROBE_ERR="$T4_CACHE_DIR/probe17-$mode.err"
   env -u NAO_ROLE_AGENTS NAO_SKILLS="$T4_ROOT" \
-    node "$PROBE" "$root" "$ref" "$EVENTS_JS" "$REGISTRY_JS" "$FLEET" "$mode" >"$PROBE_OUT" 2>"$PROBE_ERR"
+    node "$PROBE" "$root" "$ref" "$EVENTS_JS" "$REGISTRY_JS" "${FLEET_ANCHOR_MOD:-$FLEET}" "$mode" >"$PROBE_OUT" 2>"$PROBE_ERR"
   return $?
 }
 assert_probe_runs() {

@@ -100,9 +100,12 @@ c43_user_only_ws() { # [cwd] → 打印 "wsid<TAB>pane_id"
 c43_boot || t4_exit
 
 # ---------------------------------------------------------------- ① 访问器语义（单点提取真件函数）
-eval "$(grep -E '^_TERM_PLACE_FS=' "$FLEET")" || { t4_bad "① 无法提取 _TERM_PLACE_FS"; t4_exit; }
-C43_FNS="$(awk '/^_term_place_pane_row\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$FLEET")
-$(awk '/^_term_place_pane_fields\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$FLEET")"
+# T567-A：放置快照实现整组在 fleet/lib/term-herdr.sh（入口不再含实现）
+C43_MOD="$(t4_fleet_file_for "$T4_ROOT/.agents/scripts" _term_place_pane_row)"
+t4_assert_ne "" "${C43_MOD:-}" "① 定位到 pane 行构造/访问器所在模块"
+eval "$(grep -E '^_TERM_PLACE_FS=' "$C43_MOD")" || { t4_bad "① 无法提取 _TERM_PLACE_FS"; t4_exit; }
+C43_FNS="$(awk '/^_term_place_pane_row\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$C43_MOD")
+$(awk '/^_term_place_pane_fields\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$C43_MOD")"
 eval "$C43_FNS" 2>/dev/null || { t4_bad "① 无法提取构造/访问器函数"; t4_exit; }
 
 case "$_TERM_PLACE_FS" in
@@ -128,24 +131,24 @@ t4_assert_eq "" "$_TP_WS" "① 空 wsid 取到空（不串到 tab_id）"
 t4_assert_eq "w3:t1" "$_TP_TAB" "① 空 wsid 后续字段不左移"
 
 # 行构造点唯一（否则双写 ⇒ 下次有人改一处漏一处）
-t4_assert_eq "1" "$(grep -cF -- '_TERM_PLACE_PANE_ROWS+=(' "$FLEET" || true)" \
+t4_assert_eq "1" "$(grep -cF -- '_TERM_PLACE_PANE_ROWS+=(' "$C43_MOD" || true)" \
   "① pane 行构造点恰 1 处"
-t4_assert_eq "1" "$(grep -F -- '_TERM_PLACE_PANE_ROWS+=(' "$FLEET" | grep -cF -- '_term_place_pane_row' || true)" \
+t4_assert_eq "1" "$(grep -F -- '_TERM_PLACE_PANE_ROWS+=(' "$C43_MOD" | grep -cF -- '_term_place_pane_row' || true)" \
   "① 唯一构造点走 _term_place_pane_row（不是手拼分隔符）"
 
 # ---------------------------------------------------------------- ② 静态闸（含两向正控）
-t4_assert_eq "" "$(t4_scan_place_pane_rows "$FLEET")" "② 静态闸：裸 read 消费点 = 0，且每循环经访问器"
+t4_assert_eq "" "$(t4_scan_place_pane_rows "$T4_ROOT/.agents/scripts")" "② 静态闸（文件集）：裸 read 消费点 = 0，且每循环经访问器"
 
 MUT_DIR="$LAB/.agents/scripts"
 MUT_READ="$MUT_DIR/c43-mut-read-$$.sh"
 awk '{ if ($0 ~ /_term_place_pane_fields "\$line"/ && !done) { print "      IFS=$'"'"'\\t'"'"' read -r a b c <<< \"$line\" # 正控注入"; done=1; print; next } print }' \
-  "$FLEET" > "$MUT_READ"
+  "$C43_MOD" > "$MUT_READ"
 t4_assert_ge "1" "$(t4_scan_place_pane_rows "$MUT_READ" | grep -c . || true)" \
   "② 正控①：把访问器换成裸 IFS=TAB 的 read ⇒ 闸必红"
 
 MUT_NOACC="$MUT_DIR/c43-mut-noacc-$$.sh"
 awk '{ if ($0 ~ /^[[:space:]]*_term_place_pane_fields "\$line"$/ && !done) { done=1; print "      # 正控注入：访问器被删"; next } print }' \
-  "$FLEET" > "$MUT_NOACC"
+  "$C43_MOD" > "$MUT_NOACC"
 t4_assert_ge "1" "$(t4_scan_place_pane_rows "$MUT_NOACC" | grep -cF -- '缺访问器' || true)" \
   "② 正控②：删掉访问器调用 ⇒ 闸必红（缺访问器）"
 
@@ -169,9 +172,24 @@ t4_assert_contains "$BE_OUT" "（成功 1 / 跳过 0 / 失败 0）" "③ 摘要�
 C43_MAIN_DONE=1
 
 # ---------------------------------------------------------------- ④ 护栏自证（三向）
-C43_MUT_SEP="$MUT_DIR/c43-mut-tab-$$.sh"
-awk -v q="'" '{ if ($0 ~ /^_TERM_PLACE_FS=/) print "_TERM_PLACE_FS=$" q "\\t" q; else print }' "$FLEET" > "$C43_MUT_SEP"
-t4_assert_eq "1" "$(awk '/^_TERM_PLACE_FS=\$'"'"'\\t'"'"'$/ { n++ } END { print n + 0 }' "$C43_MUT_SEP")" \
+# T567-A：变异副本必须是**完整包根**（入口 + fleet/lib）—— 入口用自身位置推 SKILLS_DIR
+#   （=<入口>/../..），只克隆 scripts/ 会把 SKILLS_DIR 指到 .agents 下（roles.yaml 缺失 ⇒ 假红）。
+c43_mut_root() { # <tag> [src 包根] → 打印 <root>/.agents/scripts（新副本，互不覆盖）
+  local tag="$1"
+  local srcroot="${2:-$T4_ROOT}"
+  local root="$T4_CACHE_DIR/c43-mut-$tag-$$"
+  mkdir -p "$root" || return 1
+  cp -r "$srcroot/.agents" "$root/.agents" || return 1
+  printf '%s\n' "$root/.agents/scripts"
+}
+C43_MUT_SEP_SCRIPTS="$(c43_mut_root tab)" || { t4_bad "④ 克隆失败"; t4_exit; }
+C43_MUT_SEP_ROOT="${C43_MUT_SEP_SCRIPTS%/.agents/scripts}"   # 后续变异从「已回退分隔符」的包根继续派生
+C43_MUT_SEP="$C43_MUT_SEP_SCRIPTS/nao-fleet.sh"
+C43_MUT_SEP_MOD="$(t4_fleet_file_for "$C43_MUT_SEP_SCRIPTS" _term_place_pane_row)"
+t4_assert_ne "" "${C43_MUT_SEP_MOD:-}" "④ 变异夹具：定位到放置快照实现模块"
+awk -v q="'" '{ if ($0 ~ /^_TERM_PLACE_FS=/) print "_TERM_PLACE_FS=$" q "\\t" q; else print }' "$C43_MUT_SEP_MOD" > "$C43_MUT_SEP_MOD.new" \
+  && mv "$C43_MUT_SEP_MOD.new" "$C43_MUT_SEP_MOD"
+t4_assert_eq "1" "$(awk '/^_TERM_PLACE_FS=\$'"'"'\\t'"'"'$/ { n++ } END { print n + 0 }' "$C43_MUT_SEP_MOD")" \
   "④ 变异夹具：分隔符已回退为 TAB（根因复现）"
 
 c43_reset || { t4_bad "④a 场景重置失败"; t4_exit; }
@@ -184,12 +202,16 @@ be_pane_alive "$USER_PANE" && t4_ok "④a 用户 pane 存活（护栏生效）" 
 t4_assert_contains "$BE_ERR_ANSI" "空 workspace 判据与实测冲突" "④a fail loud 点名「快照判 0 pane / 实测非空」"
 t4_assert_contains "$BE_ERR_ANSI" "不关" "④a 显式声明不关（点名 wsid 与 pane 数）"
 
-C43_MUT_NOGUARD="$MUT_DIR/c43-mut-noguard-$$.sh"
+C43_MUT_NOGUARD_SCRIPTS="$(c43_mut_root noguard "$C43_MUT_SEP_ROOT")" || { t4_bad "④b 克隆失败"; t4_exit; }
+C43_MUT_NOGUARD="$C43_MUT_NOGUARD_SCRIPTS/nao-fleet.sh"
+C43_MUT_NOGUARD_MOD="$(t4_fleet_file_with "$C43_MUT_NOGUARD_SCRIPTS" '空 workspace 判据与实测冲突')"
+t4_assert_ne "" "${C43_MUT_NOGUARD_MOD:-}" "④b 变异夹具：定位到关前复核所在模块"
 awk '
   { if ($0 ~ /if ! live_n=/) { skip=1 }
     if (skip) { if ($0 ~ /^      fi$/) c++; if (c == 2) { skip=0; c=0 }; next }
-    print }' "$C43_MUT_SEP" > "$C43_MUT_NOGUARD"
-t4_assert_eq "0" "$(grep -cF -- '"$(term_herdr_ws_pane_count_live "' "$C43_MUT_NOGUARD" || true)" \
+    print }' "$C43_MUT_NOGUARD_MOD" > "$C43_MUT_NOGUARD_MOD.new" \
+  && mv "$C43_MUT_NOGUARD_MOD.new" "$C43_MUT_NOGUARD_MOD"
+t4_assert_eq "0" "$(grep -cF -- '空 workspace 判据与实测冲突' "$C43_MUT_NOGUARD_MOD" || true)" \
   "④b 变异夹具：关前复核调用已拆掉（定义仍在，调用点 0）"
 
 c43_reset || { t4_bad "④b 场景重置失败"; t4_exit; }
@@ -201,10 +223,12 @@ t4_assert_ge "1" "$(c43_close_count)" "④b 拆掉关前复核 ⇒ 必红：work
 be_pane_alive "$USER_PANE" && t4_bad "④b 拆分护栏后用户 pane 仍活（负控未生效，判据空转）" \
   || t4_ok "④b 拆分护栏后用户 pane 被杀（证明护栏是最后一道防线）"
 
-C43_MUT_ALWAYS0="$MUT_DIR/c43-mut-always0-$$.sh"
+C43_MUT_ALWAYS0_SCRIPTS="$(c43_mut_root always0 "$C43_MUT_SEP_ROOT")" || { t4_bad "④c 克隆失败"; t4_exit; }
+C43_MUT_ALWAYS0="$C43_MUT_ALWAYS0_SCRIPTS/nao-fleet.sh"
+C43_MUT_ALWAYS0_MOD="$(t4_fleet_file_with "$C43_MUT_ALWAYS0_SCRIPTS" 'live_n')"
 awk '{ if ($0 ~ /if \[\[ "\$live_n" != "0" \]\]; then/) { print "      live_n=0  # 变异：复核恒「0 pane」"; print "      if false; then"; next } print }' \
-  "$C43_MUT_SEP" > "$C43_MUT_ALWAYS0"
-t4_assert_ge "1" "$(grep -cF -- 'live_n=0  # 变异' "$C43_MUT_ALWAYS0" || true)" \
+  "$C43_MUT_ALWAYS0_MOD" > "$C43_MUT_ALWAYS0_MOD.new" && mv "$C43_MUT_ALWAYS0_MOD.new" "$C43_MUT_ALWAYS0_MOD"
+t4_assert_ge "1" "$(grep -cF -- 'live_n=0  # 变异' "$C43_MUT_ALWAYS0_MOD" || true)" \
   "④c 变异夹具：复核改为恒「0 pane」"
 
 c43_reset || { t4_bad "④c 场景重置失败"; t4_exit; }

@@ -81,6 +81,10 @@ trap t519_exit_trap EXIT
 # ---- 夹具构造 ----
 mkdir -p "$LAB" "$OTHER"
 cp -r "$T4_ROOT/.agents" "$LAB/.agents" || { t4_bad "夹具复制 .agents 失败"; t4_exit; }
+if [ -d "$(dirname "$SUBJECT")/fleet" ]; then
+  # T567-A：拆分后的入口 + fleet/lib 必须整集同步（否则入口 sources 到旧模块）
+  cp -r "$(dirname "$SUBJECT")/fleet/." "$LAB/.agents/scripts/fleet/" || { t4_bad "夹具同步 fleet/lib 失败"; t4_exit; }
+fi
 cp "$SUBJECT" "$LAB/.agents/scripts/nao-fleet.sh" || { t4_bad "夹具写入被测脚本失败（$SUBJECT）"; t4_exit; }
 # 名册假探针（只读 env；绝不接触真实 pi-intercom 名册/broker）；pretty-print 逐字段一行
 cat > "$LAB/.agents/scripts/intercom-probe.mts" <<'JS'
@@ -269,7 +273,11 @@ fi
 if [ "$MUTATION_CHILD" != "1" ]; then
   MUT_DIR="$T4_CACHE_DIR/mut19-$$"
   mkdir -p "$MUT_DIR"
-  MD5_BEFORE="$(md5sum "$SUBJECT" | awk '{print $1}')"
+  if [ -d "$(dirname "$SUBJECT")/fleet" ]; then
+    MD5_BEFORE="$(t4_fleet_md5 "$(dirname "$SUBJECT")")"   # T567-A：整集指纹
+  else
+    MD5_BEFORE="$(md5sum "$SUBJECT" | awk '{print $1}')"
+  fi
   GS_BEFORE="$(git -C "$T4_ROOT" status --porcelain 2>/dev/null | sort || true)"
 
   run_child() {  # <subject> ⇒ 置 CHILD_OUT / CHILD_RC
@@ -280,15 +288,29 @@ if [ "$MUTATION_CHILD" != "1" ]; then
     CHILD_RC=$?
   }
   run_mutation() {  # <label> <replacement-line> <必须点名的断言前缀...>
-    local label="$1" repl="$2" f fails exp
+    local label="$1" repl="$2" f fails exp tgt md5cur
     f="$MUT_DIR/$label.sh"
     shift 2
-    cp "$SUBJECT" "$f" || { t4_bad "M-$label 临时副本创建失败"; return; }
-    sed -i '/^repo_contains_path() /c\'"$repl" "$f"
+    if [ -d "$(dirname "$SUBJECT")/fleet" ]; then
+      # T567-A：谓词在 core 模块 ⇒ 克隆整集、改模块、把克隆入口当 subject
+      f="$(t4_fleet_clone "$(dirname "$SUBJECT")" "$MUT_DIR/$label/scripts")" || { t4_bad "M-$label 临时副本创建失败"; return; }
+      tgt="$(t4_fleet_file_for "$MUT_DIR/$label/scripts" repo_contains_path)"
+      [ -n "$tgt" ] || { t4_bad "M-$label 定位 repo_contains_path 模块失败"; return; }
+      md5cur="$(t4_fleet_md5 "$MUT_DIR/$label/scripts")"
+    else
+      cp "$SUBJECT" "$f" || { t4_bad "M-$label 临时副本创建失败"; return; }
+      tgt="$f"; md5cur="$(md5sum "$f" | awk '{print $1}')"
+    fi
+    sed -i '/^repo_contains_path() /c\'"$repl" "$tgt"
     # 直接对文件 grep（勿把整脚本喂给 t4_assert_contains：大文件 + grep -q 早退会触发 SIGPIPE，pipefail 下假 FAIL）
-    t4_assert_eq "1" "$(grep -cF -- "$repl" "$f" || true)" \
+    t4_assert_eq "1" "$(grep -cF -- "$repl" "$tgt" || true)" \
       "M-$label 变异已写入临时副本（单行谓词被替换）"
-    t4_assert_ne "$MD5_BEFORE" "$(md5sum "$f" | awk '{print $1}')" \
+    if [ -d "$(dirname "$SUBJECT")/fleet" ]; then
+      md5cur="$(t4_fleet_md5 "$MUT_DIR/$label/scripts")"
+    else
+      md5cur="$(md5sum "$f" | awk '{print $1}')"
+    fi
+    t4_assert_ne "$MD5_BEFORE" "$md5cur" \
       "M-$label 副本 md5 ≠ 真仓库（确在副本上变异）"
     run_child "$f"
     t4_assert_ne "0" "$CHILD_RC" "M-$label 变异 ⇒ 新用例翻红（rc≠0）"
@@ -311,16 +333,27 @@ if [ "$MUTATION_CHILD" != "1" ]; then
 
   # AC5② 键口径变异负控：把 `pane_cwds` 建键改回 pane_id（复原缺陷）⇒ AC1 断言必须点名 FAIL。
   #   与上面的单行谓词变异互补：谓词没坏，坏的是「键口径」，若只被谓词变异覆盖则本缺陷仍可静默复发。
-  KEY_MUT="$MUT_DIR/key-pane-id.sh"
-  if cp "$SUBJECT" "$KEY_MUT"; then
+  if [ -d "$(dirname "$SUBJECT")/fleet" ]; then
+    KEY_MUT="$(t4_fleet_clone "$(dirname "$SUBJECT")" "$MUT_DIR/key/scripts")"
+    KEY_TGT="$(t4_fleet_file_for "$MUT_DIR/key/scripts" cmd_status)"
+  else
+    KEY_MUT="$MUT_DIR/key-pane-id.sh"; KEY_TGT="$KEY_MUT"
+    cp "$SUBJECT" "$KEY_MUT" || KEY_MUT=""
+  fi
+  if [ -n "${KEY_MUT:-}" ]; then
     # 锚改到**语义唯一行**（建键赋值只在 status 出现；close 也有同名 read 行，不能拿读序当锚）
-    sed -i 's/pane_cwds\["\$pname"\]/pane_cwds["$pn"]/' "$KEY_MUT"
-    t4_assert_eq "1" "$(grep -cF 'pane_cwds["$pn"]' "$KEY_MUT" || true)" \
+    sed -i 's/pane_cwds\["\$pname"\]/pane_cwds["$pn"]/' "$KEY_TGT"
+    t4_assert_eq "1" "$(grep -cF 'pane_cwds["$pn"]' "$KEY_TGT" || true)" \
       "AC5② 变异已写入副本（键口径回退为 pane_id，单处）"
-    t4_assert_eq "0" "$(grep -cF 'pane_cwds["$pname"]' "$KEY_MUT" || true)" \
+    t4_assert_eq "0" "$(grep -cF 'pane_cwds["$pname"]' "$KEY_TGT" || true)" \
       "AC5② 副本已无修复后的键口径（变异确实生效）"
-    t4_assert_ne "$MD5_BEFORE" "$(md5sum "$KEY_MUT" | awk '{print $1}')" \
-      "AC5② 副本 md5 ≠ 真仓库（确在副本上变异）"
+    if [ -d "$(dirname "$SUBJECT")/fleet" ]; then
+      t4_assert_ne "$MD5_BEFORE" "$(t4_fleet_md5 "$MUT_DIR/key/scripts")" \
+        "AC5② 副本 md5 ≠ 真仓库（确在副本上变异）"
+    else
+      t4_assert_ne "$MD5_BEFORE" "$(md5sum "$KEY_MUT" | awk '{print $1}')" \
+        "AC5② 副本 md5 ≠ 真仓库（确在副本上变异）"
+    fi
     run_child "$KEY_MUT"
     t4_assert_ne "0" "$CHILD_RC" "AC5② 键回退 ⇒ 用例翻红（rc≠0，不静默通过）"
     t4_assert_contains "$CHILD_OUT" "RESULT: FAIL" "AC5② 键回退 ⇒ 输出 RESULT: FAIL"
@@ -332,7 +365,12 @@ if [ "$MUTATION_CHILD" != "1" ]; then
     t4_bad "AC5② 变异副本创建失败（$KEY_MUT）"
   fi
 
-  t4_assert_eq "$MD5_BEFORE" "$(md5sum "$SUBJECT" | awk '{print $1}')" \
+  if [ -d "$(dirname "$SUBJECT")/fleet" ]; then
+    MD5_AFTER="$(t4_fleet_md5 "$(dirname "$SUBJECT")")"
+  else
+    MD5_AFTER="$(md5sum "$SUBJECT" | awk '{print $1}')"
+  fi
+  t4_assert_eq "$MD5_BEFORE" "$MD5_AFTER" \
     "M 真仓库脚本 md5 前后一致（变异只在副本，BR1 只读纪律）"
   t4_assert_eq "$GS_BEFORE" "$(git -C "$T4_ROOT" status --porcelain 2>/dev/null | sort || true)" \
     "M 真仓库 git status 前后一致（零新增脏改，BR1）"
