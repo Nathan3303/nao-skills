@@ -369,6 +369,7 @@ kill37 "$P_M2L" "$P_M2O"
 # ③ `>1` 取首条：并列改取第一条 ⇒ (d2) 不再 die（红点：零回收被破坏 / 歧义判据消失）
 MUT="$(mut_new 3)" && mut37 "$MUT" '      if (( _nro > 1 || _npa > 1 )) && [[ "$force" != true ]]; then' \
   '      if false; then' \
+  && mut37 "$MUT" '          if (( _d2p > 1 || _d2r > 1 )); then' '          if false; then' \
   || t4_bad "负控③ 变异未应用（实现写法已变：h>1 的 die 行）"
 P_M3="$(stage37 "$RA" "$CORE")"
 FLEET_SCRIPT="$MUT" run37 "$RA" "$(roster "$(rent "$CORE" "$PRA")" "$(rent "$CORE" "$PRA")")" --task "$T37" qa

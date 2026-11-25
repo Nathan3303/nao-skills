@@ -22,7 +22,7 @@ LAB="$T4_CACHE_DIR/lab31-$$"; mkdir -p "$LAB"
 cp -r "$T4_ROOT/.agents" "$LAB/.agents" || { t4_bad "夹具复制 .agents 失败"; t4_exit; }
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
 FLEET_BUNDLE="$(t4_fleet_bundle "$T4_ROOT/.agents/scripts")"   # T567-A：只读内容断言按文件集（入口 + fleet/lib）
-NAME="rd-fe(T1)"
+NAME="rd-fe"
 
 BE_CACHE_ROOT="$T4_CACHE_DIR"
 be_init "$LAB" "lab" || { t4_bad "be_init 失败"; t4_exit; }
@@ -38,7 +38,7 @@ fs.writeFileSync(p,JSON.stringify(st));' "$STATE" "$1" "$2" || t4_bad "夹具：
 
 # ---- 夹具：先在目标 workspace 拉起正常 pane（v2：同名判重只看目标 ws），再制造「集成缺失」----
 be_run_fleet "$LAB" ensure --task T1 rd-fe
-t4_assert_eq "0" "$BE_RC" "夹具：ensure 拉起 rd-fe(T1)"
+t4_assert_eq "0" "$BE_RC" "夹具：ensure 拉起 rd-fe"
 P="$(be_pane_by_name "$NAME")"
 t4_assert_ne "" "$P" "夹具：拿到 pane（$NAME）"
 set_knob pi_session false
@@ -64,7 +64,7 @@ t4_assert_contains "$BE_OUT" "（成功 0 / 跳过 0 / 失败 1）" "② 摘要�
 set_knob pi_session true
 set_knob pi_skip true
 be_run_fleet "$LAB" status
-t4_assert_contains "$BE_OUT" "rd-fe(T1)" "③ 证据补全后判「rd-fe(T1) 在线」（对照成立）"
+t4_assert_contains "$BE_OUT" "rd-fe" "③ 证据补全后判「rd-fe 在线」（对照成立）"
 t4_assert_not_contains "$BE_OUT" "集成缺失" "③ 证据补全后不再报集成缺失"
 be_run_fleet "$LAB" ensure --task T1 rd-fe
 t4_assert_contains "$BE_ERR_ANSI" "已在运行" "③ ensure 判「已在运行」（与②形成反向对照）"

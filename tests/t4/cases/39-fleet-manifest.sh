@@ -8,7 +8,7 @@
 #   E 未命中仍 fail loud（列 code；不再有 slug）
 #   F「缺 slug」「code==slug」「slug 超 16」退役（改弃用 warn 忽略），其余 8 条字段非法保留
 #   G/H 两来源分歧由 fail loud **反转为** warn + 忽略（放置恒 = 仓基键）
-#   I 名长：改为 32 字 role + 长 `(task)` 使 name>48 ⇒ fail loud
+#   I 名长：v3 task 只进元数据 ⇒ 长 task 不再撑破 name（name = role）；name 预算由 cases/28 覆盖
 #   J/K 旧形全名只读（AC6；回收/并列拒绝口径不变）
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$T4_ROOT/tests/t4/lib-backend.sh"
@@ -185,14 +185,15 @@ if [ "$HAS_TABS" = "1" ]; then
   t4_assert_eq "arch-designer" "$(tab_label_of_name arch-designer)" "H tab label = arch-designer"
 fi
 
-# ================================================================ I 名长（32 字 role + 长 task ⇒ >48）
+# ================================================================ I 名长（v3：task 只进元数据，不撑破 name）
 I_TASK="$(printf 'T%.0s' $(seq 1 40))"
 N_BEFORE="$(pane_count)"
 fleet_in "$MAIN" ensure --task "$I_TASK" arch-designer
-t4_assert_ne "0" "$BE_RC" "I name>48：rc≠0"
-t4_assert_contains "$BE_ERR_ANSI" "48" "I 点名总长预算（48）"
-t4_assert_not_contains "$BE_OUT_ANSI" "已拉起" "I 无「已拉起」"
-t4_assert_eq "$N_BEFORE" "$(pane_count)" "I 零 pane"
+t4_assert_eq "0" "$BE_RC" "I 长 task：rc=0（task 只进元数据，name 不含 task）"
+t4_assert_contains "$BE_OUT_ANSI" "已拉起 arch-designer" "I name = arch-designer（不受 40 字 task 影响）"
+t4_assert_eq "$((N_BEFORE + 1))" "$(pane_count)" "I 正常拉起 +1 pane"
+t4_assert_eq "1" "$(grep -rlF "task=$I_TASK" "$LAB/.t4-home/.local/state/nao-fleet/session-meta" 2>/dev/null | grep -c . || true)" \
+  "I task 落 sidecar 元数据（task=$I_TASK）"
 
 # ================================================================ J 旧形全名 close（只读面）
 JP="$(be_new_pane "$API")" || t4_bad "J 夹具：be_new_pane 失败"

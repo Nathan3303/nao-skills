@@ -125,9 +125,9 @@ P_ARCH="$(printf '%s\n' "$NEWS" | head -1)"
 # v2：常驻重复 ensure 会递增槽位（S3）⇒ 「跳过」出口 = **同 role+task 的派生**再次 ensure。
 BEFORE="$(pane_ids)"
 run_fleet ensure --task T1 "arch@$LAB"
-t4_assert_eq "0" "$T4_RC" "AC2 夹具：先拉起 arch-designer2(T1)（槽位 2；槽位 1 已被 AC1 占用）"
+t4_assert_eq "0" "$T4_RC" "AC2 夹具：先拉起 arch-designer2（槽位 2；槽位 1 已被 AC1 占用；task 只进元数据）"
 P_DER="$(new_panes "$BEFORE" | head -1)"
-[ "$BE_NAME" = "tmux" ] && set_title "$P_DER" "arch-designer2(T1)"
+[ "$BE_NAME" = "tmux" ] && set_title "$P_DER" "arch-designer2"
 BEFORE="$(pane_ids)"
 run_fleet ensure --task T1 "arch@$LAB"
 t4_assert_eq "0" "$T4_RC" "AC2 跳过路径 rc=0"
@@ -140,7 +140,7 @@ t4_assert_contains "$(summary_text)" "（成功 0 / 跳过 1 / 失败 0）" \
 t4_assert_eq "$BEFORE" "$(pane_ids)" "AC2 跳过不新增 pane（零副作用）"
 
 # ============================================================ AC3 失败：零假行 + 桩 + 全败 rc=1（T563/AC5）
-T539_FAIL_NAME="qa(T2)"
+T539_FAIL_NAME="qa"
 BEFORE="$(pane_ids)"
 run_fleet ensure --task T2 "qa@$LAB"
 T539_FAIL_NAME=""
@@ -158,17 +158,17 @@ t4_assert_contains "$(summary_text)" "（成功 0 / 跳过 0 / 失败 1）" \
 
 # ============================================================ AC4 混合：1 成功 + 1 跳过 + 1 失败
 # 跳过来源分后端：tmux 靠标题预置（把 arch pane 改名为 rd-fe）；herdr 靠 label 命中（arch 仍在场）。
-T539_FAIL_NAME="rd-be(T1)"
+T539_FAIL_NAME="rd-be"
 BEFORE="$(pane_ids)"
 run_fleet ensure --task T1 "arch@$LAB" "rd-fe@$LAB" "rd-be@$LAB"
 T539_FAIL_NAME=""
 t4_assert_eq "0" "$T4_RC" "AC4 混合批次 rc=0（含失败目标，BR4）"
 t4_assert_eq "1" "$(launch_lines)" "AC4 混合 ⇒ 结果行恰 1 条（仅成功目标）"
-  t4_assert_contains "$T4_OUT_ANSI" "[herdr] 已拉起 rd-fe(T1) @ $LAB" "AC4 成功行归 rd-fe(T1)（arch 派生已在场 ⇒ 跳过）"
+  t4_assert_contains "$T4_OUT_ANSI" "[herdr] 已拉起 rd-fe @ $LAB" "AC4 成功行归 rd-fe（arch 派生已在场 ⇒ 跳过）"
   t4_assert_not_contains "$T4_OUT_ANSI" "已拉起 rd-be" "AC4 失败目标 rd-be 无假成功行"
   t4_assert_not_contains "$T4_OUT_ANSI" "已拉起 arch-designer" "AC4 跳过目标 arch 无假成功行"
   t4_assert_contains "$T4_ERR_ANSI" "pane run 失败" "AC4 失败目标走既有诊断 warn（herdr）"
-  t4_assert_contains "$T4_ERR_ANSI" "arch-designer2(T1) 已在运行" "AC4 跳过目标走既有跳过 warn（herdr：同 role+task 已在）"
+  t4_assert_contains "$T4_ERR_ANSI" "arch-designer2 已在运行" "AC4 跳过目标走既有跳过 warn（herdr：同 role+task 已在）"
 t4_assert_eq "1" "$(summary_lines)" "AC4 摘要恰一行（BR5）"
 SUM="$(summary_text)"
 t4_assert_contains "$SUM" "（成功 1 / 跳过 1 / 失败 1）" "AC4 三类计数 = 1/1/1"

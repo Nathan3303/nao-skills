@@ -8,7 +8,7 @@ description: pi-intercom 多会话协作协议（常驻引用）
 
 - **上下文分层与优先级**：`AGENTS.md`（项目级，PM 维护）**优先** → 本文件/roles.yaml（团队级）→ 角色卡（角色级）→ 技能（按需）。AGENTS.md 已由 pi 自动注入上下文，**所有角色必须遵循其中项目约束**（命令纪律/领域红线/机制衔接）；各层只写自己的内容，不互相复制。
 - 会话由 `nao-fleet.sh` 以 `--name <别名>` 拉起，角色卡经 `--append-system-prompt` 启动期注入。
-- **会话名 = `<role>[<N>](<task>)`**（v2 舰队模型 · ADR `2026-11-20-workspace-as-binding-unit`）：常驻形 `<role>[<N>]`（`pm` · `qa2`），派生形 `<role>[<N>](<task>)`（`rd-infra(T557)` · `qa2(T558)`）；N 空 = 槽位 1，同 workspace 内重名自动加数字（N>9 fail loud）；**名字不含位置**，绑定单位 = herdr **workspace**（1 仓 1 workspace）。⇒ **同名是机制使然**（每仓一个 `pm`），不是异常；**跨仓寻址一律用会话 id**（口径单源 @.agents/skills/pm-operations.md §一「投递寻址」，此处不复述）。旧形的 `@` 位置段（v1；在场遗留的 v1 会话名字含 `@`）已退场：旧会话只读、仍可被 `status` 识别，但**新会话不再产生**、`@` 形**不作准**；**`send`/`handover` 会把含 `@` 的 `to` 当跨机地址 ⇒ 本机不可达**，故投递一律用会话 id（`--fleet` / `--scope` / `.agents/fleet-scope` 已弃用：给参只 warn、放置键恒为仓基键）。
+- **会话名 = `<role>[<N>]`**（v3 舰队模型 · ADR `2026-11-25-term-facade-neutral-contract`）：`pm` · `qa2`（N 空 = 槽位 1，同 workspace 内重名自动加数字，N>9 fail loud）；**task 不进名字**，只落元数据（app `nao.task` / `nao.name` label；herdr sidecar），`status` 在派生节尾注 `task=<id>`；**名字不含位置**，绑定单位 = herdr **workspace**（1 仓 1 workspace）。⇒ **同名是机制使然**（每仓一个 `pm`），不是异常；**跨仓寻址一律用会话 id**（口径单源 @.agents/skills/pm-operations.md §一「投递寻址」，此处不复述）。只读旧形（`<role>(<task>)` / `<role>-<task>` / `<role>-<task>@<scope>`）仍可被 `status`/`close` 识别，但**新会话不再产生**、**不作准**；**`send`/`handover` 会把含 `@` 的 `to` 当跨机地址 ⇒ 本机不可达**，故投递一律用会话 id（`--fleet` / `--scope` / `.agents/fleet-scope` 已弃用：给参只 warn、放置键恒为仓基键）。
 - **角色 id / 别名 / 卡片映射以 `.agents/roles.yaml` 为唯一事实来源**（下表为当前快照，改动先改 roles.yaml）。
 - 被点名先回执：`已按 <role> 角色执行`。
 - 仅当消息明确要求、且确认未注入时，才自行读取 `@.agents/prompts/<role>.md`（跨仓库会话用启动期注入的环境锚点绝对路径）。
@@ -27,8 +27,8 @@ description: pi-intercom 多会话协作协议（常驻引用）
 
 拉起：`bash .agents/scripts/nao-fleet.sh ensure <别名>[@<repo>]`（`@<repo>` 只选目标仓，不进名字；显式槽位写成 `<role>2`…`<role>9`）
 
-- **任务派生**：`ensure --task <编号> <别名>[@<repo>]` 创建 `<role>(<任务>)` 独立会话（如 `rd-infra(T557)`；角色槽位已占则自动 `<role>2(<任务>)`），并行隔离、互不排队/打断，避免多任务同名冲突；任务闭环即**回收**：`nao-fleet.sh close --task <编号> <别名>`（内置在跑 turn / tasks-state 闸门）。
-- **按需角色会话（`ensure --card`，T537）不入上表**：卡来自**下游项目仓** `.agents/prompts/<role>.md`，会话名 `<role>(<任务>)` / `<role><N>(<任务>)`（无 `--task` 时为 `<role>` / `<role><N>`；`--as <名字>` 可自定义 core，须保留卡 role 前缀、禁括号），属**派生/一次性**语义 —— `status` 在派生节标注「一次性会话 · 下游卡」，`close` 回收时**不弹常驻警告**、且跳过 `tasks-state` active 闸门（在跑 turn 闸门不放宽）。它们不登记 `roles.yaml`，故**不在本表内**；卡即系统提示（完全可信输入），命名与目录约束见 `nao-fleet.sh --help` 与 `README.md`「按需角色会话」一节。
+- **任务派生**：`ensure --task <编号> <别名>[@<repo>]` 创建 `<role>[<N>]` 独立会话（task 只进元数据；同 `(role,task)` 已在 ⇒ 复用该名，否则取空闲槽位 `role` → `role2`…），并行隔离、互不排队/打断；任务闭环即**回收**：`nao-fleet.sh close --task <编号> <别名>`（按元数据匹配；内置在跑 turn / tasks-state 闸门）。
+- **按需角色会话（`ensure --card`，T537）不入上表**：卡来自**下游项目仓** `.agents/prompts/<role>.md`，会话名 `<role>` / `<role><N>`（task 只进元数据；`--as <名字>` 可自定义 core，须保留卡 role 前缀、禁括号），属**派生/一次性**语义 —— `status` 在派生节标注「一次性会话 · 下游卡」，`close` 回收时**不弹常驻警告**、且跳过 `tasks-state` active 闸门（在跑 turn 闸门不放宽）。它们不登记 `roles.yaml`，故**不在本表内**；卡即系统提示（完全可信输入），命名与目录约束见 `nao-fleet.sh --help` 与 `README.md`「按需角色会话」一节。
 - **子代理会话不属舰队会话身份模型**：由 pi-subagents 拉起的子代理会话以 `subagent-<agent>-<id>`（无名时 `subagent-chat-<id>`）进入 intercom 名册，但**不属**舰队会话 —— `status` 只对其汇总计数（不列名、不参与在线/turn 判重），`close subagent-*` 显式拒绝（生命周期归 pi-subagents 的 stop/retention，nao 不接管）。
 
 - **判重 / 在线判定**：全部取 herdr **结构化事实** —— 身份 = `pane.label`（+ argv `--name` 交叉校验）、归属 = `pane.cwd` / `foreground_cwd`、忙闲 = `agent_status` + `state_change_seq`（权威源 `pane list` / `agent list`）。**不读终端标题**，也**不把宿主终端句柄当证据**（从 tmux shell 起的 herdr server 会把外层句柄渗进 pane）。名册（`intercom-probe.mts`，含 `tmuxPane` 字段）只作 `status -v` 的诊断差异信号。已运行 ⇒ 跳过并 warn；确需重开加 `--force`。`close` 的在跑 turn 判定叠加名册活动状态（thinking / tool:* 等）。

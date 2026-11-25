@@ -233,7 +233,7 @@ if [ "$MUT_CHILD" != "1" ]; then
   expect_card "$PF_S" "$(card_path_of uiux-designer)" "AC2①[uiux]"
   # T547-AC13（O-1）：`roles.yaml workspace: .` 在 spawn 前归一成**仓物理绝对路径** ⇒ 期望的 cd 目标不再是 `.`
   #   （否则 herdr server 解析相对路径、tmux 也会继承相对 cd —— 与 AC13 的 pane cwd 判据矛盾）。
-  diff_assert "$(expected_wrapped "$LAB_PHYS" "uiux-designer(T24A)" "$PF_S")" "$CMD_S" \
+  diff_assert "$(expected_wrapped "$LAB_PHYS" "uiux-designer" "$PF_S")" "$CMD_S" \
     "AC2① 单目标命令行 = 逐字重建（cd <仓物理路径> + name + append-system-prompt，零新增参数）"
 
   # ---- AC2② --card 下游卡（完整路径通道）：override 不得被当相对名 ----
@@ -245,7 +245,7 @@ if [ "$MUT_CHILD" != "1" ]; then
   PF_C="$(prompt_file_of "$CMD_C")"
   t4_assert_ne "" "$PF_C" "AC2② 命令串含 --append-system-prompt 文件（$PF_C）"
   expect_card "$PF_C" "$DOWN_PHYS" "AC2②[code-reviewer]"
-  diff_assert "$(expected_wrapped "$LAB_PHYS" "code-reviewer(T24B)" "$PF_C")" "$CMD_C" \
+  diff_assert "$(expected_wrapped "$LAB_PHYS" "code-reviewer" "$PF_C")" "$CMD_C" \
     "AC2② --card 命令行 = 逐字重建（卡路径仍是**完整路径**，未被当清单相对名拼成 PROMPTS_DIR/<path>）"
 
   # ---- AC2③ 同批混合：--card 目标 + 常驻目标各走各的通道 ----

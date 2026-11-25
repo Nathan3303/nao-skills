@@ -60,7 +60,7 @@ CASE_TITLES=(
   "ensure 多目标每 pane 用目标自己的角色卡（含 --card 完整路径通道）+ 全局 PROMPT 负控（#75）"
   "真 pi 冒烟受限重试护栏（#86 A）：超时才重试 / 非超时失败不重试（按调用次数证）/ 无凭据不重试"
   "后端抽象层自检（#96 一期步 1）：两场隔离 / 零渗透 / 拆场幂等 / 零残留 / default 不可达 + 护栏变异自证"
-  "舰队命名契约（BR8 · #96 步 2a + T547）：C1 codec + M1–M5 负控 / herdr golden + 默认值反向断言 + C3 单写点 lint（T555：tmux golden 组退役）"
+  "命名契约 v3 + 元数据 + 身份还原（T571）：C1 纯函数 + 构造器拒 task + app/herdr 元数据 + sidecar 孤儿清理 + 四向变异必红"
   "herdr 就绪门反假阳性（#96 B4）：已 idle 但 state_change_seq 不动 ⇒ 超时 fail loud（全败 ⇒ rc=1）"
   "herdr 幽灵 pane（#96 B4）：label 在、agent 无 ⇒ 不判在线 / ensure 不判已在运行（复用重跑）"
   "herdr 集成缺失 fail loud（#96 B4）：agent_session 空 / 钩子权威缺 ⇒ 点名不可投递，不退化 idle"
@@ -81,7 +81,7 @@ CASE_TITLES=(
   "编排器阶段 1 队列与回执（T566 · AC1–AC4）：回执 schema 五变异 + pushed 与 ls-remote 双向（本地 bare 仓）+ 状态机跳级必红 + 渲染幂等/手改必红/标记缺失不改盘"
   "编排器阶段 2 静态闸（T567-B · AC9）：orch 零合并/发版/推主干能力 —— 8 条判据逐条承重 + 三条注入必红 + 注释豁免 + child_process 单点"
   "编排器阶段 2 tick（T567-B · AC5–AC8）：flock 并发只派一次 / working 零 ensure / 15m 无回执 blocked(no_ack)+追问一次 / kill -9 后 WAL 恢复不重派 + CAS 零写入 + systemd 幂等"
-  "编排器阶段 3 多仓归属（T568 · AC10）：本仓 pm(T900)+他仓 pm ⇒ ensure argv/cwd 指向本仓且 to 非裸名 / 仅他仓在线 ⇒ 零 ensure / 同名 repo 不可判定 ⇒ 零 ensure + 点名"
+  "编排器阶段 3 多仓归属（T568 · AC10）：本仓 pm（task T900 元数据）+他仓 pm ⇒ ensure argv/cwd 指向本仓且 to 非裸名 / 仅他仓在线 ⇒ 零 ensure / 同名 repo 不可判定 ⇒ 零 ensure + 点名"
   "编排器阶段 3 board（T568 · AC11）：--json 字段契约（digits/tasks/receipts）+ 人读分区/阻塞/在飞/回执 + 禁落盘 + 中途改队列 ⇒ 同快照不混合"
 )
 declare -A CASE_TITLE=()
