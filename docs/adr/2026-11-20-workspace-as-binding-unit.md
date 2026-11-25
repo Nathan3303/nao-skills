@@ -1,7 +1,7 @@
 # ADR：workspace 为绑定单位（取消 fleet · 名字不含位置）
 
-- 状态：已落地（v0.27.0 起 · 实现 `f962813`）· 注记 2026-11-22：tmux 回退面已删除（`2026-11-22-herdr-only`），本文的 workspace=仓 / 名字契约在单后端下不变
-- 更新：2026-11-21
+- 状态：已落地（v0.27.0 起 · 实现 `f962813`）· 注记 2026-11-22：tmux 回退面已删除（`2026-11-22-herdr-only`），本文的 workspace=仓 / 名字契约在单后端下不变 · 修订 2026-11-25：目标 workspace 的**选择序**新增「调用者 space 优先」一层（见文末修订节，绑定单位不变）
+- 更新：2026-11-25
 - Owner：arch-designer
 - 指针：Issue [#554](https://github.com/Nathan3303/nao-skills/issues/554) · PRD `docs/prds/2026-11-20-fleet-model-v2.md` · 判据 `docs/reports/554-lite-spec.md` · 被本篇取代：`2026-11-13-herdr-workspace-scope-key.md` / `2026-11-17-fleet-identity-source.md` / `2026-11-19-fleet-repo-manifest.md`
 
@@ -49,6 +49,37 @@
 - 名字预算：`<N>` 占 1 字符、`(task)` 逐字入括号（`T` 是任务号自带前缀，不另加）；name ≤ 48、role 段（含 N）≤ 32；三形态按首个分隔符 `(`/`-`/`@` 分派，旧形只读。
 - manifest 源仍 = 调用方仓根，不向上查找、不自动发现；旧 `slug:` 字段与 `fleet-scope` 同属弃用面（warn + 忽略一版）。
 - 不做：跨 herdr session 协同、自动发现联动仓、布局几何算式、`pi` 侧改动。
+
+## 修订 2026-11-25（T569）：目标 workspace 的选择序 = 调用者 space 优先
+
+**绑定单位不变**：仍是一个会话绑定一个 workspace/tab；名字、槽位、`close`/`status` 归属判据均不变。
+变更只发生在 **ensure 选目标 space 的那一步**（app 后端）。
+
+原选择序只有两层：仓 folder 匹配 → 新建。问题（用户实机）：在用户的（非仓根的）space 里敲
+`ensure`，该 space 的 folder 永远匹配不上仓根 ⇒ 每次都另开一个仓 space，违背「在哪个 space 里敲，
+会话就进哪个 space」（New Terminal 语义）。
+
+新选择序（自上而下命中即止）：
+
+1. **调用者所在 space 优先**：`HC_TERMINAL_ID` → `hc get <id>` → `labels.herdr.space`；该 id **仍在
+   `doc.get herdr-app` 里**（`_term_app_doc_has_space`，防 app 重启后的陈旧 id）⇒ 采用，只加 tab。
+2. **仓 folder 匹配**（原行为）：`folder` 归一后经 `place_key_label` 命中已有 space ⇒ 复用。
+3. **都没有** ⇒ 新建 space（原行为）。
+
+非交互形态（无 `HC_TERMINAL_ID`、`hc get` 失败、或该终端无 `herdr.space` 标签）直接走第 2 层；
+调用者 space 已陈旧（不在 doc）⇒ 恰一行 warn + 回退第 2 层，**不得**拿旧 id 去撞 app。
+
+## 后果（本修订引入）
+
+- **1 workspace = 1 仓 不再是放置的硬不变量**：第 1 层命中时，多个仓的会话可以共存于同一个
+  （调用者的）space。布局仍是一个 space 内一角色一 tab。
+- **归属判定不得依赖「space 唯一性」**：`status`/`close`/`cleanup` 必须继续读终端自己的
+  `herdr.space` 标签（以及 pane cwd / 名册证据），不能从「该 space 里只有一个仓」反推归属。
+- **不再因「仓 space 已存在」而绕开调用者 space**：即使第 2 层能匹配到仓 space，第 1 层命中即止。
+- 单仓单 space 场景（调用者就在该仓的 space 里）行为逐字不变：第 1 层与第 2 层指向同一个 space。
+- 幂等：同一调用者 space 重跑 `ensure` 仍由现有判重（名字 + 终端 liveness）跳过，不新增 tab/终端。
+- 用例：`tests/t4/cases/45-app-placement.sh`（夹具 `hc-double`）①复用调用者 space ②陈旧 ⇒ warn +
+  回退 ③无线索 ⇒ 第 2 层；变异「去掉第 1 层」使 ① 的复用断言必红。
 
 ## 参考来源
 

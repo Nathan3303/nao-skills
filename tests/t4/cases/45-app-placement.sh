@@ -63,10 +63,17 @@ stub_hc() { HC_DOUBLE_STATE="$BE_APP_STATE" "$FIXT/hc" "$@"; }
 app_addrs() { find "$BE_APP_STATE/t" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | grep -v '^t0$' | sort -V; }
 app_field() { head -1 "$BE_APP_STATE/t/$1/$2" 2>/dev/null; }
 app_log() { cat "$BE_APP_STATE/log" 2>/dev/null || true; }
+# 夹具注入面（T569）：hc-double 的终端标签就是 `t/<addr>/space|tab`（`hc get` 读它们，与真件同形）；
+#   调用者终端 = `HC_TERMINAL_ID`（本用例 = t0）。无参调用 = 清空（回到非交互形态）。
+caller_labels() { # <space> [tab]
+  if [ -n "${1-}" ]; then printf '%s' "$1" > "$BE_APP_STATE/t/t0/space"; else rm -f "$BE_APP_STATE/t/t0/space"; fi
+  if [ -n "${2-}" ]; then printf '%s' "$2" > "$BE_APP_STATE/t/t0/tab"; else rm -f "$BE_APP_STATE/t/t0/tab"; fi
+}
 app_reset() {
   find "$BE_APP_STATE/t" -mindepth 1 -maxdepth 1 -type d ! -name t0 -exec rm -rf {} + 2>/dev/null || true
   find "$BE_APP_STATE/spaces" -mindepth 1 -maxdepth 1 -type f -delete 2>/dev/null || true
   [ -d "$BE_APP_STATE/tabs" ] && find "$BE_APP_STATE/tabs" -mindepth 1 -maxdepth 1 -type f -delete 2>/dev/null
+  rm -f "$BE_APP_STATE/t/t0/space" "$BE_APP_STATE/t/t0/tab"
   : > "$BE_APP_STATE/log"
   rm -f "$BE_APP_STATE"/docver "$BE_APP_STATE"/doc_hide "$BE_APP_STATE"/ready \
         "$BE_APP_STATE"/status_app "$BE_APP_STATE"/status_state "$BE_APP_STATE"/run_fail \
@@ -157,6 +164,12 @@ t4_assert_eq "1" "$(grep -cF '(t.name||"-")' "$FLEET_BUNDLE" || true)" \
 t4_assert_eq "0" "$(grep -cF '(t.name||"")' "$FLEET_BUNDLE" || true)" \
   "⓪ AC2：不得退回「空 name 留空」的写法"
 
+# ⓪ T569 单点：第 1 层覆盖恰一处；调用者标签读取恰一处（删/改名必红）
+t4_assert_eq "1" "$(grep -cF 'if [[ -n "${_TERM_APP_CALLER_SPACE:-}" ]]; then sp="$_TERM_APP_CALLER_SPACE"; fi' "$FLEET_BUNDLE" || true)" \
+  "⓪ T569：第 1 层覆盖在 spawn 处恰一处"
+t4_assert_eq "1" "$(grep -cF 'cg="$(_term_app_exec get "$cid" --json 2>/dev/null)"' "$FLEET_BUNDLE" || true)" \
+  "⓪ T569：调用者终端标签读取恰一处（HC_TERMINAL_ID → hc get）"
+
 # ---------------------------------------------------------------- ① AC1：目标 space 存在 ⇒ 复用
 app_reset
 printf '%s' "$LAB" > "$BE_APP_STATE/spaces/$KEEP_SP"   # app 里本仓的 space（doc 权威）
@@ -189,6 +202,73 @@ t4_assert_ne "" "$(app_field "$A2" space)" "② AC1：终端有新 space id（�
 t4_assert_contains "$APP_ERR" "陈旧放置标签" "② AC1：陈旧 id 有一条 warn（不静默）"
 t4_assert_eq "1" "$(grep -cF '陈旧放置标签' <<< "$APP_ERR" || true)" "② AC1：该 warn 恰 1 行（不按终端刷屏）"
 t4_assert_contains "$(doc_of)" "\"terminal\":\"$A2\"" "② AC1：终端确实落在 doc 的 tab 树里"
+
+# ---------------------------------------------------------------- ①-b T569：调用者 space 优先（New Terminal 语义）
+# 目标规则（自上而下命中即止）：① 调用者所在 space（HC_TERMINAL_ID → hc get → labels.herdr.space，且仍在 doc）
+#   → ② 仓 folder 匹配（原行为）→ ③ 新建。本组同时钉住「陈旧不沿用」与「无标签 ⇒ 逐字旧行为」。
+CALLER_SP="spcaller000000000000000000000000000"
+CALLER_TB="tbcaller000000000000000000000000000"
+CALLER_FOLDER="$LAB/not-this-repo"    # 末段基名 ≠ 目标仓基名（证明第 1 层压过 folder 匹配）
+# ① 调用者 space 在 doc（folder 故意不在本仓）⇒ 复用该 space，只加 tab
+app_reset
+printf '%s' "$CALLER_FOLDER" > "$BE_APP_STATE/spaces/$CALLER_SP"
+caller_labels "$CALLER_SP" "$CALLER_TB"
+: > "$BE_APP_STATE/log"
+run_app ensure rd-fe
+A1C="$(addr_of rd-fe)"
+NEW_TB="$(app_field "$A1C" tab)"
+t4_assert_eq "0" "$APP_RC" "①-b 调用者 space 在 doc ⇒ ensure rc=0"
+t4_assert_eq "$CALLER_SP" "$(app_field "$A1C" space)" "①-b 复用调用者所在 space（不另开仓 space）"
+t4_assert_eq "1" "$(doc_spaces | grep -c . || true)" "①-b space 数仍为 1（未新建重复 space）"
+t4_assert_ne "$CALLER_TB" "$NEW_TB" "①-b 会话落在新 tab（不挤进调用者自己的 tab）"
+t4_assert_contains "$(doc_of)" "\"id\":\"$NEW_TB\"" "①-b doc 里出现新增的 tab"
+t4_assert_contains "$(doc_of)" "\"terminal\":\"$A1C\"" "①-b 终端落在该 tab 的 root 树里"
+t4_assert_not_contains "$APP_ERR" "陈旧放置标签" "①-b 负控：不误报陈旧"
+# 幂等：同一调用者 space 重跑 ensure ⇒ 判重跳过（不新建第二个 tab/终端，space 数不变）
+run_app ensure rd-fe
+t4_assert_eq "0" "$APP_RC" "①-b 重跑 ensure ⇒ rc=0（幂等）"
+t4_assert_eq "$A1C" "$(addr_of rd-fe)" "①-b 重跑不新建终端（复用已有会话）"
+t4_assert_eq "1" "$(doc_spaces | grep -c . || true)" "①-b 重跑后 space 数仍为 1"
+
+# ② 调用者 space 不在 doc（app 重启后 id 已变）⇒ warn 一行 + 回退第 2 层（本场 doc 空 ⇒ 新建），不沿用陈旧 id
+app_reset
+STALE_CALLER_SP="spoldcaller000000000000000000000"
+caller_labels "$STALE_CALLER_SP" "tb"
+: > "$BE_APP_STATE/log"
+run_app ensure rd-fe
+A2C="$(addr_of rd-fe)"
+t4_assert_eq "0" "$APP_RC" "①-b 陈旧调用者 space ⇒ 回退第 2 层，ensure rc=0"
+t4_assert_ne "$STALE_CALLER_SP" "$(app_field "$A2C" space)" "①-b 不沿用陈旧调用者 space id"
+t4_assert_contains "$APP_ERR" "调用者所在 space 不在 app 布局文档里" "①-b 陈旧有一条明确 warn"
+t4_assert_eq "1" "$(grep -cF '调用者所在 space 不在 app 布局文档里' <<< "$APP_ERR" || true)" \
+  "①-b 该 warn 恰 1 行（不与「陈旧放置标签」重复刷）"
+t4_assert_eq "0" "$(grep -cF '陈旧放置标签' <<< "$APP_ERR" || true)" "①-b 同一 id 不重复 warn"
+t4_assert_eq "$LAB" "$(cat "$BE_APP_STATE/spaces/$(app_field "$A2C" space)" 2>/dev/null)" \
+  "①-b 回退到仓匹配语义（新 space 的 folder = 目标仓）"
+
+# ③ 非交互形态 ⇒ 走第 2 层（与今日行为逐字一致）。
+#   注：字面「无 HC_TERMINAL_ID」在 app 后端被身份闸门挡在更前（case 44 ② 断言 exit 3），故这里用
+#   同一解析路径的**可达等价形态**：调用者终端在、但没有 herdr.space 标签（= 无线索）。
+app_reset
+REPO_SP="sprepo00000000000000000000000000000"
+printf '%s' "$LAB" > "$BE_APP_STATE/spaces/$REPO_SP"
+: > "$BE_APP_STATE/log"
+run_app ensure rd-fe
+A3C="$(addr_of rd-fe)"
+t4_assert_eq "0" "$APP_RC" "①-b 无线索（无 herdr.space 标签）⇒ ensure rc=0"
+t4_assert_eq "$REPO_SP" "$(app_field "$A3C" space)" "①-b 回退第 2 层：复用仓 folder 匹配的 space"
+t4_assert_eq "1" "$(doc_spaces | grep -c . || true)" "①-b 第 2 层不新建 space（与今日行为一致）"
+t4_assert_not_contains "$APP_ERR" "调用者所在 space" "①-b 负控：无线索时不打调用者 warn（不污染既有输出）"
+# 负控（可达的「hc get 失败」形态）：HC_TERMINAL_ID 指向不存在的终端 ⇒ 同一回退路径
+app_reset
+printf '%s' "$LAB" > "$BE_APP_STATE/spaces/$REPO_SP"
+APP_OVR=("HC_TERMINAL_ID=tnosuch")
+run_app ensure rd-fe
+APP_OVR=()
+A3D="$(addr_of rd-fe)"
+t4_assert_eq "0" "$APP_RC" "①-b hc get 失败 ⇒ ensure rc=0"
+t4_assert_eq "$REPO_SP" "$(app_field "$A3D" space)" "①-b hc get 失败 ⇒ 回退第 2 层（复用仓 space）"
+t4_assert_not_contains "$APP_ERR" "调用者所在 space" "①-b 负控：hc get 失败不是陈旧，不 warn"
 
 # ---------------------------------------------------------------- ③ AC3-a：目标 space 不存在 ⇒ 分类报错
 app_reset
@@ -337,6 +417,33 @@ if [ -n "$MUT2" ] && mutate "$MUT2_MOD" "$MUT2_MOD.mut" '_term_app_poll_place "$
   t4_assert_contains "$FAIL2" "收养超时" "⑦ 变异必红原因 = 收养超时（同样只取失败行）"
 else
   t4_bad "⑦ 变异锚点未命中（轮询调用点变了 ⇒ 用例需同步）"
+fi
+
+# ⑧ T569 失败演练：把第 1 层（调用者 space 覆盖）去掉 ⇒ ①-b 的「复用」断言必红。
+#   形态 = 调用者 space 在 doc、folder 不在本仓；有第 1 层 ⇒ 1 个 space；去掉 ⇒ 另起仓 space（2 个）。
+MUT3=""; MUT3_MOD=""
+if clone_for_mut mut3 'if [[ -n "${_TERM_APP_CALLER_SPACE:-}" ]]; then sp="$_TERM_APP_CALLER_SPACE"; fi'; then
+  MUT3="$MUT_ENTRY"; MUT3_MOD="$MUT_MOD"
+fi
+if [ -n "$MUT3" ] && mutate "$MUT3_MOD" "$MUT3_MOD.mut" \
+     'if [[ -n "${_TERM_APP_CALLER_SPACE:-}" ]]; then sp="$_TERM_APP_CALLER_SPACE"; fi' \
+     ': # T569 layer-1 removed by mutation'; then
+  mv "$MUT3_MOD.mut" "$MUT3_MOD"
+  app_reset
+  printf '%s' "$CALLER_FOLDER" > "$BE_APP_STATE/spaces/$CALLER_SP"
+  caller_labels "$CALLER_SP" "$CALLER_TB"
+  APP_OVR=("NAO_SKILLS=$LAB")
+  BE_FLEET_SCRIPT="$MUT3" run_app ensure rd-fe
+  BE_FLEET_SCRIPT=""
+  APP_OVR=()
+  A8="$(addr_of rd-fe)"
+  t4_assert_eq "0" "$APP_RC" "⑧ 变异（去掉第 1 层）⇒ ensure 仍能跑（不是崩掉，而是换落点）"
+  t4_assert_ne "$CALLER_SP" "$(app_field "$A8" space)" \
+    "⑧ 变异必红：不复用调用者 space（本条 = ①-b 第 2 条的负控）"
+  t4_assert_eq "2" "$(doc_spaces | grep -c . || true)" \
+    "⑧ 变异必红：另起了仓 space（space 数 1 → 2）"
+else
+  t4_bad "⑧ 变异锚点未命中（第 1 层覆盖行变了 ⇒ 用例需同步）"
 fi
 
 t4_exit
