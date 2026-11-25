@@ -21,6 +21,7 @@ PATH="$T4_ROOT/tests/t4/fixtures/herdr-double:$PATH"; export PATH
 LAB="$T4_CACHE_DIR/lab31-$$"; mkdir -p "$LAB"
 cp -r "$T4_ROOT/.agents" "$LAB/.agents" || { t4_bad "夹具复制 .agents 失败"; t4_exit; }
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+FLEET_BUNDLE="$(t4_fleet_bundle "$T4_ROOT/.agents/scripts")"   # T567-A：只读内容断言按文件集（入口 + fleet/lib）
 NAME="rd-fe(T1)"
 
 BE_CACHE_ROOT="$T4_CACHE_DIR"
@@ -69,9 +70,9 @@ be_run_fleet "$LAB" ensure --task T1 rd-fe
 t4_assert_contains "$BE_ERR_ANSI" "已在运行" "③ ensure 判「已在运行」（与②形成反向对照）"
 
 # ---- ④ 静态：BR7 映射 unknown ⇒ 不可投递 ----
-t4_assert_contains "$(sed -n '/^term_deliverable() {/,/^}/p' "$FLEET")" "idle|done" \
+t4_assert_contains "$(sed -n '/^term_deliverable() {/,/^}/p' "$(t4_fleet_file_for "$T4_ROOT/.agents/scripts" term_deliverable)")" "idle|done" \
   "④ term_deliverable 只放行 idle|done（纯谓词单点）"
-t4_assert_not_contains "$(sed -n '/^term_deliverable() {/,/^}/p' "$FLEET")" "unknown" \
+t4_assert_not_contains "$(sed -n '/^term_deliverable() {/,/^}/p' "$(t4_fleet_file_for "$T4_ROOT/.agents/scripts" term_deliverable)")" "unknown" \
   "④ unknown 不在可投递分支里（保守不可投递）"
 t4_assert_eq "" "$(t4_scan_term_herdr_forbidden "$FLEET")" \
   "④ herdr 实现区不读终端标题/不碰 tmux 句柄（BR2/BR6）"

@@ -23,6 +23,7 @@ if [ "$HAS_TABS" = "0" ]; then
 fi
 
 FLEET_MAIN="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+FLEET_BUNDLE="$(t4_fleet_bundle "$T4_ROOT/.agents/scripts")"   # T567-A：只读内容断言按文件集
 LAB="$T4_CACHE_DIR/lab39-$$"
 MAIN="$LAB/fx39-main"; API="$LAB/fx39-api"; WEB="$LAB/fx39-web"; PLAIN="$LAB/fx39-plain"; BAD="$LAB/fx39-bad"
 T39="T4C39$$"
@@ -69,7 +70,7 @@ fleet_in() { local d="$1"; shift; be_run_fleet "$d" "$@"; }
 l39_exit_trap() { local rc=$?; be_teardown >/dev/null 2>&1 || true; trap - EXIT; if [ "$rc" = "0" ]; then t4_cache_cleanup 2>/dev/null || true; fi; exit "$rc"; }
 trap l39_exit_trap EXIT
 
-t4_assert_eq "1" "$(grep -cF '"$repo/.agents/fleet.yaml"' "$FLEET_MAIN" || true)" "静态 AC10：manifest 路径只在 fleet_manifest_load 内拼一次"
+t4_assert_eq "1" "$(grep -cF '"$repo/.agents/fleet.yaml"' "$FLEET_BUNDLE" || true)" "静态 AC10：manifest 路径只在 fleet_manifest_load 内拼一次"
 
 # ================================================================ A 无 manifest
 fleet_in "$PLAIN" ensure rd-be

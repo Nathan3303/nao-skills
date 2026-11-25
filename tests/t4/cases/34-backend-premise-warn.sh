@@ -26,6 +26,7 @@ set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+FLEET_BUNDLE="$(t4_fleet_bundle "$T4_ROOT/.agents/scripts")"   # T567-A：只读内容断言按文件集（入口 + fleet/lib）
 t4_assert_file "$FLEET" "被测脚本存在（nao-fleet.sh）"
 
 # ---------------------------------------------------------------- 夹具
@@ -220,11 +221,11 @@ t4_assert_not_contains "$C34_OUT" "AGENTS.md:absent" "E4f 无 AGENTS.md：不再
 mv "$BAK/AGENTS.e4" "$AGENTS"
 
 # ============================================================ D 静态面（单点 + warn-only + 默认值单源）
-t4_assert_ge "2" "$(grep -c 'check_backend_premise' "$FLEET" || true)" \
+t4_assert_ge "2" "$(t4_fleet_count 'check_backend_premise' "$T4_ROOT/.agents/scripts")" \
   "D1 单点实现 + 单点调用（定义 1 + 调用 1）"
-t4_assert_eq "1" "$(grep -c 'check_backend_premise || true' "$FLEET" || true)" \
+t4_assert_eq "1" "$(t4_fleet_count 'check_backend_premise [|][|] true' "$T4_ROOT/.agents/scripts")" \
   "D2 调用点 warn-only（\`|| true\` ⇒ 不改 check rc）"
-t4_assert_eq "1" "$(grep -cE '^NAO_TERMINAL=' "$FLEET" || true)" \
+t4_assert_eq "1" "$(t4_fleet_count '^NAO_TERMINAL=' "$T4_ROOT/.agents/scripts")" \
   "D3 默认后端仍只有唯一赋值点（warn 比对从该点解析，不重述字面量）"
 t4_assert_eq "0" "$(grep -c '唯一路径.*tmux' "$T4_ROOT/.agents/common/intercom-protocol.md" || true)" \
   "D4 仓库协议文件已无「唯一路径 … tmux」旧口径（AC1 负向）"

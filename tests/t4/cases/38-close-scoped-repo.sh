@@ -218,7 +218,7 @@ if [ "$tsx_ok" != "1" ]; then
   t4_exit
 fi
 
-SRC_MD5="$(md5sum "$RA/.agents/scripts/nao-fleet.sh" | cut -d' ' -f1)"
+SRC_MD5="$(t4_fleet_md5 "$RA/.agents/scripts")"
 N_TGT="$N_A"
 
 # ================================================================ a 唯一·本仓
@@ -332,25 +332,39 @@ run38 "$RA" - "$N_A"
 t4_assert_eq "GREEN" "$(v_offline_none)" "f 名册不可用：rc/stdout 与基线逐字一致（不判并列、不派死）"
 
 # ================================================================ 变异负控（挑能咬住的那一层）
-FLEET_SRC="$RA/.agents/scripts/nao-fleet.sh"
-mut38() { # <文件> <定位串（须唯一）> <替换整行> → 0 = 已应用且定位串消失
+FLEET_SRC="$RA/.agents/scripts"   # T567-A：文件集（入口 + fleet/lib）
+mut38() { # <入口|文件> <定位串（须唯一）> <替换整行> → 0 = 已应用且定位串消失
   local f="$1" pat="$2" repl="$3" ln
+  # 拆分后：入口只含 CLI；按锚在**整集**里定位模块（目录直接查；入口查其 dirname）
+  if [ -d "$f" ]; then
+    f="$(t4_fleet_file_with "$f" "$pat")"
+  else
+    case "$f" in */nao-fleet.sh) f="$(t4_fleet_file_with "$(dirname "$f")" "$pat")" ;; esac
+  fi
+  [ -n "${f:-}" ] || return 1
   ln="$(grep -nF -- "$pat" "$f" | head -1 | cut -d: -f1)"
   [ -n "$ln" ] || return 1
   awk -v n="$ln" -v r="$repl" 'NR==n { print r; next } { print }' "$f" > "$f.new" || return 1
   mv "$f.new" "$f" || return 1
   ! grep -qF -- "$pat" "$f"
 }
-mut38_all() { # <文件> <定位串> <替换整行>（替换**所有**命中行；用于两分支同形的行）
+mut38_all() { # <入口|文件> <定位串> <替换整行>（替换**所有**命中行；用于两分支同形的行）
   local f="$1" pat="$2" repl="$3"
+  if [ -d "$f" ]; then
+    f="$(t4_fleet_file_with "$f" "$pat")"
+  else
+    case "$f" in */nao-fleet.sh) f="$(t4_fleet_file_with "$(dirname "$f")" "$pat")" ;; esac
+  fi
+  [ -n "${f:-}" ] || return 1
   MUT_OLD="$pat" MUT_NEW="$repl" awk '
     { if (index($0, ENVIRON["MUT_OLD"]) > 0) print ENVIRON["MUT_NEW"]; else print }' "$f" > "$f.new" || return 1
   mv "$f.new" "$f" || return 1
   ! grep -qF -- "$pat" "$f"
 }
-mut_new() { # <编号> → 变异副本路径
-  local d="$LAB/mut38-$1.sh"
-  cp "$FLEET_SRC" "$d" && printf '%s' "$d"
+mut_new() { # <编号> → 变异副本入口路径（整集克隆：入口 + fleet/lib）
+  local d="$LAB/mut38-$1"
+  t4_fleet_clone "$FLEET_SRC" "$d" >/dev/null || return 1
+  printf '%s' "$d/nao-fleet.sh"
 }
 mut_run() { # <变异脚本> <roster> <target> —— 以 cwd=$RA 跑变异副本
   T38_FLEET_SCRIPT="$1" run38 "$RA" "$2" "$3"
@@ -423,7 +437,7 @@ kill38 "$P_M6"
 #   为什么必须：g2 旧判据只查「拒绝回收」⇒ 任何拒绝都吃绿（理由换了也绿 = 空转）。
 #   变异只换理由字样，不碰「拒/不拒」的分支，红点只能来自「理由绑不住」。
   PAT38_7='拒绝回收 $name：同名 label 命中 $nrows 个 pane'
-  HITS38_7="$(grep -cF -- "$PAT38_7" "$FLEET_SRC" || true)"
+  HITS38_7="$(t4_fleet_file_with "$FLEET_SRC" "$PAT38_7" >/dev/null && printf '1' || printf '0')"
   if [ "${HITS38_7:-0}" = "0" ]; then
     t4_bad "负控⑦ 锚未命中（实现写法已变：herdr 同名 label 拒绝行）"
   elif [ "$HITS38_7" != "1" ]; then
@@ -439,6 +453,6 @@ kill38 "$P_M6"
     "负控⑦ 拒绝理由文本被改写 ⇒ g2-herdr 必红（断言绑的是理由，不是「任何拒绝」）"
   kill38 "$P_M7A" "$P_M7B"
 
-t4_assert_eq "$SRC_MD5" "$(md5sum "$FLEET_SRC" | cut -d' ' -f1)" \
+t4_assert_eq "$SRC_MD5" "$(t4_fleet_md5 "$FLEET_SRC")" \
   "变异只动副本：夹具脚本 md5 与用例开始时逐字节一致（无残留改写）"
 t4_exit

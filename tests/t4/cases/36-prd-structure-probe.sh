@@ -113,9 +113,12 @@ t4_assert_contains "$OUT1" "check: OK · roles=" "⑥ 摘要行仍在（rc=0 正
 REF="$T4_CACHE_DIR/lab36-ref-$$"
 mkdir -p "$REF" && cp -r "$T4_ROOT/.agents" "$REF/.agents" || t4_bad "⑦ 夹具：复制 .agents 失败"
 # 探针关闭 = 删掉 cmd_check 里的调用行（其余一字不改）
-grep -c '^  check_prd_structure || true$' "$REF/.agents/scripts/nao-fleet.sh" >/dev/null 2>&1
-sed -i '/^  check_prd_structure || true$/d' "$REF/.agents/scripts/nao-fleet.sh"
-t4_assert_eq "0" "$(grep -c 'check_prd_structure || true' "$REF/.agents/scripts/nao-fleet.sh" || true)" \
+# T567-A：cmd_check 在 fleet/lib/check.sh（入口已不含体检项实现）
+REF_CHECK="$(t4_fleet_file_for "$REF/.agents/scripts" cmd_check)"
+t4_assert_ne "" "${REF_CHECK:-}" "⑦ 夹具：定位到 cmd_check 所在模块"
+grep -c '^  check_prd_structure || true$' "$REF_CHECK" >/dev/null 2>&1
+sed -i '/^  check_prd_structure || true$/d' "$REF_CHECK"
+t4_assert_eq "0" "$(grep -c 'check_prd_structure || true' "$REF_CHECK" || true)" \
   "⑦ 负控锚点：副本已删掉探针调用（自证变异生效）"
 OUT_REAL="$( cd "$T4_ROOT" && env -u NAO_STASH_ROOT bash "$FLEET_REAL" check 2>&1 )"
 OUT_OFF="$( cd "$T4_ROOT" && env -u NAO_STASH_ROOT bash "$REF/.agents/scripts/nao-fleet.sh" check 2>&1 )"
@@ -143,9 +146,11 @@ t4_assert_contains "$OUT_N2" "warn=" "N2 去掉排除名单 ⇒ 摘要出现 war
 #   不是 ④ 的唯一成因，拿它做负控等于假演练。真正承重且唯一的是**日期过滤**（③ 的全部内容）。
 N3="$T4_CACHE_DIR/lab36-n3-$$"
 mkdir -p "$N3" && cp -r "$T4_ROOT/.agents" "$N3/.agents" || t4_bad "N3 夹具：复制 .agents 失败"
-t4_assert_eq "1" "$(grep -c '\[\[ "\$d" < "\$since" \]\] && continue' "$N3/.agents/scripts/nao-fleet.sh" || true)" "N3 负控锚点：原脚本含「老日期跳过」一行"
-sed -i 's/\[\[ "\$d" < "\$since" \]\] && continue/: 变异：过滤已中和/' "$N3/.agents/scripts/nao-fleet.sh"
-t4_assert_eq "1" "$(grep -c '变异：过滤已中和' "$N3/.agents/scripts/nao-fleet.sh" || true)" "N3 负控锚点：副本过滤已中和（变异生效）"
+N3_CHECK="$(t4_fleet_file_for "$N3/.agents/scripts" check_prd_structure)"
+t4_assert_ne "" "${N3_CHECK:-}" "N3 夹具：定位到 PRD 探针所在模块"
+t4_assert_eq "1" "$(grep -c '\[\[ "\$d" < "\$since" \]\] && continue' "$N3_CHECK" || true)" "N3 负控锚点：原脚本含「老日期跳过」一行"
+sed -i 's/\[\[ "\$d" < "\$since" \]\] && continue/: 变异：过滤已中和/' "$N3_CHECK"
+t4_assert_eq "1" "$(grep -c '变异：过滤已中和' "$N3_CHECK" || true)" "N3 负控锚点：副本过滤已中和（变异生效）"
 mkdir -p "$N3/docs/prds" && t36_mkprd "$N3/docs/prds/2026-10-01-old-missing.md" 3 0
 OUT_N3="$( cd "$N3" && env -u NAO_STASH_ROOT bash .agents/scripts/nao-fleet.sh check -v 2>&1 )"
 t4_assert_contains "$OUT_N3" "2026-10-01-old-missing.md" "N3 中和追溯过滤 ⇒ 老文件被报（③ 必红 ⇒ 过滤是承重的）"

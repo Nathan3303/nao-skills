@@ -115,8 +115,11 @@ t4_assert_contains "$T4_OUT" "重名" "AC2: 指名跨角色重名"
 
 # ① 别名无法解析（把夹具脚本 ALIAS 行置回键值反写态复现本缺陷）
 FX_REV="$(mk_fx rev normal)"
-perl -0pi -e 's/ALIAS_ROLE\["\$w"\]="\$v"/ALIAS_ROLE["\$v"]="\$w"/' "$FX_REV/.agents/scripts/nao-fleet.sh" 2>/dev/null || true
-REVLINE="$(grep -m1 'ALIAS) ALIAS_ROLE' "$FX_REV/.agents/scripts/nao-fleet.sh" || true)"
+# T567-A：别名表在 manifest.sh（load_manifest），按定位串取模块，不写死拆分前路径
+FX_REV_MOD="$(t4_fleet_file_with "$FX_REV/.agents/scripts" 'ALIAS) ALIAS_ROLE')"
+t4_assert_ne "" "${FX_REV_MOD:-}" "AC2 夹具：定位到别名表所在模块（拆分后不再是入口文件）"
+perl -0pi -e 's/ALIAS_ROLE\["\$w"\]="\$v"/ALIAS_ROLE["\$v"]="\$w"/' "$FX_REV_MOD" 2>/dev/null || true
+REVLINE="$(grep -m1 'ALIAS) ALIAS_ROLE' "$FX_REV_MOD" || true)"
 if [ "$REVLINE" = "${REVLINE#*'ALIAS_ROLE["$v"]="$w"'}" ]; then
   t4_bad "AC2: 无法把夹具脚本置为键值反写态（实现写法已变）：$(printf '%s' "$REVLINE" | tr -d '\n')"
 else

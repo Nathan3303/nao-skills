@@ -110,18 +110,27 @@ stage37() { # <cwd> <会话名> → pane_id（身份面就位后输出；失败 
 kill37() { local p; for p in "$@"; do [ -n "$p" ] && be_kill_pane "$p"; done; return 0; }
 
 # 变异工具（P3-1/2 与五向负控共用）：只动 $T4_CACHE_DIR/lab 内的副本，仓库脚本 md5 不变
-FLEET_SRC="$RA/.agents/scripts/nao-fleet.sh"
-mut37() { # <文件> <定位串（须唯一）> <替换整行> → 0 = 已应用且定位串消失
+FLEET_SRC="$RA/.agents/scripts"   # T567-A：文件集（入口 + fleet/lib）
+FLEET_SRC_BUNDLE="$(t4_fleet_bundle "$FLEET_SRC")"   # 只读内容断言（grep/sed 抽函数）合并视图
+mut37() { # <入口|文件> <定位串（须唯一）> <替换整行> → 0 = 已应用且定位串消失
   local f="$1" pat="$2" repl="$3" ln
+  # 拆分后：入口只含 CLI；按锚在**整集**里定位模块（目录直接查；入口查其 dirname）
+  if [ -d "$f" ]; then
+    f="$(t4_fleet_file_with "$f" "$pat")"
+  else
+    case "$f" in */nao-fleet.sh) f="$(t4_fleet_file_with "$(dirname "$f")" "$pat")" ;; esac
+  fi
+  [ -n "${f:-}" ] || return 1
   ln="$(grep -nF -- "$pat" "$f" | head -1 | cut -d: -f1)"
   [ -n "$ln" ] || return 1
   awk -v n="$ln" -v r="$repl" 'NR==n { print r; next } { print }' "$f" > "$f.new" || return 1
   mv "$f.new" "$f" || return 1
   ! grep -qF -- "$pat" "$f"
 }
-mut_new() { # <编号> → 变异副本路径
-  local d="$LAB/mut37-$1.sh"
-  cp "$FLEET_SRC" "$d" && printf '%s' "$d"
+mut_new() { # <编号> → 变异副本入口路径（整集克隆：入口 + fleet/lib）
+  local d="$LAB/mut37-$1"
+  t4_fleet_clone "$FLEET_SRC" "$d" >/dev/null || return 1
+  printf '%s' "$d/nao-fleet.sh"
 }
 
 # 跑生产脚本（**唯一**入口 = be_run_fleet：后端句柄 + 环境净化单点派生）
@@ -305,7 +314,7 @@ CARD_CORE="fxcard($T37)"
 #     会保守拒）⇒ 正确路径也会红；故同名以名册条目表达、pane 存活以异名见证表达。
 P_FW="$(stage37 "$RB" "rd-be-$T37")" || t4_bad "f 夹具：他仓见证 pane 建立失败"
 P_F="$(stage37 "$RA" "$CARD_CORE")" || t4_bad "f 夹具：卡会话 pane 建立失败"
-SRC_MD5="$(md5sum "$RA/.agents/scripts/nao-fleet.sh" | cut -d' ' -f1)"
+SRC_MD5="$(t4_fleet_md5 "$RA/.agents/scripts")"
 FROSTER="$(roster "$(rent "$CARD_CORE" "$PRA")" "$(rent "$CARD_CORE" "$PRB")" "$(rent "rd-be-$T37" "$PRB")")"
 run37 "$RA/sub" "$FROSTER" --task "$T37" fxcard
 t4_info "f debug rc=$T4_RC out=[$T4_OUT] err=[$T4_ERR]"
@@ -333,7 +342,7 @@ t4_assert_eq "2" "$(alive37 "$P_M6" "$P_M6W")" \
 t4_assert_not_contains "$T4_OUT" "close 命中同仓 legacy 裸名 $CARD_CORE" \
   "负控⑥ 同场景 ③ 也同时红（双保险明细：③ 未命中）"
 kill37 "$P_M6" "$P_M6W"
-t4_assert_eq "$SRC_MD5" "$(md5sum "$FLEET_SRC" | cut -d' ' -f1)" \
+t4_assert_eq "$SRC_MD5" "$(t4_fleet_md5 "$FLEET_SRC")" \
   "负控⑥ 变异只动副本：仓库脚本 md5 与变异前逐字节一致（无残留改写）"
 
 # ================================================================ 负控六向（真跑变异副本）
@@ -382,7 +391,7 @@ kill37 "$P_M4A" "$P_M4B"
 #    #151/T552 P3-a：产品行 `repo="$fallback_repo"` 在全名分支同样出现（字形撞车）⇒ **不**再拿它当锚，
 #    否则 grep 取首行会把变异打到全名分支（本负控当场假绿）。变异语义不变：roster_ok≠1 ⇒ die。
 PAT37_5='  intercom_list_json >/dev/null 2>&1 && roster_ok=1'
-HITS37_5="$(grep -cF -- "$PAT37_5" "$FLEET_SRC" || true)"
+HITS37_5="$(grep -cF -- "$PAT37_5" "$FLEET_SRC_BUNDLE" || true)"
 if [ "${HITS37_5:-0}" = "0" ]; then
   t4_bad "负控⑤ 锚未命中（实现写法已变：名册可用性行）"
 elif [ "$HITS37_5" != "1" ]; then
@@ -402,8 +411,10 @@ t4_expect_red "$(v_offline_none)" "负控⑤ roster_ok=0 当 die ⇒ (e) 必红�
 #   守卫行 ⇒ ① 翻绿（证明 ① 抓到的是守卫本身，不是别的东西）。
 #   子壳里必须 **stub `intercom_cwds_for`**（否则它对未定义命令 ⇒ 0 条 cwd ⇒ repo 恒空，
 #   「repo=」这类断言对空值同样吃绿 = 空转断言）；stub 后判据精确到 **repo=/tmp/x**。
-adopt_unit() { # <脚本> <模式：bare|local> → 子 shell 的输出 + `rc=<退出码>`（die 是 exit 1，故 rc 必须从进程取）
+adopt_unit() { # <脚本|入口> <模式：bare|local> → 子 shell 的输出 + `rc=<退出码>`（die 是 exit 1，故 rc 必须从进程取）
   local src="$1" mode="$2" prog out rc
+  # T567-A：入口不含实现 ⇒ 传入口时改用其文件集合并视图（含 die 与 _close_adopt_repo）
+  grep -q '^_close_adopt_repo()' "$src" 2>/dev/null || src="$(t4_fleet_bundle "$(dirname "$src")")"
   prog="$(
     grep -m1 '^die()' "$src"
     sed -n '/^_close_adopt_repo()/,/^}/p' "$src"
@@ -416,11 +427,11 @@ adopt_unit() { # <脚本> <模式：bare|local> → 子 shell 的输出 + `rc=<�
   out="$(printf '%s\n' "$prog" | bash -s 2>&1)"; rc=$?
   printf '%s\nrc=%s\n' "$out" "$rc"
 }
-OUT_BARE="$(adopt_unit "$FLEET_SRC" bare)"
+OUT_BARE="$(adopt_unit "$FLEET_SRC_BUNDLE" bare)"
 t4_assert_contains "$OUT_BARE" "内部错误：_close_adopt_repo 须在声明 local repo 的调用点内调用" \
   "P3-2① 无 repo 声明的调用点 ⇒ 守卫 fail loud 点名内部错误（不是静默造全局）"
 t4_assert_contains "$OUT_BARE" "rc=1" "P3-2① 同场景 rc=1（die 生效，不继续回写）"
-OUT_LOCAL="$(adopt_unit "$FLEET_SRC" local)"
+OUT_LOCAL="$(adopt_unit "$FLEET_SRC_BUNDLE" local)"
 t4_assert_contains "$OUT_LOCAL" "rc=0" "P3-2② 已声明 local repo 的调用点 ⇒ 守卫不误伤（rc=0）"
 # 判据必须**精确到值**：stub 的 cwd 是 /tmp/x ⇒ 回写成功才会出现 repo=/tmp/x
 #   （「repo=」对空值同样匹配 = 空转，QA 实测指出并订正）

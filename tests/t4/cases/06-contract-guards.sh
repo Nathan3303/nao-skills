@@ -30,7 +30,8 @@ console.log("skills="+JSON.stringify(pi.skills||[]));
 t4_info "manifest: $(printf '%s' "$pi_refs" | tr '\n' ' ')"
 t4_assert_eq "0" "$(printf '%s\n' "$pi_refs" | sed -n 's/^has_prompts=//p')" "AC8: manifest 无 pi.prompts"
 t4_assert_eq "0" "$(printf '%s\n' "$pi_refs" | sed -n 's/^refs_prompts=//p')" "AC8: manifest 未引用 .agents/prompts/*.md"
-t4_assert_ge 1 "$(grep -c -- '--append-system-prompt' "$T4_ROOT/.agents/scripts/nao-fleet.sh")" "AC8: fleet 仍以 --append-system-prompt 常驻注入角色卡（BR2）"
+# T567-A：实现已拆到 fleet/lib/*.sh ⇒ 内容断言按**文件集**计数（单文件口径会漏）
+t4_assert_ge 1 "$(t4_fleet_count '--append-system-prompt' "$T4_ROOT/.agents/scripts")" "AC8: fleet 仍以 --append-system-prompt 常驻注入角色卡（BR2）"
 
 # --- AC6（机制侧）：check 交叉引用 + 引用一致性 ------------------------------
 of="$(mktemp)"; ef="$(mktemp)"
@@ -534,7 +535,7 @@ rm -f "$MUT96"; rm -rf "$FXH" "$FXHWL"
 # --- M20261109：pi 版本阈值的**单一事实**（MIN_PI_VERSION）-------------------------
 # 判据：常量只有一份（脚本内该版本字面量恰 1 次）；比较阈值由它派生（无魔术数 4/1）；
 #       三处文案插值；活体负控抬到 9.9.9 后**文案与判据自洽**（不再出现「1.4.0 < 1.4.0」）。
-FLEET_VER="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+FLEET_VER="$(t4_fleet_bundle "$T4_ROOT/.agents/scripts")"   # T567-A：入口 + fleet/lib 的只读合并视图
 MINPI="$(sed -n 's/^MIN_PI_VERSION="\([^"]*\)"$/\1/p' "$FLEET_VER" 2>/dev/null | head -1)"
 t4_assert_match "$MINPI" '^[0-9]+\.[0-9]+\.[0-9]+$' "MIN_PI_VERSION 可从脚本抽出且为 x.y.z（得到「$MINPI」）"
 t4_assert_eq "1" "$(grep -cF -- "$MINPI" "$FLEET_VER" || true)" "MIN_PI_VERSION 在脚本内仅出现 1 次（文案/判据一律派生，无双源）"
@@ -552,7 +553,7 @@ mkdir -p "$LABVER/bin"
 #   「1.4.0 < 1.4.0」唯一可能出现的前提（实际版本与文案阈值撞车）；否则矛盾类断言永不变红（QA P3-2）。
 printf '#!/usr/bin/env bash\n[ "${1:-}" = "--version" ] && { echo "%s"; exit 0; }\nexit 0\n' "$MINPI" > "$LABVER/bin/pi"
 chmod +x "$LABVER/bin/pi"
-LABFLEET="$LABVER/.agents/scripts/nao-fleet.sh"
+LABFLEET="$(t4_fleet_file_with "$LABVER/.agents/scripts" 'MIN_PI_VERSION="')"   # T567-A：常量在 core.sh
 lab_check() { local root="$1"; ( cd "$root" && env -u NAO_STASH_ROOT -u NAO_SKILLS PATH="$root/bin:$PATH" timeout 120 bash .agents/scripts/nao-fleet.sh check -v 2>&1 ); }
 lab_line()  { printf '%s\n' "$1" | grep -E '✗ pi 版本' | head -1 | sed 's/^ *//'; }
 out_pos="$(lab_check "$LABVER")"
@@ -573,10 +574,12 @@ t4_assert_eq "0" "$(printf '%s' "$out_neg" | grep -cF "$MINPI < $MINPI" || true)
 #   若不跑这一段，「不再出现 1.4.0 < 1.4.0」在实际≠常量时永不变红（QA 实测空转）。
 LABMUT="$LABVER-mut"
 cp -r "$LABVER" "$LABMUT" || t4_bad "P3-2: 变异副本创建失败"
+LABMUT_COPY="$(t4_fleet_file_with "$LABMUT/.agents/scripts" '✗ pi 版本 %s < %s')"   # T567-A：文案在 check.sh
+t4_assert_ne "" "$LABMUT_COPY" "P3-2: 定位到 ✗ 行所在模块（拆分后不再是入口文件）"
 awk -v v="$MINPI" '{ if (index($0, "✗ pi 版本 %s < %s") > 0) gsub(/%s < %s/, "%s < " v); print }' \
-  "$LABMUT/.agents/scripts/nao-fleet.sh" > "$LABMUT/fleet.mut" || t4_bad "P3-2: 变异副本生成失败"
-mv "$LABMUT/fleet.mut" "$LABMUT/.agents/scripts/nao-fleet.sh"
-t4_assert_ne "0" "$(cmp -s "$LABFLEET" "$LABMUT/.agents/scripts/nao-fleet.sh" && echo 0 || echo 1)" "P3-2: 变异副本确与负控副本不同（✗ 行阈值已硬编码 $MINPI）"
+  "$LABMUT_COPY" > "$LABMUT/fleet.mut" || t4_bad "P3-2: 变异副本生成失败"
+mv "$LABMUT/fleet.mut" "$LABMUT_COPY"
+t4_assert_ne "0" "$(cmp -s "$(t4_fleet_file_with "$LABVER/.agents/scripts" '✗ pi 版本 %s < %s')" "$LABMUT_COPY" && echo 0 || echo 1)" "P3-2: 变异副本确与负控副本不同（✗ 行阈值已硬编码 $MINPI）"
 out_mut="$(lab_check "$LABMUT")"
 rc_mut=$?
 mut_line="$(lab_line "$out_mut")"
@@ -584,7 +587,7 @@ t4_assert_ne "0" "$rc_mut" "P3-2 变异: 硬编码 ✗ 行后仍 rc≠0（不是
 t4_assert_eq "✗ pi 版本 $MINPI < $MINPI" "$mut_line" "P3-2 变异: 旧缺陷如实复现（文案回头 $MINPI < $MINPI）"
 t4_assert_ne "✗ pi 版本 $MINPI < 9.9.9" "$mut_line" "P3-2 变异: 「✗ 行阈值==常量」判据在变异上必红（断言非空转）"
 t4_assert_eq "1" "$(printf '%s' "$out_mut" | grep -cF "$MINPI < $MINPI" || true)" "P3-2 变异: 「无矛盾文案」判据在变异上计数 1（断言非空转）"
-t4_assert_eq "1" "$(grep -cF -- "$MINPI" "$T4_ROOT/.agents/scripts/nao-fleet.sh" || true)" "全段结束后真脚本未被改动（阈值仍为 $MINPI，只在副本里变异）"
+t4_assert_eq "1" "$(t4_fleet_count "$MINPI" "$T4_ROOT/.agents/scripts")" "全段结束后真脚本未被改动（阈值仍为 $MINPI，只在副本里变异）"
 
 # ---------------------------------------------------------------------------
 # E2-1（#132 · backlog sweep）：文档面 pi 下限「**漂移即红**」（替代「清空文档数字」）
@@ -604,7 +607,7 @@ t4_assert_eq "1" "$(grep -cF -- "$MINPI" "$T4_ROOT/.agents/scripts/nao-fleet.sh"
 #   口径：包版本 pin（`pi install npm:@x.y.z`）不是 pi 自身的门槛 ⇒ 完备性正则排除前导 `@`。
 E2_DOC_PRUNE_RE='^(docs/(adr|prds|releases|reports|notes|designs|research)/|docs/tasks-[^/]*$|tests/)'
 E2_DOC_FILES="$(git -C "$T4_ROOT" ls-files -- '*.md' 2>/dev/null | grep -vE "$E2_DOC_PRUNE_RE" | sort || true)"
-e2_min_of() { sed -n 's/^MIN_PI_VERSION="\([^"]*\)"$/\1/p' "$1/.agents/scripts/nao-fleet.sh" 2>/dev/null | head -1; }
+e2_min_of() { local f; f="$(t4_fleet_file_with "$1/.agents/scripts" 'MIN_PI_VERSION="')"; [ -n "$f" ] && sed -n 's/^MIN_PI_VERSION="\([^"]*\)"$/\1/p' "$f" 2>/dev/null | head -1; }
 e2_scan() { # <根> decl|loose → "<相对路径>:<行>\t<版本或行文>…"（只读，不改任何文件）
   local root="$1" mode="$2" rel
   [ -n "$E2_DOC_FILES" ] || return 0
@@ -667,7 +670,7 @@ t4_assert_eq "" "$(e2_gate "$E2_LAB")" "E2-1 夹具自证：未变异副本同�
 
 # ② 只把**脚本常量**抬到 9.9.9（副本）⇒ 必红，并点名文件:行
 cp -r "$E2_LAB" "$E2_LAB-b"
-sed -i 's/^MIN_PI_VERSION=.*$/MIN_PI_VERSION="9.9.9"/' "$E2_LAB-b/.agents/scripts/nao-fleet.sh"
+sed -i 's/^MIN_PI_VERSION=.*$/MIN_PI_VERSION="9.9.9"/' "$(t4_fleet_file_with "$E2_LAB-b/.agents/scripts" 'MIN_PI_VERSION="')"
 t4_assert_eq "9.9.9" "$(e2_min_of "$E2_LAB-b")" "E2-1② 变异锚点：副本单源已抬到 9.9.9"
 E2B_GATE="$(e2_gate "$E2_LAB-b")"
 t4_assert_match "$E2B_GATE" "^README\.md:[0-9]+ 声明 $MINPI ≠ 单源 9\.9\.9$" \
@@ -700,9 +703,10 @@ rm -rf "$E2_LAB" "$E2_LAB-b" "$E2_LAB-c" "$E2_LAB-d"
 #   ④ check 生效后端行：**仅 herdr 模式加行**（tmux 路径零新增输出）；herdr 模式下 close/cleanup
 #      **已接门面（B3）**：用法守卫先于一切后端调用（PATH 桩 0 命中），空现场按「未运行/effect=0」幂等成功
 # ============================================================================
-FLEET_B1="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+FLEET_B1="$T4_ROOT/.agents/scripts"                     # T567-A：文件集（入口 + fleet/lib/*.sh）
+FLEET_B1_BUNDLE="$(t4_fleet_bundle "$FLEET_B1")"         # 只读断言（grep/awk）合并视图
 LEDGER_B1="$T4_ROOT/tests/t4/fixtures/term-legacy-allowlist.txt"
-t4_assert_file "$FLEET_B1" "B1: 被测脚本存在"
+t4_assert_file "$FLEET_B1/nao-fleet.sh" "B1: 被测入口脚本存在"
 # T555 QA 轮实测踩到的失败模式：lint helper 本身被误删 ⇒ 调用点 rc=127 + 空输出 ⇒ 「负控必红」
 #   这类断言反被掏空（假绿）。此处把「helper 存在」钉成前置（少一个就红）。
 t4_assert_eq "5" "$(for _f in t4_scan_term_bare_calls t4_verify_term_ledger t4_scan_term_herdr_forbidden \
@@ -711,17 +715,47 @@ t4_assert_eq "5" "$(for _f in t4_scan_term_bare_calls t4_verify_term_ledger t4_s
   "B1: 5 个 lint helper 均已定义（缺任一 ⇒ 其负控断言会因 127/空输出假绿）"
 t4_assert_file "$LEDGER_B1" "B1: 门面台账存在（tests/t4/fixtures/term-legacy-allowlist.txt）"
 
+# ---- T567-A：174 函数锚三向断言（ADR D3「174 函数锚怎么迁」）----
+#   判据：① 各模块顶层函数并集 == 清单（无漏登记 / 无重名 / 无孤儿）② 归属模块一致
+#         ③ 总数守恒（清单行数 == 头 total == 实际并集 = 174）
+#   锚在**清单**（functions.txt 一处 diff）：新增函数必须同行加一行 + 改头 total，否则本组必红。
+FN_MANIFEST="$T4_ROOT/.agents/scripts/fleet/functions.txt"
+t4_assert_file "$FN_MANIFEST" "T567-A: functions.txt 存在（174 锚的唯一清单）"
+t4_assert_eq "" "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MANIFEST")" \
+  "T567-A: 174 三向守恒（无漏登记/无孤儿/归属一致/总数==total）"
+t4_assert_eq "174" "$(grep -vcE '^[[:space:]]*(#|$)' "$FN_MANIFEST")" "T567-A: 清单行数 == 174"
+t4_assert_eq "174" "$(t4_fleet_count '^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{' "$FLEET_B1")" \
+  "T567-A: 各模块顶层函数并集 == 174（数量守恒）"
+# 失败演练（判据必须承重，不能空转）：三种变异各自必红
+FN_MUT="$T4_CACHE_DIR/fn-manifest-$$.mut"
+grep -v $'\tcmd_check$' "$FN_MANIFEST" > "$FN_MUT"
+t4_assert_contains "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" | grep '漏登记' || true)" "cmd_check" \
+  "T567-A 负控①：清单删一行 ⇒ 必红（漏登记 · 点名 cmd_check）"
+sed 's#^fleet/lib/check.sh\tcmd_check$#fleet/lib/core.sh\tcmd_check#' "$FN_MANIFEST" > "$FN_MUT"
+t4_assert_contains "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" || true)" "归属不符" \
+  "T567-A 负控②：模块归属写错 ⇒ 必红"
+sed 's/^# total: 174$/# total: 173/' "$FN_MANIFEST" > "$FN_MUT"
+out="$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" || true)"
+t4_assert_contains "$out" "总数不符" "T567-A 负控③：头 total 与并集不符 ⇒ 必红"
+t4_assert_contains "$out" "清单行数 174 ≠ 头 total 173" "T567-A 负控③b：只改 total 不改行数 ⇒ 同样必红"
+
 # ---- ① 默认值唯一（#96 三期 P2：默认已翻 herdr；B1 立的 lint 就是为这一步准备的）----
-t4_assert_eq "1" "$(grep -cE '^NAO_TERMINAL=' "$FLEET_B1" || true)" \
-  "B1① NAO_TERMINAL 赋值点恰 1 处（默认值唯一；三期只改这一行）"
-t4_assert_eq 'NAO_TERMINAL="${NAO_TERMINAL:-herdr}"' "$(grep -E '^NAO_TERMINAL=' "$FLEET_B1" || true)" \
+t4_assert_eq "1" "$(t4_fleet_count '^NAO_TERMINAL=' "$FLEET_B1")" \
+  "B1① NAO_TERMINAL 赋值点跨模块总和恰 1 处（默认值唯一；T567-A 起不再限制在单文件）"
+t4_assert_eq 'NAO_TERMINAL="${NAO_TERMINAL:-herdr}"' "$(grep -E '^NAO_TERMINAL=' "$FLEET_B1_BUNDLE" || true)" \
   "P2① 唯一赋值点 = 默认 **herdr**（未设/空串两种拼写走同一处）"
-t4_assert_eq "0" "$(grep -cE '^NAO_TERMINAL="\$\{NAO_TERMINAL:-tmux\}"' "$FLEET_B1" || true)" \
+t4_assert_eq "0" "$(t4_fleet_count '^NAO_TERMINAL="\$\{NAO_TERMINAL:-tmux\}"' "$FLEET_B1")" \
   "P2① 反向断言：默认不再是 tmux（flip 真生效，不是两处赋值共存）"
+
+# T567-A：SELF_SH 必须与 NAO_TERMINAL 唯一赋值点**同文件**（term.sh）—— #124 的解析点
+TERM_MOD_B1="$(t4_fleet_file_for "$FLEET_B1" term_backend)"
+t4_assert_eq "1" "$(t4_fleet_count '^SELF_SH=' "$FLEET_B1")" "T567-A: SELF_SH 赋值点跨模块总和恰 1 处"
+t4_assert_eq "1" "$(grep -cE '^SELF_SH=' "$TERM_MOD_B1" || true)" \
+  "T567-A: SELF_SH 指向 term.sh（与 NAO_TERMINAL 同文件；端前提 warn 从这里解析默认值）"
 
 # ---- ② 门面四函数 + 纯谓词：各恰 1 处定义（业务区只调它们）----
 for fn in term_require term_snapshot term_liveness term_argv term_deliverable term_spawn term_deliver term_session_start term_reclaim term_cleanup; do
-  t4_assert_eq "1" "$(grep -cE "^${fn}\\(\\) \\{" "$FLEET_B1" || true)" "B1② 门面函数 ${fn} 恰 1 处定义"
+  t4_assert_eq "1" "$(t4_fleet_count "^${fn}\\(\\) \\{" "$FLEET_B1")" "B1② 门面函数 ${fn} 跨模块恰 1 处定义"
 done
 
 # ---- ② 门面外禁裸后端调用（正控：真脚本 0 命中）+ 台账可验 ----
@@ -738,14 +772,14 @@ t4_assert_eq "0" "$(grep -vcE '^[[:space:]]*(#|$)' "$LEDGER_B1")" \
 #   旧 tmux 门面分支已删 ⇒ 该注入面改由 `t4_scan_tmux_residue`（禁旧面复活）接管。
 NEG_B1A="$T4_CACHE_DIR/b1-neg-a.sh"
 awk '{ print } /^cmd_status\(\) \{/ { print "  tmux list-panes -a -F '"'"'#{pane_id}'"'"' >/dev/null" }' \
-  "$FLEET_B1" > "$NEG_B1A"
+  "$(t4_fleet_file_for "$FLEET_B1" cmd_status)" > "$NEG_B1A"
 out="$(t4_scan_tmux_residue "$NEG_B1A")"
 t4_assert_ne "" "$out" "B1② 负控A: cmd_status 内注入 tmux 调用 ⇒ 旧面 lint 必红（不是空转）"
 t4_assert_contains "$out" "tmux list-panes" "B1② 负控A: 命中并回显被注入的那一行（可定位）"
 
 # ---- ② 负控 B：herdr 实现区之外直接调 herdr ⇒ 必红（唯一入口不可旁路）----
 NEG_B1B="$T4_CACHE_DIR/b1-neg-b.sh"
-awk '{ print } /^cmd_status\(\) \{/ { print "  herdr pane list >/dev/null" }' "$FLEET_B1" > "$NEG_B1B"
+awk '{ print } /^cmd_status\(\) \{/ { print "  herdr pane list >/dev/null" }' "$(t4_fleet_file_for "$FLEET_B1" cmd_status)" > "$NEG_B1B"
 out="$(t4_scan_term_bare_calls "$NEG_B1B" "$LEDGER_B1")"
 t4_assert_ne "" "$out" "B1② 负控B: cmd_status 内直接调 herdr ⇒ 必红"
 t4_assert_contains "$out" "[herdr-区外]" "B1② 负控B: 命中标签点名「herdr-区外」"
@@ -754,12 +788,14 @@ t4_assert_contains "$out" "[herdr-区外]" "B1② 负控B: 命中标签点名「
 t4_assert_eq "" "$(t4_scan_term_herdr_forbidden "$FLEET_B1")" \
   "B1③ herdr 实现区 0 处 tmux 句柄/标题字段名（BR2/BR6 机械兜）"
 NEG_B1C="$T4_CACHE_DIR/b1-neg-c.sh"
-awk '{ print } /^# >>> term-facade-herdr BEGIN/ { print "  local leak=\"$TMUX_PANE\"" }' "$FLEET_B1" > "$NEG_B1C"
+awk '{ print } /^# >>> term-facade-herdr BEGIN/ { print "  local leak=\"$TMUX_PANE\"" }' \
+  "$(t4_fleet_file_for "$FLEET_B1" _term_herdr_exec)" > "$NEG_B1C"
 out="$(t4_scan_term_herdr_forbidden "$NEG_B1C")"
 t4_assert_ne "" "$out" "B1③ 负控: herdr 区注入 \$TMUX_PANE ⇒ 禁字扫描必红"
 t4_assert_contains "$out" "TMUX_PANE" "B1③ 负控: 回显被注入的句柄名"
 NEG_B1D="$T4_CACHE_DIR/b1-neg-d.sh"
-awk '{ print } /^# >>> term-facade-herdr BEGIN/ { print "  local t=\"terminal_title\"" }' "$FLEET_B1" > "$NEG_B1D"
+awk '{ print } /^# >>> term-facade-herdr BEGIN/ { print "  local t=\"terminal_title\"" }' \
+  "$(t4_fleet_file_for "$FLEET_B1" _term_herdr_exec)" > "$NEG_B1D"
 t4_assert_ne "" "$(t4_scan_term_herdr_forbidden "$NEG_B1D")" \
   "B1③ 负控: herdr 区注入 terminal_title（读标题）⇒ 禁字扫描必红"
 
@@ -842,7 +878,7 @@ c6_check() { # <NAO_STASH_ROOT> [check 参数...] · 在真仓跑（**herdr 默�
       NAO_STASH_ROOT="$root" bash .agents/scripts/nao-fleet.sh check "$@" 2>&1 )
 }
 OUT_B1_BASE_CHECK="$(c6_check "$C6_STASH_NONE")"
-CHECK_GOLD_LINE='check: OK · roles=7 · files=53'   # T557 增 .agents/skills/design-loop.md（52 → 53）；改机制文件数须同步本行
+CHECK_GOLD_LINE='check: OK · roles=7 · files=65'   # T567-A：脚本拆 11 模块 + functions.txt（53 → 65，+12 文件）；改机制文件数须同步本行
 t4_assert_eq "$CHECK_GOLD_LINE" "$(printf '%s\n' "$OUT_B1_BASE_CHECK" | head -1)" \
   "P2④ herdr 摘要首行 = roles/files 计数（layout= 字段随 tmux 布局删除 —— D3）"
 t4_assert_eq "3" "$(printf '%s\n' "$OUT_B1_BASE_CHECK" | grep -c . || true)" \
@@ -1031,13 +1067,13 @@ exit3_hint_scan() { # <script> → 逐站点检查前 3 行报文是否带指路
     printf '%s: 报文缺回退指路\n' "$ln"
   done < <(exit3_token_sites "$script" | cut -f1)
 }
-EXIT3_STANDALONE="$(grep -cE '^[[:space:]]*exit 3[[:space:]]*$' "$FLEET_B1" || true)"
-EXIT3_TOKEN="$(exit3_token_sites "$FLEET_B1" | grep -c . || true)"
+EXIT3_STANDALONE="$(grep -cE '^[[:space:]]*exit 3[[:space:]]*$' "$FLEET_B1_BUNDLE" || true)"
+EXIT3_TOKEN="$(exit3_token_sites "$FLEET_B1_BUNDLE" | grep -c . || true)"
 # T562：第二后端（app）**结构上需要自己的 exit 3 闸门**（三件套/窗口/socket/放置文档）。
 #   判据零放松：按「**app 区间内 / 外**」二分（不是按 herdr 区间 —— 旧面第 7 条本来就在区间外的 cmd_status）：
 #     ① app 区间外（旧面）token 位站点仍**恰 7**（T555 原句不变量逐字保留）；
 #     ② 两轴总数相加 == 站点总数（无游离站点）；③ 每条都带指路（下面全扫断言覆盖两侧）。
-_app_r="$(_t4_term_ranges "$FLEET_B1" term-impl-app)"
+_app_r="$(_t4_term_ranges "$FLEET_B1_BUNDLE" term-impl-app)"
 _exit3_in() { # <script> <ranges> → 该区间内的 exit 3 token 位行号
   local script="$1" ln
   while IFS= read -r ln; do
@@ -1045,7 +1081,7 @@ _exit3_in() { # <script> <ranges> → 该区间内的 exit 3 token 位行号
     _t4_in_ranges "$ln" "$2" && printf '%s\n' "$ln"
   done < <(exit3_token_sites "$script" | cut -f1)
 }
-EXIT3_APP="$(_exit3_in "$FLEET_B1" "$_app_r" | grep -c . || true)"
+EXIT3_APP="$(_exit3_in "$FLEET_B1_BUNDLE" "$_app_r" | grep -c . || true)"
 EXIT3_LEGACY=$((EXIT3_STANDALONE - EXIT3_APP))
 t4_assert_eq "7" "$EXIT3_LEGACY" "P2② app 区间**外**（旧面）token 位 exit 3 = 7（T555 原句不变量；app 侧单列）"
 t4_assert_ge "1" "$EXIT3_APP" "P2② app 区间内 exit 3 闸门存在（三件套/窗口/socket/文档前置）"
@@ -1053,17 +1089,17 @@ t4_assert_eq "$EXIT3_TOKEN" "$((EXIT3_LEGACY + EXIT3_APP))" \
   "P2② token 位站点总数 = 旧面(7) + app($EXIT3_APP)（无区间外游离站点）"
 t4_assert_eq "$EXIT3_STANDALONE" "$EXIT3_TOKEN" \
   "P2② 两轴相等（独占行与 token 位当前同值；若有人写成「cmd || exit 3」本断言会把差异摆出来）"
-t4_assert_eq "" "$(exit3_hint_scan "$FLEET_B1")" \
+t4_assert_eq "" "$(exit3_hint_scan "$FLEET_B1_BUNDLE")" \
   "P2② 每条 exit 3 文案都给后续动作（重试 / pin 回旧版；T555：tmux 回退指路已随后端删除）"
-EXIT3_HINTED="$(exit3_token_sites "$FLEET_B1" | cut -f1 | while IFS= read -r ln; do
-  body="$(awk -v n="$ln" 'NR >= n - 3 && NR <= n { buf = buf "\n" $0 } END { print buf }' "$FLEET_B1")"
+EXIT3_HINTED="$(exit3_token_sites "$FLEET_B1_BUNDLE" | cut -f1 | while IFS= read -r ln; do
+  body="$(awk -v n="$ln" 'NR >= n - 3 && NR <= n { buf = buf "\n" $0 } END { print buf }' "$FLEET_B1_BUNDLE")"
   case "$body" in *"重试"*|*"pin 回"*) printf 'x\n' ;; esac
 done | grep -c . || true)"
 t4_assert_eq "$EXIT3_TOKEN" "$EXIT3_HINTED" "P2② 含后续动作的 exit 3 = 全数（herdr 7 + app $EXIT3_APP）"
 
 # 负控 A：摘掉一条 herdr 文案的回退指路 ⇒ hint 扫描恰 1 条必红（判据非空转）
 NEG_EXIT3="$T4_CACHE_DIR/p2-neg-exit3-$$.sh"
-sed 's/—— 在该 herdr 会话的 pane 内重试（旧版 tmux 后端已移除）//' "$FLEET_B1" > "$NEG_EXIT3"
+sed 's/—— 在该 herdr 会话的 pane 内重试（旧版 tmux 后端已移除）//' "$FLEET_B1_BUNDLE" > "$NEG_EXIT3"
 t4_assert_eq "1" "$(exit3_hint_scan "$NEG_EXIT3" | grep -c . || true)" \
   "P2② 负控A：摘掉一条 herdr 文案的回退指路 ⇒ 全扫恰 1 条必红（断言不是空转）"
 rm -f "$NEG_EXIT3"
@@ -1072,7 +1108,7 @@ rm -f "$NEG_EXIT3"
 #   ⇒ 证明 token 轴真的能捕获独占行判据漏掉的写法（也证明上面「两轴相等」不是恒等式）。
 NEG_EXIT3B="$T4_CACHE_DIR/p2-neg-exit3b-$$.sh"
 awk '{ if ($0 ~ /^[[:space:]]*exit 3[[:space:]]*$/ && !done) { sub(/^[[:space:]]*exit 3[[:space:]]*$/, "    : || exit 3"); done = 1 } print }' \
-  "$FLEET_B1" > "$NEG_EXIT3B"
+  "$FLEET_B1_BUNDLE" > "$NEG_EXIT3B"
 t4_assert_eq "$((EXIT3_STANDALONE - 1))" "$(grep -cE '^[[:space:]]*exit 3[[:space:]]*$' "$NEG_EXIT3B" || true)" \
   "P2② 负控B：改成「cmd || exit 3」后独占行数 -1（旧判据会漏掉它）"
 t4_assert_eq "$EXIT3_TOKEN" "$(exit3_token_sites "$NEG_EXIT3B" | grep -c . || true)" \
@@ -1087,9 +1123,9 @@ rm -f "$NEG_EXIT3B"
 # 负控 C（T562 · app 轴防空转）：把 **app 区间内**第一条独占行改成 `cmd || exit 3`
 #   ⇒ 独占行总数 −1、app 区间 token 位**不变**（证明 app 轴真的按区间在算，不是空转）。
 NEG_EXIT3C="$T4_CACHE_DIR/p2-neg-exit3c-$$.sh"
-awk -v s="$(_t4_term_ranges "$FLEET_B1" term-impl-app | cut -f1)" '
+awk -v s="$(_t4_term_ranges "$FLEET_B1_BUNDLE" term-impl-app | cut -f1)" '
   NR >= s && !done && $0 ~ /^[[:space:]]*exit 3[[:space:]]*$/ { sub(/^[[:space:]]*exit 3[[:space:]]*$/, "    : || exit 3"); done = 1 }
-  { print }' "$FLEET_B1" > "$NEG_EXIT3C"
+  { print }' "$FLEET_B1_BUNDLE" > "$NEG_EXIT3C"
 t4_assert_eq "$((EXIT3_STANDALONE - 1))" "$(grep -cE '^[[:space:]]*exit 3[[:space:]]*$' "$NEG_EXIT3C" || true)" \
   "P2② 负控C：app 区间内改「cmd || exit 3」⇒ 独占行总数 −1"
 t4_assert_eq "$EXIT3_APP" "$(_exit3_in "$NEG_EXIT3C" "$_app_r" | grep -c . || true)" \
@@ -1141,7 +1177,7 @@ rm -rf "$PROBE_NEG_DIR"
 #     ② 超阈值仍有逐卡 `!` + 基线 >100%，但 rc 仍 0（不设硬限、不改闸门语义）。
 #     ③ 移除基线实现 ⇒ 同一判据取值为 0（非空转，先红后绿的机检面）。
 #   CARD_MAX_LINES 保持 200；本段从脚本抽常量，不在用例里复制第二份阈值。
-E1_FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
+E1_FLEET="$(t4_fleet_bundle "$T4_ROOT/.agents/scripts")"   # T567-A：常量在 core.sh
 E1_CARD_MAX="$(sed -n 's/^CARD_MAX_LINES=\([0-9][0-9]*\)$/\1/p' "$E1_FLEET" | head -1)"
 t4_assert_eq "200" "$E1_CARD_MAX" "E1: CARD_MAX_LINES 保持 200（不设硬限；阈值仍由脚本单点给）"
 
@@ -1201,7 +1237,7 @@ t4_assert_contains "$E1_LAB_OUT" "最大 $E1_LAB_NAME $E1_LAB_MAX 行 / 阈值 $
 # 变异自证：删掉副本脚本里的基线输出行 ⇒ 同一判据取值为 0（实现承重，不是空转）
 E1_MUT="$E1_LAB-mut"
 cp -r "$E1_LAB" "$E1_MUT" || t4_bad "E1 变异：副本创建失败"
-sed -i '/卡预算基线/d' "$E1_MUT/.agents/scripts/nao-fleet.sh"
+sed -i '/卡预算基线/d' "$(t4_fleet_file_with "$E1_MUT/.agents/scripts" '卡预算基线')"
 E1_MUT_OUT="$( cd "$E1_MUT" && "${E1_ENV[@]}" timeout 120 bash .agents/scripts/nao-fleet.sh check -v 2>&1 )"
 E1_MUT_HIT=0
 if printf '%s\n' "$E1_MUT_OUT" | grep -qF '卡预算基线'; then E1_MUT_HIT=1; fi

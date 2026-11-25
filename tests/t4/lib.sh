@@ -418,7 +418,86 @@ t4_scan_all_server_tail1() { # $1=用例目录
   done
 }
 
-# #96 二期 B1 门面 lint（静态 · T555 收窄）：业务区**禁**裸后端调用。
+# ---------------------------------------------------------------- T567-A：nao-fleet.sh = **文件集**
+# 拆分（ADR 2026-11-24 §D3）后，`nao-fleet.sh` 只是入口（注释头 + CLI 解析 + 分发），实现分布
+#   在 `fleet/lib/*.sh`（11 模块）。静态闸与计数断言一律按**文件集**扫：参数可传目录（⇒ 入口 +
+#   `fleet/lib/*.sh`）或单个文件（负控副本 / 变异副本仍按单文件口径）。
+#   证据面：任一模块都可以独立被扫，闸的强度不依赖「实现恰好在一个文件里」。
+_t4_fleet_files() { # <dir|file>... → 文件清单（一行一个）
+  local p f
+  for p in "$@"; do
+    if [ -d "$p" ]; then
+      [ -f "$p/nao-fleet.sh" ] && printf '%s\n' "$p/nao-fleet.sh"
+      for f in "$p"/fleet/lib/*.sh; do [ -f "$f" ] && printf '%s\n' "$f"; done
+    else
+      [ -f "$p" ] && printf '%s\n' "$p"
+    fi
+  done
+}
+# 公开包装：文件集清单（用例层只调它，不触 `_t4_fleet_files`）
+t4_fleet_files() { _t4_fleet_files "$@"; }
+
+# 单点输出格式：单文件 = `行号:内容`（负控副本口径逐字不变）；多文件 = `文件:行号:内容`（可定位）
+_t4_emit() { # <多文件标记 ''|1> <文件> <行号> <内容>
+  if [ -n "$1" ]; then printf '%s:%s:%s\n' "$(basename "$2")" "$3" "$4"
+  else printf '%s:%s\n' "$3" "$4"; fi
+}
+
+# 计数：文件集内 `grep -cE` 逐文件相加（无命中 = 0；不因某文件 0 命中而中断）
+t4_fleet_count() { # <ERE> <dir|file>...
+  local re="$1"; shift
+  local f c n=0
+  while IFS= read -r f; do
+    c="$(grep -cE -- "$re" "$f" 2>/dev/null || true)"
+    n=$(( n + ${c:-0} ))
+  done < <(_t4_fleet_files "$@")
+  printf '%s\n' "$n"
+}
+# 顶层函数 → 所属文件（拆分的「哪个模块」查询单点；找不到 = 空 + rc=1）
+t4_fleet_file_for() { # <dir> <函数名>
+  local d="$1" fn="$2" f
+  while IFS= read -r f; do
+    grep -qE "^${fn}\\(\\) \\{" "$f" && { printf '%s\n' "$f"; return 0; }
+  done < <(_t4_fleet_files "$d")
+  return 1
+}
+# 定位串 → 所属文件（变异/断言用：不写死模块路径，实现搬家不误红）
+t4_fleet_file_with() { # <dir|file> <fixed-string>
+  local d="$1" pat="$2" f
+  while IFS= read -r f; do
+    grep -qF -- "$pat" "$f" && { printf '%s\n' "$f"; return 0; }
+  done < <(_t4_fleet_files "$d")
+  return 1
+}
+# 读面合并视图：把入口 + fleet/lib/*.sh 依次拼到一个临时文件（grep/awk 的「单文件」旧口径）。
+#   只用于**只读断言**（计数/取函数体/取常量）；写面（sed -i 变异）必须落到真实模块文件。
+t4_fleet_bundle() { # <scripts-dir> [输出路径]
+  local src="$1" out="${2:-}"
+  [ -n "$out" ] || out="$T4_CACHE_DIR/fleet-bundle.$$.sh"
+  {
+    while IFS= read -r f; do cat "$f"; printf '\n'; done < <(_t4_fleet_files "$src")
+  } > "$out" || return 1
+  printf '%s\n' "$out"
+}
+
+# 文件集指纹（"变异只动副本" 类断言的整集口径：入口 + fleet/lib 全部文件逐字节）
+t4_fleet_md5() { # <scripts-dir>
+  local f
+  while IFS= read -r f; do md5sum "$f"; done < <(_t4_fleet_files "$1") | md5sum | awk '{print $1}'
+}
+
+# 克隆入口 + fleet/ 到新目录（变异副本必须整集可跑；返回入口路径）
+t4_fleet_clone() { # <src-scripts-dir> <dst-scripts-dir> → <dst>/nao-fleet.sh
+  local src="$1" dst="$2"
+  [ -f "$src/nao-fleet.sh" ] || return 1
+  [ -d "$src/fleet" ] || return 1
+  mkdir -p "$dst" || return 1
+  cp "$src/nao-fleet.sh" "$dst/nao-fleet.sh" || return 1
+  cp -r "$src/fleet/." "$dst/fleet/" || return 1
+  printf '%s\n' "$dst/nao-fleet.sh"
+}
+
+# #96 二期 B1 门面 lint（静态 · T555 收窄 · T567-A 文件集）：业务区**禁**裸后端调用。
 #   唯一后端 = herdr（ADR 2026-11-22-herdr-only）：tmux 侧区间/台账分支已随后端删除，
 #   本函数只剩 herdr 判据 —— 命中行必须既在 `# >>> term-facade-herdr` 标记区内、又在唯一入口
 #   `_term_herdr_exec` 函数体内（或整行恰为 `herdr --version` 白名单：纯元数据、不触会话）。
@@ -447,27 +526,33 @@ _t4_in_ranges() { # <行号> <ranges> → 0/1
   done <<< "$rs"
   return 1
 }
-t4_scan_term_bare_calls() { # <script> [旧台账（T555 起不再使用）]
-  local script="$1" lnno body trim
+t4_scan_term_bare_calls() { # <dir|file> [旧台账（T555 起不再使用）]
+  local target="$1" script lnno body trim tag
   local re='(^|[|;&(]|\$\(|\{)[[:space:]]*(exec[[:space:]]+)?(setsid[[:space:]]+)?herdr([[:space:]]|$)'
   local allow='(command -v herdr|t4_require_cmd herdr)'
   local wl='^[[:space:]]*(exec[[:space:]]+|setsid[[:space:]]+)?herdr[[:space:]]+--version[[:space:]]*$'
-  local herdr_r funcs herdr_exec
-  herdr_r="$(_t4_term_ranges "$script" term-facade-herdr)"
-  funcs="$(_t4_term_func_ranges "$script")"
-  herdr_exec="$(awk -F'\t' '$1 == "_term_herdr_exec" { print $2 "\t" $3; exit }' <<< "$funcs")"
-  while IFS= read -r ln; do
-    lnno="${ln%%:*}"; body="${ln#*:}"
-    trim="${body#"${body%%[![:space:]]*}"}"
-    case "$trim" in \#*) continue;; esac
-    grep -qE -- "$allow" <<< "$ln" && continue
-    if ! _t4_in_ranges "$lnno" "$herdr_r"; then
-      printf '%s:%s [herdr-区外]\n' "$lnno" "$trim"; continue
-    fi
-    if grep -qE -- "$wl" <<< "$trim"; then continue; fi
-    if [ -n "$herdr_exec" ] && _t4_in_ranges "$lnno" "$herdr_exec"; then continue; fi
-    printf '%s:%s [herdr-旁路唯一入口]\n' "$lnno" "$trim"
-  done < <(grep -nE -- "$re" "$script")
+  local herdr_r funcs herdr_exec _pfx="" _n=0 _f
+  local -a _fs=()
+  while IFS= read -r _f; do _fs+=("$_f"); done < <(_t4_fleet_files "$target")
+  [ "${#_fs[@]}" -gt 1 ] && _pfx=1
+  for script in "${_fs[@]}"; do
+    # 实现区 = 带标记的文件取标记区间；不带的文件（= 非实现模块）整文件都算「区外」。
+    herdr_r="$(_t4_term_ranges "$script" term-facade-herdr)"
+    funcs="$(_t4_term_func_ranges "$script")"
+    herdr_exec="$(awk -F'\t' '$1 == "_term_herdr_exec" { print $2 "\t" $3; exit }' <<< "$funcs")"
+    while IFS= read -r ln; do
+      lnno="${ln%%:*}"; body="${ln#*:}"
+      trim="${body#"${body%%[![:space:]]*}"}"
+      case "$trim" in \#*) continue;; esac
+      grep -qE -- "$allow" <<< "$ln" && continue
+      if [ -z "$herdr_r" ] || ! _t4_in_ranges "$lnno" "$herdr_r"; then
+        printf '%s [herdr-区外]\n' "$(_t4_emit "$_pfx" "$script" "$lnno" "$trim")"; continue
+      fi
+      if grep -qE -- "$wl" <<< "$trim"; then continue; fi
+      if [ -n "$herdr_exec" ] && _t4_in_ranges "$lnno" "$herdr_exec"; then continue; fi
+      printf '%s [herdr-旁路唯一入口]\n' "$(_t4_emit "$_pfx" "$script" "$lnno" "$trim")"
+    done < <(grep -nE -- "$re" "$script")
+  done
 }
 
 # T555 / AC8 静态 lint：**禁旧 tmux 面复活**（与 t4_scan_term_herdr_forbidden 反向写法）。
@@ -496,8 +581,8 @@ t4_scan_term_bare_calls() { # <script> [旧台账（T555 起不再使用）]
 #   上下文」的替代方案：那会让 `case "$BE" in tmux)` 这类改名变量（BE=`${NAO_TERMINAL}`）漏判。
 #   作用域：`.agents/scripts/*.sh` + `tests/t4/run.sh`（**不扫 docs/**：文档必须保留迁移指路）。
 #   输出 `行号:内容`（一行一个）；空输出 = 干净。
-t4_scan_tmux_residue() { # <script>
-  local script="$1" lnno body trim
+t4_scan_tmux_residue() { # <dir|file>
+  local target="$1" script lnno body trim
   local re='(^|[|;&(]|\$\()[[:space:]]*(exec[[:space:]]+)?(setsid[[:space:]]+)?tmux([[:space:]]|$)'
   local re_assign='NAO_TERMINAL[[:space:]]*=[[:space:]]*["'"'"']?tmux'
   local re_cmp='NAO_TERMINAL[^[:space:]]*["'"'"']?[[:space:]]*(=|==|!=)[[:space:]]*["'"'"']?tmux'
@@ -522,31 +607,39 @@ t4_scan_tmux_residue() { # <script>
     grep -qE '(exit|return)[[:space:]]+2([^0-9]|$)' <<< "$t" || return 1
     return 0
   }
-  while IFS= read -r ln; do
-    lnno="${ln%%:*}"; body="${ln#*:}"
-    trim="${body#"${body%%[![:space:]]*}"}"
-    case "$trim" in \#*) continue;; esac
-    grep -qE -- "$allow" <<< "$body" && continue
-    if grep -qE -- "$re" <<< "$body" || grep -qE -- "$re_assign" <<< "$body" \
-       || grep -qE -- "$re_cmp" <<< "$body"; then
-      printf '%s:%s\n' "$lnno" "$trim"; continue
-    fi
-    if _tmux_arm_hit "$body"; then
-      _tmux_guard_arm "$lnno" && continue
-      printf '%s:%s\n' "$lnno" "$trim"; continue
-    fi
-  # 预筛：四条判据都必然含小写字面量 `tmux`（大写 TMUX/TMUX_PANE 不在覆盖面）
-  done < <(grep -n 'tmux' "$script" || true)
+  local _pfx="" _f
+  local -a _fs=()
+  while IFS= read -r _f; do _fs+=("$_f"); done < <(_t4_fleet_files "$target")
+  [ "${#_fs[@]}" -gt 1 ] && _pfx=1
+  for script in "${_fs[@]}"; do
+    while IFS= read -r ln; do
+      lnno="${ln%%:*}"; body="${ln#*:}"
+      trim="${body#"${body%%[![:space:]]*}"}"
+      case "$trim" in \#*) continue;; esac
+      grep -qE -- "$allow" <<< "$body" && continue
+      if grep -qE -- "$re" <<< "$body" || grep -qE -- "$re_assign" <<< "$body" \
+         || grep -qE -- "$re_cmp" <<< "$body"; then
+        _t4_emit "$_pfx" "$script" "$lnno" "$trim"; continue
+      fi
+      if _tmux_arm_hit "$body"; then
+        _tmux_guard_arm "$lnno" && continue
+        _t4_emit "$_pfx" "$script" "$lnno" "$trim"; continue
+      fi
+    # 预筛：四条判据都必然含小写字面量 `tmux`（大写 TMUX/TMUX_PANE 不在覆盖面）
+    done < <(grep -n 'tmux' "$script" || true)
+  done
 }
 
 # 台账校验（B1）：① 每行可验（函数真实存在 + 函数体仍含裸后端调用）② 去重 ③ 行数只允许下降（文件头 baseline）
 #   ④ 渲染层函数禁入台账（cmd_status / visible_session_names / pane_cwd_snapshot / running / term_*）。
 #   T555：台账对象（旧 tmux 迁移）已随后端删除 ⇒ baseline = 0、条目 0；机制保留以守「不回暖」。
-t4_verify_term_ledger() { # <script> <台账文件>
-  local script="$1" ledger="$2" base n=0 f owner why body herdr_r
-  local funcs; funcs="$(_t4_term_func_ranges "$script")"
-  herdr_r="$(_t4_term_ranges "$script" term-facade-herdr)"
+t4_verify_term_ledger() { # <dir|file> <台账文件>
+  local target="$1" ledger="$2" base n=0 f owner why rec script s e bfile in_region
+  local funcs=""
   [ -f "$ledger" ] || { printf '台账缺失: %s\n' "$ledger"; return 0; }
+  while IFS= read -r script; do
+    funcs+="$(_t4_term_func_ranges "$script" | awk -F'\t' -v f="$script" '{ print $1 "\t" f "\t" $2 "\t" $3 }')"$'\n'
+  done < <(_t4_fleet_files "$target")
   base="$(sed -n 's/^#[[:space:]]*baseline:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$ledger" | head -1)"
   [ -n "$base" ] || printf '台账缺 baseline 头（# baseline: N）\n'
   local -A seen=()
@@ -557,12 +650,16 @@ t4_verify_term_ledger() { # <script> <台账文件>
     if [ -n "${seen[$f]:-}" ]; then printf '台账重复条目: %s\n' "$f"; fi
     seen["$f"]=1
     if [ -z "$owner" ] || [ -z "$why" ]; then printf '台账条目缺 owner/理由: %s\n' "$f"; fi
-    body="$(awk -F'\t' -v n="$f" '$1 == n { print $2 "\t" $3; exit }' <<< "$funcs")"
-    if [ -z "$body" ]; then printf '台账条目函数不存在（typo）: %s\n' "$f"; continue; fi
-    if _t4_in_ranges "${body%%$'\t'*}" "$herdr_r"; then
+    rec="$(awk -F'\t' -v n="$f" '$1 == n { print $2 "\t" $3 "\t" $4; exit }' <<< "$funcs")"
+    if [ -z "$rec" ]; then printf '台账条目函数不存在（typo）: %s\n' "$f"; continue; fi
+    bfile="${rec%%$'\t'*}"; rec="${rec#*$'\t'}"; s="${rec%%$'\t'*}"; e="${rec##*$'\t'}"
+    # 实现区 = term-herdr.sh 全文（拆分后为独立文件）；带标记的单文件副本仍按标记区间
+    in_region=0
+    if [ "$(basename "$bfile")" = "term-herdr.sh" ] || _t4_in_ranges "$s" "$(_t4_term_ranges "$bfile" term-facade-herdr)"; then
+      in_region=1
       printf '台账多余（该函数已在标记区内，应删条目）: %s\n' "$f"
     fi
-    if ! sed -n "${body%%$'\t'*},${body##*$'\t'}p" "$script" \
+    if ! sed -n "${s},${e}p" "$bfile" \
          | grep -qE '(^|[|;&(]|\$\(|\{)[[:space:]]*(exec[[:space:]]+)?(setsid[[:space:]]+)?(tmux|herdr)([[:space:]]|$)'; then
       printf '台账 stale（该函数已无裸后端调用，应删条目）: %s\n' "$f"
     fi
@@ -575,20 +672,46 @@ t4_verify_term_ledger() { # <script> <台账文件>
 #   宿主句柄名、标题字段名，以及 tmux 的**布局算式 symbols**（最小列宽闸门 / main-row2 列差 /
 #   长度常量 137/184）都不得出现在 herdr 实现里 —— 后者是 herdr 布局 = tab 拓扑（结构判据）的反证：
 #   T555 已把 tmux 布局函数整组删除，本判据防它们被顺手搬进 herdr 区复活（AC8 同族）。
-t4_scan_term_herdr_forbidden() { # <script>
-  local script="$1" rs s e off lnno body
+t4_scan_term_herdr_forbidden() { # <dir|file>
+  local target="$1" script rs s e off lnno body trim f _pfx="" _ff
   local re='TMUX|terminal_title|pane_title|TMUX_MIN_PANE_WIDTH|main_row2_min_col|137|184'
-  rs="$(_t4_term_ranges "$script" term-facade-herdr)"
-  [ -n "$rs" ] || { printf 'herdr 实现区标记缺失（# >>> term-facade-herdr BEGIN）\n'; return 0; }
-  while IFS=$'\t' read -r s e; do
-    [ -n "$s" ] || continue
-    while IFS= read -r off; do
-      [ -n "$off" ] || continue
-      lnno=$((s + off - 1))
-      body="$(sed -n "${lnno}p" "$script")"
-      printf '%s:%s\n' "$lnno" "$body"
-    done < <(sed -n "${s},${e}p" "$script" | grep -nE "$re" | cut -d: -f1)
-  done <<< "$rs"
+  local allow='(tmuxPane|_TERM_HOST_HANDLE_VARS=)'
+  local -a files=()
+  if [ -d "$target" ]; then
+    for f in "$target"/fleet/lib/*.sh; do [ -f "$f" ] && files+=("$f"); done
+    # 结构性前提：实现区标记必须仍在 term-herdr.sh（删掉标记 ⇒ 不得静默变绿）
+    local _m
+    _m="$(grep -hcE '^# (>>>|<<<) term-facade-herdr (BEGIN|END)$' "$target"/fleet/lib/*.sh 2>/dev/null | awk '{ n += $1 } END { print n + 0 }')"
+    [ "$_m" = "2" ] || printf 'herdr 实现区标记缺失/重复（期望 BEGIN/END 各 1，实得 %s）\n' "$_m"
+  else
+    files=("$target")
+  fi
+  [ "${#files[@]}" -gt 1 ] && _pfx=1
+  for script in "${files[@]}"; do
+    rs="$(_t4_term_ranges "$script" term-facade-herdr)"
+    if [ -n "$rs" ]; then
+      while IFS=$'\t' read -r s e; do
+        [ -n "$s" ] || continue
+        while IFS= read -r off; do
+          [ -n "$off" ] || continue
+          lnno=$((s + off - 1))
+          body="$(sed -n "${lnno}p" "$script")"
+          _t4_emit "$_pfx" "$script" "$lnno" "$body"
+        done < <(sed -n "${s},${e}p" "$script" | grep -nE "$re" | cut -d: -f1)
+      done <<< "$rs"
+    else
+      # 文件集模式：term-herdr.sh = 实现区（全文）；其他模块只允许白名单位置（宿主句柄名表 / 名册字段）
+      while IFS= read -r lnno; do
+        [ -n "$lnno" ] || continue
+        body="$(sed -n "${lnno}p" "$script")"
+        trim="${body#"${body%%[![:space:]]*}"}"
+        # 非实现模块：注释行不参与（原判据只扫 herdr 实现区；这些文件里的 TMUX 只出现在迁移说明里）
+        case "$trim" in \#*) continue;; esac
+        grep -qE -- "$allow" <<< "$body" && continue
+        _t4_emit "$_pfx" "$script" "$lnno" "$body"
+      done < <(grep -nE "$re" "$script" | cut -d: -f1)
+    fi
+  done
 }
 
 # T562/AC7 静态闸：**app 臂禁裸调 hc**（唯一入口 `_term_app_exec`）。
@@ -615,25 +738,78 @@ t4_scan_app_bare_hc() { # <script>
   #      ⇒ 仍被抓红（QA 复核：上一版注释称其为盲区，是错的）。
   #   ② 入口存在性：`_term_app_exec() {` 必须**恰 1 处**；整删/改名后没有 hc 调用也**不许算绿**
   #      （否则「删掉入口」= 判据空转，是最容易被绕过的一种）。
-  local script="$1" lnno body trim execr="" entry_n=""
+  local target="$1" script lnno body trim execr="" entry_n=0 f
   local entry_re='^_term_app_exec\(\) \{'
   local -r sudo_re='sudo([[:space:]]+(-[a-zA-Z]*[ugpChU][[:space:]]+[^[:space:]]+|--(user|group|prompt|close-from|other-user)(=[^[:space:]]+|[[:space:]]+[^[:space:]]+)|-[^[:space:]]+))*'
   local pre="([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|command[[:space:]]+-[a-zA-Z]|${sudo_re}|exec|command|env|nohup|time|if|then|else|elif|while|until|do|!)"
   local case_re='^[[:space:]]*(case[[:space:]].*[[:space:]]in[[:space:]]+)?[^()[:space:];&]+[[:space:]]*\)'
   local re="(^|[|;&({]|${case_re})[[:space:]]*(${pre}[[:space:]]+)*hc([[:space:]]|$)"
   local allow='(command -v hc|t4_require_cmd hc)'
-  [ -f "$script" ] || { printf '脚本不存在: %s\n' "$script"; return 0; }
-  entry_n="$(grep -cE -- "$entry_re" "$script" || true)"
-  [ "$entry_n" = "1" ] || printf 'MISSING_ENTRY: %s 内 `_term_app_exec() {` 定义数 = %s（唯一入口缺失/重复 ⇒ app 臂可能裸调 hc 或已被删）\n' "$script" "$entry_n"
-  execr="$(awk -F'\t' '$1 == "_term_app_exec" { print $2 "\t" $3; exit }' <<< "$(_t4_term_func_ranges "$script")")"
-  while IFS= read -r ln; do
-    lnno="${ln%%:*}"; body="${ln#*:}"
-    trim="${body#"${body%%[![:space:]]*}"}"
-    case "$trim" in \#*) continue;; esac
-    grep -qE -- "$allow" <<< "$ln" && continue
-    if [ -n "$execr" ] && _t4_in_ranges "$lnno" "$execr"; then continue; fi
-    printf '%s:%s\n' "$lnno" "$trim"
-  done < <(grep -nE -- "$re" "$script")
+  # 入口存在性按**文件集**合计（拆分后唯一入口在 term-app.sh，但仍必须是 1 处）
+  while IFS= read -r f; do
+    entry_n=$(( entry_n + $(grep -cE -- "$entry_re" "$f" || true) ))
+  done < <(_t4_fleet_files "$target")
+  [ "$entry_n" = "1" ] || printf 'MISSING_ENTRY: %s 内 `_term_app_exec() {` 定义数 = %s（唯一入口缺失/重复 ⇒ app 臂可能裸调 hc 或已被删）\n' "$target" "$entry_n"
+  local _pfx="" _f
+  local -a _fs=()
+  while IFS= read -r _f; do _fs+=("$_f"); done < <(_t4_fleet_files "$target")
+  [ "${#_fs[@]}" -gt 1 ] && _pfx=1
+  for script in "${_fs[@]}"; do
+    execr="$(awk -F'\t' '$1 == "_term_app_exec" { print $2 "\t" $3; exit }' <<< "$(_t4_term_func_ranges "$script")")"
+    while IFS= read -r ln; do
+      lnno="${ln%%:*}"; body="${ln#*:}"
+      trim="${body#"${body%%[![:space:]]*}"}"
+      case "$trim" in \#*) continue;; esac
+      grep -qE -- "$allow" <<< "$ln" && continue
+      if [ -n "$execr" ] && _t4_in_ranges "$lnno" "$execr"; then continue; fi
+      _t4_emit "$_pfx" "$script" "$lnno" "$trim"
+    done < <(grep -nE -- "$re" "$script")
+  done
+}
+
+# T567-A：174 守恒三向断言（ADR D3「174 函数锚怎么迁」）。
+#   <scripts-dir> <functions.txt> → 违规行（空 = 合规）。三向 = ①并集无漏登记 ②无孤儿（清单里有、
+#   代码里没有）③ 总数守恒（清单行数 == 头 `# total: N` == 各模块顶层函数实际并集）。
+#   归属也断言：清单写的模块必须就是定义该函数的文件（防「清单对、代码搬家没改清单」）。
+t4_verify_functions_manifest() { # <scripts-dir> <functions.txt>
+  local dir="$1" manifest="$2" f n path line total expected name decl_path actual_path bad=0
+  local -A decl=() seen=()
+  [ -f "$manifest" ] || { printf '清单缺失: %s\n' "$manifest"; return 0; }
+  total="$(sed -n 's/^#[[:space:]]*total:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$manifest" | head -1)"
+  if [ -z "$total" ]; then printf '清单缺 total 头（# total: N）\n'; fi
+  while IFS=$'\t' read -r path name; do
+    case "$path" in ''|\#*) continue ;; esac
+    if [ -n "${decl[$name]:-}" ]; then printf '清单重复条目: %s（%s / %s）\n' "$name" "${decl[$name]}" "$path"; fi
+    decl["$name"]="$path"
+    if [ ! -f "$dir/$path" ]; then printf '清单路径不存在: %s（%s）\n' "$path" "$name"; fi
+  done < <(grep -vE '^[[:space:]]*(#|$)' "$manifest")
+  n=0
+  while IFS= read -r f; do
+    path="${f#"$dir"/}"
+    while IFS= read -r name; do
+      [ -n "$name" ] || continue
+      n=$((n + 1))
+      if [ -n "${seen[$name]:-}" ]; then printf '函数重名（跨模块）: %s（%s / %s）\n' "$name" "${seen[$name]}" "$path"; fi
+      seen["$name"]="$path"
+      if [ -z "${decl[$name]:-}" ]; then
+        printf '漏登记（代码有、清单无）: %s @ %s\n' "$name" "$path"
+      elif [ "${decl[$name]}" != "$path" ]; then
+        printf '归属不符: %s 清单写 %s，实际在 %s\n' "$name" "${decl[$name]}" "$path"
+      fi
+    done < <(sed -nE 's/^([A-Za-z_][A-Za-z0-9_]*)\(\)[[:space:]]*\{.*$/\1/p' "$f")
+  done < <(_t4_fleet_files "$dir")
+  for name in "${!decl[@]}"; do
+    [ -n "${seen[$name]:-}" ] || printf '孤儿（清单有、代码无）: %s @ %s\n' "$name" "${decl[$name]}"
+  done
+  if [ -n "$total" ] && [ "$n" != "$total" ]; then
+    printf '总数不符: 实际 %s ≠ 清单头 total %s\n' "$n" "$total"
+  fi
+  # 清单行数也必须与 total 一致（防「只加行不改 total」）
+  expected="$(grep -vcE '^[[:space:]]*(#|$)' "$manifest")"
+  if [ -n "$total" ] && [ "$expected" != "$total" ]; then
+    printf '清单行数 %s ≠ 头 total %s\n' "$expected" "$total"
+  fi
+  return 0
 }
 
 # T558/#160 静态闸：放置快照 pane 行的**裸 read 消费点 = 0**，且每个消费循环首步必须经单点访问器。
@@ -646,11 +822,12 @@ t4_scan_app_bare_hc() { # <script>
 #     ② 循环体必须出现 `_term_place_pane_fields "$line"`（唯一取值入口）；
 #     ③ 循环体内不得做 `$'\t'` 字段运算（前缀切 / IFS=TAB）。
 #   输出：`<行号>:<正文>`（空 = 合规）。行号 = 真件行号（循环体内的行）；② 缺访问器时给循环起始行。
-#   注：只认「首层 done 收尾」的简单循环；当前**扫到 10 个消费循环**（`nao-fleet.sh:993/1008/1088/1111/1239/1331/4068/4131/4158/4186`），
-#   全部符合该形态；若日后新增嵌套循环或其他消费写法（`mapfile`/子 shell 复制数组），本闸需同步扩展。
-t4_scan_place_pane_rows() { # <script>
-  local script="$1" ln rest start body line
-  [ -f "$script" ] || { printf '脚本不存在: %s\n' "$script"; return 0; }
+#   注：只认「首层 done 收尾」的简单循环；T567-A 起按**文件集**扫（消费循环在 term-herdr.sh 与
+#   manifest.sh/ensure.sh 里）；若日后新增嵌套循环或其他消费写法（`mapfile`/子 shell 复制数组），
+#   本闸需同步扩展。
+t4_scan_place_pane_rows() { # <dir|file>
+  local target="$1" script ln rest start body line
+  while IFS= read -r script; do
   while IFS=: read -r ln rest; do
     [ -n "$ln" ] || continue
     start="$ln"
@@ -671,6 +848,7 @@ t4_scan_place_pane_rows() { # <script>
       case "${line#*:}" in *"\$'\\t'"*) printf '%s\n' "$line" ;; esac
     done <<< "$body"
   done < <(grep -nE 'for [a-z_]+ in "\$\{_TERM_PLACE_PANE_ROWS\[@\]:-\}"' "$script")
+  done < <(_t4_fleet_files "$target")
 }
 
 # 三期 P2（默认翻 herdr）静态面：**用例不得依赖生产默认值**。
