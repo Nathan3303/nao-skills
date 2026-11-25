@@ -53,7 +53,8 @@
 - 🔄 **T568 阶段 3 已交付（2026-11-25 · rd-infra · 分支 `feat/568-orch-board-multirepo` · 待 PM 验收/合并）**：`nao-orch board` 同快照（`digits/tasks/receipts` 契约 + 读一次证明 + 禁落盘）· 多仓不串仓（role+task 命中且 `repo` == 本仓，`ensure` argv/cwd 锚本仓，同名跨仓不猜、零跨仓通知）· 90m `stalled`（WAL `intent.head`，HEAD 未变判据）+ PRD §六 同步；用例 49（23 条）/50（35 条），48 扩 13 条；报告 `docs/reports/568-impl-rd-infra.md`。
 - 🔁 **接续快照（2026-11-24 晚 · PM 重开前）**：接手者只需读本区。要点：
   - **T566 编排器阶段 1 已收敛**（**已合并 `b6bb4cb`** · PR #179 · Issue #177 已关）：QA 二轮全修 → 43/43 全量门禁绿 → squash 合并，无遗留在飞任务。
-  - **已发布版本**：v0.31.1（T565 app 放置验证修复，npm 已核验；发布后事实提交 49ce447）。
+  - **编排器三阶段 + 舰队脚本拆分已全部交付并合并**（main `9edbcdf`）：阶段 1 / 2 / 3 与 11 模块拆分均已 squash 落地；发版版本 PR（0.32.0）待合并，npm 核验后回填发布说明状态行。
+  - **已发布版本**：v0.32.0（编排器三阶段 + 舰队拆分；**待核验**）。
   - **队列**：阶段 2/3 已立项（#182/#183），阶段 2 待架构方案与开工确认；PRD `docs/prds/2026-11-24-orchestrator.md` 已接受。
   - **T567 已立项**（Issue #182 · 分支未开）：nao-orch 阶段 2 —— tick daemon + 无人值守调度（PRD AC5–AC9）；先出 ADR，**待用户批开工确认卡后**才实施。
   - **T568 已立项**（Issue #183 · 未排期）：nao-orch 阶段 3 —— 多仓不串仓 + nao-board（AC10–AC11）；**前置 = 阶段 2 落地**。
