@@ -8,15 +8,16 @@
 //   · 派单 15m 无回执 ⇒ blocked(no_ack) + 追问一次，attempt 不递增（AC7）
 //   · 写盘 CAS：落盘前重读 queue.jsonl 比对 sha，变了 ⇒ rc=1 零写入（不覆盖人的编辑）
 // 时钟注入：`--now <ISO>` 或 `NAO_ORCH_NOW`（AC7 的 15m 判据一律走注入时钟，**禁 sleep 等真实时间**）。
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
-import { parseQueue, validateQueue, renderRegion, spliceRegion } from '../queue.mjs';
+import { parseQueue, parseQueueText, validateQueue, renderRegion, spliceRegion, STATES } from '../queue.mjs';
 import { fleetExec, notifyPm, gitExec, runTool } from './fleet.mjs';
 import {
   walPath, lockPath, ensureOrchDir, appendWal, readWal, indexWal, intentKey, sha256,
 } from './wal.mjs';
 
 export const ACK_TIMEOUT_MS = 15 * 60 * 1000;
+export const STALL_TIMEOUT_MS = 90 * 60 * 1000;
 export const TICK_BUDGET_MS = 120 * 1000;
 const DONE_STATES = new Set(['qa_pass', 'merging', 'merged', 'released']);
 
@@ -371,30 +372,91 @@ function readRowsFromText(text) {
 
 export function journalLine(ctx, nowIso, counters, rc) {
   const repo = path.basename(ctx.root);
-  return `orch tick=${nowIso} repo=${repo} scanned=${counters.scanned} dispatched=${counters.dispatched} blocked=${counters.blocked} skipped=${counters.skipped} waiting=${counters.waiting} recovered=${counters.recovered} nudged=${counters.nudged} rc=${rc}`;
+  return `orch tick=${nowIso} repo=${repo} scanned=${counters.scanned} dispatched=${counters.dispatched} blocked=${counters.blocked} stalled=${counters.stalled} skipped=${counters.skipped} waiting=${counters.waiting} recovered=${counters.recovered} nudged=${counters.nudged} rc=${rc}`;
 }
 
 // ---------------------------------------------------------------- board / reap
+
+// 回执摘要（只读 `docs/queue/*.receipt.json`）：坏 JSON 只计数（board 不是 validator，判红归 nao-queue）。
+export function readReceipts(ctx) {
+  const out = { total: 0, ids: [], latest: [], unreadable: 0 };
+  if (!existsSync(ctx.receiptsDir)) return out;
+  let names = [];
+  try {
+    names = readdirSync(ctx.receiptsDir).filter((f) => f.endsWith('.receipt.json')).sort();
+  } catch {
+    return out;
+  }
+  for (const f of names) {
+    const file = path.join(ctx.receiptsDir, f);
+    let obj;
+    try {
+      obj = JSON.parse(readFileSync(file, 'utf8'));
+    } catch {
+      out.unreadable += 1;
+      continue;
+    }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+      out.unreadable += 1;
+      continue;
+    }
+    out.total += 1;
+    const id = typeof obj.id === 'string' && obj.id ? obj.id : f.slice(0, -'.receipt.json'.length);
+    out.ids.push(id);
+    const gates = obj.gates && typeof obj.gates === 'object' ? obj.gates : {};
+    const rcOf = (g) => (g && Number.isFinite(g.rc) ? g.rc : null);
+    const acs = Array.isArray(obj.acs) ? obj.acs : [];
+    out.latest.push({
+      id,
+      author: typeof obj.author === 'string' ? obj.author : '',
+      at: typeof obj.at === 'string' ? obj.at : '',
+      head: typeof obj.head === 'string' ? obj.head : '',
+      pushed: obj.pushed === true,
+      gates: { check: rcOf(gates.check), full: rcOf(gates.full) },
+      acs: acs.length,
+    });
+  }
+  out.latest.sort((a, b) => {
+    if (String(a.at) !== String(b.at)) return String(a.at) < String(b.at) ? 1 : -1;
+    return String(a.id) < String(b.id) ? -1 : 1;
+  });
+  return out;
+}
+
+// AC11：board 的数值与 queue.jsonl **同 tick 快照**。硬实现 = 队列文本只读一次（下面的 readFileSync），
+//   之后的行/计数/任务全从这份 text 派生；测试在 `board-after-queue` 钩子里改队列文件 ⇒ 输出必须不变。
+//   禁落盘、禁缓存：不 mkdir `.orch`、不写任何文件（第二事实源 = 违规）。
 export function board(opts = {}) {
   const ctx = resolveCtx(opts);
   const nowMs = opts.nowMs ?? resolveNow(opts);
-  const queue = readQueueFile(ctx.queuePath);
-  if (queue.errors.length) return { rc: 1, errors: queue.errors };
-  const wal = indexWal(readWal(ctx.wal).records);
-  const rows = sortRows(queue.rows).map((r) => {
+  if (!existsSync(ctx.queuePath)) return { rc: 1, errors: [`队列文件不存在：${ctx.queuePath}`] };
+  const text = readFileSync(ctx.queuePath, 'utf8');
+  runHook('board-after-queue');
+  const parsed = parseQueueText(ctx.queuePath, text);
+  const { errors } = validateQueue(ctx.queuePath, parsed.rows, parsed.errors);
+  if (errors.length) return { rc: 1, errors };
+  const walRead = readWal(ctx.wal);
+  const wal = indexWal(walRead.records);
+  const tasks = sortRows(parsed.rows).map((r) => {
     const at = Date.parse(r.updated);
     const ageMin = Number.isFinite(at) ? Math.max(0, Math.round((nowMs - at) / 60000)) : null;
     const e = wal.get(r.id);
     return {
-      id: r.id, state: r.state, owner: r.owner, prio: r.prio, deps: r.deps,
-      attempt: r.attempt, updated: r.updated, age_min: ageMin,
+      id: r.id, title: r.title, state: r.state, owner: r.owner, qa: r.qa, prio: r.prio,
+      deps: Array.isArray(r.deps) ? r.deps : [], attempt: r.attempt, updated: r.updated, age_min: ageMin,
       blocked_reason: r.blocked_reason || '',
       wal: e && e.intent ? 'intent' : e && e.committed ? 'committed' : '',
+      repo: r.repo, branch: r.branch,
     };
   });
-  const counts = {};
-  for (const r of rows) counts[r.state] = (counts[r.state] || 0) + 1;
-  return { rc: 0, ctx, rows, counts, walBad: readWal(ctx.wal).bad };
+  // digits = 状态表全集（缺项补 0）：形状稳定，调用方不必判「键在不在」
+  const digits = {};
+  for (const s of STATES) digits[s] = 0;
+  for (const r of tasks) if (Object.prototype.hasOwnProperty.call(digits, r.state)) digits[r.state] += 1;
+  return {
+    rc: 0, ctx, tickAt: isoSeconds(nowMs), tasks, digits,
+    receipts: readReceipts(ctx), walBad: walRead.bad,
+  };
 }
 
 export function reap(opts = {}) {

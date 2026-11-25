@@ -66,8 +66,9 @@ function short(v) {
 
 // ---------------------------------------------------------------- 队列解析 / 校验
 
-function parseQueue(file) {
-  const text = readText(file, '队列文件');
+// 文本版解析（调用方已把文件读进内存时用：board 的「一次运行只读一次队列」判据
+//   —— 这里**不再**打开文件，只做行解析；`parseQueue` 仍读一次再委托给它，行为零变更）。
+function parseQueueText(file, text) {
   const rows = [];
   const errors = [];
   text.split('\n').forEach((line, i) => {
@@ -88,6 +89,10 @@ function parseQueue(file) {
     rows.push(row);
   });
   return { rows, errors };
+}
+
+function parseQueue(file) {
+  return parseQueueText(file, readText(file, '队列文件'));
 }
 
 const nonEmptyString = (v) => typeof v === 'string' && v.trim() !== '';
@@ -381,6 +386,6 @@ export {
   STATES, TRANSITIONS, REGION_STATES, MARKER_BEGIN, MARKER_END, GENERATED_HEAD,
   QUEUE_FIELDS, RECEIPT_FIELDS, DATE_RE, SHA_RE, UsageError,
   readText, isPlainObject, typeOf, short, nonEmptyString,
-  parseQueue, validateQueue, cmpRow, formatRow, renderRegion, spliceRegion, firstDiffLines,
+  parseQueue, parseQueueText, validateQueue, cmpRow, formatRow, renderRegion, spliceRegion, firstDiffLines,
   repoRootOrNull, checkLogError, checkReceipt, git, verifyPushed,
 };
