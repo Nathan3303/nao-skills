@@ -233,6 +233,8 @@ npx @nathan33/nao-skill migrate   # 旧文件备份到 .agents/.nao-obsolete/，
 
 迁移默认按**判定式**决定是否写 shim：仓里还有旧的 `nao-fleet.sh`、或已存在 shim、或全仓有 `nao-fleet` / `nao-skill` / `NAO_SKILLS` 引用，就写；**无脚本、无引用的纯文档仓会被判定跳过**，并打印一行告知。要改变判定结果，显式加 `--shim`（强制写）或 `--no-shim`（强制不写），两者不能同时给（`exit 2`）。
 
+**已知边界（按目录名判定）**：迁移把 `.agents/{prompts,common,checklists,templates}` 按**目录名**视为旧版 nao 资产 —— 项目自有的同名目录也会被备份后移除（备份在 `.agents/.nao-obsolete/`，可回滚）。操作前先预演：`npx @nathan33/nao-skill migrate --dry-run`（`init --dry-run` 同口径）—— 只打印将备份/移除的清单与目标，**盘面零写入**；与 `--force` 互斥（`exit 2`）。去掉 `--dry-run` 才真跑，预演清单与真跑动作逐项一致。
+
 旧版的 `.agents/.nao-migrated` 标记**已废弃**：迁移不再读写它，可安全删除。`.agents/.nao-version` 的语义是「本机已安装机制包版本」（供升级检测），**不表达迁移状态**——迁移状态由「是否还有旧资产」推断。
 
 ## 发布形态与完整性判据（0.12 起有变化）
