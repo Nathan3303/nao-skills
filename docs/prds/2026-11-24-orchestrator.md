@@ -71,7 +71,7 @@
 | 回执伪造（自述 pass 无日志） | `gates.check.log` 指向不存在文件，或 `gates.full` 缺 `rc/cases/pass/fail/note` 任一 ⇒ 判红 |
 | 派单意图已落 WAL、会话不存在（`kill -9` 等） | `blocked(dispatch_unknown)` + 通知 PM；**绝不自动重派**（先让人看原因） |
 
-> 超时动作的**当前覆盖面**（阶段 2 实施口径，读者须知）：只有 `dispatched`（派单 15m 无回执）有自动动作（`blocked(no_ack)` + 追问一次）。**`working` 行当前没有任何超时自动动作** —— 90m `stalled`（HEAD 未变）判据要「派单时的 HEAD」而本 PRD §四 明确不新增 `dispatch_at` 类字段，故随阶段 3 的 board 指标一并实现（在那之前不会误判：`working` 行只会等人推进）。
+> 超时动作的**当前覆盖面**（阶段 2 + 阶段 3 已实现，读者须知）：`dispatched`（派单 15m 无回执）⇒ `blocked(no_ack)` + 追问一次；**`working` 行已实现 90m `stalled`**（`now - WAL intent.at ≥ 90m` **且** 当前 `git rev-parse HEAD` == 派单时 HEAD ⇒ `blocked(stalled)` + 通知，attempt 不递增）。判据依赖 **WAL `intent.head`**（派单时只读记录），队列字段仍不新增 `dispatch_at` 类字段；`intent.head` 缺失（阶段 2 遗留 WAL）或 HEAD 已变 ⇒ 不判停滞（fail-closed，等人推进）。
 >
 > 锚点（T566-F2）：`gates.check.log` 为相对路径时一律按**仓库根**解析（`git rev-parse --show-toplevel`，以调用 cwd 为起点）；绝对路径原样使用；仓库根不可判定（调用 cwd 不在任何 git 仓内）⇒ 判红（fail closed），不静默跳过。
 

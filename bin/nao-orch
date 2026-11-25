@@ -47,7 +47,8 @@ function usage() {
     '  · 整 tick 独占 docs/queue/.orch/lock（flock；第二实例 rc=1 并点名持锁 pid）',
     '  · 写队列前记 sha、落盘前重读比对（被人改过 ⇒ rc=1 零写入）',
     '  · 派单 = 写 WAL 意图 → ensure → 提交 row（崩在中间由下一 tick 用 WAL 的会话 id + cwd 探）',
-    '  · 15m 无回执 ⇒ blocked(no_ack) + 追问一次；目标角色 working/unknown ⇒ 零 ensure 只记等待',
+    '  · 15m 无回执 ⇒ blocked(no_ack) + 追问一次；working 90m 且 HEAD 未变 ⇒ blocked(stalled)',
+    '  · 目标角色 working/unknown ⇒ 零 ensure 只记等待；派单只认「role+task 命中且 repo=本仓」的会话（AC10）',
     '默认**不启用**（install-systemd 只落单元文件；要启用加 --enable）。',
     '',
   ].join('\n');
@@ -137,6 +138,12 @@ function tickAndReport(opts, ctx) {
   return res.rc;
 }
 
+function ageText(t) {
+  return Number.isFinite(t.age_min) ? `${t.age_min}m` : '?';
+}
+
+// AC11 看板：数据源 = queue.jsonl（**一次运行只读一次**，同 tick 快照）+ `docs/queue/*.receipt.json`。
+//   禁落盘、禁缓存 —— 本函数与 tick.mjs::board 都不写任何文件（第二事实源 = 违规）。
 function cmdBoard(opts) {
   const res = board({ root: opts.root, queue: opts.queue, now: opts.now });
   if (res.rc !== 0) {
@@ -146,24 +153,36 @@ function cmdBoard(opts) {
   if (opts.json) {
     process.stdout.write(`${JSON.stringify({
       schema: 1,
+      tick_at: res.tickAt,
       repo: res.ctx.root,
-      counts: res.counts,
-      rows: res.rows,
+      digits: res.digits,
+      tasks: res.tasks,
+      receipts: res.receipts,
       wal_bad_lines: res.walBad.length,
     })}\n`);
     return 0;
   }
-  const counts = Object.entries(res.counts).sort().map(([k, v]) => `${k}=${v}`).join(' ');
-  process.stdout.write(`orch board repo=${path.basename(res.ctx.root)} rows=${res.rows.length} ${counts}\n`);
-  for (const r of res.rows) {
-    const bits = [
-      r.id.padEnd(10), r.state.padEnd(11), `owner=${r.owner || '-'}`, `prio=${r.prio}`,
-      `attempt=${r.attempt}`, r.age_min === null ? 'age=?' : `age=${r.age_min}m`,
-    ];
-    if (r.blocked_reason) bits.push(`blocked_reason=${r.blocked_reason}`);
-    if (r.wal) bits.push(`wal=${r.wal}`);
-    process.stdout.write(`  ${bits.join(' · ')}\n`);
+  const digitText = Object.entries(res.digits).map(([k, v]) => `${k}=${v}`).join(' ');
+  process.stdout.write(`orch board repo=${path.basename(res.ctx.root)} tick_at=${res.tickAt} tasks=${res.tasks.length} receipts=${res.receipts.total}\n`);
+  process.stdout.write(`  分区 ${digitText}\n`);
+  const blocked = res.tasks.filter((t) => t.state === 'blocked');
+  process.stdout.write(`  阻塞 ${blocked.length}：\n`);
+  for (const t of blocked) {
+    process.stdout.write(`    · ${t.id} owner=${t.owner || '-'} attempt=${t.attempt} age=${ageText(t)} reason=${t.blocked_reason || '-'}\n`);
   }
+  const inflightStates = new Set(['dispatched', 'working', 'qa', 'qa_fail', 'merging']);
+  const inflight = res.tasks.filter((t) => inflightStates.has(t.state));
+  process.stdout.write(`  在飞 ${inflight.length}：\n`);
+  for (const t of inflight) {
+    process.stdout.write(`    · ${t.id} ${t.state} owner=${t.owner || '-'} prio=${t.prio} attempt=${t.attempt} age=${ageText(t)}${t.wal ? ` wal=${t.wal}` : ''}\n`);
+  }
+  const latest = res.receipts.latest.slice(0, 5);
+  process.stdout.write(`  回执 ${res.receipts.total}（最近 ${latest.length}）：\n`);
+  for (const r of latest) {
+    const gates = `check:${r.gates.check === null ? '?' : r.gates.check},full:${r.gates.full === null ? '?' : r.gates.full}`;
+    process.stdout.write(`    · ${r.id} author=${r.author || '-'} at=${r.at || '-'} gates=${gates} acs=${r.acs} head=${String(r.head || '').slice(0, 7) || '-'}\n`);
+  }
+  if (res.receipts.unreadable) process.stdout.write(`  ! 回执有 ${res.receipts.unreadable} 个不可解析（board 只计数；判红归 nao-queue validate）\n`);
   if (res.walBad.length) process.stdout.write(`  ! WAL 有 ${res.walBad.length} 行不可解析（append-only 崩溃尾部，已跳过）\n`);
   return 0;
 }
