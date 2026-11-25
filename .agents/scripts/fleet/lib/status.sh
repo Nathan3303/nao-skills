@@ -432,9 +432,10 @@ cmd_status_json() {
     [[ -n "$nm" && -z "${seen[$nm]:-}" ]] || continue
     names+=("$nm"); seen["$nm"]=1
   done
-  local -a live_names=()
-  mapfile -t live_names < <(visible_session_names)
-  for nm in "${live_names[@]:-}"; do
+  # 变量名避开「关前复核」用例用来定位模块的那个子串（撞名会把它的变异打到本文件）
+  local -a _sj_names=()
+  mapfile -t _sj_names < <(visible_session_names)
+  for nm in "${_sj_names[@]:-}"; do
     [[ -n "${nm:-}" && -z "${seen[$nm]:-}" ]] || continue
     names+=("$nm"); seen["$nm"]=1
   done
