@@ -290,6 +290,8 @@ t4_assert_contains "$(cat "$UNITD/nao-orch.service")" "ExecStart=$(command -v no
 t4_assert_contains "$(cat "$UNITD/nao-orch.timer")" "OnCalendar=*:0/1" "⑥ timer 日历式 + --interval 1m 生效"
 t4_assert_contains "$(cat "$UNITD/nao-orch.timer")" "Persistent=true" "⑥ Persistent=true（错过的 tick 补跑）"
 t4_assert_contains "$(cat "$UNITD/nao-orch.timer")" "RandomizedDelaySec=15s" "⑥ RandomizedDelaySec=15s"
+t4_assert_contains "$(cat "$UNITD/nao-orch.service")" "Environment=NAO_ORCH_NOTIFY=$STUB/notifier" \
+  "⑥ 安装时已设的通知器写进 unit Environment=（否则 timer 内通知只剩 journald + 队列留证）"
 t4_assert_eq "0" "$(grep -c 'enable' "$STUB_SYSCTL_LOG" || true)" "⑥ 默认**不 enable**（阶段 2 默认关闭）"
 cp -r "$UNITD" "$LAB/units-first"
 run_sys install-systemd --interval 1m

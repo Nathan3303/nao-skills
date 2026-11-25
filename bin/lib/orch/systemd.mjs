@@ -95,6 +95,11 @@ export function doctor(opts = {}) {
   }
   add(statusOk, 'status-json', statusDetail);
 
+  // 通知器（不阻断安装，但必须可见）：未设 ⇒ orch 只写 journald + queue.jsonl，不调 intercom
+  const notifier = process.env.NAO_ORCH_NOTIFY || '';
+  if (notifier) add(true, 'notify', notifier);
+  else lines.push('doctor: warn notify=未设（blocked/追问通知只落 journald + queue.jsonl；要唤醒 PM 请设 NAO_ORCH_NOTIFY 后重装）');
+
   // lock 可用性（flock 二进制存在时才算；不能仅凭 binary 存在就假定内核允许）
   const lk = flockExec(['--version']);
   add(lk.rc === 0, 'flock-runtime', lk.rc === 0 ? lk.out.trim().split('\n')[0] : `rc=${lk.rc}`);
@@ -118,6 +123,10 @@ function environmentLines(session) {
     if (d && !dirs.includes(d)) dirs.push(d);
   }
   const lines = [`Environment=PATH=${dirs.join(':')}`, `Environment=NAO_ORCH_NODE=${process.execPath}`];
+  // 通知器：安装时若已设 NAO_ORCH_NOTIFY（绝对路径、无空白字符）就写进 unit ——
+  //   否则 timer 环境里没有它，blocked/追问通知就只剩 journald + queue.jsonl 留证。
+  const notifier = process.env.NAO_ORCH_NOTIFY || '';
+  if (/^\/[^\s]*$/.test(notifier)) lines.push(`Environment=NAO_ORCH_NOTIFY=${notifier}`);
   if (session) {
     lines.push('Environment=HERDR_ENV=1', `Environment=HERDR_SESSION=${session}`);
     // socket 由 herdr 私有根发现（不猜会话名；找不到就不写，doctor/日志会点名）

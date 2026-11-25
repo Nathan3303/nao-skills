@@ -118,9 +118,10 @@
 
 ## 八、已知未覆盖 / 明确不做（不静默略过）
 
-- **90m `stalled`（HEAD 未变）未纳入本批**：ADR 允许「可做可不做」。理由：判据需要「派单时的 HEAD」这一事实，而 PRD §四 明确不新增 `dispatch_at` 类字段；落法应是「WAL intent 记 `head`」+ 对 `working` 行比对 `git rev-parse HEAD`。本批先把 AC5–AC8 的崩溃/并发/时钟三条主线做扎实，`stalled` 单独一批（可与阶段 3 的 board 指标同批）。当前代码**不会**误判：`working` 行没有任何超时自动动作。
+- **90m `stalled`（HEAD 未变）未纳入本批**：ADR 允许「可做可不做」。PRD §六 已写明**当前覆盖面**：只有 `dispatched`（15m 无回执）有自动动作，**`working` 行没有任何超时自动动作**（不会误判），90m 判据随阶段 3 board 指标一起做。理由：判据需要「派单时的 HEAD」这一事实，而 PRD §四 明确不新增 `dispatch_at` 类字段；落法应是「WAL intent 记 `head`」+ 对 `working` 行比对 `git rev-parse HEAD`。本批先把 AC5–AC8 的崩溃/并发/时钟三条主线做扎实，`stalled` 单独一批（可与阶段 3 的 board 指标同批）。当前代码**不会**误判：`working` 行没有任何超时自动动作。
+- **`NAO_ORCH_HOOK` 是测试专用 seam（不是后门）**：它只在环境变量显式设置时生效（`tick.mjs` 的 `runHook()` 读 `process.env.NAO_ORCH_HOOK`，未设 ⇒ 直接 return，零副作用）；systemd 单元与 `install-systemd` **都不写**这个变量，生产 timer 环境里它必然为空。用途只有一个：让 AC8 的「intent 后、提交前 `kill -9`」与 CAS 的「提交前队列被外部改」两类崩溃/竞态可机械复现（否则只能靠随机时序）。它不改变任何判定，只提供一个时间点。
 - **`reap` 是只读的**：只点名「终态/孤儿 intent」，不做破坏性回收（会话回收仍归 `nao-fleet.sh close`，PRD §九 回滚面）。自动回收需先有「谁在用什么会话」的稳定判据，不在本批范围。
-- **通知器的默认取值**：`NAO_ORCH_NOTIFY` 未设时 orch 不调任何 intercom 客户端（零依赖不引包），此时通知只落 journald + `queue.jsonl` 留证（ADR D7 的「两者都做」在部署侧需把 `NAO_ORCH_NOTIFY` 写进 unit 的 `Environment=`；本次安装器暂未写，属部署待办）。
+- **通知器（`NAO_ORCH_NOTIFY`）的处置（PM 裁定后已落地）**：安装时若已设且是绝对路径 ⇒ 写进 unit 的 `Environment=NAO_ORCH_NOTIFY=<路径>`（timer 环境里能拿到）；`doctor` 在未设时打一行 `doctor: warn notify=未设（…只落 journald + queue.jsonl…）`，不阻断安装。未设时 orch 不调任何 intercom 客户端（零依赖不引包），通知只落 journald + `queue.jsonl` 留证。
 - **systemd 下的 herdr socket 仍是最脆一环**：`--session` 只在 `$XDG_CONFIG_HOME/herdr/sessions/<名>/` 下恰好一个 `*.sock` 时写入 `HERDR_SOCKET_PATH`；发现不到就不写并靠 `doctor`/journald 点名。默认不 enable，下游不会被动调度。
 - **跨仓（AC10）/ 看板数值一致性（AC11）**：阶段 3（Issue #183），本批不做。
 - **`install-systemd` 处理 `--enable` 的失败面**：`systemctl enable` 失败 ⇒ rc=3 并报错，但已落的单元文件不自动回滚（再跑 `uninstall-systemd` 即清）。
@@ -172,6 +173,12 @@ nao-orch: 另一个 orch tick 正在运行（持锁 pid=2932960 started=2026-11-
 
 实施期踩到并已修的一处**用例耦合**（记录供后来者）：`cases/43` 用字符串 `live_n` 定位「关前复核」所在模块并做变异；`status --json` 最初把局部变量命名为 `live_names`（连注释里也写了该子串）⇒ 变异打到了 `status.sh`，`cases/43` 出现 4 条红。修法 = 变量与注释都避开该子串（`_sj_names`）。教训：用例的「按子串定位模块」是隐式契约，新增代码要避开被测仓里已被别处用作锚点的标识。
 
-## 十一、契约补记（需 PM/arch 认可的一条）
+## 十一、契约同步（初审订正后）
+
+- ADR D5 措辞已订正为「**orch 执行面（`bin/nao-orch` + `bin/lib/orch/**`）内 `child_process` 仅 `fleet.mjs` 一处**；`bin/lib/queue.mjs`（阶段 1 继承）另有一处 `execFileSync('git', …)` 只读用法（argv 数组、零 shell，不在派单路径上）」；`cases/47 ⑥` 断言文案同步，并加两条断言把该句钉住（`queue.mjs` 恰 1 处 `child_process`、零 `shell:`）。
+- PRD §四 已补 `dispatch_unknown` 与出口 `blocked → queued = 人工确认后重新排队`（契约单源在 PRD，状态表单源在 `queue.mjs`）；PRD §六 已补「`working` 行当前无任何超时自动动作」的覆盖面声明与 `dispatch_unknown` 一行。
+- `NAO_ORCH_HOOK` 的测试专用性质已写进 §八（未设即 no-op，安装器与 unit 都不写它）。
+
+## 十二、契约补记（`queued → blocked`，已获 PM 采纳）
 
 `bin/lib/queue.mjs` 的 `TRANSITIONS` 新增 `queued → blocked`。理由：AC8 的「WAL 有 intent 而 row 仍 queued、探不到目标会话 ⇒ `blocked(dispatch_unknown)`」必须能落到合法状态；否则只剩「自动重派」（违反「绝不双派」）或「留一个无人知的 queued」。既有边与 `cases/46` 的 5 条非法转换判据全部不变（`queued → merged` 仍红，允许集回显从 `dispatched` 变为 `dispatched/blocked`，断言用的是 `contains "允许：dispatched"` ⇒ 仍绿）。ADR 已同步一行补记。

@@ -43,7 +43,11 @@
 
 **队列**：`docs/queue.jsonl`，一行一任务。字段：`id/kind/title/state/prio/deps/repo/branch/owner/qa/acs/attempt/created/updated/blocked_reason`。
 
-**状态机**：`queued → dispatched → working → qa → (qa_fail → working) → qa_pass → merging → merged → released`，另有 `blocked` 由 `no_ack(15m)` / `stalled(90m, HEAD 未变)` / `attempt>2` 进入。
+**状态机**：`queued → dispatched → working → qa → (qa_fail → working) → qa_pass → merging → merged → released`，另有 `blocked` 由 `no_ack(15m)` / `stalled(90m, HEAD 未变)` / `attempt>2` / `dispatch_unknown` 进入。
+
+- `queued → blocked`（`blocked_reason=dispatch_unknown`，阶段 2 落地点见 ADR D4）：WAL 里已有派单意图（`intent`），但恢复期用该意图的 `session_id + cwd` 去 `nao-fleet.sh status --json` **探不到**目标会话 ⇒ 冻结交人，**绝不自动重派**（重派即可能双派）。
+- `blocked → queued` = **人工**核对原因后重新排队；本状态机不提供任何自动出口（唯一的写入口是人的判断或 tick 按上表判定）。
+- 状态表**单源** = `bin/lib/queue.mjs::TRANSITIONS`（`bin/nao-queue` 与 `bin/nao-orch` 同引，复制即双源）。
 
 **回执**：`docs/queue/<id>.receipt.json`，字段 `id/author/at/head/pushed/gates{check{rc,log},full{rc,cases,pass,fail,note}}/acs[{id,how,evidence}]/blocked/artifacts/deviation`。
 
@@ -65,7 +69,10 @@
 | 会话被外部杀掉 | `agent_verdict=absent` ⇒ 标 `blocked(absent)`，不自动重派（先让人看原因） |
 | 队列与台账不一致 | 以 `queue.jsonl` 为准，重渲染 `tasks-state.md`；不一致本身记账 |
 | 回执伪造（自述 pass 无日志） | `gates.check.log` 指向不存在文件，或 `gates.full` 缺 `rc/cases/pass/fail/note` 任一 ⇒ 判红 |
+| 派单意图已落 WAL、会话不存在（`kill -9` 等） | `blocked(dispatch_unknown)` + 通知 PM；**绝不自动重派**（先让人看原因） |
 
+> 超时动作的**当前覆盖面**（阶段 2 实施口径，读者须知）：只有 `dispatched`（派单 15m 无回执）有自动动作（`blocked(no_ack)` + 追问一次）。**`working` 行当前没有任何超时自动动作** —— 90m `stalled`（HEAD 未变）判据要「派单时的 HEAD」而本 PRD §四 明确不新增 `dispatch_at` 类字段，故随阶段 3 的 board 指标一并实现（在那之前不会误判：`working` 行只会等人推进）。
+>
 > 锚点（T566-F2）：`gates.check.log` 为相对路径时一律按**仓库根**解析（`git rev-parse --show-toplevel`，以调用 cwd 为起点）；绝对路径原样使用；仓库根不可判定（调用 cwd 不在任何 git 仓内）⇒ 判红（fail closed），不静默跳过。
 
 ## 七、验收（AC，机械可判）

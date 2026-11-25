@@ -88,7 +88,11 @@ t4_assert_contains "$out" "git push origin main" "⑤ 注入③b：同一条里 
 
 # ---------------------------------------------------------------- ⑥ 结构层：唯一外部执行面
 _cp_files="$(grep -rl 'child_process' "$ORCH" "$ORCH_LIB" 2>/dev/null | sed "s#^$T4_ROOT/##" | sort || true)"
-t4_assert_eq "bin/lib/orch/fleet.mjs" "$_cp_files" "⑥ 结构层：child_process 只出现在 bin/lib/orch/fleet.mjs（唯一外部出口）"
+t4_assert_eq "bin/lib/orch/fleet.mjs" "$_cp_files" "⑥ 结构层：**orch 执行面内**（bin/nao-orch + bin/lib/orch/**）child_process 只出现在 fleet.mjs（唯一外部出口）"
+# 与 ADR D5 的措辞一致：`bin/lib/queue.mjs`（阶段 1 继承）另有**一处**只读用法，不在 orch 派单路径上（故不在上面的扫面内）
+t4_assert_eq "1" "$(grep -c 'child_process' "$T4_ROOT/bin/lib/queue.mjs" || true)" \
+  "⑥ 阶段 1 继承：bin/lib/queue.mjs 恰 1 处 child_process（只读 git ls-remote，不在 orch 执行面内）"
+t4_assert_eq "0" "$(grep -c 'shell:' "$T4_ROOT/bin/lib/queue.mjs" || true)" "⑥ 阶段 1 继承那处同样零 shell（与 ADR 表述一致）"
 t4_assert_eq "0" "$(grep -c 'shell:' "$ORCH_LIB/fleet.mjs" 2>/dev/null || true)" "⑥ fleet.mjs 内零 shell 选项"
 t4_assert_contains "$(grep -E '^const FLEET_SUBS' -A6 "$ORCH_LIB/fleet.mjs")" "'status'" "⑥ 子命令白名单含 status"
 for forbidden_sub in merge publish release push tag; do
