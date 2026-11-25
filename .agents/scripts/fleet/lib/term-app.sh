@@ -18,6 +18,9 @@
 #   放置：写标签 `herdr.space`/`herdr.tab` → **轮询读 `doc.get herdr-app` 验证终端是否在该 tab 的 root 树**
 #         （T565：收养是异步的，立刻读 = 假失败）→ 不成则 kill+rm 回滚 + fail loud 并**分类报因**
 #         （目标 space/tab 不存在 vs 收养超时）。放置前先校验目标 space 仍在 doc 里（陈旧 id 不沿用）。
+#   目标 space 选择序（T569 · New Terminal 语义）：① 调用者所在 space（`HC_TERMINAL_ID` 的
+#         `labels.herdr.space`，且仍在 doc 里）→ ② 仓 folder 匹配（原行为）→ ③ 新建。
+#         第 1 层命中时与仓无关：多仓会话可共存于同一 space（归属判定仍取终端标签，不靠 space 唯一性）。
 #         `hc ls` 的 `where` 只是展示 label，**不进断言**。
 #   忙闲：`status.app` + `status.state`（working/blocked = 忙；idle/done = 可投递；缺失 = unknown）；
 #         **无 `state_change_seq` 等价物** ⇒ 快照 seq 位恒 `-`，判据不依赖它。
@@ -42,6 +45,7 @@ TERM_APP_ADOPT_INTERVAL="${NAO_APP_ADOPT_INTERVAL:-0.5}"
 # 放置快照的 doc 权威集（AC1/T565）：doc 里的 space id + 被判为陈旧（不在 doc）的 space id —— prime 里重建。
 declare -A _TERM_APP_DOC_SPACES=()
 _TERM_APP_STALE_SPACES=()
+_TERM_APP_CALLER_SPACE=""      # T569：调用者所在 space（仅在 doc 里仍存在时采用；prime 重建）
 _TERM_VERIFY_STATE=""        # ok | no-space | no-tab | no-term | doc-fail（给分类报因）
 _TERM_VERIFY_ATTEMPTS=0      # 实际读回次数（报错带参，不靠猜测）
 _TERM_VERIFY_INTERVAL=""     # 规范化后的轮询间隔（非法值回落 0.5 后的**实际**值）
@@ -345,10 +349,10 @@ _term_app_doc_has_space() {  # <space_id> → 0 在 / 1 不在
 }
 
 _term_app_place_prime() {  # → 0 已建快照 / 1 后端不可用（fail loud 由调用方）
-  local rows snap sid folder base cand nn kind a b c d
+  local rows snap sid folder base cand nn kind a b c d csp="" cid="${HC_TERMINAL_ID:-}" cg=""
   local -A sid_folder=() base_folder=() tab_of=() stale_seen=()
   _TERM_PLACE_WS_BY_LABEL=(); _TERM_PLACE_WS_ROWS=(); _TERM_PLACE_PANE_ROWS=()
-  _TERM_APP_DOC_SPACES=(); _TERM_APP_STALE_SPACES=()
+  _TERM_APP_DOC_SPACES=(); _TERM_APP_STALE_SPACES=(); _TERM_APP_CALLER_SPACE=""
   rows="$(_term_app_doc_rows)" || return 1
   _term_app_doc_guard "$rows" || return 1
   # ① space 发现：**doc 是唯一权威**（app 持久化）——AC1/T565：标签里的 id 只是线索，
@@ -359,6 +363,23 @@ _term_app_place_prime() {  # → 0 已建快照 / 1 后端不可用（fail loud 
     _TERM_APP_DOC_SPACES["$a"]=1
     [[ -n "$b" ]] && sid_folder["$a"]="$b"
   done <<< "$rows"
+  # ①-b T569：调用者所在 space（第 1 层）—— `HC_TERMINAL_ID` → `hc get` → `labels.herdr.space`。
+  #   只在**仍在 doc 里**时采用；陈旧 ⇒ warn 一行 + 回退第 2 层。
+  #   非交互形态（无 id / hc get 失败 / 该终端无该标签）⇒ csp 空、静默走第 2 层（不改变今日行为）。
+  #   预置 stale_seen，避免下方「陈旧放置标签」对同一个 id 再喊一行（一行 = 本层唯一的可见信号）。
+  if [[ -n "$cid" ]]; then
+    cg="$(_term_app_exec get "$cid" --json 2>/dev/null)" || cg=""
+    if _term_app_payload_ok "$cg"; then csp="$(_term_app_field "$cg" "$TERM_APP_LABEL_SPACE")"; fi
+  fi
+  if [[ -n "$csp" ]]; then
+    if _term_app_doc_has_space "$csp"; then
+      _TERM_APP_CALLER_SPACE="$csp"
+    else
+      warn "调用者所在 space 不在 app 布局文档里：space=$csp（app 重启后 space id 会变化）⇒ 回退按仓匹配/新建（不沿用该 id）"
+      _TERM_APP_STALE_SPACES+=("$csp")
+      stale_seen["$csp"]=1
+    fi
+  fi
   snap="$(_term_app_snapshot)" || return 1
   while IFS=$'\t' read -r label addr _tid cwd fgcwd _fg _st _seq _sess _av _hook sp; do
     [[ -n "$label" ]] || continue
@@ -490,6 +511,9 @@ _term_app_spawn() {  # <name> <inner> <repo> [force] <label> [group] → SPAWN_R
   #   space/tab 无处可去 ⇒ #175 的假失败）；改交一个 doc 未知的新 id 让 app 自建，并回写标签。
   local sp_old=""
   if (( _TERM_PLACE_CACHE )); then sp="${_TERM_PLACE_WS_BY_LABEL[$label]:-}"; else sp=""; fi
+  # T569 第 1 层：调用者所在 space 优先（New Terminal 语义）—— prime 已校验它仍在 doc 里。
+  #   命中即只加 tab；仓 folder 匹配（第 2 层）与新建（第 3 层）保持原语义。
+  if [[ -n "${_TERM_APP_CALLER_SPACE:-}" ]]; then sp="$_TERM_APP_CALLER_SPACE"; fi
   if ! _term_app_doc_has_space "$sp"; then
     sp_old="$sp"
     sp="$(_term_app_mint_fresh_space "$repo")"
