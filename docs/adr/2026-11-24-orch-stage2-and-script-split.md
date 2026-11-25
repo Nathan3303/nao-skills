@@ -65,6 +65,7 @@
 - 拆分不重命名函数、不改行为（纯搬迁 + 依赖倒置）；`174` 是拆分时刻基线，之后新增函数须同步 `fleet/functions.txt`（一处 diff）—— 且此保护是**用例断言**而非文档约定（`cases/06` 或新例：总数不符/漏登记即红，新增函数必须同行改 `functions.txt`）。
 - **实施分两批且顺序 = 先拆分（批次 A）后 orch（批次 B）**：A = 11 模块纯搬迁 + `fleet/functions.txt` + 5 个静态闸改文件集 + `NAO_TERMINAL` 唯一性 lint 跨模块总和=1，判据 = `status`/`check`/`--help` 拆分前后**逐字 diff 为空** + 174 并集守恒 + `check` rc=0 ×2 + 全量 `npm test` 绿；B = `bin/nao-orch` + `bin/lib/queue.mjs` + `fleet/status.sh` 的 `--json` + WAL/flock/CAS + AC9 双闸 + `cases/47` + systemd 单元。理由：先拆把「文件集静态闸 + 模块边界」一次到位，orch 的 AC9 lint 直接落在新结构上、不做二次迁移；且 `status --json` 落在 `fleet/status.sh` 比落在单体再搬更省。
 - 批次 A/B 各自一个 PR、各自可 `git revert` 回滚（A 回滚后入口路径与行为不变）。
+- AC1 口径订正（批次 A 实测）：`status`/`check`/`--help` 输出拆分前后逐字相同，**唯一例外 = `check` 汇总行的 `files=` 计数**（53 → 65，新增 11 模块 + `functions.txt` ⇒ 文件集真实变化，如实报）；不允许为了字面相等而让体检跳过新文件。
 - 本文不含实施闸门 / 用例全文 / 接线清单（属 rd-infra 的实施报告）。
 
 ## 相关指针
