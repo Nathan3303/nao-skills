@@ -6,6 +6,7 @@
 #   AC-F4-1/2/3/4  minimal 判定 + 开关覆盖 + init 边界
 #   AC-F7-1/2/3    单行去重逐字节不变 / 多行 / 失败恰一行 warn
 #   AC-F7-4 (=B2)  无 legacy 资产时去重照常
+#   AC-F8 (B1)     --dry-run 预演：清单逐条 + 盘面零写入 + 无 legacy 边界 + 与 --force 互斥 + 清单==真跑
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 
 t4_require_cmd node
@@ -217,5 +218,60 @@ t4_assert_match "$(both)" 'init|去重|skills-lock' "B2: 输出说明走的是 i
 fxb2b="$(t4_fixture)"; make_clean "$fxb2b"; lock_multi2 > "$fxb2b/skills-lock.json"
 t510_run "$fxb2b" migrate
 t4_assert_eq "0" "$(hits "$fxb2b/skills-lock.json" 'frontend-design')" "B2: 多行形态亦去重（命中 0）"
+
+# ============================================================== F8 B1 dry-run 预演阀门
+tree_sig() { ( cd "$1" && find . -path ./.git -prune -o -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}' ); }
+
+# F8-1 主路径：清单逐条 + 盘面零写入（树 sha 含 .agents/.pi/.nao-obsolete）
+fx8="$(t4_fixture)"; make_legacy "$fx8"; lock_single > "$fx8/skills-lock.json"
+sig8="$(tree_sig "$fx8")"
+t510_run "$fx8" migrate --dry-run
+t4_assert_eq "0" "$T510_RC" "F8-1/AC1: migrate --dry-run exit=0"
+t4_assert_contains "$T510_OUT" "预演（--dry-run，不写盘）" "F8-1/AC1: 输出明示预演"
+t4_assert_contains "$T510_OUT" "remove .agents/prompts（备份 .agents/.nao-obsolete/" "F8-1/AC1: 逐条列出目录类资产 + 备份目标"
+t4_assert_contains "$T510_OUT" "remove .agents/roles.yaml" "F8-1/AC1: 逐条列出文件类资产"
+t4_assert_contains "$T510_OUT" "将移除 skills-lock.json" "F8-1/AC1: 锁定去重动作也进清单"
+t4_assert_contains "$T510_OUT" "预演完成：将移除" "F8-1/AC1: 结尾给出总数"
+t4_assert_eq "$sig8" "$(tree_sig "$fx8")" "F8-1/AC1: 预演前后树 sha 一致（零写入）"
+t4_assert_absent "$fx8/.agents/.nao-obsolete" "F8-1/AC1: 预演不建 .nao-obsolete"
+
+# F8-2 边界：无 legacy ⇒ 「无可移除项」+ rc=0 + 盘面不变
+fx8b="$(t4_fixture)"; make_clean "$fx8b"
+sig8b="$(tree_sig "$fx8b")"
+t510_run "$fx8b" migrate --dry-run
+t4_assert_eq "0" "$T510_RC" "F8-2/AC2: 无 legacy 时 dry-run exit=0"
+t4_assert_contains "$T510_OUT" "无可移除项" "F8-2/AC2: 输出「无可移除项」"
+t4_assert_eq "$sig8b" "$(tree_sig "$fx8b")" "F8-2/AC2: 无 legacy 预演盘面不变"
+
+# F8-3 负向闭环：不带 --dry-run 真跑仍照旧（备份目录内容 + 汇总行 + rc）
+fx8c="$(t4_fixture)"; make_legacy "$fx8c"; lock_single > "$fx8c/skills-lock.json"
+t510_run "$fx8c" migrate
+t4_assert_eq "0" "$T510_RC" "F8-3/AC3: 真跑 exit=0（回归）"
+t4_assert_contains "$T510_OUT" "迁移完成：移除" "F8-3/AC3: 汇总行照旧"
+t4_assert_contains "$T510_OUT" "备份在 .agents/.nao-obsolete/" "F8-3/AC3: 备份位置照旧"
+t4_assert_dir "$(ls -d "$fx8c/.agents/.nao-obsolete/"*/prompts 2>/dev/null | head -1)" "F8-3/AC3: 真跑仍备份 prompts 目录"
+t4_assert_file "$(ls -d "$fx8c/.agents/.nao-obsolete/"*/roles.yaml 2>/dev/null | head -1)" "F8-3/AC3: 真跑仍备份 roles.yaml"
+t4_assert_eq "0" "$(hits "$fx8c/skills-lock.json" 'frontend-design')" "F8-3/AC3: 真跑去重照旧生效"
+t4_assert_absent "$fx8c/.agents/prompts" "F8-3/AC3: 真跑仍移除旧资产"
+
+# F8-4 异常：--dry-run 与 --force 互斥 ⇒ exit 2；未知组合 ⇒ exit 2
+sig8d="$(tree_sig "$fx8")"
+t510_run "$fx8" migrate --dry-run --force
+t4_assert_eq "2" "$T510_RC" "F8-4/AC4: --dry-run --force ⇒ exit 2"
+t4_assert_contains "$T510_ERR" "互斥" "F8-4/AC4: 点名互斥（不是静默取舍）"
+t4_assert_eq "$sig8d" "$(tree_sig "$fx8")" "F8-4/AC4: 拒绝后盘面不变"
+t510_run "$fx8" migrate --dry-run --plugins
+t4_assert_eq "2" "$T510_RC" "F8-4/AC4: 未知组合 ⇒ exit 2"
+
+# F8-5 设计一致性：预演清单 == 真跑实际动作清单（同夹具两跑逐项相等）
+fx8e="$(t4_fixture)"; make_legacy "$fx8e"; lock_single > "$fx8e/skills-lock.json"
+t510_run "$fx8e" migrate --dry-run
+dry_items="$(printf '%s\n' "$T510_OUT" | sed -n 's/.*  remove \(\.agents\/[^（]*\)（.*/\1/p' | sort)"
+fx8f="$(t4_fixture)"; make_legacy "$fx8f"; lock_single > "$fx8f/skills-lock.json"
+t510_run "$fx8f" migrate -v
+real_items="$(printf '%s\n' "$T510_OUT" | sed -n 's/.*backup+remove \(\.agents\/[^ ]*\) → .*/\1/p' | sort)"
+t4_assert_ne "" "$dry_items" "F8-5/AC5: 预演清单非空（判据不空转）"
+t4_assert_eq "$dry_items" "$real_items" "F8-5/AC5: 预演清单与真跑动作清单逐项相等"
+t4_assert_ge 10 "$(printf '%s\n' "$dry_items" | grep -c . || true)" "F8-5/AC5: 覆盖目录/文件/脚本/skill 多类（≥10 项）"
 
 t4_exit

@@ -345,8 +345,29 @@ function applyShim(target, decision, verbose) {
 // ---------------------------------------------------------------------------
 // init：干净项目 —— 写 shim + AGENTS.md（不复制机制；机制在 .pi/npm 包内）
 // ---------------------------------------------------------------------------
-function init(target, force, verbose, shimMode = 'shim', decision = null) {
+function init(target, force, verbose, shimMode = 'shim', decision = null, dryRun = false) {
   const legacy = detectLegacyAssets(target);
+  if (dryRun) {
+    if (legacy.length) {
+      if (!force) {
+        warn('检测到旧版全套 .agents/ 安装（机制副本）：');
+        for (const p of legacy) warn(`  - ${p}`);
+        warn('请先运行 `nao-skill migrate`（备份到 .agents/.nao-obsolete/ + 就位 shim），勿直接 init。');
+        process.exit(1);
+      }
+      log('预演（--dry-run，不写盘）：init --force 会改走 migrate。');
+      return migrateDryRun(target, legacyRemovalPlan(target), decision || resolveShim(target, shimMode), verbose, newStamp(), legacy);
+    }
+    const agentsMd = join(target, 'AGENTS.md');
+    log('预演（--dry-run，不写盘）：未发现旧版全套 .agents/ 机制副本，无可移除项；按 init 处理。');
+    const shimDecision = decision || resolveShim(target, shimMode);
+    log(`  将会：${shimDecision.needed ? '写 shim（.agents/scripts/nao-fleet.sh）' : '不写 shim'}（依据：${shimDecision.reason}）`);
+    log('  将会：写 .agents/.nao-version（本机已安装机制包版本）');
+    log(`  将会：${existsSync(agentsMd) ? '保留既有 AGENTS.md（不覆盖）' : '生成 AGENTS.md（模板）'}`);
+    if (!hasNaoPackageDeclared(target)) warn(`（预演）未在 .pi/settings.json 发现 npm:${PKG.name} 声明；真跑时会提示先 pi install。`);
+    log('预演完成：盘面未改动。');
+    return;
+  }
   if (legacy.length) {
     if (!force) {
       warn('检测到旧版全套 .agents/ 安装（机制副本）：');
@@ -383,6 +404,23 @@ function init(target, force, verbose, shimMode = 'shim', decision = null) {
 // ---------------------------------------------------------------------------
 // migrate：旧版全套安装 → 精准备份 .agents/.nao-obsolete/ + 移除 + shim 就位
 // ---------------------------------------------------------------------------
+function newStamp() {
+  return new Date().toISOString().replace(/[:.]/g, '-');
+}
+
+// 迁移**动作清单**单一来源：真跑（migrateLegacy）与预演（--dry-run）同引 ——
+//   两边逐项相等由用例断言（AC5）；这里只按「已存在的旧资产」过滤，顺序固定。
+function legacyRemovalPlan(target) {
+  const rels = [];
+  for (const d of LEGACY_TOP_DIRS) rels.push(`.agents/${d}`);
+  for (const f of LEGACY_TOP_FILES) rels.push(`.agents/${f}`);
+  for (const f of LEGACY_SCRIPT_FILES) rels.push(`.agents/scripts/${f}`);
+  for (const e of LEGACY_SKILL_ENTRIES) rels.push(`.agents/skills/${e}`);
+  rels.push('.agents/skills/checklists');
+  return rels.filter((rel) => existsSync(join(target, rel))
+    && !(rel === '.agents/scripts/nao-fleet.sh' && isShimFile(join(target, rel))));
+}
+
 function backupAndRemove(target, rel, stamp, verbose) {
   const src = join(target, rel);
   if (!existsSync(src)) return false;
@@ -398,17 +436,9 @@ function backupAndRemove(target, rel, stamp, verbose) {
 // 共享目录精准删除：只删已知 nao 资产（保留项目其它 skill / 脚本）
 function migrateLegacy(target, stamp, verbose) {
   const removed = [];
-  const rem = (rel) => { if (backupAndRemove(target, rel, stamp, verbose)) removed.push(rel); };
-  for (const d of LEGACY_TOP_DIRS) rem(`.agents/${d}`);
-  for (const f of LEGACY_TOP_FILES) rem(`.agents/${f}`);
-  for (const f of LEGACY_SCRIPT_FILES) {
-    // shim-only 项目里 nao-fleet.sh 是 shim，不是旧版资产 —— 不备份不移除
-    if (f === 'nao-fleet.sh' && isShimFile(join(target, '.agents', 'scripts', f))) continue;
-    rem(`.agents/scripts/${f}`);
+  for (const rel of legacyRemovalPlan(target)) {
+    if (backupAndRemove(target, rel, stamp, verbose)) removed.push(rel);
   }
-  for (const e of LEGACY_SKILL_ENTRIES) rem(`.agents/skills/${e}`);
-  const obsolete = join(target, '.agents', 'skills', 'checklists');
-  if (existsSync(obsolete)) rem('.agents/skills/checklists');
   return removed;
 }
 
@@ -491,22 +521,34 @@ function removeJsonProperty(raw, key) {
 // §12-C：nao 包为唯一来源 —— 移除 skills-lock.json 里重复的 frontend-design 条目（原文件先备份）
 // F1：文本级删除单条，保留原缩进与其余字节（4 空格 / 2 空格均不重排）
 // F7：三态返回 ok | absent | failed；failed 时恰一行 warn（不静默）且不改写
-function stripLockDuplicate(target, stamp, verbose) {
+// 去重计划（只读）：真跑与 --dry-run 共用同一判据（避免预演与会话动作各说各话）
+function planLockStrip(target) {
   const lock = join(target, 'skills-lock.json');
-  if (!existsSync(lock)) return 'absent';
+  if (!existsSync(lock)) return { action: 'absent' };
   const raw = readFileSync(lock, 'utf8');
   let data;
-  try { data = JSON.parse(raw); } catch { return 'absent'; }
-  if (!data.skills || !data.skills['frontend-design']) return 'absent';
-  // D6：失败两形态文案分家 —— ① 唯一 key 但末位无法安全裁剪 ≠ ② 真重复（两条都要求手工移除）
-  const trimWarn = () => warn('skills-lock.json 未能安全去重 frontend-design（文本形态不支持自动裁剪）：请手工移除该条目；其余迁移步骤不受影响。');
-  const dupWarn = () => warn('skills-lock.json 存在重复 frontend-design：请手工移除该条目；其余迁移步骤不受影响。');
+  try { data = JSON.parse(raw); } catch { return { action: 'absent' }; }
+  if (!data.skills || !data.skills['frontend-design']) return { action: 'absent' };
   const next = removeJsonProperty(raw, 'frontend-design');
-  if (next == null) { trimWarn(); return 'failed'; }
+  if (next == null) return { action: 'failed', reason: 'trim' };
   try {
     const parsed = JSON.parse(next);
-    if (!parsed.skills || 'frontend-design' in parsed.skills) { dupWarn(); return 'failed'; }
-  } catch { trimWarn(); return 'failed'; }
+    if (!parsed.skills || 'frontend-design' in parsed.skills) return { action: 'failed', reason: 'dup' };
+  } catch { return { action: 'failed', reason: 'trim' }; }
+  return { action: 'ok', next };
+}
+
+function stripLockDuplicate(target, stamp, verbose) {
+  const lock = join(target, 'skills-lock.json');
+  const plan = planLockStrip(target);
+  if (plan.action === 'absent') return 'absent';
+  // D6：失败两形态文案分家 —— ① 唯一 key 但末位无法安全裁剪 ≠ ② 真重复（两条都要求手工移除）
+  if (plan.action === 'failed') {
+    if (plan.reason === 'dup') warn('skills-lock.json 存在重复 frontend-design：请手工移除该条目；其余迁移步骤不受影响。');
+    else warn('skills-lock.json 未能安全去重 frontend-design（文本形态不支持自动裁剪）：请手工移除该条目；其余迁移步骤不受影响。');
+    return 'failed';
+  }
+  const next = plan.next;
   const bak = join(target, '.agents', '.nao-obsolete', stamp, 'skills-lock.json');
   mkdirSync(join(bak, '..'), { recursive: true });
   cpSync(lock, bak);
@@ -515,11 +557,38 @@ function stripLockDuplicate(target, stamp, verbose) {
   return 'ok';
 }
 
-function migrate(target, force, verbose, shimMode = 'auto') {
+// --dry-run（B1 · 预演阀门）：只打印将备份/移除的清单与目标，**盘面零写入**
+//   （不 mkdir .nao-obsolete、不删、不写 settings/版本文件；只读锁判定与文件 existence）。
+function migrateDryRun(target, plan, decision, verbose, stamp, legacy) {
+  const lockPlan = planLockStrip(target);
+  if (!legacy.length) {
+    log('预演（--dry-run，不写盘）：未发现旧版全套 .agents/ 机制副本，无可移除项；按 init 处理。');
+    log(`  将会：${decision.needed ? '写 shim（.agents/scripts/nao-fleet.sh）' : '不写 shim'}（依据：${decision.reason}）`);
+    log('  将会：写 .agents/.nao-version（本机已安装机制包版本）');
+    log(`  将会：${existsSync(join(target, 'AGENTS.md')) ? '保留既有 AGENTS.md（不覆盖）' : '生成 AGENTS.md（模板）'}`);
+    if (!hasNaoPackageDeclared(target)) warn(`（预演）未在 .pi/settings.json 发现 npm:${PKG.name} 声明；真跑时会提示先 pi install。`);
+    log('预演完成：盘面未改动。');
+    return;
+  }
+  log(`预演（--dry-run，不写盘）：发现 ${legacy.length} 处旧版 nao 资产。`);
+  log(`  将备份到 .agents/.nao-obsolete/${stamp}/ 后移除：`);
+  for (const rel of plan) log(`  remove ${rel}（备份 .agents/.nao-obsolete/${stamp}/）`);
+  if (lockPlan.action === 'ok') {
+    log(`  将移除 skills-lock.json 的重复 frontend-design 条目（文本级，其余字节不变；备份 .agents/.nao-obsolete/${stamp}/）`);
+  } else if (lockPlan.action === 'failed') {
+    log(`  skills-lock.json 去重会失败（${lockPlan.reason === 'dup' ? '存在重复' : '未能安全去重'}）⇒ 真跑只 warn、不改写`);
+  }
+  log(`  将${decision.needed ? '安装 shim（.agents/scripts/nao-fleet.sh）' : '跳过 shim'}（依据：${decision.reason}）`);
+  log('  将写 .agents/.nao-version（本机已安装机制包版本）');
+  log(`预演完成：将移除 ${plan.length} 项（盘面未改动）。`);
+}
+
+function migrate(target, force, verbose, shimMode = 'auto', dryRun = false) {
   const legacy = detectLegacyAssets(target);
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const stamp = newStamp();
   // F4 判定式必须在备份/移除之前采样（B 需排除待移除旧资产）
   const decision = resolveShim(target, shimMode);
+  if (dryRun) return migrateDryRun(target, legacyRemovalPlan(target), decision, verbose, stamp, legacy);
   // B2：去重置于早退判断之前 —— 无 legacy 资产（走 init 路径）时同样生效
   stripLockDuplicate(target, stamp, verbose);
   if (!legacy.length) {
@@ -554,14 +623,19 @@ function help() {
   console.log(`nao-skill v${PKG.version} — nao 多角色 AI 开发舰队（pi 原生分发）
 
 用法:
-  nao-skill init [dir] [-v] [--shim|--no-shim]     干净项目：写 shim + AGENTS.md（默认写）
-  nao-skill migrate [dir] [-v] [--shim|--no-shim]  迁移旧版全套 .agents/：备份 .nao-obsolete/ + 移除 + shim
+  nao-skill init [dir] [-v] [--dry-run] [--shim|--no-shim]     干净项目：写 shim + AGENTS.md（默认写）
+  nao-skill migrate [dir] [-v] [--dry-run] [--shim|--no-shim]  迁移旧版全套 .agents/：备份 .nao-obsolete/ + 移除 + shim
   nao-skill exec <参数...>            转发给包内 nao-fleet.sh（CI/脚本用；NAO_SKILLS=包根）
   nao-skill plugins list              列出已知 pi 插件与安装状态
   nao-skill plugins install <名...>   安装指定插件（intercom/ask-me/subagents/web-access/codegraph）
   nao-skill plugins install-all       安装全部舰队插件
   nao-skill --version                 显示版本
   nao-skill --help                    显示本帮助
+
+预演（--dry-run，仅 init/migrate）:
+  只打印将备份/移除的清单与目标（含 shim、版本标记、AGENTS.md 动作），**盘面零写入**
+  （不建 .nao-obsolete、不删、不写 settings/版本文件）。去掉 --dry-run 才真跑。
+  与 --force 互斥（exit 2）；未知/不支持的组合一律 exit 2。
 
 shim 判定式（migrate 默认；init 默认装）:
   needsShim = A ∨ A′ ∨ B（Node 扫描，跳过 >1MiB 与二进制，排除 .git/.pi/node_modules/.nao-obsolete）
@@ -594,12 +668,14 @@ if (cmd === '--version' || cmd === '-v' || cmd === 'version') {
   let verbose = false;
   let wantShim = false;
   let wantNoShim = false;
+  let dryRun = false;
   const rest = args.slice(1);
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === '--force' || rest[i] === '-f') force = true;
     else if (rest[i] === '--verbose' || rest[i] === '-v') verbose = true;
     else if (rest[i] === '--shim') wantShim = true;
     else if (rest[i] === '--no-shim') wantNoShim = true;
+    else if (rest[i] === '--dry-run') dryRun = true;
     else if (rest[i] === '--target') target = resolve(rest[++i]);
     else if (!rest[i].startsWith('-')) target = resolve(rest[i]);
     else { warn(`未知参数: ${rest[i]}`); process.exit(2); }
@@ -608,13 +684,17 @@ if (cmd === '--version' || cmd === '-v' || cmd === 'version') {
     warn('--shim 与 --no-shim 互斥，不能同时使用。');
     process.exit(2);
   }
+  if (dryRun && force) {
+    warn('--dry-run 与 --force 互斥：预演不写盘，force 的覆盖语义无从表达（去掉 --force 再预演）。');
+    process.exit(2);
+  }
   if (!statIsDir(target)) {
     warn(`目标目录无效: ${target}`);
     process.exit(2);
   }
   const shimMode = wantShim ? 'shim' : wantNoShim ? 'no-shim' : (cmd === 'init' ? 'shim' : 'auto');
-  if (cmd === 'init') init(target, force, verbose, shimMode);
-  else migrate(target, force, verbose, shimMode);
+  if (cmd === 'init') init(target, force, verbose, shimMode, null, dryRun);
+  else migrate(target, force, verbose, shimMode, dryRun);
 } else if (cmd === 'exec') {
   execFleet(args.slice(1));
 } else if (cmd === 'install' || cmd === 'i') {
