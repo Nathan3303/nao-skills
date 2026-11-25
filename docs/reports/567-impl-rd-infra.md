@@ -105,6 +105,8 @@
 
 ## 七、门禁与数字
 
+门禁三件套：**HEAD `c4bd52c`**（跑门禁时的提交）· **静默工作区**（`git status --porcelain` = 0 行，前后各核一次；本 worktree 的 `node_modules` 是符号链接，靠本地 `.git/info/exclude` 忽略，属依赖不是源码改动）· 每条数字给命令与输出（见下）。
+
 - `bash .agents/scripts/nao-fleet.sh check`：**rc=0 ×2，`cmp` 逐字一致**；摘要 `check: OK · roles=7 · files=67`（拆分后基线 65 + `.agents/systemd/nao-orch.{service,timer}.in` 两个新文件；ADR「AC1 口径订正」允许的唯一差异类）。
 - `status` 文本：与 `e82d8b6` 在**同一替身场景**下逐字相同（904 B vs 904 B，`diff` 为空；见 §九 证据）。
 - `--help`：唯一差异 = `status` 那一行加了 `[--json]` 与两行说明（新能力的文档面，AC1 的文本面仍是 `status`/`check` 输出）。
