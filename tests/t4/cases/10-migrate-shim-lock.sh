@@ -65,6 +65,8 @@ make_migrated() { # shim 就位 + 版本一致 + docs 有 nao-fleet 引用
 lock_single() { printf '%s' '{"skills":{"frontend-design":{"source":"anthropics/skills","ref":"main"},"keep-me":{"source":"example/keep","ref":"v1"}},"version":1}'; }
 LOCK_SINGLE_EXPECTED='{"skills":{"keep-me":{"source":"example/keep","ref":"v1"}},"version":1}'
 lock_fail_dup() { printf '%s' '{"skills":{"frontend-design":{"source":"a/b","ref":"main"},"keep-me":{"source":"c/d","ref":"v1"},"frontend-design":{"source":"a/b","ref":"main"}},"version":1}'; }
+# 形态①：唯一 key 但末位属性无可安全删除的分隔逗号（合法 JSON，文本级裁剪拒绝）
+lock_trim_unsafe() { printf '%s' '{"skills":{"frontend-design":{"source":"a/b","ref":"main"}},"version":1}'; }
 lock_multi2() { # 2 空格缩进多行
   cat <<'EOF'
 {
@@ -181,13 +183,27 @@ else
   diff "$T4_CACHE_DIR/t510-lock-expected.json" "$fx2/skills-lock.json" 2>/dev/null | head -5
 fi
 
-# ============================================================== F7-3 失败不静默
+# ============================================================== F7-3a 失败不静默 · 形态②真重复（D6）
 fx3="$(t4_fixture)"; make_legacy "$fx3"; lock_fail_dup > "$fx3/skills-lock.json"
 m3="$(md5f "$fx3/skills-lock.json")"
 t510_run "$fx3" migrate
-t4_assert_eq "0" "$T510_RC" "F7-3: 无法安全去重时 migrate exit=0（其余步骤完成）"
-t4_assert_eq "$m3" "$(md5f "$fx3/skills-lock.json")" "F7-3: lock 文件字节不变"
-t4_assert_eq "1" "$(printf '%s' "$T510_ERR" | grep -c '手工移除' || true)" "F7-3: 恰一行「手工移除」warn"
+t4_assert_eq "0" "$T510_RC" "F7-3a: 真重复时 migrate exit=0（其余步骤完成）"
+t4_assert_eq "$m3" "$(md5f "$fx3/skills-lock.json")" "F7-3a: lock 文件字节不变"
+t4_assert_eq "1" "$(printf '%s' "$T510_ERR" | grep -c '手工移除' || true)" "F7-3a: 恰一行「手工移除」warn"
+t4_assert_contains "$T510_ERR" "存在重复 frontend-design" "F7-3a/D6: 形态② 文案点名「存在重复」"
+t4_assert_not_contains "$T510_ERR" "未能安全去重" "F7-3a/D6: 形态② 不得混用形态① 文案"
+t4_assert_not_contains "$T510_ERR" "文本形态不支持自动裁剪" "F7-3a/D6: 形态② 不带裁剪理由"
+
+# ============================================================== F7-3b 失败不静默 · 形态①唯一 key 未能安全裁剪（D6）
+fx3b="$(t4_fixture)"; make_legacy "$fx3b"; lock_trim_unsafe > "$fx3b/skills-lock.json"
+m3b="$(md5f "$fx3b/skills-lock.json")"
+t510_run "$fx3b" migrate
+t4_assert_eq "0" "$T510_RC" "F7-3b: 未能安全裁剪时 migrate exit=0（其余步骤完成）"
+t4_assert_eq "$m3b" "$(md5f "$fx3b/skills-lock.json")" "F7-3b: lock 文件字节不变"
+t4_assert_eq "1" "$(printf '%s' "$T510_ERR" | grep -c '手工移除' || true)" "F7-3b: 恰一行「手工移除」warn"
+t4_assert_contains "$T510_ERR" "未能安全去重 frontend-design（文本形态不支持自动裁剪）" "F7-3b/D6: 形态① 文案点名真实原因（非「重复」）"
+t4_assert_not_contains "$T510_ERR" "存在重复" "F7-3b/D6: 形态① 不得误报「重复」（唯一 key 不是重复）"
+t4_assert_eq "1" "$(printf '%s' "$T510_ERR" | grep -c '未能安全去重' || true)" "F7-3b/D6: 形态① 恰一行专用 warn（不静默/不重复）"
 
 # ============================================================== F7-4 (=B2) 无 legacy 去重
 fxb2="$(t4_fixture)"; make_clean "$fxb2"; lock_single > "$fxb2/skills-lock.json"

@@ -498,13 +498,15 @@ function stripLockDuplicate(target, stamp, verbose) {
   let data;
   try { data = JSON.parse(raw); } catch { return 'absent'; }
   if (!data.skills || !data.skills['frontend-design']) return 'absent';
-  const failWarn = () => warn('skills-lock.json 存在重复 frontend-design，但无法安全文本删除：请手工移除该条目；其余迁移步骤不受影响。');
+  // D6：失败两形态文案分家 —— ① 唯一 key 但末位无法安全裁剪 ≠ ② 真重复（两条都要求手工移除）
+  const trimWarn = () => warn('skills-lock.json 未能安全去重 frontend-design（文本形态不支持自动裁剪）：请手工移除该条目；其余迁移步骤不受影响。');
+  const dupWarn = () => warn('skills-lock.json 存在重复 frontend-design：请手工移除该条目；其余迁移步骤不受影响。');
   const next = removeJsonProperty(raw, 'frontend-design');
-  if (next == null) { failWarn(); return 'failed'; }
+  if (next == null) { trimWarn(); return 'failed'; }
   try {
     const parsed = JSON.parse(next);
-    if (!parsed.skills || 'frontend-design' in parsed.skills) { failWarn(); return 'failed'; }
-  } catch { failWarn(); return 'failed'; }
+    if (!parsed.skills || 'frontend-design' in parsed.skills) { dupWarn(); return 'failed'; }
+  } catch { trimWarn(); return 'failed'; }
   const bak = join(target, '.agents', '.nao-obsolete', stamp, 'skills-lock.json');
   mkdirSync(join(bak, '..'), { recursive: true });
   cpSync(lock, bak);
