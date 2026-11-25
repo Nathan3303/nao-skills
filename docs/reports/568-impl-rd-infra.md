@@ -99,6 +99,7 @@
 - 停滞判据按 tick 采样（timer interval 默认 2m，误差 ≤1 interval）；HEAD 变化只作「不判停滞」的信号，不据此推断进度。
 - `ensure` 的 `@<repo_root>` 依赖 fleet 既有 `@<仓路径>` 通道；若仓根含 argv token 白名单外字符（如空格），本 tick 该行 fail-closed 记 `aborted(ensure_argv)` 并点名（不退化裸名跨仓）。
 - 目标会话身份以 `status --json` 的 `repo` 字段为准：`repo` 为空（归属不可判定）一律视为歧义 —— 宁愿少派一条，也不猜一次。
+- **测试 seam（生产部署不设）**：`NAO_ORCH_HOOK`（tick/board 相位钩子，仅崩溃/CAS/同快照用例注入）与 `NAO_ORCH_GIT`（HEAD 判据替换 git 可执行文件，仅用例注入）都只在显式 env 存在时生效，未设时零行为差异；systemd 单元与真实部署**不设置**这两个变量。
 
 ## 相关指针
 
