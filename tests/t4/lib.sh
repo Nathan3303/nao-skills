@@ -1024,3 +1024,42 @@ t4_pi_smoke() {
   [ "$rcf" = "0" ] && [ "$bf" != "0" ] && return 0
   return 4
 }
+
+# T567-B / AC9② 静态闸：**orch 绝不自带合并/发版/推主干能力**。
+#   扫面（ADR D5）：`bin/nao-orch` + `bin/lib/orch/**`（结构层唯一出口 = fleet.mjs::fleetExec，见 AC9①）。
+#   判据 = 「命令位前缀集」（与既有 t4_scan_* 同族）：命中的是**可执行面**，注释行豁免（`//` `#` `*` `/*`）。
+#   命中即红并回显 `文件:行号: 该行`，供用例逐条点名。
+t4_scan_orch_forbidden() { # <仓根|文件>
+  local target="$1" f ln lnno body trim hit=0
+  local -a files=()
+  if [ -d "$target" ]; then
+    [ -f "$target/bin/nao-orch" ] && files+=("$target/bin/nao-orch")
+    for f in "$target"/bin/lib/orch/*.mjs; do [ -f "$f" ] && files+=("$f"); done
+  elif [ -f "$target" ]; then
+    files=("$target")
+  fi
+  [ "${#files[@]}" -gt 0 ] || return 0
+  local -a pats=(
+    'gh[[:space:]]+pr[[:space:]]+merge'
+    'gh[[:space:]]+release[[:space:]]+create'
+    'git[[:space:]]+push[^"'"'"']*(main|master|--tags|--all)'
+    'git[[:space:]]+tag([[:space:]]|$)'
+    'git[[:space:]]+merge([[:space:]]|$)'
+    'npm[[:space:]]+publish'
+    '(^|[^A-Za-z0-9_])execSync[[:space:]]*\('
+    'shell[[:space:]]*:[[:space:]]*true'
+  )
+  local re
+  re="$(printf '%s\n' "${pats[@]}" | paste -sd'|' -)"
+  for f in "${files[@]}"; do
+    while IFS= read -r ln; do
+      [ -n "$ln" ] || continue
+      lnno="${ln%%:*}"; body="${ln#*:}"
+      trim="${body#"${body%%[![:space:]]*}"}"
+      case "$trim" in \#*|//*|\**|\**|/\**) continue;; esac
+      hit=1
+      printf '%s:%s:%s\n' "${f#"$T4_ROOT"/}" "$lnno" "$trim"
+    done < <(grep -nE -- "$re" "$f" 2>/dev/null || true)
+  done
+  return 0
+}

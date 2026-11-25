@@ -49,6 +49,7 @@
 ## PM 接续快照（会话重开后**先读本区**）
 
 - ✅ **T567-A 拆分已交付（2026-11-25 · rd-infra · 分支 `refactor/567-fleet-split` · 待 PM 验收/合并）**：`nao-fleet.sh` 按 ADR D3 拆为 11 模块（入口永久保留 + `fleet/lib/*.sh` + `fleet/functions.txt` 174 锚）；纯搬迁、行为零变更（`status`/`--help` 逐字一致；`check` 仅文件计数 53→65）；5 个静态闸改「文件集 + 每模块期望」+ 174 三向断言；全量 `npm test` 43/43 绿。
+- 🔄 **T567-B 阶段 2 已交付（2026-11-25 · rd-infra · 分支 `feat/567-orch-daemon` · 待 PM 验收/合并）**：`bin/nao-orch`（tick/board/dispatch/reap/doctor/install-systemd/uninstall-systemd）+ `bin/lib/queue.mjs`（队列/状态表/渲染单源，`nao-queue` 行为零变更 107 断言）+ `status --json`（`schema:1`，文本逐字不变）+ WAL/flock/CAS + AC9 双闸（`fleet.mjs` 唯一 `child_process`；`t4_scan_orch_forbidden` 8 判据逐条承重）+ systemd 单元模板与幂等安装（doctor 失败 exit 3 不落单元；默认不 enable）+ 新用例 47（32 条）/48（112 条）。报告 `docs/reports/567-impl-rd-infra.md`。未纳入：90m `stalled`（理由见报告 §八）。
 - 🔁 **接续快照（2026-11-24 晚 · PM 重开前）**：接手者只需读本区。要点：
   - **T566 编排器阶段 1 已收敛**（**已合并 `b6bb4cb`** · PR #179 · Issue #177 已关）：QA 二轮全修 → 43/43 全量门禁绿 → squash 合并，无遗留在飞任务。
   - **已发布版本**：v0.31.1（T565 app 放置验证修复，npm 已核验；发布后事实提交 49ce447）。

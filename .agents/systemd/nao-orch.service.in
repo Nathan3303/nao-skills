@@ -1,0 +1,14 @@
+# nao-orch.service —— 一次性 tick（T567-B · ADR 2026-11-24 §D6）
+# 安装：`bin/nao-orch install-systemd`（先跑 doctor，失败不 enable + exit 3）
+# 默认 Type=oneshot：跑完即退，无常驻进程（「daemon 半死」整类消失）；挂住的 tick 由 TimeoutStartSec 收尸。
+[Unit]
+Description=nao orchestration tick（扫描 docs/queue.jsonl 并派单；不合并/不发版）
+Documentation=https://github.com/Nathan3303/nao-skills/blob/main/docs/prds/2026-11-24-orchestrator.md
+
+[Service]
+Type=oneshot
+WorkingDirectory=@WORKDIR@
+@ENVIRONMENT@
+ExecStart=@NODE@ @ORCH@ tick
+# 整 tick 硬上限（ADR D4：单次 fleet 调用 30s / 整 tick 120s）
+TimeoutStartSec=120
