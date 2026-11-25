@@ -111,7 +111,7 @@
 - `bash tests/t4/run.sh --case 46`：**107 断言全绿**（`bin/nao-queue` 抽取后行为零变更的硬证据；状态表新增 `queued → blocked` 边不改变既有 5 条非法转换判据）。
 - `bash tests/t4/run.sh --case 47`：**32 条全绿**。
 - `bash tests/t4/run.sh --case 48`：**112 条全绿**。
-- `npm test`：全量见 §九（43 + 2 = 45 例）。
+- `npm test`：**全量 rc=0**（43 + 2 = **45 例** · 逐例 PASS · `SKIP=0 · DEGRADE=0 · NOTE=18`（全部白名单）· 日志 `/tmp/full-test.log`）。
 - 用例注册：`tests/t4/run.sh` 的 `CASE_IDS`/`CASE_TITLES` 加 `47`/`48`；快档分类 47 → `FAST_SKIP_PRICE`（契约档）、48 → `FAST_SKIP_DOUBLE`（多场 + 真 herdr 替身，单价超 15s）—— 快档自检（未分类即硬错）通过。
 
 ## 八、已知未覆盖 / 明确不做（不静默略过）
@@ -167,6 +167,8 @@ nao-orch: 另一个 orch tick 正在运行（持锁 pid=2932960 started=2026-11-
 - 未改 `fleet/lib/{core,term,term-herdr,term-app,manifest,session,check,close,cleanup,ensure}.sh`（只改 `status.sh` 加 `--json`）；未改 `bin/nao-queue` 的输出/退出码/文本；未改 `package.json`；未动根 `.gitignore`；ADR 只加 D4 的一处**契约补记**（`queued → blocked`）。
 - `docs/queue.jsonl` / `T566.receipt.json` 未动；台账只在 `docs/tasks-state.md` 手写区加 1 行。
 - 工作树在 `/tmp/orch567`（worktree），未在主工作区 checkout。
+
+实施期踩到并已修的一处**用例耦合**（记录供后来者）：`cases/43` 用字符串 `live_n` 定位「关前复核」所在模块并做变异；`status --json` 最初把局部变量命名为 `live_names`（连注释里也写了该子串）⇒ 变异打到了 `status.sh`，`cases/43` 出现 4 条红。修法 = 变量与注释都避开该子串（`_sj_names`）。教训：用例的「按子串定位模块」是隐式契约，新增代码要避开被测仓里已被别处用作锚点的标识。
 
 ## 十一、契约补记（需 PM/arch 认可的一条）
 
