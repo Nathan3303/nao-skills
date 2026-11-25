@@ -62,7 +62,7 @@ _log_call() { printf '%s\n' "$*" >> "$LOG"; }
 
 # 终端 JSON（单行；键序与真 hc 无关 —— 被测脚本的抽取按「首个同名键」，见字段抽取注释）
 _term_json() { # <addr>
-  local a="$1" name cwd state space tab app stt rep par fgname fgargv
+  local a="$1" name cwd state space tab app stt rep par fgname fgargv nao_task nao_name argv_name
   # bare_get=1 ⇒ 只给最小字段（模拟 app 版本不支持 labels/status 契约：AC8 负控）
   # bare_labels=1 ⇒ 只缺 labels（status 仍 reported：AC8 子形态 —— 判 unknown + warn）
   if [ -f "$ST/bare_get" ]; then
@@ -71,20 +71,27 @@ _term_json() { # <addr>
     return 0
   fi
   name="$(_field "$a" name)"; cwd="$(_field "$a" cwd)"
-  state="$(_field "$a" state)"; space="$(_field "$a" space)"; tab="$(_field "$a" tab)"
+  [ -f "$ST/t/$a/name_null" ] && name=""
+  state="$(_field "$a" state)"
+  space="$(_field "$a" space)"; tab="$(_field "$a" tab)"
+  nao_task="$(_field "$a" nao_task)"; nao_name="$(_field "$a" nao_name)"
+  argv_name="$(_field "$a" argv_name)"; [ -n "$argv_name" ] || argv_name="$name"
   app="$(_field "$a" app)"; stt="$(_field "$a" stt)"; rep="$(_field "$a" reported)"
   par="$(_field "$a" parent)"; fgname="$(_field "$a" fg)"
   printf '{"address":"%s","id":"%s","name":"%s","cwd":"%s","state":"%s","parent":"%s"' \
     "$a" "$a" "$(_esc "$name")" "$(_esc "$cwd")" "$state" "$(_esc "$par")"
   if [ ! -f "$ST/bare_labels" ]; then
-    printf ',"labels":{"herdr.space":"%s","herdr.tab":"%s"}' "$(_esc "$space")" "$(_esc "$tab")"
+    printf ',"labels":{"herdr.space":"%s","herdr.tab":"%s"' "$(_esc "$space")" "$(_esc "$tab")"
+    [ -n "$nao_name" ] && printf ',"nao.name":"%s"' "$(_esc "$nao_name")"
+    [ -n "$nao_task" ] && printf ',"nao.task":"%s"' "$(_esc "$nao_task")"
+    printf '}'
   fi
   printf ',"reported":%s' "$([ "$rep" = "1" ] && printf true || printf false)"
   if [ -n "$app" ]; then
     printf ',"status":{"app":"%s","state":"%s","state_ms":1}' "$(_esc "$app")" "$(_esc "$stt")"
   fi
   printf ',"foreground":{"name":"%s","cwd":"%s","argv":["%s","--name","%s"]}}\n' \
-    "$(_esc "${fgname:-}")" "$(_esc "$cwd")" "$(_esc "${fgname:-}")" "$(_esc "$name")"
+    "$(_esc "${fgname:-}")" "$(_esc "$cwd")" "$(_esc "${fgname:-}")" "$(_esc "${argv_name:-}")"
 }
 
 cmd="${1:-}"; shift || true
@@ -121,7 +128,7 @@ case "$cmd" in
 
   run)
     # 参数解析（只认被测脚本用到的形态；未知标志 fail loud，防替身悄悄放宽契约）
-    noparent=0 keep=0 name="" cwd="" ; labels=()
+    noparent=0 keep=0 name="" cwd="" lbl_task="" lbl_name="" ; labels=()
     while [ $# -gt 0 ]; do
       case "$1" in
         --bg) shift ;;
@@ -135,6 +142,11 @@ case "$cmd" in
       esac
     done
     [ -n "$name" ] || { printf 'HC-DOUBLE-VIOLATION: run 缺 --name\n' >&2; exit 9; }
+    # 与真 hc 同形：--name 限 [a-z0-9._-]{1,32}（v3 合法化后必须满足；原样传括号名 ⇒ 必红）
+    case "$name" in
+      *[!a-z0-9._-]*) printf '{"error":{"code":"invalid_name","message":"invalid terminal name: %s"}}\n' "$name"; exit 0 ;;
+    esac
+    [ "${#name}" -le 32 ] || { printf '{"error":{"code":"invalid_name","message":"terminal name too long: %s"}}\n' "$name"; exit 0; }
     if [ -f "$ST/run_fail" ]; then
       printf '{"error":{"code":"denied","message":"simulated run failure"}}\n'
       exit 0
@@ -157,9 +169,13 @@ case "$cmd" in
       case "$k" in
         herdr.space) req_space="$v" ;;
         herdr.tab)   req_tab="$v" ;;
+        nao.task)    lbl_task="$v" ;;
+        nao.name)    lbl_name="$v" ;;
         *)           printf 'HC-DOUBLE-VIOLATION: 未知 label %s\n' "$k" >&2; exit 9 ;;
       esac
     done
+    [ -n "$lbl_task" ] && _put "$a" nao_task "$lbl_task"
+    [ -n "$lbl_name" ] && _put "$a" nao_name "$lbl_name"
     stale=0
     if [ -f "$ST/space_refuse" ]; then stale=1; fi
     if [ -f "$ST/stale_ids" ] && { [ -n "$req_space" ] || [ -n "$req_tab" ]; }; then

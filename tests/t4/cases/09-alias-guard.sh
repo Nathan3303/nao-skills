@@ -145,7 +145,7 @@ c09_names=("pm:pm" "arch:arch-designer" "arch-designer:arch-designer" "uiux:uiux
 for pair in "${c09_names[@]}"; do
   n="${pair%%:*}"; want="${pair#*:}"
   fx_fleet "$FX_N" close --task NAOQA9 "$n"
-  if [ "$T4_RC" = "0" ] && printf '%s' "$T4_OUT" | grep -qF "$want(NAOQA9)" \
+  if [ "$T4_RC" = "0" ] && printf '%s' "$T4_OUT" | grep -qF "$want" \
      && ! printf '%s' "$T4_OUT" | grep -qF "未知角色"; then
     t4_ok "AC1: \`$n\` → $want"
   else

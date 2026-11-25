@@ -39,6 +39,7 @@ ws_label_count() { split_objs <<< "$(ws_json)" | grep -cF "\"label\":\"${1:-}\""
 ws_id_of_pane() { fld "$(obj_for "$(pane_json)" pane_id "${1:-}")" workspace_id; }
 pane_ws_by_label() { fld "$(obj_for "$(pane_json)" label "${1:-}")" workspace_id; }
 pane_cwd_by_label() { fld "$(obj_for "$(pane_json)" label "${1:-}")" cwd; }
+pane_label_by_cwd() { fld "$(obj_for "$(pane_json)" cwd "$(phys "$1")")" label; }
 phys() { ( cd "$1" 2>/dev/null && pwd -P ) || printf '%s' "$1"; }
 pane_ws_by_cwd() { fld "$(obj_for "$(pane_json)" cwd "$(phys "$1")")" workspace_id; }
 tab_label_of_name() { local o t; o="$(obj_for "$(pane_json)" label "$1")"; t="$(fld "$o" tab_id)"; fld "$(obj_for "$(tab_json)" tab_id "$t")" label; }
@@ -213,7 +214,7 @@ if [ "${N1_N:-0}" -ge 1 ] && [ "$N1_MD5" != "$MAIN_DIR_MD5" ]; then
   t4_ok "N1 变异：副本忽略入参 label、回退会话名"
   BE_FLEET_SCRIPT="$NEG1/.agents/scripts/nao-fleet.sh"
   fleet ensure --task N1 "rd-fe@$NEG1/repo-neg1"
-  N1_VERDICT="$(u1_verdict "repo-neg1" "rd-fe(N1)")"
+  N1_VERDICT="$(u1_verdict "repo-neg1" "rd-fe")"
   unset BE_FLEET_SCRIPT
   t4_assert_ne "GREEN" "$N1_VERDICT" "N1 负控：label 回退名字 ⇒ 必红（$N1_VERDICT）"
 else
@@ -246,7 +247,8 @@ AC13_BEFORE="$(be_pane_count)"
 be_run_fleet "$AC13_REL" ensure rd-fe
 t4_assert_eq "0" "$BE_RC" "AC13 相对仓 ensure rc=0"
 t4_assert_eq "$((AC13_BEFORE + 1))" "$(be_pane_count)" "AC13 会话拉起（+1 pane）"
-t4_assert_eq "$AC13_PHYS" "$(pane_cwd_by_label 'rd-fe')" "AC13 pane cwd = 目标仓物理绝对路径"
+t4_assert_eq "rd-fe" "$(pane_label_by_cwd "$AC13_PHYS")" "AC13 pane 名 = rd-fe（按 cwd 定位，不与跨仓同名 pane 混淆）"
+t4_assert_eq "$(ws_id_by_label "repo-rel")" "$(pane_ws_by_cwd "$AC13_PHYS")" "AC13 pane cwd = 目标仓物理绝对路径"
 AC13_CNT="$(be_pane_count)"
 be_run_fleet "$AC13_REL" ensure rd-fe
 t4_assert_eq "0" "$BE_RC" "AC13 重复 ensure rc=0（新槽位）"

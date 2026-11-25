@@ -133,9 +133,9 @@ term_argv() {  # <pane_id>
 #   ⇒ `pane move --new-tab` + `tab rename` 迁移（pane_id 不变、被搬空的 tab 由 herdr 自动关闭）。
 # 返回三态码（SPAWN_RC_*）：0 成功 · 2 跳过 · 3 失败（含就绪超时 / 0 尺寸 pane；调用方计入 SPAWN_FAIL）。
 # 成功时**必须**回填 `_TERM_SPAWN_PANE`（T548 投递点依赖它）。
-term_spawn() {  # <name> <inner> <repo> [force] [label] [group]
-  if _term_app_backend; then _term_app_spawn "${1-}" "${2-}" "${3-}" "${4:-false}" "${5-}" "${6-}"
-  else _term_herdr_spawn "${1-}" "${2-}" "${3-}" "${4:-false}" "${5-}" "${6-}"; fi
+term_spawn() {  # <name> <inner> <repo> [force] [label] [group] [task]
+  if _term_app_backend; then _term_app_spawn "${1-}" "${2-}" "${3-}" "${4:-false}" "${5-}" "${6-}" "${7-}"
+  else _term_herdr_spawn "${1-}" "${2-}" "${3-}" "${4:-false}" "${5-}" "${6-}" "${7-}"; fi
 }
 
 # ---- 6/8 起 server（B2 · BR6）：唯一生产入口 ----
@@ -177,7 +177,7 @@ term_session_name() { if _term_app_backend; then printf '%s\n' "${HC_SCOPE:-}"; 
 term_place_prime() {  # → 0 已建快照 / 1 不可用
   if _term_app_backend; then _term_app_place_prime; else _term_herdr_place_prime; fi
 }
-term_place_reset() { _TERM_PLACE_CACHE=0; _TERM_PLACE_WS_BY_LABEL=(); _TERM_PLACE_WS_ROWS=(); _TERM_PLACE_PANE_ROWS=(); _TERM_APP_GHOST_TABS=(); _TERM_APP_DOC_SPACES=(); _TERM_APP_STALE_SPACES=(); }
+term_place_reset() { _TERM_PLACE_CACHE=0; _TERM_PLACE_WS_BY_LABEL=(); _TERM_PLACE_WS_ROWS=(); _TERM_PLACE_PANE_ROWS=(); _TERM_PLACE_TASK_BY_PANE=(); _TERM_APP_GHOST_TABS=(); _TERM_APP_DOC_SPACES=(); _TERM_APP_STALE_SPACES=(); }
 
 # ---- 状态页的 workspace/space 标签表（每行 "<id>\t<label>"）----
 term_ws_label_rows() {

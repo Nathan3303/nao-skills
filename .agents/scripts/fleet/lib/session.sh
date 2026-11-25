@@ -162,23 +162,25 @@ intercom_status_for() {
 #   ⇒ 拒绝 + 指路（禁静默谎报「未运行」）。
 # P5（BR8）：候选**必须**先经 fleet_name_parse 比 **core**，并要求 scope 与目标一致 ——
 #   旧写法 `[[ "$n" == "$1"-?* ]]` 会把**他仓/他 scope 的派生**算成本仓派生（T516 AC3 误拒复发）。
-derived_in_field() {  # <role> [want_scope] → 同角色的派生命名（v2 + 旧形；空 = 无）
-  local role="${1-}" want_scope="${2-}" n out k r t s sc
+derived_in_field() {  # <role> [want_scope] → 同角色的派生命名（v3 元数据 + v2/旧形；空 = 无）
+  local role="${1-}" want_scope="${2-}" n out k r t s sc te
   [[ -n "$role" ]] || return 0
+  fleet_task_map_init
   while IFS= read -r n; do
     [[ -n "$n" ]] || continue
     out="$(fleet_name_parse "$n")"
     case "$out" in
       "OK "*)
         IFS=',' read -r k r t s <<< "${out#OK }"
-        sc=""                                       # v2 无 scope
+        sc=""                                       # v3/v2 无 scope
         ;;
       "LEGACY OK "*)
         IFS=',' read -r k r t sc <<< "${out#LEGACY OK }"
         ;;
       *) continue ;;
     esac
-    [[ -n "$t" ]] || continue                      # 无任务号 ⇒ 不是派生
+    te="$(fleet_effective_task "$n")"
+    [[ -n "$te" ]] || continue                     # 无任务 ⇒ 不是派生
     [[ "$r" == "$role" ]] || continue
     [[ "$sc" == "$want_scope" ]] || continue       # 旧形按 scope 过滤（裸名 ≠ 带 scope 全名）
     printf '%s\n' "$n"
@@ -205,6 +207,7 @@ fleet_scoped_candidates() {  # <role> [<task>] → 名字（每行一个；空 =
 fleet_same_core_candidates() {  # <role> [<task>] → 名字（每行一个；空 = 无）
   local role="${1-}" want_task="${2-}" n out k r t s
   [[ -n "$role" ]] || return 0
+  fleet_task_map_init
   while IFS= read -r n; do
     [[ -n "$n" ]] || continue
     out="$(fleet_name_parse "$n")"
@@ -213,7 +216,8 @@ fleet_same_core_candidates() {  # <role> [<task>] → 名字（每行一个；�
       *) continue ;;
     esac
     IFS=',' read -r k r t s <<< "${out#*OK }"
-    [[ "$r" == "$role" && "$t" == "$want_task" ]] || continue
+    [[ "$r" == "$role" ]] || continue
+    [[ "$(fleet_effective_task "$n")" == "$want_task" ]] || continue
     printf '%s\n' "$n"
   done < <(visible_session_names)
 }
@@ -256,6 +260,35 @@ running_verdict() {  # <name> [repo] → same | unknown | absent
 # ---- 共享投影（无后端调用）：会话名从门面快照取（label 即会话名；名册不参与身份判定 —— BR3/BR7）----
 visible_session_names() {
   term_snapshot | awk -F'\t' 'NF && $1 != "" {print $1}' | awk '!seen[$0]++'
+}
+
+# 元数据 task 索引（v3 · ADR 2026-11-25）：快照第 13 列 = 后端元数据（app `nao.task` / herdr sidecar）。
+#   只存**元数据**；v2/legacy 名字里的 task 由 fleet_effective_task 回落解析（不在快照里反解角色，
+#   因为快照可能在 roles 表灌入前建成）。每命令一次；调用点：status / close / ensure（roles 初始化之后）。
+declare -A FLEET_TASK_BY_NAME=()
+fleet_task_map_init() {  # → 0（后端不可用 ⇒ 空表，不报错）
+  local n t line
+  FLEET_TASK_BY_NAME=()
+  while IFS=$'\t' read -r n _ _ _ _ _ _ _ _ _ _ _ t; do
+    [[ -n "$n" ]] || continue
+    [[ -n "$t" && "$t" != "-" ]] && FLEET_TASK_BY_NAME["$n"]="$t"
+  done < <(term_snapshot 2>/dev/null || true)
+  return 0
+}
+
+# 有效 task：元数据优先，其次只读旧形/ v2 名字里的 task（槽位号永不承载语义）。
+fleet_effective_task() {  # <name> → task（无 ⇒ 空）
+  local nm="${1-}" out k r t s
+  [[ -n "$nm" ]] || return 0
+  if [[ -n "${FLEET_TASK_BY_NAME[$nm]:-}" ]]; then printf '%s\n' "${FLEET_TASK_BY_NAME[$nm]}"; return 0; fi
+  out="$(fleet_name_parse "$nm")"
+  case "$out" in
+    "OK "*)        IFS=',' read -r k r t s <<< "${out#OK }" ;;
+    "LEGACY OK "*) IFS=',' read -r k r t s <<< "${out#LEGACY OK }" ;;
+    *) return 0 ;;
+  esac
+  [[ -n "$t" ]] && printf '%s\n' "$t"
+  return 0
 }
 
 # 任务在 tasks-state 的归处：

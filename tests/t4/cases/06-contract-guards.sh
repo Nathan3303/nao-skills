@@ -715,17 +715,17 @@ t4_assert_eq "5" "$(for _f in t4_scan_term_bare_calls t4_verify_term_ledger t4_s
   "B1: 5 个 lint helper 均已定义（缺任一 ⇒ 其负控断言会因 127/空输出假绿）"
 t4_assert_file "$LEDGER_B1" "B1: 门面台账存在（tests/t4/fixtures/term-legacy-allowlist.txt）"
 
-# ---- T567-A：函数锚三向断言（ADR D3「174 函数锚怎么迁」；T567-B 起基线 176 = 174 + status --json 两函数）----
+# ---- T567-A：函数锚三向断言（ADR D3「174 函数锚怎么迁」；T567-B 起 176 = 174 + status --json 两函数；v3 元数据批次 185 = 176 + 9）----
 #   判据：① 各模块顶层函数并集 == 清单（无漏登记 / 无重名 / 无孤儿）② 归属模块一致
-#         ③ 总数守恒（清单行数 == 头 total == 实际并集 = 176）
+#         ③ 总数守恒（清单行数 == 头 total == 实际并集 = 185）
 #   锚在**清单**（functions.txt 一处 diff）：新增函数必须同行加一行 + 改头 total，否则本组必红。
 FN_MANIFEST="$T4_ROOT/.agents/scripts/fleet/functions.txt"
 t4_assert_file "$FN_MANIFEST" "T567-A: functions.txt 存在（函数锚的唯一清单）"
 t4_assert_eq "" "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MANIFEST")" \
-  "T567-A: 176 三向守恒（无漏登记/无孤儿/归属一致/总数==total）"
-t4_assert_eq "176" "$(grep -vcE '^[[:space:]]*(#|$)' "$FN_MANIFEST")" "T567-A: 清单行数 == 176（174 + T567-B 两函数）"
-t4_assert_eq "176" "$(t4_fleet_count '^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{' "$FLEET_B1")" \
-  "T567-A: 各模块顶层函数并集 == 176（数量守恒）"
+  "T567-A: 185 三向守恒（无漏登记/无孤儿/归属一致/总数==total）"
+t4_assert_eq "185" "$(grep -vcE '^[[:space:]]*(#|$)' "$FN_MANIFEST")" "T567-A: 清单行数 == 185（174 + status --json 2 + v3 元数据 9）"
+t4_assert_eq "185" "$(t4_fleet_count '^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{' "$FLEET_B1")" \
+  "T567-A: 各模块顶层函数并集 == 185（数量守恒）"
 # 失败演练（判据必须承重，不能空转）：三种变异各自必红
 FN_MUT="$T4_CACHE_DIR/fn-manifest-$$.mut"
 grep -v $'\tcmd_check$' "$FN_MANIFEST" > "$FN_MUT"
@@ -734,10 +734,10 @@ t4_assert_contains "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" | grep 
 sed 's#^fleet/lib/check.sh\tcmd_check$#fleet/lib/core.sh\tcmd_check#' "$FN_MANIFEST" > "$FN_MUT"
 t4_assert_contains "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" || true)" "归属不符" \
   "T567-A 负控②：模块归属写错 ⇒ 必红"
-sed 's/^# total: 176$/# total: 175/' "$FN_MANIFEST" > "$FN_MUT"
+sed 's/^# total: 185$/# total: 184/' "$FN_MANIFEST" > "$FN_MUT"
 out="$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" || true)"
 t4_assert_contains "$out" "总数不符" "T567-A 负控③：头 total 与并集不符 ⇒ 必红"
-t4_assert_contains "$out" "清单行数 176 ≠ 头 total 175" "T567-A 负控③b：只改 total 不改行数 ⇒ 同样必红"
+t4_assert_contains "$out" "清单行数 185 ≠ 头 total 184" "T567-A 负控③b：只改 total 不改行数 ⇒ 同样必红"
 
 # ---- ① 默认值唯一（#96 三期 P2：默认已翻 herdr；B1 立的 lint 就是为这一步准备的）----
 t4_assert_eq "1" "$(t4_fleet_count '^NAO_TERMINAL=' "$FLEET_B1")" \
@@ -1147,9 +1147,9 @@ t4_assert_eq "$(sed -n '/^CASE_IDS=(/,/)/p' "$T4_ROOT/tests/t4/run.sh" | grep -o
 t4_assert_eq "$(sed -n '/^CASE_IDS=(/,/)/p' "$T4_ROOT/tests/t4/run.sh" | grep -oE '"[0-9]+"' | tail -1 | tr -d '"')" \
   "$(ls -1 "$CASES_DIR"/*.sh | tail -1 | sed -E 's#.*/([0-9]+)-.*#\1#')" \
   "P2③ 最大用例编号 = run.sh CASE_IDS 末位（退役编号不复用）"
-t4_assert_eq "06-contract-guards.sh 28-naming-contract.sh 44-app-backend.sh 45-app-placement.sh" \
+t4_assert_eq "06-contract-guards.sh 44-app-backend.sh 45-app-placement.sh" \
   "$(grep -l 'default-value-probe BEGIN' "$CASES_DIR"/*.sh | while IFS= read -r f; do basename "$f"; done | sort | paste -sd' ' -)" \
-  "P2③ 默认值探针块白名单 = 显式文件清单（06 默认值段 · 28 B1① 反向断言 · 44 AC1「默认=herdr」反向断言 · 45 #175 AC4「app 终端内未设 NAO_TERMINAL」；新增须显式改本断言，不靠计数漂移）"
+  "P2③ 默认值探针块白名单 = 显式文件清单（06 默认值段 · 44 AC1「默认=herdr」反向断言 · 45 #175 AC4「app 终端内未设 NAO_TERMINAL」；28 v3 重写后不再需要默认值探针；新增须显式改本断言，不靠计数漂移）"
 # 负控：块外注入 unset ⇒ 必被扫到（并点名行号与形态）
 #   注：本段用 printf **构造**违规样本（不是执行默认值探针）；构造串里必然出现被扫关键字，
 #   故一并包在标记块内（否则用例 06 会「自我举报」—— 判据只白名单标记块内文本）。
@@ -1291,8 +1291,8 @@ rm -rf "$E1_LAB" "$E1_MUT" "$E1_BIN"
 #   后果是「宿主 HERDR_* 渗进夹具」的**假绿**（不报错、只让断言失真），没有报错面可接。
 #   golden = 收敛前（#130 开工时）四处手写清单的**并集**：
 #     lib-backend `envs` (ENV/SESSION/SOCKET_PATH/SOCKET_FILE) ∪ cases/06 `B3_CLEAN_ENV`
-#     (SOCKET_PATH/SESSION) ∪ cases/28 `TMUX_FIELD_ENV` (+PANE_ID/WORKSPACE_ID/TAB_ID/BIN_PATH)
-#     ∪ cases/28 两处直连 (ENV/SESSION) = 8 个。复核命令见 docs/reports/130-gate-tune.md。
+#     单源集合 = 8 个（lib.sh T4_HERDR_ENV_VARS）；cases/28 v3 重写后经 be_run_fleet 单源，无直连。
+#     复核命令见 docs/reports/130-gate-tune.md。
 D2_LIB="$T4_ROOT/tests/t4/lib.sh"
 D2_GOLD="HERDR_BIN_PATH HERDR_ENV HERDR_PANE_ID HERDR_SESSION HERDR_SOCKET_FILE HERDR_SOCKET_PATH HERDR_TAB_ID HERDR_WORKSPACE_ID"
 d2_vars()     { sed -n '/^T4_HERDR_ENV_VARS=(/,/)/p' "$1" | grep -oE '\bHERDR_[A-Z_]+' | sort -u; }
@@ -1309,9 +1309,10 @@ t4_assert_eq "0" "$(d2_handwritten)" "D2③ 调用点零手写（tests/ 下 「e
 t4_assert_ge 2 "$(d2_refs "$T4_ROOT/tests/t4/lib-backend.sh")" "D2④ lib-backend 夹具经单源清（引用 + 缺失时 fail loud 的守卫）"
 t4_assert_eq "1" "$(grep -cE '^B3_CLEAN_ENV=\(env .*T4_HERDR_UNSET_ARG[S]' "$T4_ROOT/tests/t4/cases/06-contract-guards.sh" || true)" \
   "D2④ cases/06 「B3_CLEAN_ENV」 改为引用单源"
-grep -qE '^B2_ENV=\(env "\$\{T4_HERDR_UNSET_ARGS\[@\]\}"' "$T4_ROOT/tests/t4/cases/28-naming-contract.sh"   && t4_ok "D2④ cases/28 \`B2_ENV\` 改为引用单源（T555：原 TMUX_FIELD_ENV 随 tmux 夹具退役）"   || t4_bad "D2④ cases/28 \`B2_ENV\` 应引用单源"
-t4_assert_eq "4" "$(grep -cE '^t4_run_in_dir .*env .*T4_HERDR_UNSET_ARG[S]' "$T4_ROOT/tests/t4/cases/28-naming-contract.sh" || true)" \
-  "D2④ cases/28 四处直连（herdr 场负控 ×2 + B3 桩场 ×2）改为引用单源"
+t4_assert_eq "0" "$(grep -cF 'T4_HERDR_UNSET_ARGS' "$T4_ROOT/tests/t4/cases/28-naming-contract.sh" || true)" \
+  "D2④ cases/28 v3 重写后零手写清理面（经 be_run_fleet / be_herdr 单源）"
+t4_assert_ge "5" "$(grep -c 'be_run_fleet' "$T4_ROOT/tests/t4/cases/28-naming-contract.sh" || true)" \
+  "D2④ cases/28 经 be_run_fleet 单源跑生产脚本（覆盖仍承重）"
 t4_assert_eq "16" "$(d2_args_n "$D2_LIB")" "D2⑤ 派生参数数 = 2×8（「env -u <名>」 成对；形态可运行）"
 # 变异 A（枚举减少 ⇒ 必红）：从副本的单源里删掉 `HERDR_SOCKET_FILE`
 D2_MUT="$T4_CACHE_DIR/d2-lib-mut-$$.sh"

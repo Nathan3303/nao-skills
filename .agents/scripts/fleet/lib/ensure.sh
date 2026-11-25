@@ -37,7 +37,7 @@ build_system_prompt() {
 }
 
 spawn_one() {
-  local name="$1" repo="$2" model="$3" card_override="${4:-}" role_id="${5:-}" card_name="${6:-}" force="${7:-false}" label="${8:-}" group="${9:-}" card prompt_file inner
+  local name="$1" repo="$2" model="$3" card_override="${4:-}" role_id="${5:-}" card_name="${6:-}" force="${7:-false}" label="${8:-}" group="${9:-}" task="${10:-}" card prompt_file inner
   # T537：卡路径可由调用方显式给出（下游仓卡）；未给出时仍走清单（PROMPTS_DIR/<card>）逐字不变
   # #75：**两条取卡通道分两个参数，禁混用** ——
   #   ④ card_override = `--card` 的**完整路径**（下游卡，已由 resolve_card 限定在 <repo>/.agents/prompts/ 内）
@@ -69,7 +69,7 @@ spawn_one() {
   #   `|| rc=$?` 是 set -e 下的必需写法（|| 列表豁免 errexit）；函数返回值即结果契约。
   local rc=0
   _TERM_SPAWN_PANE=""
-  term_spawn "$name" "$inner" "$repo" "$force" "$label" "$group" || rc=$?
+  term_spawn "$name" "$inner" "$repo" "$force" "$label" "$group" "$task" || rc=$?
   case "$rc" in
     "$SPAWN_RC_OK")   SPAWN_OK=$((SPAWN_OK + 1))
                       log "[$(term_label)] 已拉起 $name @ $repo${model:+（model=$model）}${_TERM_SPAWN_PANE:+（pane=$_TERM_SPAWN_PANE）}"
@@ -199,7 +199,8 @@ _ensure_slot_taken() {  # <wsid> <role> <num>
   return 1
 }
 
-# 派生任务复用：目标 ws 内已有同 (role,task) 的 v2 名字 ⇒ 打印该名字（同槽位同 task = same）
+# 任务复用（v3）：目标 ws 内已有同 (role, task) 的会话 ⇒ 打印该名字（task 只认元数据；
+#   槽位号不承载语义）。v2/legacy 名字仍按解析出的 task 兼容复用（只读面）。
 _ensure_task_name_in_ws() {  # <wsid> <role> <task>
   local wsid="${1-}" role="${2-}" task="${3-}" name out k r t s line
   if (( _TERM_PLACE_CACHE )); then
@@ -211,15 +212,20 @@ _ensure_task_name_in_ws() {  # <wsid> <role> <task>
       out="$(fleet_name_parse "$name")"
       [[ "$out" == "OK "* ]] || continue
       IFS=',' read -r k r t s <<< "${out#OK }"
-      [[ "$r" == "$role" && "$t" == "$task" ]] && { printf '%s\n' "$name"; return 0; }
+      [[ "$r" == "$role" ]] || continue
+      [[ "${_TERM_PLACE_TASK_BY_PANE[$_TP_PANE]:-}" == "$task" ]] || continue
+      printf '%s\n' "$name"; return 0
     done
   else
+    fleet_task_map_init
     while IFS= read -r name; do
       [[ -n "$name" ]] || continue
       out="$(fleet_name_parse "$name")"
       [[ "$out" == "OK "* ]] || continue
       IFS=',' read -r k r t s <<< "${out#OK }"
-      [[ "$r" == "$role" && "$t" == "$task" ]] && { printf '%s\n' "$name"; return 0; }
+      [[ "$r" == "$role" ]] || continue
+      [[ "$(fleet_effective_task "$name")" == "$task" ]] || continue
+      printf '%s\n' "$name"; return 0
     done < <(visible_session_names)
   fi
   return 0
@@ -255,15 +261,8 @@ _ensure_pick_num() {  # <wsid> <role> <task> <kind> → stdout num（空 = 槽�
     [[ -z "${_T_RSV_WS[$i]:-}" || "${_T_RSV_WS[$i]}" == "$wsid" ]] || continue
     [[ "${_T_RSV_ROLE[$i]}" == "$role" ]] && occ+=("${_T_RSV_NUM[$i]:-1}")
   done
-  if [[ -n "$task" ]]; then
-    # 派生复用已有次槽位（最小 ≥2）
-    local best=""
-    for n in "${occ[@]:-}"; do
-      [[ "$n" =~ ^[2-9]$ ]] || continue
-      [[ -z "$best" || "$n" -lt "$best" ]] && best="$n"
-    done
-    if [[ -n "$best" ]]; then printf '%s\n' "$best"; return 0; fi
-  fi
+  # v3：task 不进名字 ⇒ 槽位号只用于区分同 role 多会话，**不得**复用已占槽位
+  #   （v2 的「派生复用已有次槽位」会让两个不同 task 撞同一个 `role2` 名）。
   for n in "" 2 3 4 5 6 7 8 9; do
     local hit=0
     for i in "${occ[@]:-}"; do [[ "$i" == "${n:-1}" ]] && { hit=1; break; }; done
@@ -361,7 +360,7 @@ cmd_ensure() {
         else
           slot="$(_ensure_pick_num "$wsid" "$CARD_ROLE" "$task" "card")" \
             || die "ensure 中止：角色槽位已满（$CARD_ROLE 的 2..9 全占；该怎么办：先 close 无用会话再重试）"
-          disp="$(fleet_name_build card "$CARD_ROLE" "$slot" "$task")"
+          disp="$(fleet_name_build card "$CARD_ROLE" "$slot")"
         fi
       fi
       t_names+=("$CARD_ROLE"); t_repos+=("$CARD_REPO"); t_cards+=("$CARD_PATH"); t_roles+=("${CARD_ROLE:-}")
@@ -409,10 +408,10 @@ cmd_ensure() {
       wsid="${_TERM_PLACE_WS_BY_LABEL[$place]:-}"
       if [[ -n "$forced_num" ]]; then
         slot="$forced_num"
-        if [[ -n "$task" ]]; then disp="$(fleet_name_build derived "$NAME" "$slot" "$task")"
-        else disp="$(fleet_name_build resident "$NAME" "$slot" "")"; fi
+        if [[ -n "$task" ]]; then disp="$(fleet_name_build derived "$NAME" "$slot")"
+        else disp="$(fleet_name_build resident "$NAME" "$slot")"; fi
       elif [[ -n "$task" ]]; then
-        # 同槽位同 task 已在 ⇒ same（复用该名字；相位 2 判重会跳过）
+        # 同 (role, task) 元数据已在 ⇒ same（复用该名字；相位 2 判重会跳过）
         disp="$(_ensure_task_name_in_ws "$wsid" "$NAME" "$task")"
         if [[ -n "$disp" ]]; then
           slot=""; pout_tmp="$(fleet_name_parse "$disp")"
@@ -420,12 +419,12 @@ cmd_ensure() {
         else
           slot="$(_ensure_pick_num "$wsid" "$NAME" "$task" "derived")" \
             || die "ensure 中止：角色槽位已满（$NAME 的 2..9 全占；该怎么办：先 close 无用会话再重试）"
-          disp="$(fleet_name_build derived "$NAME" "$slot" "$task")"
+          disp="$(fleet_name_build derived "$NAME" "$slot")"
         fi
       else
         slot="$(_ensure_pick_num "$wsid" "$NAME" "" "resident")" \
           || die "ensure 中止：角色槽位已满（$NAME 的 2..9 全占；该怎么办：先 close 无用会话，如 close ${NAME}2）"
-        disp="$(fleet_name_build resident "$NAME" "$slot" "")"
+        disp="$(fleet_name_build resident "$NAME" "$slot")"
       fi
       t_names+=("$NAME"); t_repos+=("$repo"); t_cards+=(""); t_roles+=("$NAME")
       t_nums+=("$slot"); t_kinds+=("resident"); t_labels+=("$place"); t_disps+=("$disp")
@@ -476,9 +475,9 @@ cmd_ensure() {
       fi
     fi
     if [[ -n "${t_cards[$i]}" ]]; then
-      spawn_one "$disp" "$repo" "$model" "${t_cards[$i]}" "${t_roles[$i]:-}" "" "$force" "${t_labels[$i]}" ""
+      spawn_one "$disp" "$repo" "$model" "${t_cards[$i]}" "${t_roles[$i]:-}" "" "$force" "${t_labels[$i]}" "" "$task"
     else
-      spawn_one "$disp" "$repo" "$model" "" "${t_roles[$i]:-}" "${t_prompts[$i]:-}" "$force" "${t_labels[$i]}" ""
+      spawn_one "$disp" "$repo" "$model" "" "${t_roles[$i]:-}" "${t_prompts[$i]:-}" "$force" "${t_labels[$i]}" "" "$task"
     fi
   done
   term_place_reset

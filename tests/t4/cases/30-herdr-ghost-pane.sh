@@ -21,7 +21,7 @@ LAB="$T4_CACHE_DIR/lab30-$$"; mkdir -p "$LAB"
 cp -r "$T4_ROOT/.agents" "$LAB/.agents" || { t4_bad "夹具复制 .agents 失败"; t4_exit; }
 FLEET="$T4_ROOT/.agents/scripts/nao-fleet.sh"
 FLEET_BUNDLE="$(t4_fleet_bundle "$T4_ROOT/.agents/scripts")"   # T567-A：只读内容断言按文件集（入口 + fleet/lib）
-NAME="rd-fe(T1)"
+NAME="rd-fe"
 
 BE_CACHE_ROOT="$T4_CACHE_DIR"
 be_init "$LAB" "lab" || { t4_bad "be_init 失败"; t4_exit; }

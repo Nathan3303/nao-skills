@@ -113,12 +113,12 @@ cd <repo> && codegraph init                # 建索引（不带 -i；该 flag �
 - **`--card` 只作用于紧跟它的那个目标**：`ensure qa --card x.md` 是「常驻 `qa`」+「卡 `x.md`」两个会话，不会整批串味；命令末尾悬挂 `--card`、或把它递给 `check`/`status`/`close`，都按用法错误处理。
 - **卡正文就是系统提示**，属于**完全可信输入**（能写你仓库的人本来就能定义角色）。fleet 只校验目录、文件类型、大小与命名一致性，不做内容安全审查。卡同样可以被 pi-subagents 当项目 agent 用（加 `name:` 即可），但那条路径没有「环境锚点」行，卡正文别依赖 `@.agents/...` 引用才自洽。若你已在使用 overlay 清单（`NAO_SKILLS` 指向自己的清单目录），同一仓别两法并用。
 
-## 会话命名与多仓（v2 命名 · 1 仓 1 workspace）
+## 会话命名与多仓（v3 命名 · 1 仓 1 workspace）
 
-会话名是**路由标签**（不是身份证明），形如 **`<role>[<N>](<task>)`**：
+会话名是**路由标签**（不是身份证明），形如 **`<role>[<N>]`**（task 不进名字，只落元数据）：
 
 - 常驻：`<role>[<N>]` —— `pm`、`qa`、`qa2`（`N` 空 = 槽位 1；同 workspace 内重名自动加数字，`>9` 直接 fail loud）。
-- 派生：`<role>[<N>](<task>)` —— `rd-be(T1)`、`qa2(T558)`；`ensure --task <编号>` 生成。
+- 任务：`ensure --task <编号>` 的会话名仍是 `<role>[<N>]` —— 如 `rd-be`、`qa2`；task 只落元数据（app label / herdr sidecar），`status` 尾注 `task=<id>`、`status --json` 提供 `task` 字段。只读旧形 `<role>(<task>)` / `<role>-<task>` / `<role>-<task>@<scope>` 仍可被 `status`/`close` 识别，新会话不再生成。
 - **名字不含位置**：不再有 `@<fleet>` 段。绑定单位 = herdr **workspace**（1 仓 1 workspace，label = 仓基键；同机同基名两仓自动加序号）。
 - 预算：卡会话 core ≤32、总名长 ≤48；撞线 fail loud，**不自动截短**。
 

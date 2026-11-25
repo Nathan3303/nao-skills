@@ -19,8 +19,8 @@
 #      c) 根因回退 + 复核恒「0 pane」 ⇒ 用户 pane 被杀（复用快照/恒真复核必红）。
 #   ⑤ 真·空 ws 仍要能关（否则旧行为回不去）：0 pane 的旧 ws ⇒ 允许 `workspace close` 重建；ensure rc=0。
 #   ⑥ 同族消费点（防「只修 P0 那行」）：
-#      · 判重（spawn 同名 label）：ws 内已有 `rd-fe2(T1)` ⇒ `ensure --task T1 rd-fe` 判「已在运行」跳过（不新建）；
-#      · 槽位/名字：同 ws `ensure --task T2 rd-fe` ⇒ 复用槽位 2 取名 `rd-fe2(T2)`（`_ensure_pick_num` /
+#      · 判重（spawn 同名 label）：ws 内已有 `rd-fe2`（元数据 task=T1）⇒ `ensure --task T1 rd-fe` 判「已在运行」跳过（不新建）；
+#      · 槽位/名字：同 ws `ensure --task T2 rd-fe` ⇒ 取最小空闲槽位 1 取名 `rd-fe`（槽位号不承载语义，不复用已占槽位）（`_ensure_pick_num` /
 #        `_ensure_task_name_in_ws` 读到的是 label 字段而不是 pane_id）；
 #      · 仓归属（`_ensure_ws_panes_in_repo`）：base label 的 ws 里 pane 全在**仓外** ⇒ 让号建 `<base>2`，
 #        不把新 pane 塞进别的仓的 ws、也不关那个 ws。
@@ -120,13 +120,13 @@ t4_assert_eq "w1" "$_TP_WS" "① 空 label ⇒ wsid 仍在第 3 位（P0：不�
 t4_assert_eq "w1:t1" "$_TP_TAB" "① 空 label ⇒ tab_id 仍在第 4 位"
 t4_assert_eq "/repo" "$_TP_CWD" "① 空 label ⇒ cwd 仍在第 5 位"
 
-_term_place_pane_fields "$(_term_place_pane_row "rd-fe(T1)" "w2:p3" "w2" "w2:t2" "" "")"
+_term_place_pane_fields "$(_term_place_pane_row "rd-fe" "w2:p3" "w2" "w2:t2" "" "")"
 t4_assert_eq "w2" "$_TP_WS" "① 空 cwd/fgcwd 不左移（wsid 命中）"
 t4_assert_eq "" "$_TP_CWD" "① 空 cwd 保真（真空值，不补哨兵）"
 t4_assert_eq "" "$_TP_FGCWD" "① 空 fgcwd 保真"
 t4_assert_eq "w2:t2" "$_TP_TAB" "① 空 cwd/fgcwd 不左移（tab_id 命中）"
 
-_term_place_pane_fields "$(_term_place_pane_row "rd-be(T1)" "w3:p1" "" "w3:t1" "/r" "/r")"
+_term_place_pane_fields "$(_term_place_pane_row "rd-be" "w3:p1" "" "w3:t1" "/r" "/r")"
 t4_assert_eq "" "$_TP_WS" "① 空 wsid 取到空（不串到 tab_id）"
 t4_assert_eq "w3:t1" "$_TP_TAB" "① 空 wsid 后续字段不左移"
 
@@ -164,8 +164,8 @@ t4_assert_eq "0" "$BE_RC" "③ ensure rc=0（P0：不得因空判据失败或杀
 t4_assert_eq "0" "$(c43_close_count)" "③ **全程未发出 workspace close**（P0 主判据）"
 be_pane_alive "$USER_PANE" && t4_ok "③ 用户 pane 存活（$USER_PANE）" || t4_bad "③ 用户 pane 被杀（$USER_PANE —— #160 缺陷复现）"
 t4_assert_eq "$LBL" "$(c43_ws_label_of "$WS")" "③ 用户 ws 仍在（label=$LBL，未被关掉重建）"
-C43_FLEET_PANE="$(be_pane_by_name "rd-fe(T1)")"
-t4_assert_ne "" "$C43_FLEET_PANE" "③ fleet pane 正常放置（rd-fe(T1)）"
+C43_FLEET_PANE="$(be_pane_by_name "rd-fe")"
+t4_assert_ne "" "$C43_FLEET_PANE" "③ fleet pane 正常放置（rd-fe）"
 t4_assert_eq "$WS" "$(be_herdr "$BE_SESSION" pane list 2>/dev/null | _be_json_lines "(r.panes||[]).filter(p=>p.pane_id==='$C43_FLEET_PANE').map(p=>p.workspace_id)")" \
   "③ fleet pane 落在用户同一 ws（1 workspace/仓，不另起）"
 t4_assert_contains "$BE_OUT" "（成功 1 / 跳过 0 / 失败 0）" "③ 摘要计成功 1（放置成功而非失败）"
@@ -273,8 +273,13 @@ SC="$(c43_user_only_ws)" || { t4_bad "⑥ 无法构造场景"; t4_exit; }
 WS="${SC%%$'\t'*}"; USER_PANE="${SC#*$'\t'}"
 js="$(be_herdr "$BE_SESSION" pane split "$USER_PANE" --direction down --cwd "$LAB" --no-focus 2>/dev/null)"
 ROLE_PANE="$(printf '%s' "$js" | _be_json_lines '[(r.pane||{}).pane_id].filter(Boolean)')"
-be_herdr "$BE_SESSION" pane rename "$ROLE_PANE" "rd-fe2(T1)" >/dev/null 2>&1
-t4_assert_eq "rd-fe2(T1)" "$(be_pane_label "$ROLE_PANE")" "⑥ 夹具：槽位 2 的派生 pane 就位"
+be_herdr "$BE_SESSION" pane rename "$ROLE_PANE" "rd-fe2" >/dev/null 2>&1
+# v3：task 在 sidecar（不是名字）—— 为槽位 2 写入 task=T1，证明判重认元数据
+mkdir -p "$LAB/.t4-home/.local/state/nao-fleet/session-meta/${BE_SESSION}__${WS}" 2>/dev/null || true
+printf 'task=T1
+name=rd-fe2
+' > "$LAB/.t4-home/.local/state/nao-fleet/session-meta/${BE_SESSION}__${WS}/$ROLE_PANE" 2>/dev/null || true
+t4_assert_eq "rd-fe2" "$(be_pane_label "$ROLE_PANE")" "⑥ 夹具：槽位 2 的派生 pane 就位（task 在 sidecar）"
 
 : > "$CALL_LOG"
 n_before="$(c43_panes_in "$WS" | grep -c . || true)"
@@ -288,7 +293,7 @@ be_pane_alive "$USER_PANE" && t4_ok "⑥a 用户 pane 仍存活" || t4_bad "⑥a
 : > "$CALL_LOG"
 be_run_fleet "$LAB" ensure --task T2 rd-fe
 t4_assert_eq "0" "$BE_RC" "⑥b 槽位：ensure rc=0"
-t4_assert_ne "" "$(be_pane_by_name "rd-fe2(T2)")" "⑥b 槽位/名字：复用槽位 2 取名 rd-fe2(T2)（读到的是 label，不是 pane_id）"
+t4_assert_ne "" "$(be_pane_by_name "rd-fe")" "⑥b 槽位/名字：取最小空闲槽位 1 取名 rd-fe（槽位号不承载语义；不复用已占槽位 2）"
 t4_assert_eq "0" "$(c43_close_count)" "⑥b 槽位：全程未关 ws"
 
 # ---------------------------------------------------------------- ⑥c 仓归属（`_ensure_ws_panes_in_repo`）

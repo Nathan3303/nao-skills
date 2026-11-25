@@ -83,7 +83,7 @@ cd 你的项目
 
 角色名可以写**别名**或**规范名**（两者等价）：`arch` = `arch-designer`、`infra` = `rd-infra`；上例混用也照常拉起。完整别名见 `.agents/roles.yaml` 或 `nao-fleet.sh --help`。
 
-会话名形如 **`<role>[<N>](<task>)`**：常驻 `pm`、`qa`、`qa2`；派生 `rd-be(T1)`、`qa2(T558)`（`N` 空 = 槽位 1，同 workspace 内重名自动加数字，`>9` 直接报错）。**名字不含位置**——绑定单位是 herdr workspace：**1 仓 = 1 workspace**，两个仓各跑各的、零配置不撞车。上面例子里的 `@api` 是**「去哪个仓干活」的选择符**，不是名字的一部分。跨仓给别的会话发消息时，用**会话 id** 而不是名字（同名是正常的：每仓都有一个 `pm`）。细节见 [docs/INSTALL.md](docs/INSTALL.md)「会话命名与多仓」。
+会话名形如 **`<role>[<N>]`**：`pm`、`qa`、`qa2`、`rd-be`（`N` 空 = 槽位 1，同 workspace 内重名自动加数字，`>9` 直接报错）。**task 不进名字**：`ensure --task T1 rd-be` 仍叫 `rd-be`，task 落元数据，`status` 在派生节尾注 `task=T1`、`status --json` 有 `task` 字段。**名字不含位置**——绑定单位是 herdr workspace：**1 仓 = 1 workspace**，两个仓各跑各的、零配置不撞车。上面例子里的 `@api` 是**「去哪个仓干活」的选择符**，不是名字的一部分。跨仓给别的会话发消息时，用**会话 id** 而不是名字（同名是正常的：每仓都有一个 `pm`）。细节见 [docs/INSTALL.md](docs/INSTALL.md)「会话命名与多仓」。
 
 **多仓编队（可选）**：在仓根写 `.agents/fleet.yaml`（只写「联动仓短代号 → 路径」映射），就能把角色派到联动仓干活、仍住同一个 herdr workspace：`ensure rd-be@api`（`@api` = 目标仓选择符）。旧的 `slug:` 字段已弃用（读到只提示、不生效）。不写这个文件 = 与以前**完全一致**。写法与边界见 [docs/INSTALL.md](docs/INSTALL.md)「联动仓 manifest」。
 
@@ -121,7 +121,7 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 
 **它会在 GitHub 上开 PR 吗？** 会——每个需求一条分支、一个 PR（Draft 早开、CI 早跑），你确认验收后由研发角色 squash 合并，main 上只留 1 条可读提交。没有远端或 `gh` 时降级为本地分支，流程不变。
 
-**跑完的会话要留着吗？** 派生会话验收完就回收：`nao-fleet.sh close --task T1 rd-be`（也可直接给派生会话名 `nao-fleet.sh close 'rd-be(T1)'`）；常驻角色留着复用。`nao-fleet.sh status` 会提示哪些是残留。目标在别的项目里也能回收——定位不到时会**非 0 退出并打印诊断**，不会假装已回收。
+**跑完的会话要留着吗？** 派生会话验收完就回收：`nao-fleet.sh close --task T1 rd-be`（按元数据精确匹配；只读旧名 `rd-be(T1)` / `rd-be-T1` 仍可被识别与回收）；常驻角色留着复用。`nao-fleet.sh status` 会提示哪些是残留。目标在别的项目里也能回收——定位不到时会**非 0 退出并打印诊断**，不会假装已回收。
 
 **为什么需要终端后端？** 舰队要把 7 个角色会话放进终端里，且要能可靠地「找回来」与「收掉」。
 

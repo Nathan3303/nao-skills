@@ -34,6 +34,9 @@ TERM_APP_SCHEMA_MIN="1"
 TERM_APP_DOC_MIN="10"
 TERM_APP_LABEL_SPACE="herdr.space"
 TERM_APP_LABEL_TAB="herdr.tab"
+# 命名契约 v3 元数据（ADR 2026-11-25 决策一）：app 有键值 label ⇒ task + 原始名直接落标签。
+TERM_APP_LABEL_TASK="nao.task"
+TERM_APP_LABEL_NAME="nao.name"
 # 收养轮询（T565/#175 · AC2）：app 的收养是**异步**的 —— 厂方内嵌文档原文：
 #   「acknowledge with `pending: true`, then apply after the machine replies」
 #   ⇒ 写完标签**立刻**读 doc 必然假失败（用户实机：t10 不在目标 tab 的 root 树里 ⇒ 回滚）。
@@ -205,9 +208,32 @@ _term_app_doc_guard() {
 #   app 语义：pane_id/terminal_id = 终端地址（tN）；agent_status = status.state；
 #   seq 恒 `-`（无 state_change_seq 等价物）；session 位放**终端生命周期**（live/finished）；
 #   hook = 1 表示 `reported:true`（状态由程序 OSC 上报，非保守推断）；ws_id = labels.herdr.space。
+# 身份还原（ADR 2026-11-25 决策一 / 缺陷 2）：labels.nao.name → 后端 name → argv --name
+#   （argv 仅当进程是 pi 且名字可被 fleet_name_parse 识别）。app 的 `name=null` 不再整行省略。
+#   注意：调用方须先 fleet_roles_init（status/ensure/close 均如此），否则 parse 表空 ⇒ argv 不通。
+_term_app_identity() {  # <get-json> → 身份名（无 ⇒ 空）
+  local g="${1-}" nm="" fg="" av=""
+  nm="$(_term_app_field "$g" "$TERM_APP_LABEL_NAME")"
+  [[ -n "$nm" ]] || nm="$(_term_app_field "$g" name)"
+  # 真 hc 的 name 可为 null：字段抽取会得到 `null` / `null,` 一类裸值 ⇒ 一律视为缺席
+  case "$nm" in null|null,*|null\}*) nm="" ;; esac
+  if [[ -z "$nm" ]]; then
+    fg="$(_term_app_fg_name "$g")"
+    if [[ "$fg" == "pi" ]]; then
+      av="$(sed -n 's/.*"argv":\[\([^]]*\)\].*/\1/p' <<< "$g" | head -1 | tr -d '"' | sed 's/,/ /g')"
+      nm="$(_term_argv_name "$av")"
+      case "$(fleet_name_parse "$nm")" in
+        "OK "*|"LEGACY OK "*) ;;
+        *) nm="" ;;
+      esac
+    fi
+  fi
+  printf '%s\n' "$nm"
+}
+
 _term_app_snapshot() {
-  local ls="" g addr name cwd tstate st fg fgcwd sp tb hook
-  local nl ncwd nfgcwd nsp ntb nfgp nst nts
+  local ls="" g addr name cwd tstate st fg fgcwd sp tb hook task
+  local nl ncwd nfgcwd nsp ntb nfgp nst nts ntask
   ls="$(_term_app_exec ls --all --json)" || { warn "hc ls 失败（app core 未就绪？）"; return 1; }
   if ! _term_app_payload_ok "$ls"; then
     warn "hc ls 不可用：$(printf '%s' "$ls" | head -c 200)"
@@ -220,7 +246,7 @@ _term_app_snapshot() {
       warn "hc get $addr 返回错误：$(printf '%s' "$g" | head -c 200)"
       return 1
     fi
-    name="$(_term_app_field "$g" name)"
+    name="$(_term_app_identity "$g")"
     [[ -n "$name" ]] || continue
     cwd="$(_term_app_field "$g" cwd)"
     tstate="$(_term_app_term_state "$g")"
@@ -229,6 +255,7 @@ _term_app_snapshot() {
     fgcwd="$(_term_app_fg_cwd "$g")"
     sp="$(_term_app_field "$g" "$TERM_APP_LABEL_SPACE")"
     tb="$(_term_app_field "$g" "$TERM_APP_LABEL_TAB")"
+    task="$(_term_app_field "$g" "$TERM_APP_LABEL_TASK")"
     case "$g" in *'"reported":true'*) hook=1 ;; *) hook=0 ;; esac
     _term_tsv_norm "$name";  nl="$_TSV_NORM"
     _term_tsv_norm "$cwd";   ncwd="$_TSV_NORM"
@@ -238,9 +265,10 @@ _term_app_snapshot() {
     _term_tsv_norm "$fg";    nfgp="$_TSV_NORM"
     _term_tsv_norm "$st";    nst="$_TSV_NORM"
     _term_tsv_norm "$tstate"; nts="$_TSV_NORM"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    _term_tsv_norm "$task";  ntask="$_TSV_NORM"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$nl" "$addr" "$addr" "$ncwd" "$nfgcwd" "$nfgp" \
-      "$nst" - "$nts" - "$hook" "$nsp"
+      "$nst" - "$nts" - "$hook" "$nsp" "$ntask"
   done < <(printf '%s' "$ls" | grep -o '"address":"[^"]*"' | cut -d'"' -f4)
   return 0
 }
@@ -270,7 +298,7 @@ _term_app_liveness() {  # <name> [repo] → verdict/state/seq/hook
   #   只有残留时给 `ghost`（label 在、agent 无）—— 比 absent 更诚实，status 会单列进证据异常节。
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
-    IFS=$'\t' read -r _l _p _t _ _ fg st seq sess av hook ws <<< "$line"
+    IFS=$'\t' read -r _l _p _t _ _ fg st seq sess av hook ws _task <<< "$line"
     if [[ "$sess" == "live" ]]; then
       live_rows+="$line"$'\n'
     else
@@ -286,7 +314,7 @@ _term_app_liveness() {  # <name> [repo] → verdict/state/seq/hook
   fi
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
-    IFS=$'\t' read -r _l _p _t _ _ fg st seq sess av hook ws <<< "$line"
+    IFS=$'\t' read -r _l _p _t _ _ fg st seq sess av hook ws _task <<< "$line"
     # 缺 `labels`（AC8 子形态，PM 裁定）：真 hc 恒给 `"labels":{}`，**单缺键**不构成「版本不支持」，
     #   但「有名字、无放置键」⇒ 无法确认归属 ⇒ 判 `unknown`（**不判在线/不可投递**）+ 一行 warn。
     #   若 labels 与 status **两项都缺** ⇒ 按 AC8 主形态判 `integration-missing`（更强的缺陷），
@@ -349,9 +377,10 @@ _term_app_doc_has_space() {  # <space_id> → 0 在 / 1 不在
 }
 
 _term_app_place_prime() {  # → 0 已建快照 / 1 后端不可用（fail loud 由调用方）
-  local rows snap sid folder base cand nn kind a b c d csp="" cid="${HC_TERMINAL_ID:-}" cg=""
+  local rows snap sid folder base cand nn kind a b c d csp="" cid="${HC_TERMINAL_ID:-}" cg="" task=""
   local -A sid_folder=() base_folder=() tab_of=() stale_seen=()
   _TERM_PLACE_WS_BY_LABEL=(); _TERM_PLACE_WS_ROWS=(); _TERM_PLACE_PANE_ROWS=()
+  _TERM_PLACE_TASK_BY_PANE=()
   _TERM_APP_DOC_SPACES=(); _TERM_APP_STALE_SPACES=(); _TERM_APP_CALLER_SPACE=""
   rows="$(_term_app_doc_rows)" || return 1
   _term_app_doc_guard "$rows" || return 1
@@ -381,7 +410,7 @@ _term_app_place_prime() {  # → 0 已建快照 / 1 后端不可用（fail loud 
     fi
   fi
   snap="$(_term_app_snapshot)" || return 1
-  while IFS=$'\t' read -r label addr _tid cwd fgcwd _fg _st _seq _sess _av _hook sp; do
+  while IFS=$'\t' read -r label addr _tid cwd fgcwd _fg _st _seq _sess _av _hook sp _task; do
     [[ -n "$label" ]] || continue
     [[ -n "$sp" && "$sp" != "-" ]] || continue    # `-` = 快照里“该字段为空”的占位（非舰队终端/无标签）
     _term_app_doc_has_space "$sp" && continue
@@ -420,8 +449,9 @@ _term_app_place_prime() {  # → 0 已建快照 / 1 后端不可用（fail loud 
   # ④ pane 行（live）+ ⑤ keep 换壳残留（finished ⇒ 记 ghost，spawn 时清）
   local line tb
   local -a ghosts=()
-  while IFS=$'\t' read -r label addr _tid cwd fgcwd _fg _st _seq _sess _av _hook sp; do
+  while IFS=$'\t' read -r label addr _tid cwd fgcwd _fg _st _seq _sess _av _hook sp task; do
     [[ -n "$label" ]] || continue
+    [[ -n "$task" && "$task" != "-" ]] && _TERM_PLACE_TASK_BY_PANE["$addr"]="$task"
     tb="${tab_of[$addr]:-}"
     # finished 终端不在 doc（doc 只列 live）⇒ tab id 用与 spawn 同一确定性算法兜底
     [[ -n "$tb" ]] || tb="$(_term_app_mint_tab "$sp" "$label")"
@@ -498,9 +528,9 @@ _term_app_wait_ready() {  # <addr> <name> → 0 就绪 / 1 超时（终端保留
   return 1
 }
 
-_term_app_spawn() {  # <name> <inner> <repo> [force] <label> [group] → SPAWN_RC_OK|FAIL
-  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}"
-  local sp tb out addr
+_term_app_spawn() {  # <name> <inner> <repo> [force] <label> [group] [task] → SPAWN_RC_OK|FAIL
+  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" task="${7-}"
+  local sp tb out addr legal="" line llegal llabel
   [[ -n "$name" && -n "$inner" ]] || { warn "app spawn 参数缺失（name/inner）"; return "$SPAWN_RC_FAIL"; }
   [[ -n "$label" ]] || { warn "app spawn 缺放置键（期望 = 仓基键；repo=$repo）"; return "$SPAWN_RC_FAIL"; }
   if ! fleet_scope_problem "$label" >/dev/null; then
@@ -551,9 +581,24 @@ _term_app_spawn() {  # <name> <inner> <repo> [force] <label> [group] → SPAWN_R
     done
   fi
   # --no-parent 是硬护栏（父终端结束会带走子终端）；--keep 按 ADR 保留（core 丢失后原地换 shell）
-  out="$(_term_app_exec run --bg --no-parent --keep --name "$name" --cwd "$repo" \
-        --label "$TERM_APP_LABEL_SPACE=$sp" --label "$TERM_APP_LABEL_TAB=$tb" \
-        -- "${SHELL:-/bin/bash}" -lc "$inner")" || true
+  # 名称合法化（v3）：hc run --name 限 [a-z0-9-_.]{1,32}；原始 nao 名存 `nao.name`。
+  legal="$(fleet_backend_name "$name")"
+  if (( _TERM_PLACE_CACHE )); then
+    for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
+      [[ -n "$line" ]] || continue
+      _term_place_pane_fields "$line"
+      llabel="$_TP_LABEL"
+      [[ -n "$llabel" && "$llabel" != "$name" ]] || continue
+      llegal="$(fleet_backend_name "$llabel")"
+      [[ "$llegal" == "$legal" ]] || continue
+      legal="${legal:0:27}-$(_term_sha256 "$name" | cut -c1-4)"
+      break
+    done
+  fi
+  local -a lbl=(--label "$TERM_APP_LABEL_SPACE=$sp" --label "$TERM_APP_LABEL_TAB=$tb" --label "$TERM_APP_LABEL_NAME=$name")
+  [[ -n "$task" ]] && lbl+=(--label "$TERM_APP_LABEL_TASK=$task")
+  out="$(_term_app_exec run --bg --no-parent --keep --name "$legal" --cwd "$repo" \
+        "${lbl[@]}" -- "${SHELL:-/bin/bash}" -lc "$inner")" || true
   if ! _term_app_payload_ok "$out"; then
     warn "hc run 失败（name=$name）：$(printf '%s' "$out" | head -c 200)"
     return "$SPAWN_RC_FAIL"
@@ -587,7 +632,7 @@ _term_app_spawn() {  # <name> <inner> <repo> [force] <label> [group] → SPAWN_R
   _TERM_SPAWN_PANE="$addr"; _TERM_SPAWN_WSID="$sp"; _TERM_SPAWN_TID="$tb"
   if [[ -n "${_TERM_SNAP_FILE:-}" ]]; then rm -f "$_TERM_SNAP_FILE" 2>/dev/null || true; _TERM_SNAP_FILE=""; fi
   if (( _TERM_PLACE_CACHE )); then
-    _term_place_set_pane "$name" "$addr" "$sp" "$tb" "$repo"
+    _term_place_set_pane "$name" "$addr" "$sp" "$tb" "$repo" "$task"
   fi
   return "$SPAWN_RC_OK"
 }
