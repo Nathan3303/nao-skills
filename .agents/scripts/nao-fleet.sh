@@ -26,8 +26,10 @@
 # 用法
 #   nao-fleet.sh check [--strict] [-v]            静态体检：roles.yaml/缩进/EOL/角色卡/交叉引用/PR 模板/白名单/herdr+pi 前提
 #                                                 默认摘要 2–3 行：摘要行 + codegraph 状态行（四态之一）+ herdr 的生效后端行；-v 展开完整报告；失败始终展开
-#   nao-fleet.sh status                           角色会话在线状态（pane label + agent 状态
+#   nao-fleet.sh status [--json]                  角色会话在线状态（pane label + agent 状态
 #                                                 （结构化事实，权威源 pane list/agent list）；非在线证据单列）
+#                                                 `--json`（T567-B · schema:1）= 编排器契约：文本输出**逐字不变**，
+#                                                 另出机读 JSON（角色/会话/pane/cwd/归属/在线/三态忙闲/可投递）
 #   nao-fleet.sh ensure <别名>[@<repo>] [更多...]  拉起角色窗口（默认工作区=roles.yaml workspace）
 #                                                 `@<repo>` = 目标仓选择符（`@main` 走 manifest、`@<路径>` 直指），不入会话名
 #   nao-fleet.sh ensure -m <model> <别名>...       显式指定模型（须命中白名单）
@@ -120,6 +122,8 @@ usage() {
 
 # ---- 入口 ----
 CMD=""; FORCE=false; STRICT=false; MODEL=""; TASK=""; CLEANUP_SOCK=""; SESSION_ARG=""; TARGETS=()
+# T567-B：`status --json`（编排器唯一跨进程契约）。默认关 ⇒ 文本路径逐字不变（AC1）。
+JSON_OUT=false
 # T554/D7：`--fleet` / `--scope` 已弃用 —— 只保留「给参但空 ⇒ 用法错」守卫；非空仅打一行 warn 后丢弃（放置键恒为仓基键）
 CLI_FLEET=""; SCOPE_SEEN=false; FLEET_SEEN=false
 # T537：目标级修饰符（--card / --as）的绑定状态 —— 只作用于**其后第一个 positional**（BR11）
@@ -129,6 +133,9 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     check)  CMD="check";  shift ;;
     status) CMD="status"; shift ;;
+    # T567-B · --json：只给 status（其它子命令/空命令 ⇒ 用法错，不静默吞参）
+    --json)
+      JSON_OUT=true; shift ;;
     close)  CMD="close";  shift ;;
     cleanup) CMD="cleanup"; shift ;;
     session-start) CMD="session-start"; shift ;;
@@ -200,6 +207,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 # 悬挂修饰符：命令末尾缺目标 ⇒ 用法错（非 0 + 单行，照 -S 守卫先例；AC7②）
+if $JSON_OUT && [[ "$CMD" != "status" ]]; then
+  die "--json 仅用于 status 子命令：nao-fleet.sh status --json（当前子命令：${CMD:-<无>}）"
+fi
 if $PEND_CARD; then die "--card 后缺少卡路径参数（该怎么办：ensure --card .agents/prompts/<name>.md）"; fi
 if [[ -n "$PEND_AS" ]]; then die "--as 缺少同目标的 --card 与卡路径（该怎么办：ensure --card <卡路径> --as <会话名>）"; fi
 
@@ -282,7 +292,7 @@ case "$CMD" in
     rm -f "$REPFILE"
     exit $CHECK_RC
     ;;
-  status) cmd_status ;;
+  status) if $JSON_OUT; then cmd_status_json; else cmd_status; fi ;;
   close)  cmd_close "$FORCE" "$TASK" "${TARGETS[0]:-}" ;;
   cleanup) cmd_cleanup ;;
   session-start) term_session_start "$SESSION_ARG" ;;

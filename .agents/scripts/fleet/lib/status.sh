@@ -360,3 +360,128 @@ cmd_status() {
   # 无标签 pi pane：**不列**（herdr 无标题契约、pane 可无 label 且可属用户自己的 agent；幽灵 pane 已单列）
   return 0
 }
+
+# =============================================================================
+# status --json（T567-B · ADR 2026-11-24 §D2 · PRD §五）：编排器唯一跨进程契约（`schema:1`）。
+#
+# 硬约束（AC1）：文本路径 `cmd_status` **零改动** —— 本组函数不参与文本渲染，只读同一批门面事实
+#   （term_snapshot / term_liveness / fleet_name_parse / session_repo_verdict），因此两侧不存在判定双源。
+# 字段清单（**长期契约**，只增不删/不改语义；见 docs/reports/567-impl-rd-infra.md §三）：
+#   {schema:1, backend, repo_root,
+#    sessions:[{name,kind,role,task,pane_id,cwd,repo,own,online,agent,busy,deliverable,verdict}],
+#    roles:[{role,online,sessions:[name...]}]}
+#   agent 三态 = working | idle | unknown —— `unknown` 覆盖 absent/ghost/dead/mismatch/integration-missing
+#     与任何非 idle/working 的 agent_status（fail-closed：不可投递 ≠ 空闲）。
+#   own/online/busy/deliverable = 布尔；`verdict` 为归属原始判据（local|other|unknown），保留供诊断。
+# JSON 由 node 生成（转义交给 JSON.stringify，禁 bash 手拼）：node 已是 fleet 的既有前提（check/session 用）。
+_status_json_emit() {  # <backend> <repo_root>（TSV 行来自 stdin）
+  node -e '
+const [backend, repoRoot] = process.argv.slice(1);
+let buf = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (d) => { buf += d; });
+process.stdin.on("end", () => {
+  const sessions = [];
+  const roles = new Map();
+  for (const line of buf.split("\n")) {
+    if (!line) continue;
+    const f = line.split("\t");
+    if (f.length < 13) continue;
+    const [name, kind, role, task, pane_id, cwd, repo, own, online, agent, busy, deliverable, verdict] = f;
+    const s = {
+      name, kind, role, task, pane_id, cwd, repo,
+      own: own === "1", online: online === "1", agent,
+      busy: busy === "1", deliverable: deliverable === "1", verdict,
+    };
+    sessions.push(s);
+    if (!roles.has(role)) roles.set(role, { role, online: false, sessions: [] });
+    const r = roles.get(role);
+    if (s.online) r.online = true;
+    r.sessions.push(name);
+  }
+  const out = {
+    schema: 1, backend, repo_root: repoRoot,
+    sessions,
+    roles: [...roles.values()].sort((a, b) => (a.role < b.role ? -1 : a.role > b.role ? 1 : 0)),
+  };
+  process.stdout.write(JSON.stringify(out) + "\n");
+});
+' "$1" "$2"
+}
+
+cmd_status_json() {
+  local be root snap nm k r t num sc po vline vd st seq hk ws verdict obase repo_c
+  local own online agent busy dl cwd pid
+  local -a names=()
+  local -A seen=() cwds=() pids=()
+  # 前提：与文本路径同判据、同退出码（rc=3 = 环境级失败；orch 据此「不写 blocked、下 tick 重试」）
+  if ! term_snapshot >/dev/null; then
+    if _term_app_backend; then
+      printf 'status --json: 需要 desktop app core：hc ls / hc get 不可用（核对 desktop app 是否在运行、HC_TERMINAL_SOCKET 是否有效）—— 修好后重试\n' >&2
+    else
+      printf 'status --json: 需要 herdr server：pane list / agent list 不可用（核对 `herdr --session %s server` 是否在跑、protocol 是否 22）—— 修好后重试\n' "${HERDR_SESSION:-?}" >&2
+    fi
+    exit 3
+  fi
+  fleet_roles_init --cards
+  be="$(term_label)"
+  root="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || true)"
+  [[ -n "$root" ]] || root="$(nao_phys_path "$PWD")"
+  # 会话全集：先常驻（ROLE_ORDER，未在线也要出现 —— orch 需要「角色缺席」这一事实），再现场名册
+  for nm in "${ROLE_ORDER[@]}"; do
+    [[ -n "$nm" && -z "${seen[$nm]:-}" ]] || continue
+    names+=("$nm"); seen["$nm"]=1
+  done
+  local -a live_names=()
+  mapfile -t live_names < <(visible_session_names)
+  for nm in "${live_names[@]:-}"; do
+    [[ -n "${nm:-}" && -z "${seen[$nm]:-}" ]] || continue
+    names+=("$nm"); seen["$nm"]=1
+  done
+  # pane cwd / pane id（同名多 pane：取首个，保留分屏下的稳定输出）
+  local pn pcwd ppid
+  while IFS=$'\t' read -r pn ppid pcwd; do
+    [[ -n "$pn" ]] || continue
+    [[ -z "${cwds[$pn]:-}" ]] && cwds["$pn"]="$pcwd"
+    [[ -z "${pids[$pn]:-}" ]] && pids["$pn"]="$ppid"
+  done < <(pane_cwd_snapshot)
+  local roots_blob="" rl
+  while IFS= read -r rl; do [[ -n "$rl" ]] && roots_blob+="$rl"$'\n'; done < <(repo_anchor_roots)
+  for nm in "${names[@]}"; do
+    k=""; r=""; t=""; num=""; sc=""
+    po="$(fleet_name_parse "$nm")"
+    case "$po" in
+      "OK "*)        IFS=',' read -r k r t num <<< "${po#OK }" ;;
+      "LEGACY OK "*) IFS=',' read -r k r t sc <<< "${po#LEGACY OK }" ;;
+      *)             k="other"; r="$nm" ;;
+    esac
+    # 与文本路径同一判据（常驻角色带所属 workspace 作 repo 过滤；其余不带）
+    if [[ -n "${ROLE_CARDS[$nm]:-}" ]]; then
+      vline="$(term_liveness "$nm" "${ROLE_WS[$nm]:-}")"
+    else
+      vline="$(term_liveness "$nm")"
+    fi
+    IFS=$'\t' read -r vd st seq hk <<< "$vline"
+    online=0; [[ "${vd:-absent}" == "online" ]] && online=1
+    agent=unknown
+    if (( online )); then
+      case "${st:--}" in
+        working) agent=working ;;
+        idle|done) agent=idle ;;
+        *) agent=unknown ;;
+      esac
+    fi
+    busy=0; [[ "$agent" == "working" ]] && busy=1
+    dl=0; (( online )) && term_deliverable "${st:--}" && dl=1
+    cwd="${cwds[$nm]:-}"; pid="${pids[$nm]:-}"
+    IFS=$'\t' read -r verdict obase <<< "$(session_repo_verdict "$roots_blob" "$cwd" "")"
+    own=0; repo_c=""
+    case "$verdict" in
+      local) own=1; repo_c="$root" ;;
+      other) repo_c="${obase:--}" ;;
+      *)     repo_c="" ;;
+    esac
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$nm" "$k" "$r" "$t" "$pid" "$cwd" "$repo_c" "$own" "$online" "$agent" "$busy" "$dl" "$verdict"
+  done | _status_json_emit "$be" "$root"
+}

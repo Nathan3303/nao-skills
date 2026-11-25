@@ -715,17 +715,17 @@ t4_assert_eq "5" "$(for _f in t4_scan_term_bare_calls t4_verify_term_ledger t4_s
   "B1: 5 个 lint helper 均已定义（缺任一 ⇒ 其负控断言会因 127/空输出假绿）"
 t4_assert_file "$LEDGER_B1" "B1: 门面台账存在（tests/t4/fixtures/term-legacy-allowlist.txt）"
 
-# ---- T567-A：174 函数锚三向断言（ADR D3「174 函数锚怎么迁」）----
+# ---- T567-A：函数锚三向断言（ADR D3「174 函数锚怎么迁」；T567-B 起基线 176 = 174 + status --json 两函数）----
 #   判据：① 各模块顶层函数并集 == 清单（无漏登记 / 无重名 / 无孤儿）② 归属模块一致
-#         ③ 总数守恒（清单行数 == 头 total == 实际并集 = 174）
+#         ③ 总数守恒（清单行数 == 头 total == 实际并集 = 176）
 #   锚在**清单**（functions.txt 一处 diff）：新增函数必须同行加一行 + 改头 total，否则本组必红。
 FN_MANIFEST="$T4_ROOT/.agents/scripts/fleet/functions.txt"
-t4_assert_file "$FN_MANIFEST" "T567-A: functions.txt 存在（174 锚的唯一清单）"
+t4_assert_file "$FN_MANIFEST" "T567-A: functions.txt 存在（函数锚的唯一清单）"
 t4_assert_eq "" "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MANIFEST")" \
-  "T567-A: 174 三向守恒（无漏登记/无孤儿/归属一致/总数==total）"
-t4_assert_eq "174" "$(grep -vcE '^[[:space:]]*(#|$)' "$FN_MANIFEST")" "T567-A: 清单行数 == 174"
-t4_assert_eq "174" "$(t4_fleet_count '^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{' "$FLEET_B1")" \
-  "T567-A: 各模块顶层函数并集 == 174（数量守恒）"
+  "T567-A: 176 三向守恒（无漏登记/无孤儿/归属一致/总数==total）"
+t4_assert_eq "176" "$(grep -vcE '^[[:space:]]*(#|$)' "$FN_MANIFEST")" "T567-A: 清单行数 == 176（174 + T567-B 两函数）"
+t4_assert_eq "176" "$(t4_fleet_count '^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{' "$FLEET_B1")" \
+  "T567-A: 各模块顶层函数并集 == 176（数量守恒）"
 # 失败演练（判据必须承重，不能空转）：三种变异各自必红
 FN_MUT="$T4_CACHE_DIR/fn-manifest-$$.mut"
 grep -v $'\tcmd_check$' "$FN_MANIFEST" > "$FN_MUT"
@@ -734,10 +734,10 @@ t4_assert_contains "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" | grep 
 sed 's#^fleet/lib/check.sh\tcmd_check$#fleet/lib/core.sh\tcmd_check#' "$FN_MANIFEST" > "$FN_MUT"
 t4_assert_contains "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" || true)" "归属不符" \
   "T567-A 负控②：模块归属写错 ⇒ 必红"
-sed 's/^# total: 174$/# total: 173/' "$FN_MANIFEST" > "$FN_MUT"
+sed 's/^# total: 176$/# total: 175/' "$FN_MANIFEST" > "$FN_MUT"
 out="$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" || true)"
 t4_assert_contains "$out" "总数不符" "T567-A 负控③：头 total 与并集不符 ⇒ 必红"
-t4_assert_contains "$out" "清单行数 174 ≠ 头 total 173" "T567-A 负控③b：只改 total 不改行数 ⇒ 同样必红"
+t4_assert_contains "$out" "清单行数 176 ≠ 头 total 175" "T567-A 负控③b：只改 total 不改行数 ⇒ 同样必红"
 
 # ---- ① 默认值唯一（#96 三期 P2：默认已翻 herdr；B1 立的 lint 就是为这一步准备的）----
 t4_assert_eq "1" "$(t4_fleet_count '^NAO_TERMINAL=' "$FLEET_B1")" \
@@ -1083,7 +1083,8 @@ _exit3_in() { # <script> <ranges> → 该区间内的 exit 3 token 位行号
 }
 EXIT3_APP="$(_exit3_in "$FLEET_B1_BUNDLE" "$_app_r" | grep -c . || true)"
 EXIT3_LEGACY=$((EXIT3_STANDALONE - EXIT3_APP))
-t4_assert_eq "7" "$EXIT3_LEGACY" "P2② app 区间**外**（旧面）token 位 exit 3 = 7（T555 原句不变量；app 侧单列）"
+# T567-B：8 = T555 原 7 处 + `status --json` 的 rc=3 前提闸门（环境级失败，orch 据此「不写 blocked」）
+t4_assert_eq "8" "$EXIT3_LEGACY" "P2② app 区间**外**（旧面）token 位 exit 3 = 8（T555 原 7 + status --json 闸门）"
 t4_assert_ge "1" "$EXIT3_APP" "P2② app 区间内 exit 3 闸门存在（三件套/窗口/socket/文档前置）"
 t4_assert_eq "$EXIT3_TOKEN" "$((EXIT3_LEGACY + EXIT3_APP))" \
   "P2② token 位站点总数 = 旧面(7) + app($EXIT3_APP)（无区间外游离站点）"

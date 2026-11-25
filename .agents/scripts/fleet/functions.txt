@@ -3,7 +3,9 @@
 # 格式：<脚本路径（相对 .agents/scripts/）>\t<函数名>
 # 断言（tests/t4/cases/06）：① 各模块顶层函数并集 == 本清单（无漏登记/无重名/无孤儿）
 #   ② 总数守恒（纯搬迁 ⇒ 174；新增函数须同行加一行并改本头的 total）
-# total: 174
+fleet/lib/status.sh	_status_json_emit
+fleet/lib/status.sh	cmd_status_json
+# total: 176
 # 重排：本文件可机械重排（sort -k1,1 -k2,2），断言不依赖行序。
 nao-fleet.sh	usage
 nao-fleet.sh	_need_ensure
