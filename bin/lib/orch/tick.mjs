@@ -324,7 +324,52 @@ function ackPhase(ctx, st, queue, wal, opts, counters) {
   return { rc: 0, text, sha };
 }
 
-// 派单相位：AC6 闸门（working/unknown ⇒ 零 ensure）→ WAL intent → ensure → ensured → 提交。
+// 停滞相位（PRD §六 已实现口径 · 90m stalled）：working 行 + 派单 intent 距今 ≥90m + 当前 HEAD == 派单时 HEAD
+//   ⇒ blocked(stalled) + 通知（与 no_ack 同口径，attempt 不递增）。
+//   判据材料 = WAL intent 的 `at` + `head`（PRD §四 不新增 dispatch_at 字段）；缺 head（阶段 2 旧 WAL）⇒ 不动作。
+export function gitHead(root) {
+  const r = gitExec(['rev-parse', 'HEAD'], { cwd: root });
+  const head = r.rc === 0 ? r.out.trim() : '';
+  return /^[0-9a-f]{7,40}$/.test(head) ? head : '';
+}
+
+function stalledPhase(ctx, st, queue, wal, opts, counters) {
+  const { rows, byId } = queue;
+  let text = queue.text;
+  let sha = queue.sha;
+  const headNow = opts.head || '';
+  if (!headNow) return { rc: 0, text, sha };
+  for (const row of sortRows(rows)) {
+    if (opts.only && row.id !== opts.only) continue;
+    const rowNow = byId.get(row.id);
+    if (!rowNow || rowNow.state !== 'working') continue;
+    const e = wal.get(row.id);
+    const intent = e && e.intent;
+    if (!intent || !intent.at) continue;
+    const at = Date.parse(intent.at);
+    if (!Number.isFinite(at)) continue;
+    if (opts.nowMs - at < STALL_TIMEOUT_MS) continue;
+    if (!intent.head) continue;
+    if (intent.head === headNow) {
+      if (receiptExists(ctx, row.id)) continue;
+      const next = rewriteRow(text, row.id, { state: 'blocked', blocked_reason: 'stalled', updated: opts.nowIso });
+      const w = casWrite(ctx.queuePath, sha, next);
+      if (!w.ok) return { rc: 1, why: w.why, text, sha };
+      text = next;
+      sha = w.sha;
+      appendWal(ctx.wal, { type: 'stalled', id: row.id, key: intent.key, attempt: rowNow.attempt, head: headNow });
+      notify(ctx, st, `orch: ${row.id} working 90m 且 HEAD 未变（${headNow.slice(0, 7)}）⇒ blocked(stalled)，请核对 ${rowNow.owner} 会话`);
+      counters.blocked += 1;
+      counters.stalled += 1;
+    } else {
+      // HEAD 变了 = 仓有进展（提交/合并）⇒ 不判停滞（可能正在推进），只记观测
+      process.stderr.write(`orch: ${row.id} working 已超 90m 但 HEAD 已变（${String(intent.head).slice(0, 7)} → ${headNow.slice(0, 7)}）⇒ 不判 stalled\n`);
+    }
+  }
+  return { rc: 0, text, sha };
+}
+
+// 派单相位：AC6 闸门（本仓 working/unknown ⇒ 零 ensure）+ AC10 归属闸（他仓/歧义 ⇒ 零 ensure）→ WAL intent → ensure → ensured → 提交。
 function dispatchPhase(ctx, st, queue, opts, counters) {
   const { rows, byId } = queue;
   let text = queue.text;
@@ -408,7 +453,11 @@ export function tick(opts = {}) {
   ensureOrchDir(ctx.root);
   const nowMs = opts.nowMs ?? resolveNow(opts);
   const nowIso = isoSeconds(nowMs);
-  const counters = { scanned: 0, dispatched: 0, blocked: 0, skipped: 0, waiting: 0, recovered: 0, nudged: 0, failed: 0, envFail: 0 };
+  const counters = {
+    scanned: 0, dispatched: 0, blocked: 0, skipped: 0, waiting: 0,
+    recovered: 0, nudged: 0, stalled: 0, failed: 0, envFail: 0,
+  };
+  const head = gitHead(ctx.root);
   let queue;
   try {
     queue = readQueueFile(ctx.queuePath);
@@ -424,7 +473,7 @@ export function tick(opts = {}) {
   const st = loadStatus(ctx);
   if (!st.ok) return { rc: st.rc, counters, why: st.why };
   const wal = indexWal(readWal(ctx.wal).records);
-  const opts2 = { ...opts, nowMs, nowIso, only: opts.only || '' };
+  const opts2 = { ...opts, nowMs, nowIso, head, only: opts.only || '' };
 
   const r1 = recoverPhase(ctx, st.status, queue, wal, opts2, counters);
   if (r1.rc !== 0) return { rc: r1.rc, counters, why: r1.why };
@@ -435,9 +484,13 @@ export function tick(opts = {}) {
   if (r2.rc !== 0) return { rc: r2.rc, counters, why: r2.why };
   const q2 = { ...q1, text: r2.text, sha: r2.sha };
   const q2View = { ...readRowsFromText(q2.text), sha: q2.sha };
-  const r3 = dispatchPhase(ctx, st.status, q2View, opts2, counters);
+  const r3 = stalledPhase(ctx, st.status, q2View, wal, opts2, counters);
   if (r3.rc !== 0) return { rc: r3.rc, counters, why: r3.why };
-  const render = renderTarget(ctx, readRowsFromText(r3.text).rows);
+  const q3 = { ...q2, text: r3.text, sha: r3.sha };
+  const q3View = { ...readRowsFromText(q3.text), sha: q3.sha };
+  const r4 = dispatchPhase(ctx, st.status, q3View, opts2, counters);
+  if (r4.rc !== 0) return { rc: r4.rc, counters, why: r4.why };
+  const render = renderTarget(ctx, readRowsFromText(r4.text).rows);
   return { rc: 0, counters, render, queuePath: ctx.queuePath, walPath: ctx.wal };
 }
 

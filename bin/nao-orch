@@ -47,7 +47,8 @@ function usage() {
     '  · 整 tick 独占 docs/queue/.orch/lock（flock；第二实例 rc=1 并点名持锁 pid）',
     '  · 写队列前记 sha、落盘前重读比对（被人改过 ⇒ rc=1 零写入）',
     '  · 派单 = 写 WAL 意图 → ensure → 提交 row（崩在中间由下一 tick 用 WAL 的会话 id + cwd 探）',
-    '  · 15m 无回执 ⇒ blocked(no_ack) + 追问一次；目标角色 working/unknown ⇒ 零 ensure 只记等待',
+    '  · 15m 无回执 ⇒ blocked(no_ack) + 追问一次；working 90m 且 HEAD 未变 ⇒ blocked(stalled)',
+    '  · 目标角色 working/unknown ⇒ 零 ensure 只记等待；派单只认「role+task 命中且 repo=本仓」的会话（AC10）',
     '默认**不启用**（install-systemd 只落单元文件；要启用加 --enable）。',
     '',
   ].join('\n');

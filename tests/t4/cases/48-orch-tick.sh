@@ -107,11 +107,14 @@ reset_state() { rm -rf "$ORCH_DIR"; : > "$STUB_LOG"; : > "$NOTIFY_LOG"; }
 qstate() { node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean)[0]);console.log(r.state)' "$QUEUE"; }
 qfield() { node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean)[0]);console.log(String(r[process.argv[2]]))' "$QUEUE" "$1"; }
 qreason() { node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean)[0]);console.log(r.blocked_reason||"")' "$QUEUE"; }
+set_qstate() { node -e 'const fs=require("fs"),p=process.argv[1];const ls=fs.readFileSync(p,"utf8").split("\n").filter(Boolean);ls[0]=JSON.stringify({...JSON.parse(ls[0]),state:process.argv[2]});fs.writeFileSync(p,ls.join("\n")+"\n")' "$QUEUE" "$1"; }
 calls() { grep -cE "^$1 " "$STUB_LOG" 2>/dev/null || true; }
 wal_type() { grep -cE "\"type\":\"$1\"" "$ORCH_DIR/wal.jsonl" 2>/dev/null || true; }
 notify_n() { grep -c . "$NOTIFY_LOG" 2>/dev/null || true; }
 
 git -C "$REPO" init -q 2>/dev/null || true
+# HEAD 判据（90m stalled）需要非空 HEAD ⇒ 夹具仓先落一个空提交（`git rev-parse HEAD` 才有值）
+git -C "$REPO" -c user.name=t4 -c user.email=t4@example.invalid commit -q --allow-empty -m init 2>/dev/null || true
 
 # 整例唯一退出路径（herdr 替身段要保证 server 收场）
 t48_exit() {
@@ -186,6 +189,37 @@ t4_assert_eq "1" "$(calls ensure)" "② AC7 全程不重复 ensure（仍 1 次�
 run_orch tick --now 2026-11-25T10:40:00Z
 t4_assert_eq "1" "$(wal_type nudge)" "② 再 tick 不重复追问（nudge 仍 1）"
 t4_assert_eq "1" "$(grep -c 'no_ack' "$NOTIFY_LOG" || true)" "② 再 tick 不重复追问通知（no_ack 仍 1）"
+
+# ================================================================ ②b 90m stalled（HEAD 未变判据 · PRD §六「已实现」）
+# 派单时 WAL intent 记 `head`；working 行 now - intent.at ≥90m 且 HEAD 未变 ⇒ blocked(stalled)。
+# 全程注入时钟 + 夹具仓真 git（不 sleep 90 分钟）。三态：+89m 不动 / +91m 且 HEAD 未变 ⇒ blocked / +91m 但 HEAD 变了 ⇒ 不 blocked。
+mk_status rd-infra idle 1 rd-infra "" "$REPO"
+mk_queue queued rd-infra 0
+reset_state
+run_orch tick --now 2026-11-25T09:00:00Z
+t4_assert_eq "dispatched" "$(qstate)" "②b 派单成功（stalled 场景起点）"
+t4_assert_contains "$(grep '"type":"intent"' "$ORCH_DIR/wal.jsonl")" '"head":"' "②b WAL intent 记 head（派单时的 HEAD）"
+set_qstate working
+run_orch tick --now 2026-11-25T10:29:00Z
+t4_assert_eq "working" "$(qstate)" "②b +89m（<90m）⇒ 仍 working（不误判）"
+t4_assert_eq "0" "$(wal_type stalled)" "②b +89m ⇒ 无 stalled 记录"
+run_orch tick --now 2026-11-25T10:31:00Z
+t4_assert_eq "blocked" "$(qstate)" "②b +91m 且 HEAD 未变 ⇒ blocked"
+t4_assert_eq "stalled" "$(qreason)" "②b blocked_reason=stalled"
+t4_assert_eq "1" "$(wal_type stalled)" "②b WAL 记 stalled（可观测）"
+t4_assert_eq "0" "$(qfield attempt)" "②b attempt 不递增"
+t4_assert_eq "1" "$(grep -c 'stalled' "$NOTIFY_LOG" || true)" "②b 通知 PM（与 no_ack 同口径）"
+# 反例：+91m 但 HEAD 变了 ⇒ 不判 stalled（仓有进展迹象）
+mk_queue queued rd-infra 0
+reset_state
+run_orch tick --now 2026-11-25T12:00:00Z
+t4_assert_eq "dispatched" "$(qstate)" "②b HEAD 变化场景：派单成功"
+set_qstate working
+git -C "$REPO" -c user.name=t4 -c user.email=t4@example.invalid commit -q --allow-empty -m progress
+run_orch tick --now 2026-11-25T13:31:00Z
+t4_assert_eq "working" "$(qstate)" "②b +91m 但 HEAD 已变 ⇒ **不** blocked（仍 working）"
+t4_assert_eq "0" "$(wal_type stalled)" "②b HEAD 变化 ⇒ 无 stalled 记录"
+t4_assert_contains "$T4_ERR" "HEAD 已变" "②b 点名「HEAD 已变 ⇒ 不判 stalled」（不是静默）"
 
 # ================================================================ ③ AC8 kill -9 后 WAL 恢复
 cat > "$LAB/hook-kill.sh" <<'HOOK'

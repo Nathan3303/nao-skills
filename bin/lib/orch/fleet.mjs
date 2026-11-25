@@ -132,9 +132,11 @@ export function flockExec(argv, opts = {}) {
   return runArgv('flock', argv, { timeout: opts.timeout || 0, stdio: opts.stdio, env: opts.env });
 }
 
+// 测试注入点：`NAO_ORCH_GIT` 可指向桩（AC11 的 HEAD 比对不靠真实提交历史也能构造）
 export function gitExec(argv, opts = {}) {
   if (!Array.isArray(argv)) throw new FleetError('git argv 必须是数组');
-  return runArgv('git', argv, { timeout: opts.timeout ?? 10_000 });
+  const cmd = opts.command || process.env.NAO_ORCH_GIT || 'git';
+  return runArgv(cmd, argv, { timeout: opts.timeout ?? 10_000, cwd: opts.cwd });
 }
 
 export function runTool(cmd, argv, opts = {}) {
