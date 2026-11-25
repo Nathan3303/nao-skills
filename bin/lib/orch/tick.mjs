@@ -111,14 +111,76 @@ function sessionsFor(status, role) {
   return status.sessions.filter((s) => s && s.role === role);
 }
 
-// 目标角色的忙闲：多会话时「任一 working ⇒ working」；否则「任一 online+idle ⇒ idle」；否则 unknown（fail-closed）。
-export function roleState(status, role) {
-  const list = sessionsFor(status, role);
-  if (list.some((s) => s.online && s.agent === 'working')) return { online: true, agent: 'working', deliverable: false };
-  const idle = list.find((s) => s.online && s.agent === 'idle');
-  if (idle) return { online: true, agent: 'idle', deliverable: idle.deliverable !== false, session: idle };
-  const online = list.find((s) => s.online);
-  if (online) return { online: true, agent: 'unknown', deliverable: false, session: online };
+function samePath(a, b) {
+  if (!a || !b) return false;
+  try {
+    return path.resolve(a) === path.resolve(b);
+  } catch {
+    return false;
+  }
+}
+
+// AC10（多仓不串仓）：只有「role(+task) 命中」且「repo == 本仓」的会话才是目标。
+//   同名 / repo 不可判定 ⇒ **不猜**（fail-closed）：ok:false + `news` 供 journal 点名，调用方 skip + 零投递。
+//   `why`：exact 命中以外 = absent（无会话）/ busy（本仓 working）/ unknown（本仓不可判）/
+//          foreign（只有他仓会话）/ ambiguous（本仓多条或 repo 不可判定）。
+export function selectTarget(status, role, task, repoRoot) {
+  const roleHits = sessionsFor(status, role).filter((s) => s.online);
+  const owned = (s) => samePath(s.repo, repoRoot);
+  const exact = task ? roleHits.filter((s) => s.task === task) : [];
+  const exactLocal = exact.filter(owned);
+  if (exactLocal.length > 1) {
+    return {
+      ok: false, why: 'ambiguous', names: exactLocal.map((s) => s.name),
+      news: `同名跨仓歧义：${exactLocal.map((s) => s.name).join('/')} 均在本仓且 task=${task} ⇒ 不猜、不投递`,
+    };
+  }
+  if (exactLocal.length === 1) {
+    const s = exactLocal[0];
+    if (s.agent === 'working') return { ok: false, why: 'busy' };
+    if (s.agent !== 'idle' || s.deliverable === false) return { ok: false, why: 'unknown' };
+    return { ok: true, session: s, exact: true };
+  }
+  if (exact.length > 0) {
+    const undecidable = exact.filter((s) => !s.repo);
+    if (undecidable.length > 0) {
+      return {
+        ok: false, why: 'ambiguous', names: undecidable.map((s) => s.name),
+        news: `同名跨仓歧义：role+task 命中但 repo 不可判定（${undecidable.map((s) => s.name).join('/')}）⇒ 不猜、不投递`,
+      };
+    }
+    return {
+      ok: false, why: 'foreign',
+      news: `role+task 命中仅在他仓（${exact.map((s) => s.repo || '?').join('/')}）⇒ 不投递`,
+    };
+  }
+  const local = roleHits.filter(owned);
+  if (local.length === 0) {
+    if (roleHits.length === 0) return { ok: false, why: 'absent' };
+    const undecidable = roleHits.filter((s) => !s.repo);
+    if (undecidable.length > 0) {
+      return {
+        ok: false, why: 'ambiguous', names: undecidable.map((s) => s.name),
+        news: `同名跨仓歧义：role=${role} 的会话 repo 不可判定（${undecidable.map((s) => s.name).join('/')}）⇒ 不猜、不投递`,
+      };
+    }
+    return {
+      ok: false, why: 'foreign',
+      news: `role=${role} 仅在他仓在线（${roleHits.map((s) => s.repo || '?').join('/')}）⇒ 不投递`,
+    };
+  }
+  if (local.some((s) => s.agent === 'working')) return { ok: false, why: 'busy' };
+  const idle = local.find((s) => s.agent === 'idle' && s.deliverable !== false);
+  if (idle) return { ok: true, session: idle, exact: false };
+  return { ok: false, why: 'unknown' };
+}
+
+// 角色忙闲（单仓口径，导出供诊断）：只看本仓会话，他仓 working 不阻塞本仓派单。
+export function roleState(status, role, repoRoot) {
+  const t = selectTarget(status, role, '', repoRoot);
+  if (t.ok) return { online: true, agent: 'idle', deliverable: true, session: t.session };
+  if (t.why === 'busy') return { online: true, agent: 'working', deliverable: false };
+  if (t.why === 'unknown') return { online: true, agent: 'unknown', deliverable: false };
   return { online: false, agent: 'unknown', deliverable: false };
 }
 
@@ -132,19 +194,23 @@ function findSession(status, name, cwd) {
   }) || null;
 }
 
-function findRoleTask(status, role, id) {
-  return status.sessions.find((s) => s && s.online && s.role === role && s.task === id) || null;
+// ensure 后的真实身份：同样要求 repo == 本仓（AC10）；多条 = 歧义（调用方 fail-closed）。
+function findLocalRoleTask(status, role, id, repoRoot) {
+  return status.sessions.filter((s) => s && s.online && s.role === role && s.task === id && samePath(s.repo, repoRoot));
 }
 
-function pmTarget(status) {
-  const pm = status.sessions.find((s) => s && s.online && s.role === 'pm');
-  return pm ? { name: pm.name, cwd: pm.cwd || '' } : null;
+// 通知目标也只用本仓 pm（AC10）：0 条 ⇒ 不通知（不猜他仓）；>1 条 ⇒ 同名歧义，不通知。
+function pmTarget(status, repoRoot) {
+  if (!repoRoot) return null;
+  const pms = status.sessions.filter((s) => s && s.online && s.role === 'pm' && samePath(s.repo, repoRoot));
+  if (pms.length !== 1) return null;
+  return { name: pms[0].name, cwd: pms[0].cwd || repoRoot };
 }
 
 function notify(ctx, status, text) {
-  const t = pmTarget(status);
-  if (!t) return { skipped: 'pm-offline' };
-  // 消息带会话 id + cwd（PRD §十.3：禁裸名）
+  const t = pmTarget(status, ctx.root);
+  if (!t) return { skipped: 'pm-offline-or-ambiguous' };
+  // 消息带会话名 + cwd（PRD §十.3：禁裸名；本仓 pm 的名字可能是 pm(T900) 这类派生名）
   return notifyPm(`${text}（pm=${t.name} cwd=${t.cwd || '?'}）`, t.name);
 }
 
@@ -270,10 +336,12 @@ function dispatchPhase(ctx, st, queue, opts, counters) {
     if (!depsSatisfied(rowNow, byId)) { counters.waiting += 1; continue; }
     const role = typeof rowNow.owner === 'string' ? rowNow.owner.trim() : '';
     if (!role) { counters.skipped += 1; continue; }
-    const rs = roleState(st, role);
-    // AC6：working / unknown（含 absent）⇒ 零 ensure，只记等待
-    if (!rs.online || rs.agent !== 'idle' || rs.deliverable === false) {
-      counters.waiting += 1;
+    // AC6 + AC10：目标必须同时满足「role(+task) 命中」与「repo == 本仓」；他仓/同名歧义 ⇒ 零 ensure、不猜。
+    const sel = selectTarget(st, role, rowNow.id, ctx.root);
+    if (!sel.ok) {
+      if (sel.news) process.stderr.write(`orch: ${rowNow.id} 跳过（${sel.news}）\n`);
+      if (sel.why === 'foreign' || sel.why === 'ambiguous') counters.skipped += 1;
+      else counters.waiting += 1;
       continue;
     }
     const at = opts.nowIso;
@@ -281,9 +349,23 @@ function dispatchPhase(ctx, st, queue, opts, counters) {
     const predicted = `${role}(${rowNow.id})`;
     appendWal(ctx.wal, {
       type: 'intent', id: rowNow.id, key, attempt: rowNow.attempt, at, role,
+      // AC11 · 90m stalled 判据材料：派单时的 HEAD（只读；内容变了说明仓有进展）
+      head: opts.head || '',
       session_id: predicted, cwd: ctx.root, row_sha: sha,
+      // AC10：目标 = 本仓这个会话的 name + cwd（禁裸名跨仓；WAL 留证供恢复期探测）
+      target: { name: sel.session.name, cwd: sel.session.cwd || ctx.root },
+      target_repo: sel.session.repo || ctx.root,
     });
-    const ens = fleetExec('ensure', ['--task', rowNow.id, role], { repoRoot: ctx.root });
+    let ens;
+    try {
+      // `${role}@${root}` 把「哪一个仓」写进 argv（fleet 的 @<仓路径> 通道），cwd 同时锚到本仓根（双保险）
+      ens = fleetExec('ensure', ['--task', rowNow.id, `${role}@${ctx.root}`], { repoRoot: ctx.root, cwd: ctx.root });
+    } catch (e) {
+      appendWal(ctx.wal, { type: 'aborted', id: rowNow.id, key, reason: 'ensure_argv', detail: String(e.message || e) });
+      process.stderr.write(`orch: ${rowNow.id} 跳过（ensure argv 无法安全表达本仓：${e.message}）\n`);
+      counters.failed += 1;
+      continue;
+    }
     if (ens.rc === 3) {
       appendWal(ctx.wal, { type: 'aborted', id: rowNow.id, key, reason: 'fleet_premise', rc: ens.rc });
       counters.envFail += 1;
@@ -296,7 +378,16 @@ function dispatchPhase(ctx, st, queue, opts, counters) {
     }
     // ensure 可能落槽位（`rd-infra2(T567)`）⇒ 重新取一次 status 拿真实身份（探针与 WAL 都对得上）
     const st2 = loadStatus(ctx);
-    const real = (st2.ok && findRoleTask(st2.status, role, rowNow.id)) || null;
+    const hits = st2.ok ? findLocalRoleTask(st2.status, role, rowNow.id, ctx.root) : [];
+    if (hits.length > 1) {
+      appendWal(ctx.wal, {
+        type: 'aborted', id: rowNow.id, key, reason: 'ambiguous_target', names: hits.map((s) => s.name),
+      });
+      process.stderr.write(`orch: ${rowNow.id} 跳过（同名跨仓歧义：ensure 后本仓出现 ${hits.map((s) => s.name).join('/')}）\n`);
+      counters.skipped += 1;
+      continue;
+    }
+    const real = hits[0] || null;
     const ident = real ? { name: real.name, cwd: real.cwd || ctx.root } : { name: predicted, cwd: ctx.root };
     appendWal(ctx.wal, { type: 'ensured', id: rowNow.id, key, session_id: ident.name, cwd: ident.cwd });
     runHook('before-commit');

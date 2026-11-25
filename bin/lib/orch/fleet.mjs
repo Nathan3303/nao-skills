@@ -97,6 +97,8 @@ function runArgv(cmd, argv, opts = {}) {
       maxBuffer: 8 * 1024 * 1024,
       stdio: opts.stdio || ['ignore', 'pipe', 'pipe'],
       env: opts.env || process.env,
+      // cwd 显式透传（AC10：orch 绑一仓 ⇒ 子进程的仓归属锚点 = 本仓根，不依赖调用方 cwd）
+      ...(opts.cwd ? { cwd: opts.cwd } : {}),
     });
     return { rc: 0, out: out || '', err: '' };
   } catch (e) {
@@ -112,7 +114,7 @@ export function fleetExec(sub, argv = [], opts = {}) {
   checkFleetArgv(sub, argv);
   const cmd = opts.command || resolveFleet(opts.repoRoot);
   if (!cmd) return { rc: 127, out: '', err: 'nao-fleet.sh 不可达（PATH 与机制包内路径都没有）' };
-  return runArgv(cmd, [sub, ...argv], { timeout: opts.timeout ?? 30_000 });
+  return runArgv(cmd, [sub, ...argv], { timeout: opts.timeout ?? 30_000, cwd: opts.cwd });
 }
 
 // intercom 通知（PRD §十.3）：命令 = `pi-intercom`（PATH）或 env 显式指定；消息整体作为一个 argv。
