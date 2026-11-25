@@ -33,14 +33,14 @@
 #   nao-fleet.sh ensure <别名>[@<repo>] [更多...]  拉起角色窗口（默认工作区=roles.yaml workspace）
 #                                                 `@<repo>` = 目标仓选择符（`@main` 走 manifest、`@<路径>` 直指），不入会话名
 #   nao-fleet.sh ensure -m <model> <别名>...       显式指定模型（须命中白名单）
-#   nao-fleet.sh ensure --task <编号> <别名>[@<repo>]   任务派生会话：名字 = `<别名>(<编号>)`；同 workspace 内该
-#                                                 role 已有会话 ⇒ 自动取槽位 `<别名><N>(<编号>)`（N=2..9，段满 fail loud）
+#   nao-fleet.sh ensure --task <编号> <别名>[@<repo>]   任务派生会话（task 只进元数据）：名字 = `<别名>[<N>]`；
+#                                                 同 (role,task) 元数据已在 ⇒ 复用该名；否则取空闲槽位（N=2..9，段满 fail loud）
 #   nao-fleet.sh ensure --card <卡路径> [--as <会话名>] [--task <编号>]
 #                                                 下游仓自定义角色会话（一次性）：卡须为 <repo>/.agents/prompts/<file>.md
 #                                                 （卡 role 与常驻 id/别名必须前缀不相交；不入 roles.yaml、不算常驻；
 #                                                  --as 只给常驻名/旧形后缀：= 卡 role、`<role><N>`（N=2..9）或
 #                                                  `<role>-<后缀>`；含 `(` 即拒 —— 派生 task 只走 --task）
-#   会话名契约（v2 · ADR 2026-11-20）：`<role>[<N>](<task>)` —— 常驻 `<role>[<N>]`、派生 `<role>[<N>](<task>)`；
+#   会话名契约（v3 · ADR 2026-11-25）：`<role>[<N>]`（task 不进名字，只落元数据）；
 #                                                 N = 单字符 2..9（空 = 槽位 1；>9 结构上不可解析 ⇒ fail loud）；
 #                                                 名字不含位置，绑定单位 = herdr workspace（同名跨仓合法）。
 #                                                 旧形 `<core>[-<task>][@<scope>]` 只读：status/close 能认，ensure 永不生成。
@@ -56,7 +56,7 @@
 #                                                 （目标解析为 pm 时，**就绪后**投递一条固定用户消息：机制包版本自检，
 #                                                  仅提示不自动升级；关闭用 NAO_UPDATE_ON_ENSURE=0）
 #   nao-fleet.sh close <别名|派生会话名|legacy 全名> [--task <编号>] [--force]
-#                                                 回收已完成会话（派生名如 rd-be(T1)、带槽位 rd-be2(T1)）；
+#                                                 回收已完成会话（派生名如 rd-be、带槽位 rd-be2；task 按元数据匹配）；
 #                                                 裸别名 = 本仓锚内同 core（v2 各槽位 → legacy 旧形候选
 #                                                 → 全 session 唯一同 core → 否则拒绝列候选）；带 `@` 的 legacy
 #                                                 （跨仓定位；定位失败/名册报在线但无句柄 ⇒ 非 0 + 诊断）

@@ -137,11 +137,16 @@ place_key_label() {
   printf '%s\n' "$slug"
 }
 
-# ⓪ 名字主体构造（**唯一构造点**）：<role> [<task>] [<num>] → `<role><num>` 或 `<role><num>(<task>)`
+# ⓪ 名字主体构造（**唯一构造点** · 命名契约 v3）：<role> [<num>] → `<role><num>`
 #   num 空 = 槽位 1（不出现数字）；num 非空必须是单字符 2..9（N>9 结构上不可解析 ⇒ fail loud）。
-#   core 与 scope/fleet 彻底解耦（名字不含位置）。
+#   **v3 起不再接受 task**：task 只进元数据（app label / herdr sidecar），严禁编进身份；
+#   多传参数（含空串）即 fail loud —— 不静默忽略（ADR 2026-11-25 决策一）。
 fleet_core_build() {
-  local role="${1-}" task="${2-}" num="${3-}"
+  local role="${1-}" num="${2-}"
+  if (( $# > 2 )); then
+    printf 'fleet_core_build：命名契约 v3 不再接受 task 参数（task 只进元数据；多传即拒）\n' >&2
+    return 1
+  fi
   [[ -n "$role" ]] || { printf 'fleet_core_build：role 为空\n' >&2; return 1; }
   [[ "$role" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] \
     || { printf 'fleet_core_build：role 含非法字符（仅字母/数字/-/_）：%s\n' "$role" >&2; return 1; }
@@ -149,25 +154,45 @@ fleet_core_build() {
     [[ "$num" =~ ^[2-9]$ ]] \
       || { printf 'fleet_core_build：槽位号非法（只接受单字符 2..9；空 = 槽位 1）：%s\n' "$num" >&2; return 1; }
   fi
-  if [[ -n "$task" ]]; then
-    [[ "$task" =~ ^[A-Za-z0-9_-]+$ ]] \
-      || { printf 'fleet_core_build：task 含非法字符（仅字母/数字/-/_）：%s\n' "$task" >&2; return 1; }
-    printf '%s%s(%s)\n' "$role" "$num" "$task"
-  else
-    printf '%s%s\n' "$role" "$num"
-  fi
+  printf '%s%s\n' "$role" "$num"
 }
 
-# ① 名字构造（kind 只做契约自证）：<kind> <role> [<num>] [<task>] → stdout 名字
-#   签名与判据 §四 一致（build(kind,role[,num][,task])）；旧签名第 3 参 scope 已删除
-#   ⇒ 传非空非法值（如旧 scope）即 rc≠0（防调用点静默残留旧语义）。
+# ① 名字构造（kind 只做契约自证）：<kind> <role> [<num>] → stdout 名字
+#   v3 起签名去掉 task（多传即 fail loud）；kind 仍限 resident|derived|card（调用方语义标签）。
+#   旧签名第 3 参 scope / 第 4 参 task 均已删除 ⇒ 传旧语义值即 rc≠0（防调用点静默残留）。
 fleet_name_build() {
-  local kind="${1-}" role="${2-}" num="${3-}" task="${4-}"
+  local kind="${1-}" role="${2-}" num="${3-}"
+  if (( $# > 3 )); then
+    printf 'fleet_name_build：命名契约 v3 不再接受 task 参数（task 只进元数据；多传即拒）\n' >&2
+    return 1
+  fi
   case "$kind" in
     resident|derived|card) ;;
     *) printf 'fleet_name_build：未知 kind=%s（只能是 resident|derived|card）\n' "${kind:-<空>}" >&2; return 1 ;;
   esac
-  fleet_core_build "$role" "$task" "$num"
+  fleet_core_build "$role" "$num"
+}
+
+# ①-b 后端合法名映射（ADR 2026-11-25 决策一）：nao 名 → herdr desktop app 的 `hc run --name` 合法名。
+#   规则：小写化 + 非 [a-z0-9-_.] → `-` + 首字符补齐（非字母数字 ⇒ 前缀 `s-`）+ 截 32 位
+#   （**保留槽位后缀**）+ 空 ⇒ `session`。纯函数；同 scope 冲突的 `-<4hex>` 由调用方（app spawn）追加。
+#   为什么需要：v3 正常名天然合法；此映射只兜卡名 / 旧 `--as` 边界（括号/大写/其它字符）。
+fleet_backend_name() {  # <raw> → 合法名（1..32）
+  local raw="${1-}" low="" out="" num="" core=""
+  low="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+  out="$(printf '%s' "$low" | sed -e 's/[^a-z0-9._-]/-/g')"
+  # 槽位后缀属于**语义**（v3 用槽位区分同 role 多会话）⇒ 截断时保留尾部的单字符 2..9
+  if [[ "$out" =~ ^(.*[^2-9])([2-9])$ ]]; then
+    core="${BASH_REMATCH[1]}"; num="${BASH_REMATCH[2]}"
+  else
+    core="$out"
+  fi
+  core="${core:0:$(( 32 - ${#num} ))}"
+  out="${core}${num}"
+  [[ -n "$out" ]] || out="session"
+  [[ "$out" =~ ^[a-z0-9] ]] || out="s-${out}"
+  out="${out:0:32}"
+  printf '%s\n' "$out"
 }
 
 # ② 名字解析（**全函数**：任何输入都有定义结果；非法一律 ERR，禁猜）
@@ -178,7 +203,7 @@ fleet_name_parse() {
   [[ -n "$name" ]] || { printf 'ERR\n'; return 0; }
   (( ${#name} <= 48 )) || { printf 'ERR\n'; return 0; }        # 总名长预算
 
-  # ---- 新形：<role>[<N>](<task>) ----
+  # ---- v2 只读形：<role>[<N>](<task>) ----
   if [[ "$name" == *'('* ]]; then
     [[ "$name" == *')' ]] || { printf 'ERR\n'; return 0; }    # 反例①：不以 `)` 结尾 ⇒ ERR
     pre="${name%%(*}"

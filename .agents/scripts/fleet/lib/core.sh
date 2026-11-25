@@ -98,21 +98,19 @@ warn() { printf '\033[1;33m[fleet]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[fleet]\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
-# 舰队命名契约 v2（T554 · ADR 2026-11-20-workspace-as-binding-unit · 唯一构造/解析点）
+# 舰队命名契约 v3（T571 · ADR 2026-11-25-term-facade-neutral-contract · 唯一构造/解析点）
 #
 #   放置键 = 仓（`place_key_label`，见下）；**名字不含位置**（`@` 段已删除）。
-#   常驻 = `<role>[<N>]` · 派生 = `<role>[<N>](<task>)`（N 在 `(` **之前**，单字符 2..9，
-#     空 = 槽位 1；task = `^[A-Za-z0-9_-]+$`，`T` 是任务号自带前缀，格式不另加）。
-#   预算：name ≤48 · role 段（含 N）≤32（卡）· task 不设独立上限（随 name 总长收紧）。
-#   文法唯一判据（R1）：`(` 位置 + 槽位紧贴单字符 + 角色**最长匹配** + 按**首个分隔符**分派：
-#     `(` ⇒ 新形 · `-` ⇒ 旧形只读 · `@` ⇒ legacy scope（旧形只读）。三集合不相交。
-#   反例（§一.3，用例 28 注释同抄）：
-#     ① `rd-be2(T553)` 唯一分解 = rd-be + 槽位 2 + task T553；若 N 放到 `)` 后
-#        （`rd-be(T553)2`）就与「task 尾部数字」不可区分 ⇒ 该串不以 `)` 结尾 ⇒ ERR。
-#     ② `rd-be(T553)` 与旧形 `rd-be-T553` 是不同字符串：`qa-2` 是旧形任务号 2，`qa2` 是槽位 2。
-#   历史形态：旧形 `<core>[-<task>][@<scope>]` 只读（status/close 接受；ensure 自动命名永不生成）。
+#   会话名 = `<role>[<N>]`（N 单字符 2..9，空 = 槽位 1）；**task 不进身份**，只落元数据
+#     （app `nao.task` / `nao.name` label；herdr sidecar）。构造器多传 task ⇒ fail loud。
+#   预算：name ≤48 · role 段（含 N）≤32（卡）。
+#   只读兼容：v2 `<role>[<N>](<task>)` / legacy `<role>-<task>` / `<role>-<task>@<scope>`
+#     （status/close 可认，task 仍从名字解析；ensure 永不生成这些写形态）。
+#   文法唯一判据（R1）：槽位紧贴单字符 + 角色**最长匹配** + 按**首个分隔符**分派：
+#     `(` ⇒ v2 只读 · `-` ⇒ 旧形只读 · `@` ⇒ legacy scope（只读）。三集合不相交。
 #   parse 输出：新形 `OK <kind>,<role>,<task>,<num>` · 旧形 `LEGACY OK <kind>,<role>,<task>,<scope>` · 非法 `ERR`
-#   （第 4 段语义按前缀区分：新形 = 槽位号、旧形 = scope —— 调用点禁把 legacy 值当 num）。
+#   （第 4 段语义按前缀区分：新形 = 槽位号、旧形 = scope —— 调用点禁把 legacy 值当 num；
+#     v3 写入面只产生 task 为空的新形）。
 #
 # C1 单测（tests/t4/cases/28）按下方标记**整体抽取**本块 ⇒ 块内自包含
 #   （不依赖块外的 nao_phys_path / repo_* / warn：只用 _fleet_phys 与 printf 回落）。
@@ -165,6 +163,71 @@ nao_phys_path() {
 # 单行谓词（AC7⑤，同时是 AC2 的单行变异点）：cwd 是否落在 root 子树内。
 #   组件级前缀：`/a/b` **不**命中 `/a/bc`（裸字符串前缀的经典陷阱 ⇒ AC7②）。
 repo_contains_path() { [[ -n "$1" && -n "$2" && ( "$2" == "$1" || "$2" == "${1%/}"/* ) ]]; }
+
+# ---------------------------------------------------------------------------
+# 会话元数据（命名契约 v3 · ADR 2026-11-25 决策一）：task 不进身份，只落元数据。
+#   herdr 无键值 label ⇒ 本地 sidecar：<root>/<workspace_ref>/<handle>，内容 `task=<id>` / `name=<原始名>`。
+#   app 用 labels `nao.task` / `nao.name`（写读在 term-app.sh；本组只管 herdr 的持久面）。
+#   纪律：读写失败只 warn、**不改 rc**（元数据缺失不得阻断启动）；原子写 = 临时文件 + mv。
+#   孤儿清理：任何读快照的入口（status / ensure / orch tick）拿到 handle 集合后调用 fleet_meta_gc。
+# ---------------------------------------------------------------------------
+FLEET_META_ROOT="${NAO_FLEET_META_DIR:-${HOME:-/tmp}/.local/state}/nao-fleet/session-meta"
+
+# workspace_ref = <后端上下文句柄>__<workspace_id>：同一个 meta 根下可能有多个 herdr session，
+#   只用 workspace_id 会让 A 会话的 status 把 B 会话的 sidecar 当孤儿删掉（handle 只在 session 内唯一）。
+fleet_meta_wsref() {  # <workspace_id> → <session>__<workspace_id>
+  printf '%s__%s\n' "${HERDR_SESSION:-${HC_SCOPE:-_}}" "${1-}"
+}
+
+fleet_meta_write() {  # <workspace_ref> <handle> <task> <name> → 0 / 1（仅 warn）
+  local ws="${1-}" h="${2-}" task="${3-}" name="${4-}" dir tmp
+  [[ -n "$ws" && -n "$h" ]] || { warn "元数据未落盘：缺 workspace_ref/handle（ws=$ws handle=$h）"; return 1; }
+  dir="$FLEET_META_ROOT/$ws"
+  mkdir -p "$dir" 2>/dev/null || { warn "元数据目录不可建：$dir（task=$task；不阻断启动）"; return 1; }
+  tmp="$dir/.$h.tmp.$$"
+  if ! { printf 'task=%s\n' "$task"; printf 'name=%s\n' "$name"; } > "$tmp" 2>/dev/null; then
+    rm -f "$tmp" 2>/dev/null || true
+    warn "元数据写入失败：$tmp（task=$task；不阻断启动）"; return 1
+  fi
+  if ! mv -f "$tmp" "$dir/$h" 2>/dev/null; then
+    rm -f "$tmp" 2>/dev/null || true
+    warn "元数据落位失败：$dir/$h（task=$task；不阻断启动）"; return 1
+  fi
+  return 0
+}
+
+fleet_meta_read() {  # <workspace_ref> <handle> [key=task] → 值（缺失 ⇒ 空，rc=0）
+  local f="$FLEET_META_ROOT/${1-}/${2-}" key="${3:-task}"
+  [[ -f "$f" ]] || return 0
+  sed -n "s/^${key}=//p" "$f" 2>/dev/null | head -1
+  return 0
+}
+
+fleet_meta_remove_handle() {  # <handle> —— close/cleanup 即时删（幂等；失败仅 warn）
+  local h="${1-}"
+  [[ -n "$h" && -d "$FLEET_META_ROOT" ]] || return 0
+  find "$FLEET_META_ROOT" -mindepth 2 -maxdepth 2 -type f -name "$h" -delete 2>/dev/null \
+    || warn "元数据删除失败：handle=$h（不影响回收结果）"
+  return 0
+}
+
+fleet_meta_gc() {  # stdin = 当前 live handle（每行一个）→ 删不在集合内的 sidecar（幂等；失败仅 warn）
+  local -A live=()
+  local h f
+  while IFS= read -r h; do [[ -n "$h" ]] && live["$h"]=1; done
+  [[ -d "$FLEET_META_ROOT" ]] || return 0
+  local sess="${HERDR_SESSION:-}" rel ref
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    rel="${f#"$FLEET_META_ROOT"/}"; ref="${rel%%/*}"
+    # 只清**当前会话**的 sidecar（其他 session 的 handle 集合不在本次快照里，删了就是误伤）
+    [[ -z "$sess" || "$ref" == "$sess"__* ]] || continue
+    h="${f##*/}"
+    [[ -n "${live[$h]:-}" ]] && continue
+    rm -f "$f" 2>/dev/null || warn "元数据孤儿清理失败：$f（不影响本次判定）"
+  done < <(find "$FLEET_META_ROOT" -mindepth 2 -maxdepth 2 -type f 2>/dev/null)
+  return 0
+}
 
 # 本仓锚集（每 run 一次）：主锚 pwd -P；git toplevel 是 cwd **严格祖先**时并入
 #   （覆盖在 `.agents/` 等子目录跑 status ⇒ AC7③）。不用 roles.yaml workspace（常为 `.`/子目录，且 ensure 支持 @repo）。

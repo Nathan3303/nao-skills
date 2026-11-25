@@ -5,7 +5,7 @@
 #   ② 总数守恒（纯搬迁 ⇒ 174；新增函数须同行加一行并改本头的 total）
 fleet/lib/status.sh	_status_json_emit
 fleet/lib/status.sh	cmd_status_json
-# total: 176
+# total: 185
 # 重排：本文件可机械重排（sort -k1,1 -k2,2），断言不依赖行序。
 nao-fleet.sh	usage
 nao-fleet.sh	_need_ensure
@@ -15,6 +15,11 @@ fleet/lib/core.sh	warn
 fleet/lib/core.sh	die
 fleet/lib/core.sh	nao_phys_path
 fleet/lib/core.sh	repo_contains_path
+fleet/lib/core.sh	fleet_meta_wsref
+fleet/lib/core.sh	fleet_meta_write
+fleet/lib/core.sh	fleet_meta_read
+fleet/lib/core.sh	fleet_meta_remove_handle
+fleet/lib/core.sh	fleet_meta_gc
 fleet/lib/core.sh	repo_anchor_roots
 fleet/lib/core.sh	_nao_phys_for_match
 fleet/lib/core.sh	repo_abspath
@@ -96,6 +101,7 @@ fleet/lib/term-app.sh	_term_app_fg_cwd
 fleet/lib/term-app.sh	_term_app_require
 fleet/lib/term-app.sh	_term_app_spawn_preflight
 fleet/lib/term-app.sh	_term_app_doc_rows
+fleet/lib/term-app.sh	_term_app_identity
 fleet/lib/term-app.sh	_term_app_doc_guard
 fleet/lib/term-app.sh	_term_app_snapshot
 fleet/lib/term-app.sh	_term_app_liveness
@@ -123,6 +129,7 @@ fleet/lib/manifest.sh	fleet_scope_problem
 fleet/lib/manifest.sh	place_key_label
 fleet/lib/manifest.sh	fleet_core_build
 fleet/lib/manifest.sh	fleet_name_build
+fleet/lib/manifest.sh	fleet_backend_name
 fleet/lib/manifest.sh	fleet_name_parse
 fleet/lib/manifest.sh	fleet_manifest_root
 fleet/lib/manifest.sh	fleet_manifest_load
@@ -148,6 +155,8 @@ fleet/lib/session.sh	subagent_in_field
 fleet/lib/session.sh	running
 fleet/lib/session.sh	running_verdict
 fleet/lib/session.sh	visible_session_names
+fleet/lib/session.sh	fleet_task_map_init
+fleet/lib/session.sh	fleet_effective_task
 fleet/lib/session.sh	task_state_class
 fleet/lib/session.sh	pane_cwd_snapshot
 fleet/lib/session.sh	session_repo_verdict
