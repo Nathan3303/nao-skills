@@ -5,7 +5,7 @@
 
 ## D1 · `cases/44` 每跑一次泄漏 2 个真 `herdr-core` 进程（收尾用了不存在的子命令）
 
-- **状态**：**Fixed（本批）· verify 通过**（待 PM 验收后 Closed）
+- **状态**：**Closed（本批修复 · QA verify 通过 · 2026-11-26）· verify 通过**（待 PM 验收后 Closed）
 - **修复提交**：`nao/572-qa-verify` 分支（test-only：`tests/t4/cases/44-app-backend.sh`，1 词 + 1 条 effect 断言）
 - **严重度**：一般（P2 —— 不阻断发布，但每次跑测试都累积进程/资源）
 - **发现于**：T571+T572 合并后全量验证（HEAD `a59d1c3`），`npm run test:t4:full` 收尾孤儿扫描
