@@ -19,7 +19,7 @@ npx @nathan33/nao-skill plugins install-all        # 1. 装协作插件（多会
 ## 体检怎么看
 
 ```
-check: OK · roles=7 · files=69                            ← 摘要行：能开工
+check: OK · roles=7 · files=67                            ← 摘要行：能开工
   ✓ codegraph 齐备                                        ← 可选增强状态
   · 生效后端 NAO_TERMINAL=herdr（形态 TUI …）               ← 你实际在用哪个后端
 ```
