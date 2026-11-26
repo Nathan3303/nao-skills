@@ -44,6 +44,9 @@ const props = defineProps<{ flow: HomeFlowData }>()
           </li>
         </ul>
         <p v-if="props.flow.messagesNote" class="flow-note">{{ props.flow.messagesNote }}</p>
+        <p v-if="props.flow.messagesDisclaimer" class="flow-disclaimer">
+          {{ props.flow.messagesDisclaimer }}
+        </p>
       </div>
     </div>
   </section>

@@ -43,7 +43,7 @@ home:
       text: 3 个会话窗口逐个亮起（要拉满 7 个，照快速开始里的三步走）
       more: true
     - kind: muted
-      text: 你：想加个「导出 CSV」功能
+      text: 你：想加个登录页
       more: true
       gap: true
       cursor: true
@@ -93,36 +93,37 @@ home:
         yours: true
         you: 你点确认
     messagesTitle: 中间实际发生的事（就是会话之间发的消息）
-    messagesNote: 从 09:30 到 11:55 —— 一个上午，一个需求。
+    messagesNote: 从 09:30 到 11:55 —— 一个小需求走完一轮。
+    messagesDisclaimer: 时间只是示意：快慢取决于所用模型的能力与速率、机器负载，以及需求本身的复杂度。不保证每个需求都在这个时间内完成。
     messages:
       - time: '09:30'
         from: pm
-        to: arch
+        to: arch-designer
         tag: T1
         text: 定登录方案 · 会话存哪儿 · 401 错误码 · 分几个端点
       - time: '09:41'
-        from: arch
+        from: arch-designer
         to: pm
         text: 契约 3 个端点 · 会话走 httpOnly cookie · 错误码 401 / 423
       - time: '09:45'
         from: pm
-        to: uiux
+        to: uiux-designer
         tag: T2
         text: 登录页两屏 · 四态：默认 / 错误 / 加载 / 禁用
       - time: '10:05'
-        from: uiux
+        from: uiux-designer
         to: pm
         text: 稿子两屏四态齐 · 错误提示放输入框下方 · 禁用态置灰
       - time: '10:08'
         from: pm
         to: rd-fe
         tag: T3
-        text: 照 uiux 稿实现 · 接口按 arch 的契约接
+        text: 照 uiux-designer 的稿实现 · 接口按 arch-designer 的契约接
       - time: '10:08'
         from: pm
         to: rd-be
         tag: T4
-        text: 照 arch 契约实现 POST /api/login · 密码不落明文
+        text: 照 arch-designer 的契约实现 POST /api/login · 密码不落明文
       - time: '11:05'
         from: rd-be
         to: pm
@@ -221,6 +222,8 @@ home:
   faq:
     - q: 会改我的代码库吗？
       a: 只会新增三样东西：项目根的 AGENTS.md、.pi/settings.json，以及一个转发入口脚本。角色卡、清单、技能这些机制文件都在依赖包里，不铺进你的仓库，也不碰你原有文件；仓库里已有 AGENTS.md 时是合并追加，不会覆盖。
+    - q: 要花钱吗？
+      a: 机制本身是 MIT，不花钱。真正跑起来用的是你自己的 pi 和模型额度 —— 七个角色同时干活，token 消耗比一个人用多得多。可以先只开 PM 加一个研发角色试水，觉得顺手再补人。
     - q: 除了 pi，能配别的编程 Agent 吗？
       a: 不能。nao 的多会话派活、回执、回收整套机制都建立在 pi 之上，只支持 pi，不为其他编程 Agent 做适配，也不承诺可互换。
     - q: 它会在 GitHub 上开 PR 吗？

@@ -80,8 +80,10 @@ export interface HomeFlow {
   lead: string
   steps: HomeFlowStep[]
   messagesTitle: string
-  /** 日志下方的一句总结，如「一个上午，一个需求」 */
+  /** 日志下方的一句总结，如「一个小需求走完一轮」 */
   messagesNote?: string
+  /** 紧跟 note 的免责说明（时长只是示意，不是承诺） */
+  messagesDisclaimer?: string
   messages: HomeFlowMessage[]
 }
 

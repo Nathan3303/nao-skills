@@ -977,7 +977,7 @@
 
 .nh .flow-msg {
   display: grid;
-  grid-template-columns: 3.2rem 4.4rem 0.9rem 4.4rem 2.1rem minmax(0, 1fr);
+  grid-template-columns: 3.2rem max-content 0.9rem max-content 2.1rem minmax(0, 1fr);
   align-items: baseline;
   gap: 0 var(--nh-sp-2);
   font-family: var(--nh-mono);
@@ -1067,6 +1067,14 @@
   font-size: var(--nh-fs-13);
   font-weight: 600;
   color: var(--nh-text-2);
+}
+
+.nh .flow-disclaimer {
+  margin: var(--nh-sp-1) 0 0;
+  font-size: var(--nh-fs-12);
+  line-height: 1.6;
+  font-weight: 400;
+  color: var(--nh-text-3);
 }
 
 /* ── 段四：和「多开几个窗口」的区别 ── */
