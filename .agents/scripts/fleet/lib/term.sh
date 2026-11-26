@@ -40,7 +40,9 @@ TERM_SHELL_NAMES=(bash zsh sh dash fish ksh mksh tcsh csh nu elvish xonsh)
 #   其余子 shell 与父 shell 读同一份（status 另在入口显式 prime 一次，保证「每命令 ≤1 次 pane list」）。
 _TERM_SNAP_TOKEN="$$.$RANDOM$RANDOM"
 _TERM_SNAP_PATH="${TMPDIR:-/tmp}/nao-fleet-term-snap.${_TERM_SNAP_TOKEN}"
-trap 'rm -f "${_TERM_SNAP_PATH:-}" 2>/dev/null || true' EXIT
+# 后端私有事实行（13 列）缓存：只供实现层（liveness/reclaim/project5）读，业务层不可见。
+_TERM_FACT_PATH="${TMPDIR:-/tmp}/nao-fleet-term-facts.${_TERM_SNAP_TOKEN}"
+trap 'rm -f "${_TERM_SNAP_PATH:-}" "${_TERM_FACT_PATH:-}" 2>/dev/null || true' EXIT
 
 # =============================================================================
 # 终端后端门面（#96 二期 B1 · PRD 附二「门面 + 双实现并存」）
@@ -86,8 +88,22 @@ term_backend() {  # 守卫（无输出 = 放行）；非法/已移除值 ⇒ 单
 # 后端名（输出面用；herdr 路径的文案逐字不变 ⇒ AC1）
 term_label() { if _term_app_backend; then printf 'app\n'; else printf 'herdr\n'; fi; }
 
-# 快照构建分派（缓存/落盘逻辑在 term_snapshot，实现分派在此）
-_term_backend_snapshot() { if _term_app_backend; then _term_app_snapshot; else _term_herdr_snapshot; fi; }
+# 事实构建分派（13 列，后端私有；只给实现层与 project5 用）
+_term_backend_facts() { if _term_app_backend; then _term_app_facts; else _term_herdr_facts; fi; }
+# 5 列投影分派（<name>\t<status>\t<cwd>\t<handle>\t<task>）
+_term_backend_project5() { if _term_app_backend; then _term_app_project5; else _term_herdr_project5; fi; }
+
+# 后端私有事实行（每命令一份；业务层禁调）
+_term_facts() {
+  local f="${_TERM_FACT_FILE:-${_TERM_FACT_PATH:-${TMPDIR:-/tmp}/nao-fleet-term-facts.$$}}"
+  if [[ -e "$f" ]]; then _TERM_FACT_FILE="$f"; cat "$f"; return 0; fi
+  if ! _term_backend_facts > "$f"; then
+    rm -f "$f" 2>/dev/null || true; _TERM_FACT_FILE=""
+    return 1
+  fi
+  _TERM_FACT_FILE="$f"
+  cat "$f"
+}
 
 # ---- 1/4 前提闸门 ----
 term_require() { if _term_app_backend; then _term_app_require; else _term_herdr_require; fi; }
@@ -95,18 +111,17 @@ term_require() { if _term_app_backend; then _term_app_require; else _term_herdr_
 # ensure 前的后端前提（app = AC3b「窗口不在跑 ⇒ exit 3」；herdr 无此概念 ⇒ 无操作）
 term_spawn_preflight() { if _term_app_backend; then _term_app_spawn_preflight; else return 0; fi; }
 
-# ---- 2/4 快照（每命令 ≤1 次 pane list / agent list；落临时文件，子 shell 复用同一份）----
-# 12 列（TAB）：name pane_id terminal_id cwd foreground_cwd fg_process
-#               agent_status state_change_seq agent_session argv_name hook_authority workspace_id
-#   pane list + agent list 按 pane_id join；只对带 label 的 pane 各取一次 process-info
+# ---- 2/4 快照（5 列中性投影；每命令 ≤1 次 pane list / agent list；落临时文件）----
+# 每行：<name>\t<status>\t<cwd>\t<handle>\t<task>
+#   status ∈ alive|working|idle|unknown；cwd = 归属 cwd；handle 不透明；空值 `-`；无身份整行省略。
+#   后端私有 13 列事实只在实现层（_term_facts / project5）可见，业务层读完即弃。
 term_snapshot() {
-  local f="${_TERM_SNAP_FILE:-${_TERM_SNAP_PATH:-${TMPDIR:-/tmp}/nao-fleet-term-snap.$$}}"
-  # 判据用「文件存在」而非「非空」：**无 label 会话时快照合法为空** —— 用 -s 会每调用重建
-  #   （QA P3-1 实测 status 退化成 pane list ×7 / agent list ×7）。
+  local f="${_TERM_SNAP_FILE:-${_TERM_SNAP_PATH:-${TMPDIR:-/tmp}/nao-fleet-term-snap.$$}}" facts=""
+  # 判据用「文件存在」而非「非空」：无舰队会话时快照合法为空（用 -s 会每调用重建）。
   if [[ -e "$f" ]]; then _TERM_SNAP_FILE="$f"; cat "$f"; return 0; fi
-  # 上一轮被 SIGKILL/timeout 杀掉时会留下同名快照（EXIT trap 不执行）⇒ 只在**重建**时清 >2h 的陈迹
   find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'nao-fleet-term-snap.*' -mmin +120 -delete 2>/dev/null || true
-  if ! _term_backend_snapshot > "$f"; then
+  facts="$(_term_facts)" || { rm -f "$f" 2>/dev/null || true; _TERM_SNAP_FILE=""; return 1; }
+  if ! printf '%s\n' "$facts" | _term_backend_project5 > "$f"; then
     rm -f "$f" 2>/dev/null || true; _TERM_SNAP_FILE=""
     return 1
   fi
@@ -173,11 +188,33 @@ term_cleanup() {  # <herdr-session> [force]
 # ---- 9/9 当前终端会话名（诊断行用）----
 term_session_name() { if _term_app_backend; then printf '%s\n' "${HC_SCOPE:-}"; else printf '%s\n' "${HERDR_SESSION:-}"; fi; }
 
-# ---- 放置快照门面（ensure 相位 1a）：herdr = workspace/pane list；app = doc.get + hc ls ----
-term_place_prime() {  # → 0 已建快照 / 1 不可用
-  if _term_app_backend; then _term_app_place_prime; else _term_herdr_place_prime; fi
+# ---- 放置面（中性）：begin/end/rows/ws_for_label；业务层禁见任何 _TERM_PLACE_* ----
+term_place_begin() {  # → 0 已建 / 1 不可用
+  if _term_app_backend; then _term_app_place_begin; else _term_herdr_place_begin; fi
 }
-term_place_reset() { _TERM_PLACE_CACHE=0; _TERM_PLACE_WS_BY_LABEL=(); _TERM_PLACE_WS_ROWS=(); _TERM_PLACE_PANE_ROWS=(); _TERM_PLACE_TASK_BY_PANE=(); _TERM_APP_GHOST_TABS=(); _TERM_APP_DOC_SPACES=(); _TERM_APP_STALE_SPACES=(); }
+term_place_end() {  # 幂等
+  if _term_app_backend; then _term_app_place_end; else _term_herdr_place_end; fi
+}
+term_place_rows() {  # 每行 <space_ref>\t<label>\t<name>\t<handle>\t<cwd>；空值 `-`
+  if _term_app_backend; then _term_app_place_rows; else _term_herdr_place_rows; fi
+}
+term_place_ws_for_label() {  # <label> → space_ref（未命中空 + rc0；未 begin ⇒ rc1 + stderr）
+  if _term_app_backend; then _term_app_place_ws_for_label "${1-}"; else _term_herdr_place_ws_for_label "${1-}"; fi
+}
+
+# ---- 诊断面（check 用）：后端 schema 谓词 + app 端前提（中性门面，业务不直连实现）----
+term_api_schema() {  # → 后端 schema 输出（不可用 ⇒ rc1）
+  if _term_app_backend; then _term_app_exec schema; else _term_herdr_exec api schema; fi
+}
+term_check_premise() {  # app 端前提 warn-only（app 后端或 app 终端内）；herdr TUI 无输出
+  if _term_app_backend || _term_app_context; then
+    if _term_app_context && ! _term_app_backend; then
+      printf '  · 检测到 herdr desktop app 终端（HC_* 三件套在场），但 NAO_TERMINAL 未设为 app ⇒ 以下 app 端前提仅供参考\n'
+    fi
+    _term_app_check_premise
+  fi
+  return 0
+}
 
 # ---- 状态页的 workspace/space 标签表（每行 "<id>\t<label>"）----
 term_ws_label_rows() {

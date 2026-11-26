@@ -26,23 +26,21 @@ _status_scope_tag() {  # <legacy scope> → "·code=…[ ·path=…]"
   printf '·code=%s' "$s"
 }
 
-# S13（T554）：本仓同名会话行末尾的「他仓同名 N 个（ws=<label>）」附加字段。
-#   数据源 = status 已建的快照（STATUS_SNAP，12 列含 workspace_id）+ workspace list（≤1 次）。
-#   own 判据 = 该行 cwd/foreground_cwd 落在目标仓内（与 term_liveness 的 repo 过滤同源）。
+# S13（T554）：本仓同名会话行末尾的「他仓同名 N 个」附加字段。
+#   数据源 = 5 列中性快照（name/status/cwd/handle/task）；Step 2 起业务层不再拿 workspace_id。
+#   own 判据 = 该行 cwd 落在目标仓内（与 term_liveness 的 repo 过滤同源）。
 _status_other_same() {  # <name> <repo_phys>
-  local name="${1-}" repo="${2-}" line _n _p _t _c _f _fg _st _sq _sess _av _hk wsid _task c n=0 labels=""
+  local name="${1-}" repo="${2-}" _n _st c _h _task n=0
   [[ -n "$name" && -n "${STATUS_SNAP:-}" ]] || return 0
-  while IFS=$'\t' read -r _n _p _t _c _f _fg _st _sq _sess _av _hk wsid _task; do
+  while IFS=$'\t' read -r _n _st c _h _task; do
     [[ "$_n" == "$name" ]] || continue
-    c="$_c"; [[ "$c" == "-" || -z "$c" ]] && c="$_f"
     if [[ -n "$repo" && -n "$c" && "$c" != "-" ]] && repo_contains_path "$repo" "$(_fleet_phys "$c")"; then
       continue
     fi
     n=$((n + 1))
-    labels+="${labels:+ }${STATUS_WS_LABEL[$wsid]:-${wsid:--}}"
   done <<< "$STATUS_SNAP"
   (( n > 0 )) || return 0
-  printf ' · 他仓同名 %d 个（ws=%s）' "$n" "$labels"
+  printf ' · 他仓同名 %d 个' "$n"
 }
 
 cmd_status() {
@@ -52,7 +50,7 @@ cmd_status() {
   # B1（BR3/BR7）：身份/归属/忙闲全部来自结构化事实 ⇒ 快照**每命令一次**
   #   （≤1 次 pane list / agent list；逐名查询会 7×2 次 CLI，且同命令内两份快照不一致 = 新 flake 源）
   if ! term_snapshot >/dev/null; then
-    if _term_app_backend; then
+    if [[ "$(term_label)" == "app" ]]; then
       printf '需要 desktop app core：hc ls / hc get 不可用（核对 desktop app 是否在运行、HC_TERMINAL_SOCKET 是否有效）—— 修好后重试\n' >&2
     else
       printf '需要 herdr server：pane list / agent list 不可用（核对 `herdr --session %s server` 是否在跑、protocol 是否 22）—— 修好后重试\n' "${HERDR_SESSION:-?}" >&2
@@ -61,8 +59,8 @@ cmd_status() {
   fi
   # v3 元数据：task 映射 + 当前会话 sidecar 孤儿清理（快照已建好，零新增后端调用）
   fleet_task_map_init
-  if ! _term_app_backend; then
-    term_snapshot 2>/dev/null | awk -F'\t' 'NF{print $2}' | fleet_meta_gc
+  if [[ "$(term_label)" != "app" ]]; then
+    term_snapshot 2>/dev/null | awk -F'\t' 'NF{print $4}' | fleet_meta_gc
   fi
   # M5（#139）：manifest 读面（只在 manifest 可读时追加字段；无 manifest / 不可读不动既有行格式）
   #   可读 ⇒ `fleet=<slug>` + `code=<code>`；非法/不可读 ⇒ `fleet=?`（显式不可知，禁空值）。
@@ -84,7 +82,7 @@ cmd_status() {
   else
     STATUS_MN_OK=2
   fi
-  # S13：herdr 快照（12 列）+ workspace label 表（≤1 次 workspace list；快照已由入口建好）
+  # S13：5 列中性快照 + workspace label 表（≤1 次 workspace list；快照已由入口建好）
   STATUS_SNAP=""; STATUS_WS_LABEL=()
   STATUS_SNAP="$(term_snapshot 2>/dev/null || true)"
   local _wid _wlabel
@@ -152,7 +150,7 @@ cmd_status() {
     abn_seen["$nm"]=1
     case "${hv[$nm]:-absent}" in
       ghost)
-        if _term_app_backend; then
+        if [[ "$(term_label)" == "app" ]]; then
           term_abn+=("  ! $nm 终端残留：name 在、status 缺（finished 换壳）⇒ 非在线（勿当「已在运行」，回收归 B3）")
         else
           term_abn+=("  ! $nm 幽灵 pane：label 在、agent 条目缺（label 命中 ≠ 在线；勿当「已在运行」，回收归 B3）")
@@ -168,7 +166,7 @@ cmd_status() {
     esac
   done
   
-  if _term_app_backend; then
+  if [[ "$(term_label)" == "app" ]]; then
     echo "== 角色会话在线状态（本表按 app 终端 name + status.state 判定；权威源 = hc ls / hc get）=="
   else
     echo "== 角色会话在线状态（本表按 herdr pane label + agent 状态判定；权威源 = pane list / agent list）=="
@@ -332,7 +330,7 @@ cmd_status() {
   [[ -f "$TASKS_STATE" ]] || echo "  （$TASKS_STATE 不存在，残留判定已跳过）"
   # B1（herdr）：终端证据异常节 —— 单列、点名、给结论（非在线 / 不可投递），不得静默退化成 unknown
   if (( ${#term_abn[@]} > 0 )); then
-    if _term_app_backend; then
+    if [[ "$(term_label)" == "app" ]]; then
       echo '== 终端证据异常（app 后端：name 命中 ≠ 在线）=='
     else
       echo '== 终端证据异常（herdr 后端：label 命中 ≠ 在线）=='
@@ -352,9 +350,9 @@ cmd_status() {
     dv="${hv[$dn]:-absent}"; ds="${hstate[$dn]:--}"
     [[ "$dv" == "absent" ]] && continue
     if [[ "$dv" == "online" ]] && term_deliverable "$ds"; then
-      dl+=("  · $dn：可投递（agent_status=$ds）")
+      dl+=("  · $dn：可投递（状态=$ds）")
     elif [[ "$dv" == "online" ]]; then
-      dl+=("  · $dn：不可投递（agent_status=$ds；BR7 ⇒ 保守不可投递）")
+      dl+=("  · $dn：不可投递（状态=$ds；BR7 ⇒ 保守不可投递）")
     else
       dl+=("  · $dn：不可投递（$dv ⇒ 无在线证据）")
     fi
@@ -433,7 +431,7 @@ cmd_status_json() {
   local -A seen=() cwds=() pids=()
   # 前提：与文本路径同判据、同退出码（rc=3 = 环境级失败；orch 据此「不写 blocked、下 tick 重试」）
   if ! term_snapshot >/dev/null; then
-    if _term_app_backend; then
+    if [[ "$(term_label)" == "app" ]]; then
       printf 'status --json: 需要 desktop app core：hc ls / hc get 不可用（核对 desktop app 是否在运行、HC_TERMINAL_SOCKET 是否有效）—— 修好后重试\n' >&2
     else
       printf 'status --json: 需要 herdr server：pane list / agent list 不可用（核对 `herdr --session %s server` 是否在跑、protocol 是否 22）—— 修好后重试\n' "${HERDR_SESSION:-?}" >&2
@@ -441,8 +439,8 @@ cmd_status_json() {
     exit 3
   fi
   fleet_task_map_init
-  if ! _term_app_backend; then
-    term_snapshot 2>/dev/null | awk -F'\t' 'NF{print $2}' | fleet_meta_gc
+  if [[ "$(term_label)" != "app" ]]; then
+    term_snapshot 2>/dev/null | awk -F'\t' 'NF{print $4}' | fleet_meta_gc
   fi
   be="$(term_label)"
   root="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || true)"

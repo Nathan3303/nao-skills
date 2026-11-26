@@ -565,12 +565,12 @@ cmd_check() {
     done
   fi
 
-  if _term_app_backend; then
+  if [[ "$(term_label)" == "app" ]]; then
     echo "== 运行前提（端前提 = herdr desktop app 终端 + pi ≥$MIN_PI_VERSION；app 后端）=="
     echo '  · 生效后端 NAO_TERMINAL=app（第二后端；status/ensure/close/cleanup 走门面；core 由 desktop app 管理；session-start 不适用）'
     # T565/#175 AC4：app 端前提是 **warn-only**（`|| true`）—— 用户实机报阻碍时，这些提示是证据，
     #   但不该把一个静态体检变成 rc 阻塞（需要阻塞的地方 ensure 自己 exit 3）。
-    _term_app_check_premise || true
+    term_check_premise || true
   else
   echo "== 运行前提（端前提 = herdr pane + pi ≥$MIN_PI_VERSION；AC1/AC3）=="
   # rc 口径（P3-4 订正）：**缺 herdr 可执行文件** ⇒ rc=1（明确错配，不能装没看见）；
@@ -582,7 +582,7 @@ cmd_check() {
     if [[ -n "${HERDR_SESSION:-}" && "${HERDR_SESSION}" != "default" ]]; then
       printf '  ✓ HERDR_SESSION=%s\n' "$HERDR_SESSION"
       local hschema hproto
-      if hschema="$(_term_herdr_exec api schema 2>/dev/null)"; then
+      if hschema="$(term_api_schema 2>/dev/null)"; then
         hproto="$(printf '%s\n' "$hschema" | sed -n 's/^protocol:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -1)"
         if [[ "$hproto" == "$TERM_HERDR_PROTOCOL" ]]; then
           printf '  ✓ herdr protocol=%s\n' "$hproto"
@@ -601,10 +601,7 @@ cmd_check() {
   fi
   # T565/#175 AC4：**在 app 终端内但 NAO_TERMINAL 未设**（用户实机形态）⇒ 也体检 app 端前提。
   #   仍然 warn-only（`|| true`）且不谎报生效后端（生效后端仍是上面那行 herdr）。
-  if _term_app_context; then
-    echo "  · 检测到 herdr desktop app 终端（HC_* 三件套在场），但 NAO_TERMINAL 未设为 app ⇒ 以下 app 端前提仅供参考"
-    _term_app_check_premise || true
-  fi
+  term_check_premise || true
   fi
   local pi_cur
   if pi_cur="$(pi_version_check)"; then

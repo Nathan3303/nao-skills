@@ -269,7 +269,7 @@ declare -A FLEET_TASK_BY_NAME=()
 fleet_task_map_init() {  # → 0（后端不可用 ⇒ 空表，不报错）
   local n t line
   FLEET_TASK_BY_NAME=()
-  while IFS=$'\t' read -r n _ _ _ _ _ _ _ _ _ _ _ t; do
+  while IFS=$'\t' read -r n _ _ _ t; do
     [[ -n "$n" ]] || continue
     [[ -n "$t" && "$t" != "-" ]] && FLEET_TASK_BY_NAME["$n"]="$t"
   done < <(term_snapshot 2>/dev/null || true)
@@ -324,8 +324,8 @@ task_state_class() {
 }
 
 # 共享投影（无后端调用）：从门面快照取 name/pane/cwd（列 1/2/4）；**禁**逐名查询（O(N) 次后端调用）
-pane_cwd_snapshot() {
-  term_snapshot | awk -F'\t' '$1 != "" && $2 != "" {print $1 "\t" $2 "\t" $4}'
+pane_cwd_snapshot() {  # <name>\t<handle>\t<cwd>（5 列快照：name/status/cwd/handle/task）
+  term_snapshot | awk -F'\t' '$1 != "" && $4 != "" && $3 != "" {print $1 "\t" $4 "\t" $3}'
 }
 
 # 归属三态：local（本仓）/ other（他仓）/ unknown（不可判定 ⇒ fail-closed，只标注不给命令）

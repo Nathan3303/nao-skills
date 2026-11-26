@@ -108,22 +108,18 @@ _repo_identity() {  # <path> → 物理身份串
   fi
 }
 
-# 快照内某 workspace 的 pane cwd 是否**全在**目标仓内（含空 ws ⇒ true）
-_ensure_ws_panes_in_repo() {  # <wsid> <repo_phys> → 0 全部在仓内 / 1 有 pane 在仓外
-  local wsid="${1-}" repo="${2-}" line
-  local -a cwds=()
-  if (( _TERM_PLACE_CACHE )); then
-    for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
-      [[ -n "$line" ]] || continue
-      _term_place_pane_fields "$line"
-      [[ "$_TP_WS" == "$wsid" ]] || continue
-      cwds+=("${_TP_FGCWD:-$_TP_CWD}")
-    done
-  fi
-  (( ${#cwds[@]} )) || return 0
-  local c ident
+# 本命令的放置行（业务侧缓存；5 列 = space_ref/label/name/handle/cwd）
+declare -a ENSURE_PLACE_ROWS=()
+_ensure_place_load() { mapfile -t ENSURE_PLACE_ROWS < <(term_place_rows 2>/dev/null || true); }
+
+# 快照内某 space 的 pane cwd 是否**全在**目标仓内（含空 space ⇒ true）
+_ensure_ws_panes_in_repo() {  # <space_ref> <repo_phys> → 0 全部在仓内 / 1 有 pane 在仓外
+  local wsid="${1-}" repo="${2-}" line _sr _lbl _nm _h c ident
   ident="$(_repo_identity "$repo")"
-  for c in "${cwds[@]}"; do
+  for line in "${ENSURE_PLACE_ROWS[@]:-}"; do
+    [[ -n "$line" ]] || continue
+    IFS=$'\t' read -r _sr _lbl _nm _h c <<< "$line"
+    [[ "$_sr" == "$wsid" ]] || continue
     [[ "$c" == "-" || -z "$c" ]] && continue
     # 同仓 worktree（git common-dir 相同）⇒ 复用；否则必须物理落在目标仓内
     if [[ -n "$ident" && "$(_repo_identity "$c")" == "$ident" ]]; then continue; fi
@@ -149,13 +145,9 @@ _ensure_place_label() {  # <base> <repo_phys> → stdout label
     done
     (( same )) && { printf '%s\n' "$cand"; return 0; }
     if (( ! taken )); then
-      if (( _TERM_PLACE_CACHE )); then
-        wsid="${_TERM_PLACE_WS_BY_LABEL[$cand]:-}"
-        if [[ -n "$wsid" ]]; then
-          if _ensure_ws_panes_in_repo "$wsid" "$repo"; then printf '%s\n' "$cand"; return 0; fi
-        else
-          printf '%s\n' "$cand"; return 0
-        fi
+      wsid="$(term_place_ws_for_label "$cand")" || return 1
+      if [[ -n "$wsid" ]]; then
+        if _ensure_ws_panes_in_repo "$wsid" "$repo"; then printf '%s\n' "$cand"; return 0; fi
       else
         printf '%s\n' "$cand"; return 0
       fi
@@ -175,27 +167,16 @@ _ensure_slot_taken() {  # <wsid> <role> <num>
     [[ -z "${_T_RSV_WS[$i]:-}" || "${_T_RSV_WS[$i]}" == "$wsid" ]] || continue
     [[ "${_T_RSV_ROLE[$i]}" == "$role" && "${_T_RSV_NUM[$i]}" == "$num" ]] && return 0
   done
-  if (( _TERM_PLACE_CACHE )); then
-    for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
-      [[ -n "$line" ]] || continue
-      _term_place_pane_fields "$line"
-      [[ -n "$_TP_LABEL" ]] || continue
-      [[ "$_TP_WS" == "$wsid" ]] || continue
-      name="$_TP_LABEL"
-      out="$(fleet_name_parse "$name")"
-      [[ "$out" == "OK "* ]] || continue
-      IFS=',' read -r k r t s <<< "${out#OK }"
-      [[ "$r" == "$role" && "$s" == "$num" ]] && return 0
-    done
-  else
-    while IFS= read -r name; do
-      [[ -n "$name" ]] || continue
-      out="$(fleet_name_parse "$name")"
-      [[ "$out" == "OK "* ]] || continue
-      IFS=',' read -r k r t s <<< "${out#OK }"
-      [[ "$r" == "$role" && "$s" == "$num" ]] && return 0
-    done < <(visible_session_names)
-  fi
+  for line in "${ENSURE_PLACE_ROWS[@]:-}"; do
+    [[ -n "$line" ]] || continue
+    IFS=$'\t' read -r _sr _lbl name _h _c <<< "$line"
+    [[ -n "$name" ]] || continue
+    [[ "$_sr" == "$wsid" ]] || continue
+    out="$(fleet_name_parse "$name")"
+    [[ "$out" == "OK "* ]] || continue
+    IFS=',' read -r k r t s <<< "${out#OK }"
+    [[ "$r" == "$role" && "$s" == "$num" ]] && return 0
+  done
   return 1
 }
 
@@ -203,31 +184,18 @@ _ensure_slot_taken() {  # <wsid> <role> <num>
 #   槽位号不承载语义）。v2/legacy 名字仍按解析出的 task 兼容复用（只读面）。
 _ensure_task_name_in_ws() {  # <wsid> <role> <task>
   local wsid="${1-}" role="${2-}" task="${3-}" name out k r t s line
-  if (( _TERM_PLACE_CACHE )); then
-    for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
-      [[ -n "$line" ]] || continue
-      _term_place_pane_fields "$line"
-      name="$_TP_LABEL"
-      [[ -n "$name" && "$_TP_WS" == "$wsid" ]] || continue
-      out="$(fleet_name_parse "$name")"
-      [[ "$out" == "OK "* ]] || continue
-      IFS=',' read -r k r t s <<< "${out#OK }"
-      [[ "$r" == "$role" ]] || continue
-      [[ "${_TERM_PLACE_TASK_BY_PANE[$_TP_PANE]:-}" == "$task" ]] || continue
-      printf '%s\n' "$name"; return 0
-    done
-  else
-    fleet_task_map_init
-    while IFS= read -r name; do
-      [[ -n "$name" ]] || continue
-      out="$(fleet_name_parse "$name")"
-      [[ "$out" == "OK "* ]] || continue
-      IFS=',' read -r k r t s <<< "${out#OK }"
-      [[ "$r" == "$role" ]] || continue
-      [[ "$(fleet_effective_task "$name")" == "$task" ]] || continue
-      printf '%s\n' "$name"; return 0
-    done < <(visible_session_names)
-  fi
+  for line in "${ENSURE_PLACE_ROWS[@]:-}"; do
+    [[ -n "$line" ]] || continue
+    IFS=$'\t' read -r _sr _lbl name _h _c <<< "$line"
+    [[ -n "$name" ]] || continue
+    [[ "$_sr" == "$wsid" ]] || continue
+    out="$(fleet_name_parse "$name")"
+    [[ "$out" == "OK "* ]] || continue
+    IFS=',' read -r k r t s <<< "${out#OK }"
+    [[ "$r" == "$role" ]] || continue
+    [[ "$(fleet_effective_task "$name")" == "$task" ]] || continue
+    printf '%s\n' "$name"; return 0
+  done
   return 0
 }
 
@@ -236,26 +204,16 @@ _ensure_pick_num() {  # <wsid> <role> <task> <kind> → stdout num（空 = 槽�
   local wsid="${1-}" role="${2-}" task="${3-}" kind="${4-}" n found="" name line out k r t s
   # 收集已占槽位
   local -a occ=()
-  if (( _TERM_PLACE_CACHE )); then
-    for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
-      [[ -n "$line" ]] || continue
-      _term_place_pane_fields "$line"
-      name="$_TP_LABEL"
-      [[ -n "$name" && "$_TP_WS" == "$wsid" ]] || continue
-      out="$(fleet_name_parse "$name")"
-      [[ "$out" == "OK "* ]] || continue
-      IFS=',' read -r k r t s <<< "${out#OK }"
-      [[ "$r" == "$role" ]] && occ+=("${s:-1}")
-    done
-  else
-    while IFS= read -r name; do
-      [[ -n "$name" ]] || continue
-      out="$(fleet_name_parse "$name")"
-      [[ "$out" == "OK "* ]] || continue
-      IFS=',' read -r k r t s <<< "${out#OK }"
-      [[ "$r" == "$role" ]] && occ+=("${s:-1}")
-    done < <(visible_session_names)
-  fi
+  for line in "${ENSURE_PLACE_ROWS[@]:-}"; do
+    [[ -n "$line" ]] || continue
+    IFS=$'\t' read -r _sr _lbl name _h _c <<< "$line"
+    [[ -n "$name" ]] || continue
+    [[ "$_sr" == "$wsid" ]] || continue
+    out="$(fleet_name_parse "$name")"
+    [[ "$out" == "OK "* ]] || continue
+    IFS=',' read -r k r t s <<< "${out#OK }"
+    [[ "$r" == "$role" ]] && occ+=("${s:-1}")
+  done
   local i
   for i in "${!_T_RSV_NAME[@]}"; do
     [[ -z "${_T_RSV_WS[$i]:-}" || "${_T_RSV_WS[$i]}" == "$wsid" ]] || continue
@@ -299,14 +257,15 @@ cmd_ensure() {
   # ==== 相位 1a：后端前提 + 放置快照（T554 查询上限：≤1 布局/终端列表）====
   #   app：AC3b 窗口不在跑 ⇒ exit 3（**先于**任何终端创建，不玩「起了再回滚」）
   term_spawn_preflight
-  term_place_reset
-  if ! term_place_prime; then
-    if _term_app_backend; then
+  if ! term_place_begin; then
+    if [[ "$(term_label)" == "app" ]]; then
       die "ensure 中止：app 放置快照不可用（hc ls / doc.get 失败；核对 desktop app 窗口后重试）"
     fi
     die "ensure 中止：herdr 放置快照不可用（workspace list / pane list 失败；核对 server 后重试）"
   fi
 
+  _ensure_place_load
+  fleet_task_map_init
   # ==== 相位 1b：全量解析 + 校验（BR11 两相执行；失败必在建 pane 之前）====
   for i in "${!TARGETS[@]}"; do
     spec="${TARGETS[$i]}"; card_arg="${TARGET_CARD[$i]:-}"; card_as="${TARGET_AS[$i]:-}"
@@ -347,7 +306,7 @@ cmd_ensure() {
       # 槽位：--as 已显式给名字 ⇒ 不参与自动槽位；否则按卡 role 取空闲槽位
       slot=""
       if [[ -z "$card_as" ]]; then
-        wsid="${_TERM_PLACE_WS_BY_LABEL[$place]:-}"
+        wsid="$(term_place_ws_for_label "$place")"
         # 卡会话同 role+task 已在 ⇒ same（复用名字；相位 2 判重跳过）；否则取空闲槽位
         if [[ -n "$task" ]]; then
           disp="$(_ensure_task_name_in_ws "$wsid" "$CARD_ROLE" "$task")"
@@ -405,7 +364,7 @@ cmd_ensure() {
       [[ -n "$base_label" ]] || die "ensure 中止：放置键计算失败（repo=$repo；实现缺陷，不得回落空值）"
       place="$(_ensure_place_label "$base_label" "$repo")" \
         || die "ensure 中止：workspace label 号段已满（base=$base_label，2..9 全占；该怎么办：先清理空 workspace 或 close 无用会话）"
-      wsid="${_TERM_PLACE_WS_BY_LABEL[$place]:-}"
+      wsid="$(term_place_ws_for_label "$place")"
       if [[ -n "$forced_num" ]]; then
         slot="$forced_num"
         if [[ -n "$task" ]]; then disp="$(fleet_name_build derived "$NAME" "$slot")"
@@ -455,7 +414,7 @@ cmd_ensure() {
     if [[ "$force" != "true" ]]; then
       vrd="$(running_verdict "$disp" "$repo")"
       if [[ "$vrd" == "same" ]]; then
-        if _term_app_backend; then
+        if [[ "$(term_label)" == "app" ]]; then
           warn "$disp 已在运行（终端 name + status 事实命中），跳过；确需重开请加 --force"
         elif [[ "$NAO_TERMINAL" == "herdr" ]]; then
           warn "$disp 已在运行（pane label + 结构化事实命中），跳过；确需重开请加 --force"
@@ -480,7 +439,7 @@ cmd_ensure() {
       spawn_one "$disp" "$repo" "$model" "" "${t_roles[$i]:-}" "${t_prompts[$i]:-}" "$force" "${t_labels[$i]}" "" "$task"
     fi
   done
-  term_place_reset
+  term_place_end
   # 恰一行摘要，三类计数（成功/跳过/失败）
   if (( SPAWN_OK + SPAWN_SKIP + SPAWN_FAIL > 0 )); then
     log "已拉起 ${SPAWN_OK} 个会话（成功 ${SPAWN_OK} / 跳过 ${SPAWN_SKIP} / 失败 ${SPAWN_FAIL}）；就绪后在线状态用 nao-fleet.sh status 查看"

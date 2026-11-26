@@ -231,7 +231,7 @@ _term_app_identity() {  # <get-json> → 身份名（无 ⇒ 空）
   printf '%s\n' "$nm"
 }
 
-_term_app_snapshot() {
+_term_app_facts() {
   local ls="" g addr name cwd tstate st fg fgcwd sp tb hook task
   local nl ncwd nfgcwd nsp ntb nfgp nst nts ntask
   ls="$(_term_app_exec ls --all --json)" || { warn "hc ls 失败（app core 未就绪？）"; return 1; }
@@ -273,12 +273,35 @@ _term_app_snapshot() {
   return 0
 }
 
+# 5 列中性投影（app 13 列 → 业务契约）：无身份省略；空值 `-`。
+_term_app_project5() {
+  local name pid tid cwd fgcwd fg astat seq sess avname hook wsid task status c
+  while IFS=$'\t' read -r name pid tid cwd fgcwd fg astat seq sess avname hook wsid task; do
+    [[ -n "$name" ]] || continue
+    c="$cwd"; [[ "$c" == "-" || -z "$c" ]] && c="$fgcwd"
+    if [[ "$sess" != "live" ]]; then status=alive
+    elif [[ "$wsid" == "-" ]]; then status=alive
+    elif [[ "$fg" != "pi" ]]; then status=alive
+    elif [[ "$hook" != "1" ]]; then status=alive
+    else
+      case "$astat" in
+        working|blocked) status=working ;;
+        idle|done)       status=idle ;;
+        *)               status=unknown ;;
+      esac
+    fi
+    [[ -n "$c" ]] || c="-"
+    [[ -n "$task" ]] || task="-"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$status" "$c" "$pid" "$task"
+  done
+}
+
 # ---- 在线判定（M4：忙闲表，无 seq）----
 _term_app_liveness() {  # <name> [repo] → verdict/state/seq/hook
   local name="${1-}" repo="${2-}" rows="" line rp="" filtered="" v="" state="-" cnt=0
   local _l _p _t c1 c2 fg st seq sess av hook ws live_rows=""
   [[ -n "$name" ]] || { printf 'absent\t-\t-\t-\n'; return 0; }
-  rows="$(term_snapshot 2>/dev/null | awk -F'\t' -v n="$name" '$1==n')" || rows=""
+  rows="$(_term_facts 2>/dev/null | awk -F'\t' -v n="$name" '$1==n')" || rows=""
   [[ -n "$rows" ]] || { printf 'absent\t-\t-\t-\n'; return 0; }
   if [[ -n "$repo" ]]; then
     rp="$(nao_phys_path "$repo")"
@@ -376,7 +399,7 @@ _term_app_doc_has_space() {  # <space_id> → 0 在 / 1 不在
   [[ -n "${_TERM_APP_DOC_SPACES[$1]:-}" ]]
 }
 
-_term_app_place_prime() {  # → 0 已建快照 / 1 后端不可用（fail loud 由调用方）
+_term_app_place_begin() {  # → 0 已建快照 / 1 后端不可用（fail loud 由调用方）
   local rows snap sid folder base cand nn kind a b c d csp="" cid="${HC_TERMINAL_ID:-}" cg="" task=""
   local -A sid_folder=() base_folder=() tab_of=() stale_seen=()
   _TERM_PLACE_WS_BY_LABEL=(); _TERM_PLACE_WS_ROWS=(); _TERM_PLACE_PANE_ROWS=()
@@ -409,7 +432,7 @@ _term_app_place_prime() {  # → 0 已建快照 / 1 后端不可用（fail loud 
       stale_seen["$csp"]=1
     fi
   fi
-  snap="$(_term_app_snapshot)" || return 1
+  snap="$(_term_app_facts)" || return 1
   while IFS=$'\t' read -r label addr _tid cwd fgcwd _fg _st _seq _sess _av _hook sp _task; do
     [[ -n "$label" ]] || continue
     [[ -n "$sp" && "$sp" != "-" ]] || continue    # `-` = 快照里“该字段为空”的占位（非舰队终端/无标签）
@@ -463,6 +486,39 @@ _term_app_place_prime() {  # → 0 已建快照 / 1 后端不可用（fail loud 
   done <<< "$snap"
   _TERM_APP_GHOST_TABS=("${ghosts[@]:-}")
   _TERM_PLACE_CACHE=1
+  return 0
+}
+
+_term_app_place_end() {
+  _TERM_PLACE_CACHE=0
+  _TERM_PLACE_WS_BY_LABEL=(); _TERM_PLACE_WS_ROWS=(); _TERM_PLACE_PANE_ROWS=(); _TERM_PLACE_TASK_BY_PANE=()
+  _TERM_APP_GHOST_TABS=(); _TERM_APP_DOC_SPACES=(); _TERM_APP_STALE_SPACES=(); _TERM_APP_CALLER_SPACE=""
+  return 0
+}
+
+_term_app_place_rows() {  # 5 列：<space_ref>\t<label>\t<name>\t<handle>\t<cwd>
+  local line wsid label name handle c
+  local -A wslabel=()
+  for line in "${_TERM_PLACE_WS_ROWS[@]:-}"; do
+    [[ -n "$line" ]] || continue
+    IFS=$'\t' read -r wsid label <<< "$line"
+    [[ -n "$wsid" ]] && wslabel["$wsid"]="$label"
+  done
+  for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
+    [[ -n "$line" ]] || continue
+    _term_place_pane_fields "$line"
+    [[ -n "$_TP_PANE" ]] || continue
+    wsid="${_TP_WS:--}"; name="${_TP_LABEL:--}"; handle="$_TP_PANE"
+    label="${wslabel[$_TP_WS]:-}"; [[ -n "$label" ]] || label="-"
+    c="${_TP_CWD:--}"; [[ "$c" == "-" || -z "$c" ]] && c="${_TP_FGCWD:--}"
+    [[ -n "$c" ]] || c="-"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$wsid" "$label" "$name" "$handle" "$c"
+  done
+}
+
+_term_app_place_ws_for_label() {  # <label> → space_ref / 空；未 begin ⇒ rc1
+  (( _TERM_PLACE_CACHE )) || { printf 'term_place_ws_for_label：未调用 term_place_begin\n' >&2; return 1; }
+  printf '%s\n' "${_TERM_PLACE_WS_BY_LABEL[${1-}]:-}"
   return 0
 }
 
