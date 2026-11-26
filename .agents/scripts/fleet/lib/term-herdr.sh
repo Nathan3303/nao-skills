@@ -681,10 +681,10 @@ _term_herdr_place_begin() {  # → 0 已建快照 / 1 后端不可用
     _term_place_add_pane "$label" "$pid" "$wsid" "$tid" "$cwd" "$fgcwd"
   done < <(_term_json_objs <<< "$js")
   # v3 元数据孤儿清理（ensure 读快照入口）：当前会话 handle 集合之外的 sidecar 即时删（幂等，仅 warn）。
-  local row
-  for row in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
-    [[ -n "$row" ]] || continue
-    _term_place_pane_fields "$row"
+  local line
+  for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
+    [[ -n "$line" ]] || continue
+    _term_place_pane_fields "$line"
     [[ -n "$_TP_PANE" ]] && printf '%s\n' "$_TP_PANE"
   done | fleet_meta_gc
   _TERM_PLACE_CACHE=1
@@ -692,13 +692,21 @@ _term_herdr_place_begin() {  # → 0 已建快照 / 1 后端不可用
 }
 
 _term_herdr_place_end() { _TERM_PLACE_CACHE=0; _TERM_PLACE_WS_BY_LABEL=(); _TERM_PLACE_WS_ROWS=(); _TERM_PLACE_PANE_ROWS=(); _TERM_PLACE_TASK_BY_PANE=(); }
+_TPW_WS=""; _TPW_LABEL=""
+_TERM_TAB_SPLIT="$(printf '\t')"
+_term_place_ws_fields() {  # <ws-row "wsid<TAB>label"> → _TPW_WS / _TPW_LABEL
+  _TPW_WS=""; _TPW_LABEL=""
+  IFS="$_TERM_TAB_SPLIT" read -r _TPW_WS _TPW_LABEL <<< "${1-}"
+  return 0
+}
+
 _term_herdr_place_rows() {  # 5 列：<space_ref>\t<label>\t<name>\t<handle>\t<cwd>
   local line wsid label name handle c
   local -A wslabel=()
   for line in "${_TERM_PLACE_WS_ROWS[@]:-}"; do
     [[ -n "$line" ]] || continue
-    IFS=$'\t' read -r wsid label <<< "$line"
-    [[ -n "$wsid" ]] && wslabel["$wsid"]="$label"
+    _term_place_ws_fields "$line"
+    [[ -n "$_TPW_WS" ]] && wslabel["$_TPW_WS"]="$_TPW_LABEL"
   done
   for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
     [[ -n "$line" ]] || continue

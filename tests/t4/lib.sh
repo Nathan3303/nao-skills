@@ -851,6 +851,48 @@ t4_scan_place_pane_rows() { # <dir|file>
   done < <(_t4_fleet_files "$target")
 }
 
+# Step 2（T572）业务层静态闸：业务模块禁出现后端事实词（代码面；注释/字符串先剔除）。
+#   扫描范围 = fleet/lib/{ensure,status,close,cleanup,check,manifest,session}.sh。
+#   命中输出 `<file>:<line>:<token>:<原文>`；空 = 合规。
+t4_scan_business_backend_words() { # <scripts-dir|file...>
+  python3 - "$@" <<'PY'
+import os,re,sys
+mods = {"ensure","status","close","cleanup","check","manifest","session"}
+tok_re = re.compile(r"(_TERM_PLACE_|_term_herdr_|_term_app_|pane_id|workspace_id|agent_status|argv_name|\bhook\b)")
+def strip(s):
+    out=[]; q=None; i=0; n=len(s)
+    while i<n:
+        c=s[i]
+        if q:
+            if c==q: q=None
+            elif q=='"' and c=='\\': i+=2; out.append('  '); continue
+            out.append('\n' if c=='\n' else ' ')
+        elif c in ("'",'"'):
+            q=c; out.append(' ')
+        elif c=='#' and (i==0 or s[i-1] in " \t;\n"):
+            j=s.find('\n',i)
+            if j<0: out.append(' '*(n-i)); i=n; continue
+            out.append(' '*(j-i)); i=j; continue
+        else:
+            out.append(c)
+        i+=1
+    return ''.join(out)
+files=[]
+for a in sys.argv[1:]:
+    if os.path.isdir(a):
+        for m in sorted(mods):
+            p=os.path.join(a,"fleet","lib",m+".sh")
+            if os.path.exists(p): files.append(p)
+    else: files.append(a)
+for f in files:
+    raw=open(f,encoding="utf-8",errors="replace").read()
+    clean=strip(raw)
+    for ln,(r,c) in enumerate(zip(raw.splitlines(),clean.splitlines()),1):
+        for m in tok_re.finditer(c):
+            print(f"{f}:{ln}:{m.group(1)}:{r}")
+PY
+}
+
 # 三期 P2（默认翻 herdr）静态面：**用例不得依赖生产默认值**。
 #   默认已 = herdr ⇒ 靠「未设」搭车的用例会在不同机器/不同默认下走不同后端（不可复现）。基线由
 #   `run.sh` 按 `NAO_TEST_TERMINAL` **显式导出** `NAO_TERMINAL`；允许 unset/清空的**唯一**位置 =

@@ -152,9 +152,9 @@ t4_assert_eq "1" "$(grep -cF '_term_app_poll_place "$sp" "$tb" "$addr"' "$FLEET_
   "⓪ AC2：spawn 侧调用轮询（且只此一处）"
 t4_assert_eq "1" "$(grep -cE '^_term_app_doc_has_space\(\) \{' "$FLEET_BUNDLE" || true)" \
   "⓪ AC1：doc 校验有唯一实现点"
-t4_assert_ge "2" "$(grep -cF '_term_app_check_premise || true' "$FLEET_BUNDLE" || true)" \
+t4_assert_ge "2" "$(grep -cF 'term_check_premise || true' "$FLEET_BUNDLE" || true)" \
   "⓪ AC4：check 侧 app 前提用 || true（app 后端臂 + app 终端臂各一处，warn 不计入 rc）"
-t4_assert_eq "0" "$(grep -cF '_term_app_check_premise || rc=1' "$FLEET_BUNDLE" || true)" \
+t4_assert_eq "0" "$(grep -cF 'term_check_premise || rc=1' "$FLEET_BUNDLE" || true)" \
   "⓪ AC4：旧的 || rc=1 接线已不存在（否则前提 warn 会改 rc）"
 
 # ⓪ AC2 补（2026-11-25 实机事故）：空 tab name 会让 bash `read` 压缩连续 TAB ⇒ terminals 左移

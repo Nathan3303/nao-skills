@@ -501,8 +501,8 @@ _term_app_place_rows() {  # 5 列：<space_ref>\t<label>\t<name>\t<handle>\t<cwd
   local -A wslabel=()
   for line in "${_TERM_PLACE_WS_ROWS[@]:-}"; do
     [[ -n "$line" ]] || continue
-    IFS=$'\t' read -r wsid label <<< "$line"
-    [[ -n "$wsid" ]] && wslabel["$wsid"]="$label"
+    _term_place_ws_fields "$line"
+    [[ -n "$_TPW_WS" ]] && wslabel["$_TPW_WS"]="$_TPW_LABEL"
   done
   for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
     [[ -n "$line" ]] || continue

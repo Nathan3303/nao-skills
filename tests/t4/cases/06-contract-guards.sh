@@ -715,17 +715,17 @@ t4_assert_eq "5" "$(for _f in t4_scan_term_bare_calls t4_verify_term_ledger t4_s
   "B1: 5 个 lint helper 均已定义（缺任一 ⇒ 其负控断言会因 127/空输出假绿）"
 t4_assert_file "$LEDGER_B1" "B1: 门面台账存在（tests/t4/fixtures/term-legacy-allowlist.txt）"
 
-# ---- T567-A：函数锚三向断言（ADR D3「174 函数锚怎么迁」；T567-B 起 176 = 174 + status --json 两函数；v3 元数据批次 185 = 176 + 9）----
+# ---- T567-A：函数锚三向断言（ADR D3「174 函数锚怎么迁」；T567-B 起 176 = 174 + status --json 两函数；Step 2 门面中性化 200 = 185 + 15）----
 #   判据：① 各模块顶层函数并集 == 清单（无漏登记 / 无重名 / 无孤儿）② 归属模块一致
-#         ③ 总数守恒（清单行数 == 头 total == 实际并集 = 185）
+#         ③ 总数守恒（清单行数 == 头 total == 实际并集 = 200）
 #   锚在**清单**（functions.txt 一处 diff）：新增函数必须同行加一行 + 改头 total，否则本组必红。
 FN_MANIFEST="$T4_ROOT/.agents/scripts/fleet/functions.txt"
 t4_assert_file "$FN_MANIFEST" "T567-A: functions.txt 存在（函数锚的唯一清单）"
 t4_assert_eq "" "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MANIFEST")" \
-  "T567-A: 185 三向守恒（无漏登记/无孤儿/归属一致/总数==total）"
-t4_assert_eq "185" "$(grep -vcE '^[[:space:]]*(#|$)' "$FN_MANIFEST")" "T567-A: 清单行数 == 185（174 + status --json 2 + v3 元数据 9）"
-t4_assert_eq "185" "$(t4_fleet_count '^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{' "$FLEET_B1")" \
-  "T567-A: 各模块顶层函数并集 == 185（数量守恒）"
+  "T567-A: 200 三向守恒（无漏登记/无孤儿/归属一致/总数==total）"
+t4_assert_eq "200" "$(grep -vcE '^[[:space:]]*(#|$)' "$FN_MANIFEST")" "T567-A: 清单行数 == 200（185 + Step 2 中性化 15）"
+t4_assert_eq "200" "$(t4_fleet_count '^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{' "$FLEET_B1")" \
+  "T567-A: 各模块顶层函数并集 == 200（数量守恒）"
 # 失败演练（判据必须承重，不能空转）：三种变异各自必红
 FN_MUT="$T4_CACHE_DIR/fn-manifest-$$.mut"
 grep -v $'\tcmd_check$' "$FN_MANIFEST" > "$FN_MUT"
@@ -734,10 +734,53 @@ t4_assert_contains "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" | grep 
 sed 's#^fleet/lib/check.sh\tcmd_check$#fleet/lib/core.sh\tcmd_check#' "$FN_MANIFEST" > "$FN_MUT"
 t4_assert_contains "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" || true)" "归属不符" \
   "T567-A 负控②：模块归属写错 ⇒ 必红"
-sed 's/^# total: 185$/# total: 184/' "$FN_MANIFEST" > "$FN_MUT"
+sed 's/^# total: 200$/# total: 199/' "$FN_MANIFEST" > "$FN_MUT"
 out="$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" || true)"
 t4_assert_contains "$out" "总数不符" "T567-A 负控③：头 total 与并集不符 ⇒ 必红"
-t4_assert_contains "$out" "清单行数 185 ≠ 头 total 184" "T567-A 负控③b：只改 total 不改行数 ⇒ 同样必红"
+t4_assert_contains "$out" "清单行数 200 ≠ 头 total 199" "T567-A 负控③b：只改 total 不改行数 ⇒ 同样必红"
+
+# ---- T572：业务层后端词静态闸（双向负控 + 判据存在 + 演练）----
+t4_assert_eq "1" "$(type t4_scan_business_backend_words >/dev/null 2>&1 && echo 1 || echo 0)" \
+  "T572 静态闸：t4_scan_business_backend_words 存在（删判据 ⇒ 本组必红）"
+t4_assert_eq "" "$(t4_scan_business_backend_words "$FLEET_B1")" \
+  "T572 静态闸：业务模块 0 后端事实词（_TERM_PLACE_/_term_*_/pane_id/workspace_id/agent_status/argv_name/hook）"
+GATE_BODY="$(sed -n '/^t4_scan_business_backend_words()/,/^}/p' "$T4_ROOT/tests/t4/lib.sh")"
+for _tok in _TERM_PLACE_ _term_herdr_ _term_app_ pane_id workspace_id agent_status argv_name hook; do
+  t4_assert_contains "$GATE_BODY" "$_tok" "T572 静态闸：判据含禁止词 $_tok（删词 ⇒ 本组必红）"
+done
+BIZ_NEG="$T4_CACHE_DIR/t572-biz-neg-$$"; rm -rf "$BIZ_NEG"; mkdir -p "$BIZ_NEG"
+cp "$T4_ROOT/.agents/scripts/fleet/lib/ensure.sh" "$BIZ_NEG/ensure.sh"
+printf '\n: $pane_id\n' >> "$BIZ_NEG/ensure.sh"
+t4_assert_contains "$(t4_scan_business_backend_words "$BIZ_NEG/ensure.sh")" "pane_id" \
+  "T572 静态闸 负控：业务模块注入 pane_id ⇒ 必红并点名"
+# 删判据演练：从副本里删掉 pane_id 词 ⇒ 同一违规输入不再被该词抓到
+T572_LIB_NEG="$T4_CACHE_DIR/t572-lib-neg-$$.sh"
+sed 's/pane_id|//' "$T4_ROOT/tests/t4/lib.sh" > "$T572_LIB_NEG"
+_out="$(bash -c 'source "$1"; t4_scan_business_backend_words "$2"' _ "$T572_LIB_NEG" "$BIZ_NEG/ensure.sh" 2>/dev/null || true)"
+t4_assert_eq "0" "$(printf '%s\n' "$_out" | grep -cF 'pane_id' || true)" \
+  "T572 演练③：删判据里的 pane_id 词 ⇒ 同一违规不再命中（判据承重，不是恒绿）"
+sed -i '/: \$pane_id/d' "$BIZ_NEG/ensure.sh"
+t4_assert_eq "" "$(t4_scan_business_backend_words "$BIZ_NEG/ensure.sh")" \
+  "T572 静态闸 正控：移除注入后 0 命中（判据非恒真）"
+rm -rf "$BIZ_NEG" "$T572_LIB_NEG"
+# 演练①：把 term_snapshot 的 5 列投影退回后端事实列 ⇒ 判据必红
+T572_TERM_NEG="$T4_CACHE_DIR/t572-term-neg-$$.sh"
+sed 's/_term_backend_project5/_term_backend_facts/g' \
+  "$(t4_fleet_file_for "$FLEET_B1" term_snapshot)" > "$T572_TERM_NEG"
+t4_assert_eq "0" "$(sed -n '/^term_snapshot()/,/^}/p' "$T572_TERM_NEG" | grep -cF '_term_backend_project5' || true)" \
+  "T572 演练①：5 列退回 13 列（term_snapshot 内投影调用被替换）⇒ 0 命中"
+t4_assert_eq "1" "$(sed -n '/^term_snapshot()/,/^}/p' "$(t4_fleet_file_for "$FLEET_B1" term_snapshot)" | grep -cF '_term_backend_project5' || true)" \
+  "T572 演练①：真件 term_snapshot 仍走 _term_backend_project5（5 列契约）"
+# 演练②：恢复 check.sh 直连后端实现 ⇒ 业务静态闸必红
+T572_CHK_NEG="$T4_CACHE_DIR/t572-chk-neg-$$.sh"
+cp "$(t4_fleet_file_for "$FLEET_B1" cmd_check)" "$T572_CHK_NEG"
+printf '\n_term_herdr_exec api schema >/dev/null 2>&1 || true\n' >> "$T572_CHK_NEG"
+t4_assert_contains "$(t4_scan_business_backend_words "$T572_CHK_NEG")" "_term_herdr_" \
+  "T572 演练②：恢复 check.sh:585 直连 _term_herdr_exec ⇒ 静态闸必红"
+t4_assert_eq "0" "$(grep -cF '_term_herdr_exec' "$(t4_fleet_file_for "$FLEET_B1" cmd_check)" || true)" \
+  "T572 演练②：真件 check.sh 0 处直连 _term_herdr_exec"
+t4_assert_ge "1" "$(grep -cF 'term_api_schema' "$(t4_fleet_file_for "$FLEET_B1" cmd_check)" || true)" \
+  "T572：check.sh 的 schema 走门面 term_api_schema"
 
 # ---- ① 默认值唯一（#96 三期 P2：默认已翻 herdr；B1 立的 lint 就是为这一步准备的）----
 t4_assert_eq "1" "$(t4_fleet_count '^NAO_TERMINAL=' "$FLEET_B1")" \
@@ -810,7 +853,7 @@ printf 'no_such_function_b1\tB2\ttypo\n' >> "$NEG_LED"
 t4_assert_contains "$(t4_verify_term_ledger "$FLEET_B1" "$NEG_LED")" "函数不存在（typo）" \
   "B1② 负控C2: 台账函数名 typo ⇒ 必红"
 cp "$LEDGER_B1" "$NEG_LED"
-printf '_term_herdr_snapshot\tB2\t已在 herdr 标记区内（T555：旧 tmux 区间已删，改用现存标记区）\n' >> "$NEG_LED"
+printf '_term_herdr_facts\tB2\t已在 herdr 标记区内（T555：旧 tmux 区间已删，改用现存标记区）\n' >> "$NEG_LED"
 out="$(t4_verify_term_ledger "$FLEET_B1" "$NEG_LED")"
 t4_assert_contains "$out" "台账行数 1 超过 baseline 0" "B1②/B4 负控C3: 条目数超 baseline ⇒ 必红（B4: 0 条上限；自造第 1 条即红）"
 t4_assert_contains "$out" "台账多余（该函数已在标记区内" "B1② 负控C4: 标记区内函数混进台账 ⇒ 必红"
