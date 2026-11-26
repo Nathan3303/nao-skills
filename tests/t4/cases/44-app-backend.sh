@@ -375,8 +375,23 @@ else
     t4_assert_eq "0" "$rm_after_rc" "⑪ 真 hc：kill 后 rm 成功"
     t4_assert_not_contains "$(racc ls --all --json || true)" "\"address\":\"$raddr\"" "⑪ 真 hc：往返后从 ls --all 消失"
   fi
-  # 收掉私有 core（只 stop 本场 session；effect 判据 = 进程/socket 消失，不阻塞用例结论）
-  XDG_RUNTIME_DIR="$RRT" XDG_STATE_HOME="$RRT/state" HC_SESSION="$SESS" "$REAL_HC" server kill >/dev/null 2>&1 || true
+  # 该运行时根下的 herdr-core 进程数（/proc 扫描：comm + environ；零外部依赖，不借 ss/lsof）
+  rrt_procs() {
+    local d n=0
+    for d in /proc/[0-9]*; do
+      [ -r "$d/comm" ] || continue
+      [ "$(cat "$d/comm" 2>/dev/null)" = "herdr-core" ] || continue
+      if tr '\0' '\n' < "$d/environ" 2>/dev/null | grep -qxF "XDG_RUNTIME_DIR=$RRT"; then n=$((n+1)); fi
+    done
+    printf '%s' "$n"
+  }
+  # 收掉私有 core（本场 session）。判据 = **effect（进程消失），不信 rc**：
+  #   `hc server` 只有 start/stop/status/restart；写成 `kill` ⇒ rc=2 usage 错误，被 `|| true` 吞掉
+  #   ⇒ 旧写法每跑泄漏 2 个真 herdr-core（serve + holder），D1 见 docs/reports/572-defects.md。
+  XDG_RUNTIME_DIR="$RRT" XDG_STATE_HOME="$RRT/state" HC_SESSION="$SESS" "$REAL_HC" server stop >/dev/null 2>&1 || true
+  rrt_left="$(rrt_procs)"
+  for _i in $(seq 1 50); do [ "$rrt_left" = "0" ] && break; sleep 0.1; rrt_left="$(rrt_procs)"; done
+  t4_assert_eq "0" "$rrt_left" "⑪ 真 hc 收尾 effect：私有运行时根下 0 个 herdr-core 进程（D1 回归）"
   _t4_rm_cache_dir "$RRT"   # 删除走 lib.sh 单点（cases/14 ⑳ 断言删除语句全仓唯一）
 fi
 

@@ -1,6 +1,6 @@
 # T571 + T572 合并后全量验证（批次第一轮）
 
-- 状态：**放行（产品面）· 附 1 条测试夹具缺陷 D1（P2，不阻断本次发布）**
+- 状态：**放行（产品面）· D1 已在本批修复并 verify（2 → 0）**
 - 日期：2026-11-26 · Owner：qa · 执行方式：**唯一测试执行者**（用户 2026-11-26 拍板，角色卡 v18）
 - 验证对象（均已合并进 main，HEAD = `a59d1c3`）：
   - Step 1 `db43278` 命名契约 v3（会话名只含角色 + 身份还原 + 元数据面）
@@ -12,10 +12,10 @@
 
 ## TL;DR（四段结论）
 
-1. **跑了什么**：`bash .agents/scripts/nao-fleet.sh check` / `tsc` / `npm test`（全量 47 例）/ `npm run test:t4:full`（发布前置）/ 18 例逐任务目标用例单跑 / 孤儿扫描与清理。
-2. **实测数字**：`check` rc=0（roles=7 · files=67）· `npm test` rc=0（47 例 PASS · `[PASS]`=2843 · FAIL=0 · SKIP=0 · DEGRADE=0 · NOTE=18 全白名单）· `test:t4:full` rc=0（同数字，`NOTE白名单=18`）· 18 例目标用例全 PASS（合计 `[PASS]`=1466）· 起跑前孤儿 93 server + 13 cache 目录已清 0，成功跑次新增 2（D1）也已清 0。
+1. **跑了什么**：`bash .agents/scripts/nao-fleet.sh check` / `tsc` / `npm test`（全量 47 例）/ `npm run test:t4:full`（发布前置）/ 18 例逐任务目标用例单跑 / D1 修复的**先红后绿**两跑（`--case 44`）×2 / 修复后全量 `npm test` 复跑 / 孤儿扫描与清理。
+2. **实测数字**：`check` rc=0（roles=7 · files=67）· `npm test` rc=0（47 例 PASS · `[PASS]`=**2844**（修复后；修复前 2843，+1 = D1 新断言）· FAIL=0 · SKIP=0 · DEGRADE=0 · NOTE=18 全白名单）· `test:t4:full` rc=0（修复前同轴 2843，`NOTE白名单=18`）· 18 例目标用例全 PASS（case44 修复后 100）· D1 修复前后 `herdr-core` 进程数 **2 → 0**；起跑前孤儿 93 server + 13 cache 目录已清 0，收尾 0。
 3. **未覆盖**：桌面 app 视觉/UI 呈现（本批无 UI 呈现变更，不适用）；`npm publish` 落地核验（发布动作，不在本批）；tmux 面（ADR 已退役，结构性不可达）。**无因能力缺失而跳过的用例**（SKIP=0/DEGRADE=0）。
-4. **放行／不放行**：**放行**（v0.33.0 发布门禁满足）；**已知残留 D1** = `cases/44` 每跑一次泄漏 2 个真 `herdr-core` 进程（测试夹具缺陷，非产品行为），已登记 P2，建议本批或下批修（1 行 + 1 条 effect 断言）。
+4. **放行／不放行**：**放行**（v0.33.0 发布门禁满足）；D1（`cases/44` 每跑泄漏 2 个真 `herdr-core`）**已在本批修复**：`server kill`→`server stop` + effect 断言，先红（期望=0 实际=2）后绿（0），全量复跑 0 泄漏。
 
 ## 一、环境与命令（逐字）
 
@@ -46,10 +46,10 @@ find "$NAO_SKILLS/.agents" -type f | wc -l
 ## 二、实测数字（口径 + 输出）
 
 - `check`：rc=0 · 输出 `check: OK · roles=7 · files=67` · `find .agents -type f | wc -l` = **67**（同口径一致）。
-- `npm test`：rc=0 · **47 例**（`--list` 47）· 逐例 `PASS=47 / FAIL=0` · `[PASS]` 行 **2843** · `FAIL` 行 **0** · `SKIP=0 · DEGRADE=0 · NOTE=18（白名单命中 18）`。
+- `npm test`：rc=0 · **47 例**（`--list` 47）· 逐例 `PASS=47 / FAIL=0` · `[PASS]` 行 **2843**（修复前基线）/ **2844**（D1 修复后复跑，+1 = 新断言）· `FAIL` 行 **0** · `SKIP=0 · DEGRADE=0 · NOTE=18（白名单命中 18）`。
 - `npm run test:t4:full`（发布前置，`T4_ALLOW_MISSING=0 T4_REQUIRE_FULL=1`）：rc=0 · 47 例全 PASS · `[PASS]`=**2843** · FAIL=0 · `RESULT: PASS（SKIP=0 · DEGRADE=0 · NOTE=18 · NOTE白名单=18）`。
 - 两次全量 `[PASS]` 计数**逐字相同（2843）** = 确定性（同一台机、同一 HEAD）。
-- 目标用例单跑（rc 全 0；`[PASS]` 为单例断言数）：06=360 · 09=36 · 20=109 · 22=62 · 23=104 · 24=78 · 28=101 · 29=18 · 30=21 · 31=18 · 32=79 · 33=68 · 37=32 · 39=78 · 40=53 · 43=63 · 44=99 · 45=87 → 合计 **1466**。
+- 目标用例单跑（rc 全 0；`[PASS]` 为单例断言数）：06=360 · 09=36 · 20=109 · 22=62 · 23=104 · 24=78 · 28=101 · 29=18 · 30=21 · 31=18 · 32=79 · 33=68 · 37=32 · 39=78 · 40=53 · 43=63 · 44=**100**（D1 修复后；修复前 99）· 45=87。
 - 覆盖强度（对照 `571-coverage-map.md`）：`cases/28` 静态 `t4_assert` = **95**、C1 `chk` = **28**，与映射文档逐字一致；运行时 `[PASS]`=101。批次前后全仓静态断言 **2618 → 2401**（Δ −217 = `cases/28` −230 + `cases/06` +12 + `cases/33` +1），减少部分即映射文档归口到 `cases/29/30/31/32/33/37/38/40/43/44/45` 的同契约覆盖。
 - 承重性抽查（`cases/28`，非仅计数）：herdr golden `md5=4b7f47b28a141521ec262b2d727348f8` == 记录值（`P2①` 绿）；未设 `NAO_TERMINAL` 与显式 `=herdr` **同源**（默认值唯一）；≠ 冻结的旧 tmux golden `144f3447…`；「默认改回 tmux」变异 ⇒ 必红、复原复绿（先红后绿）；C3①–⑤ 正控 + 14 条负控 + M1–M4 四向变异均在跑次内执行。
 - Step 2 关键面（`cases/06` 360 条断言内）：函数数 **200** 三向守恒（清单/顶层并集/总数）· T572 静态闸 9 类禁止词 + 注入负控 + 删词演练（判据承重）· 5 列退回 13 列演练 · `check.sh` 0 处直连 `_term_herdr_exec`、schema 走 `term_api_schema`。
@@ -68,16 +68,25 @@ find "$NAO_SKILLS/.agents" -type f | wc -l
 1. **桌面 app 的视觉/UI 呈现**：本批无 UI 呈现变更（机制/终端 CLI 与门面契约），不适用；`cases/44/45` 覆盖 app 后端的**行为**（放置/读回/回滚/就绪/回收）与真 `hc` 私有 core 往返，不含视觉验收。
 2. **`npm publish` 与 registry 落地核验**：属发布动作（用户执行），不在测试批次；发布时按 AGENTS.md「npm 发布成功判据」直连 registry 核验 integrity。
 3. **tmux 后端面**：ADR `2026-11-22-herdr-only` 已退役，结构性不可达（`NAO_TERMINAL=tmux` ⇒ rc=2 已有 fail-loud 断言）。
-4. **`cases/44` ⑪ 真 hc 收尾的 effect 断言**：当前只有「尽力 stop」没有 effect 判据 ⇒ D1 逃逸。属**已知缺陷**（已登记），不作为本批放行依据。
+4. ~~`cases/44` ⑪ 真 hc 收尾的 effect 断言~~：**已在本批补齐**（见 §五 D1），不在未覆盖清单。
 
 除上述外：**无**因能力缺失而跳过的用例（SKIP=0 / DEGRADE=0，`test:t4:full` 亦为 0）。
 
-## 五、缺陷（详见 `docs/reports/572-defects.md`）
+## 五、缺陷 D1（本批已修 · 台账 `docs/reports/572-defects.md`）
 
-- **D1（P2 · 一般 · New）**：`tests/t4/cases/44-app-backend.sh:379` 用 `hc server kill` 收尾真 hc 私有 core，但 `hc 0.1.22` 的 `server` 子命令只有 `start/stop/status/restart` ⇒ `kill` 返回 `{\"error\":{\"kind\":\"usage\",\"message\":\"unrecognized subcommand 'kill'\"}}` rc=2，被 `|| true` 吞掉；**每跑一次 `cases/44` 泄漏 2 个 `herdr-core` 进程**（serve + holder），2/2 复现。同探针内 `hc server stop` ⇒ `{\"stopped\":true}` rc=0、监听归 0。建议修法：`kill`→`stop`，并补一条「stop 后该 `XDG_RUNTIME_DIR` 下监听 socket 数 == 0」的 effect 断言（判 effect 不看 rc）。
+- **D1（P2 · 一般 · Fixed，verify 通过）**：`tests/t4/cases/44-app-backend.sh` ⑪ 段用 `hc server kill` 收尾真 hc 私有 core，但 `hc 0.1.22` 的 `server` 子命令只有 `start/stop/status/restart` ⇒ `kill` 返回 usage 错误（`unrecognized subcommand 'kill'`）rc=2，被 `|| true` 吞掉；**每跑一次 `cases/44` 泄漏 2 个 `herdr-core` 进程**（serve + holder），2/2 复现。
+- **修复（test-only，1 词 + 1 条断言）**：
+  - `server kill` → `server stop`（同探针内 `hc server stop` rc=0、监听归 0）；
+  - 新增 effect 断言「该 `XDG_RUNTIME_DIR` 下 `herdr-core` 进程数 = 0」：`/proc` 扫描 `comm + environ`（零外部依赖，不借 `ss`/`lsof`），`50×100ms` 有界轮询，**判 effect 不看 rc**。
+- **修前必红（先红）**：旧 `kill` + 新断言 ⇒ `bash tests/t4/run.sh --case 44` **rc=1**，`[FAIL] ⑪ 真 hc 收尾 effect：私有运行时根下 0 个 herdr-core 进程（D1 回归）（期望=0 实际=2）`；跑后监听 **2**。
+- **修后复绿**：同命令 **rc=0** · PASS=**100** / FAIL=0，新断言 `[PASS]`；跑后监听 **0** / cache 目录 **0**。
+- **全量回归**：`npm test` rc=0 · 47/47 PASS · `[PASS]`=**2844** · FAIL=0 · `SKIP=0 · DEGRADE=0 · NOTE=18`；跑后孤儿监听 **0** / cache 目录 **0**。
+- **修复前后对比**：单跑 `--case 44` 的 `herdr-core` 残留 **2 → 0**；全量 `npm test` 后同样 0（修复前每轮 +2）。
 
 ## 六、放行结论
 
 - **放行**：`check` + `npm test` + `test:t4:full` 三门禁全 rc=0，SKIP=0 / DEGRADE=0 / NOTE 全白名单；Step 1 / 覆盖补齐 / Step 2 的目标用例全 PASS；`cases/28` 断言强度与 571 映射一致。
-- **已知残留**：D1（测试夹具泄漏，P2）。不阻断 v0.33.0 发布（产品行为无关），但会随每次跑测试累积进程（本次实测历史累积 93 个），建议在同批或下一批修掉。
-- **不代替合并权**：本报告只给质量结论；PR 由 RD 在 PM 验收后合并（本次不合并）。
+- **D1 已修（本批）**：修复前后 `herdr-core` 进程数 **2 → 0**（单跑与全量复跑均为 0）。
+- **残留**：无（本次跑次收尾监听 0 / cache 目录 0；用户 `~/.config/herdr` 会话未触碰）。
+- 补充口径：`test:t4:full` 本轮在**修复前**执行（rc=0）；修复后按 PM 指定跑了一次 `npm test` 全量（同轴 SKIP=0/DEGRADE=0、NOTE 全白名单）。若发布门禁要求在修复后 HEAD 复跑 `test:t4:full`，可再跑一轮。
+- **不代替合并权**：本报告只给质量结论；合并由 PM/RD 执行（本次不合并）。

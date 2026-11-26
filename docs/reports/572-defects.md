@@ -5,7 +5,8 @@
 
 ## D1 · `cases/44` 每跑一次泄漏 2 个真 `herdr-core` 进程（收尾用了不存在的子命令）
 
-- **状态**：New（未修）
+- **状态**：**Fixed（本批）· verify 通过**（待 PM 验收后 Closed）
+- **修复提交**：`nao/572-qa-verify` 分支（test-only：`tests/t4/cases/44-app-backend.sh`，1 词 + 1 条 effect 断言）
 - **严重度**：一般（P2 —— 不阻断发布，但每次跑测试都累积进程/资源）
 - **发现于**：T571+T572 合并后全量验证（HEAD `a59d1c3`），`npm run test:t4:full` 收尾孤儿扫描
 - **环境**：`hc 0.1.22` · `herdr 0.9.5` · `node v24.22.3` · Linux（test cache 根 `/tmp/nao-t4.*`）
@@ -53,23 +54,33 @@ env XDG_RUNTIME_DIR="$RRT" XDG_STATE_HOME="$RRT/state" HC_SESSION=qa-probe hc se
 
 `hc` CLI 的服务端子命令是 `server stop`，用例写成了 `server kill`（rc=2 usage 错误），又被 `|| true` 静默吞掉 ⇒ 私有 core 未被停。
 
-### 建议修法（测试侧，1 行 + 1 条断言）
+### 实际修法（已合入本批 · test-only）
 
 ```diff
--  XDG_RUNTIME_DIR="$RRT" XDG_STATE_HOME="$RRT/state" HC_SESSION="$SESS" "$REAL_HC" server kill >/dev/null 2>&1 || true
-+  XDG_RUNTIME_DIR="$RRT" XDG_STATE_HOME="$RRT/state" HC_SESSION="$SESS" "$REAL_HC" server stop >/dev/null 2>&1 || true
-+  # effect 判据（不信 rc）：该运行时根下不得再残留 herdr-core 监听 socket
-+  t4_assert_eq "0" "$(ss -xlpH 2>/dev/null | grep -c "$RRT" || true)" "⑪ 真 hc 收尾：私有运行时根下 0 个监听 socket"
+-  XDG_RUNTIME_DIR="$RRT" … "$REAL_HC" server kill >/dev/null 2>&1 || true
++  XDG_RUNTIME_DIR="$RRT" … "$REAL_HC" server stop >/dev/null 2>&1 || true
++  # effect 判据（不信 rc）：该运行时根下 herdr-core 进程数 = 0
++  rrt_left="$(rrt_procs)"                       # /proc 扫描 comm + environ，零外部依赖
++  for _i in $(seq 1 50); do [ "$rrt_left" = "0" ] && break; sleep 0.1; rrt_left="$(rrt_procs)"; done
++  t4_assert_eq "0" "$rrt_left" "⑪ 真 hc 收尾 effect：私有运行时根下 0 个 herdr-core 进程（D1 回归）"
 ```
 
-注意：`ss` 属可选能力，若要保持本用例零额外依赖，可改为「按 `/proc/<pid>/fd` 或 `pgrep -f` 反查 `$RRT`」的等价判据；无论哪种，**判据必须是 effect，不能是 rc**。
+判据性质：**effect**（进程消失）而非 rc；`_t4_rm_cache_dir "$RRT"` 仍走 lib.sh 单点（cases/14 ⑳ 的唯一性断言不受影响）。
+
+### 先红后绿（verify 证据）
+
+- **修前必红**（旧 `server kill` + 新断言，同 HEAD）：`bash tests/t4/run.sh --case 44` ⇒ **rc=1**，
+  `[FAIL] ⑪ 真 hc 收尾 effect：私有运行时根下 0 个 herdr-core 进程（D1 回归）（期望=0 实际=2）`；跑后 `ss -xlpH | grep -c nao-t4` = **2**。
+- **修后复绿**：同命令 ⇒ **rc=0** · PASS=**100**（修复前 99）/ FAIL=0，新断言 `[PASS]`；跑后监听 **0** / cache 目录 **0**。
+- **全量回归**：`npm test` rc=0 · 47/47 PASS · `[PASS]`=**2844**（修复前 2843）· FAIL=0 · `SKIP=0 · DEGRADE=0 · NOTE=18`；跑后孤儿监听 **0** / cache 目录 **0**。
+- **进程数对比**：单跑 `--case 44` 修复前 **2** → 修复后 **0**；全量 `npm test` 修复前每轮 +2 → 修复后 **0**。
 
 ### 已执行清理（本验证轮的收尾，已复核）
 
 - 先按监听 socket 反查 PID，**只杀** `comm=herdr-core` 且 socket 在 `/tmp/nao-t4.*` 的进程（用户 `~/.config/herdr` 的 `herdr` 会话未触碰：前后均在线）。
 - 清理前后：监听 `nao-t4` 93 → **0**；`/tmp/nao-t4.*` 目录 13 → **0**；`git status --porcelain` 仅 `?? .pi/`（与本批无关）。
 
-### 修复排期建议
+### 修复记录
 
-- 不阻断 v0.33.0（产品面全绿）。
-- 建议随下一批（或本批 PM 允许时）修：改 1 词 + 补 1 条 effect 断言，修复后重跑 `--case 44` 并复核「跑后监听数 0」，再进 PR 评论。
+- 2026-11-26：PM 拍板**本批修**（不留下一批）。QA 出 test-only 改动并入 PR #204（`nao/572-qa-verify`），先红后绿 + 全量复跑均通过。
+- 关闭条件：PR 合并后无回归即 Closed（不 Verify 不关闭，已 verify）。
