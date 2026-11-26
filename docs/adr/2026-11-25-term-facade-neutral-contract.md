@@ -1,6 +1,6 @@
 # ADR：fleet 门面契约中性化 + 命名契约 v3
 
-- 状态：已接受 —— **决策一（命名契约 v3）已落地**（T571）· 决策二（门面契约中性化）待落地（Step 2，以 T569 合并后的 main 为基）
+- 状态：已接受 —— **决策一（命名契约 v3）已落地**（T571）· **决策二（门面契约中性化）已落地**（T572）
 - 更新：2026-11-25
 - Owner：arch-designer
 - 指针：Issue [#197](https://github.com/Nathan3303/nao-skills/issues/197) · 用户 2026-11-25 拍板（先 ADR，不拆进程）· 关联 ADR `2026-11-24-herdr-app-backend.md` · 缺陷证据 `docs/reports/568-impl-rd-infra.md`
