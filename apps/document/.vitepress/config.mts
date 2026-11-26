@@ -25,6 +25,7 @@ const sidebar = [
       { text: '装机制', link: '/quickstart/install' },
       { text: '拉队开工', link: '/quickstart/fleet' },
       { text: '排错', link: '/quickstart/troubleshoot' },
+      { text: '翻会话记录', link: '/quickstart/logs' },
     ],
   },
   {
@@ -33,6 +34,10 @@ const sidebar = [
       { text: '一个需求的旅程', link: '/how/task-journey' },
       { text: '验收与回执', link: '/how/acceptance' },
     ],
+  },
+  {
+    text: '没人的时候',
+    items: [{ text: '让队列自己往前走', link: '/orchestrator' }],
   },
   {
     text: '七个角色',
