@@ -67,9 +67,9 @@ cmd_close() {
   local -A close_pw=()
   intercom_list_json >/dev/null 2>&1 || true   # 预热名册缓存
   fleet_roles_init --cards                     # BR8：parse 的角色事实表（常驻 + 卡 role）
-  fleet_task_map_init                          # v3：task 元数据映射（快照第 13 列）
-  if ! _term_app_backend; then
-    term_snapshot 2>/dev/null | awk -F'\t' 'NF{print $2}' | fleet_meta_gc
+  fleet_task_map_init                          # v3：task 元数据映射（5 列快照第 5 列）
+  if [[ "$(term_label)" != "app" ]]; then
+    term_snapshot 2>/dev/null | awk -F'\t' 'NF{print $4}' | fleet_meta_gc
   fi
   # D7：manifest `slug:` 弃用告警在 close 读入口也要出现（即使本命令不需要 manifest 做仓回退）
   local _mnr_w="" _mnj_w=""
@@ -238,10 +238,9 @@ cmd_close() {
       # 锚内同名多 pane / 多名册条目 ⇒ 不猜（与 d2 同口径；并列拒绝在句柄层之前给出可读文案）
       local _nro=0 _npa=0 _cc _cl _sr_p _sr_c _sr_f _pids=""
       local -a _ncw=()
-      while IFS=$'\t' read -r _srcn _sr_p _ _sr_c _sr_f _; do
+      while IFS=$'\t' read -r _srcn _ _sr_c _sr_p _; do
         [[ "$_srcn" == "$exact" ]] || continue
-        _sr_c="$_sr_c"; [[ "$_sr_c" == "-" || -z "$_sr_c" ]] && _sr_c="$_sr_f"
-        [[ "$_sr_c" == "-" ]] || repo_contains_path "$anchor" "$(nao_phys_path "$_sr_c")" || continue
+        [[ "$_sr_c" == "-" || -z "$_sr_c" ]] || repo_contains_path "$anchor" "$(nao_phys_path "$_sr_c")" || continue
         _pids+="${_pids:+,}$_sr_p"
       done < <(term_snapshot 2>/dev/null || true)
       if [[ "$roster_ok" == "1" ]]; then
@@ -277,9 +276,8 @@ cmd_close() {
         # v3：task 候选的名字可能同名（同一槽位）多 pane ⇒ 与精确名分支同口径，不猜
         if [[ "$force" != true ]]; then
           local _d2p=0 _d2r=0 _d2n _d2pane _d2c _d2f _d2cc
-          while IFS=$'\t' read -r _d2n _d2pane _ _d2c _d2f _; do
+          while IFS=$'\t' read -r _d2n _ _d2c _d2pane _; do
             [[ "$_d2n" == "$name" ]] || continue
-            _d2c="${_d2c:--}"; [[ "$_d2c" == "-" || -z "$_d2c" ]] && _d2c="$_d2f"
             [[ "$_d2c" == "-" || -z "$_d2c" ]] || repo_contains_path "$anchor" "$(nao_phys_path "$_d2c")" || continue
             _d2p=$((_d2p + 1))
           done < <(term_snapshot 2>/dev/null || true)

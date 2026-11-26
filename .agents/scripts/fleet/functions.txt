@@ -5,7 +5,7 @@
 #   ② 总数守恒（纯搬迁 ⇒ 174；新增函数须同行加一行并改本头的 total）
 fleet/lib/status.sh	_status_json_emit
 fleet/lib/status.sh	cmd_status_json
-# total: 185
+# total: 200
 # 重排：本文件可机械重排（sort -k1,1 -k2,2），断言不依赖行序。
 nao-fleet.sh	usage
 nao-fleet.sh	_need_ensure
@@ -38,11 +38,17 @@ fleet/lib/term.sh	term_deliver
 fleet/lib/term.sh	term_reclaim
 fleet/lib/term.sh	term_cleanup
 fleet/lib/term.sh	term_session_name
-fleet/lib/term.sh	term_place_prime
-fleet/lib/term.sh	term_place_reset
+fleet/lib/term.sh	term_place_begin
+fleet/lib/term.sh	term_place_end
+fleet/lib/term.sh	term_place_rows
+fleet/lib/term.sh	term_place_ws_for_label
+fleet/lib/term.sh	term_api_schema
+fleet/lib/term.sh	term_check_premise
 fleet/lib/term.sh	term_ws_label_rows
 fleet/lib/term.sh	term_deliverable
-fleet/lib/term.sh	_term_backend_snapshot
+fleet/lib/term.sh	_term_backend_facts
+fleet/lib/term.sh	_term_backend_project5
+fleet/lib/term.sh	_term_facts
 fleet/lib/term-herdr.sh	_term_herdr_exec
 fleet/lib/term-herdr.sh	_term_path_norm
 fleet/lib/term-herdr.sh	_term_herdr_require
@@ -52,7 +58,8 @@ fleet/lib/term-herdr.sh	_term_json_objs
 fleet/lib/term-herdr.sh	_term_argv_name
 fleet/lib/term-herdr.sh	_term_tsv_norm
 fleet/lib/term-herdr.sh	_term_herdr_argv
-fleet/lib/term-herdr.sh	_term_herdr_snapshot
+fleet/lib/term-herdr.sh	_term_herdr_facts
+fleet/lib/term-herdr.sh	_term_herdr_project5
 fleet/lib/term-herdr.sh	_term_herdr_liveness
 fleet/lib/term-herdr.sh	_term_herdr_pane_shell_pid
 fleet/lib/term-herdr.sh	_term_herdr_shell_is_caller
@@ -69,8 +76,11 @@ fleet/lib/term-herdr.sh	_term_herdr_workspace_id_for
 fleet/lib/term-herdr.sh	_term_place_pane_row
 fleet/lib/term-herdr.sh	_term_place_add_pane
 fleet/lib/term-herdr.sh	_term_place_pane_fields
-fleet/lib/term-herdr.sh	_term_herdr_place_prime
-fleet/lib/term-herdr.sh	_term_herdr_place_reset
+fleet/lib/term-herdr.sh	_term_place_ws_fields
+fleet/lib/term-herdr.sh	_term_herdr_place_begin
+fleet/lib/term-herdr.sh	_term_herdr_place_end
+fleet/lib/term-herdr.sh	_term_herdr_place_rows
+fleet/lib/term-herdr.sh	_term_herdr_place_ws_for_label
 fleet/lib/term-herdr.sh	_term_herdr_ws_pane_count_live
 fleet/lib/term-herdr.sh	_term_place_set_pane
 fleet/lib/term-herdr.sh	_term_herdr_place_drop_pane
@@ -103,14 +113,18 @@ fleet/lib/term-app.sh	_term_app_spawn_preflight
 fleet/lib/term-app.sh	_term_app_doc_rows
 fleet/lib/term-app.sh	_term_app_identity
 fleet/lib/term-app.sh	_term_app_doc_guard
-fleet/lib/term-app.sh	_term_app_snapshot
+fleet/lib/term-app.sh	_term_app_facts
+fleet/lib/term-app.sh	_term_app_project5
 fleet/lib/term-app.sh	_term_app_liveness
 fleet/lib/term-app.sh	_term_app_argv
 fleet/lib/term-app.sh	_term_sha256
 fleet/lib/term-app.sh	_term_app_mint_tab
 fleet/lib/term-app.sh	_term_app_mint_fresh_space
 fleet/lib/term-app.sh	_term_app_doc_has_space
-fleet/lib/term-app.sh	_term_app_place_prime
+fleet/lib/term-app.sh	_term_app_place_begin
+fleet/lib/term-app.sh	_term_app_place_end
+fleet/lib/term-app.sh	_term_app_place_rows
+fleet/lib/term-app.sh	_term_app_place_ws_for_label
 fleet/lib/term-app.sh	_term_app_verify_place
 fleet/lib/term-app.sh	_term_app_poll_place
 fleet/lib/term-app.sh	_term_app_wait_ready
@@ -186,6 +200,7 @@ fleet/lib/ensure.sh	spawn_one
 fleet/lib/ensure.sh	_repo_identity
 fleet/lib/ensure.sh	_ensure_ws_panes_in_repo
 fleet/lib/ensure.sh	_ensure_place_label
+fleet/lib/ensure.sh	_ensure_place_load
 fleet/lib/ensure.sh	_ensure_slot_taken
 fleet/lib/ensure.sh	_ensure_task_name_in_ws
 fleet/lib/ensure.sh	_ensure_pick_num

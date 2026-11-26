@@ -125,7 +125,7 @@ _term_herdr_argv() {  # <pane_id> → 每行 "process-name<TAB>argv"（全部前
   done < <(_term_json_objs <<< "$js")
 }
 
-_term_herdr_snapshot() {
+_term_herdr_facts() {
   local pl al
   pl="$(_term_herdr_exec pane list 2>/dev/null)" || { warn "herdr pane list 失败（server 未就绪？）"; return 1; }
   if [[ -z "$pl" || "$pl" == *'"error"'* ]]; then
@@ -179,11 +179,34 @@ _term_herdr_snapshot() {
   done < <(_term_json_objs <<< "$pl")
 }
 
+# 5 列中性投影（后端私有 13 列 → 业务契约）：身份无 ⇒ 整行省略；空值 `-`。
+_term_herdr_project5() {
+  local name pid tid cwd fgcwd fg astat seq sess avname hook wsid task status c
+  while IFS=$'\t' read -r name pid tid cwd fgcwd fg astat seq sess avname hook wsid task; do
+    [[ -n "$name" ]] || continue
+    c="$cwd"; [[ "$c" == "-" || -z "$c" ]] && c="$fgcwd"
+    if [[ "$seq" == "-" ]]; then status=alive
+    elif [[ "$fg" != "pi" ]]; then status=alive
+    elif [[ -n "$avname" && "$avname" != "-" && "$avname" != "$name" ]]; then status=alive
+    elif [[ -z "$sess" || "$sess" == "-" || "$hook" != "1" ]]; then status=alive
+    else
+      case "$astat" in
+        working|blocked) status=working ;;
+        idle|done)       status=idle ;;
+        *)               status=unknown ;;
+      esac
+    fi
+    [[ -n "$c" ]] || c="-"
+    [[ -n "$task" ]] || task="-"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$status" "$c" "$pid" "$task"
+  done
+}
+
 _term_herdr_liveness() {  # <name> [repo] → verdict/state/seq/hook（只读快照，零外部调用）
   local name="${1-}" repo="${2-}" rows="" line rp="" filtered=""
   local v="" state="-" rq="-" rh="-" c1 c2 fg astat seq sess avname hook rv
   [[ -n "$name" ]] || { printf 'absent\t-\t-\t-\n'; return 0; }
-  rows="$(term_snapshot 2>/dev/null | awk -F'\t' -v n="$name" '$1==n')" || rows=""
+  rows="$(_term_facts 2>/dev/null | awk -F'\t' -v n="$name" '$1==n')" || rows=""
   [[ -n "$rows" ]] || { printf 'absent\t-\t-\t-\n'; return 0; }
   if [[ -n "$repo" ]]; then
     rp="$(nao_phys_path "$repo")"
@@ -381,12 +404,12 @@ _term_herdr_reclaim() {  # <name> <repo> <force> <core> <scope> <ensure-target>
   local name="${1-}" repo="${2-}" force="${3:-false}" core="${4-}" scope="${5-}" tgt="${6-}"
   local rows="" nrows=0 pane="" cwdf="" fgcwd="" why="" probe="" pstate="" pmsg=""
   # 快照不可用 ⇒ 不判「未运行」（否则 server 故障会被谎报成「无需回收」）
-  if ! term_snapshot >/dev/null 2>&1; then
+  if ! _term_facts >/dev/null 2>&1; then
     warn "拒绝回收 $name：herdr pane/agent 快照不可用（server 未就绪？）⇒ 不回收"
     warn "  该怎么办：核对 \`herdr --session ${HERDR_SESSION:-<s>} api snapshot\` 后再试"
     return 1
   fi
-  rows="$(term_snapshot 2>/dev/null | awk -F'\t' -v n="$name" '$1==n')" || rows=""
+  rows="$(_term_facts 2>/dev/null | awk -F'\t' -v n="$name" '$1==n')" || rows=""
   # T554：v2 名字的同名跨 workspace **合法** ⇒ 回收只认目标仓锚内的行；
   #   旧形（LEGACY）名字沿用「全局唯一」旧契约 ⇒ 不按仓过滤（并列仍拒绝，AC6/K 口径）。
   local _pkind="${1-}"
@@ -635,7 +658,7 @@ _term_place_pane_fields() {  # <row> → _TP_LABEL/_TP_PANE/_TP_WS/_TP_TAB/_TP_C
   return 0
 }
 
-_term_herdr_place_prime() {  # → 0 已建快照 / 1 后端不可用
+_term_herdr_place_begin() {  # → 0 已建快照 / 1 后端不可用
   local js="" obj label wsid pid tid cwd fgcwd task
   _TERM_PLACE_WS_BY_LABEL=(); _TERM_PLACE_WS_ROWS=(); _TERM_PLACE_PANE_ROWS=(); _TERM_PLACE_TASK_BY_PANE=()
   js="$(_term_herdr_exec workspace list 2>/dev/null)" || return 1
@@ -658,17 +681,50 @@ _term_herdr_place_prime() {  # → 0 已建快照 / 1 后端不可用
     _term_place_add_pane "$label" "$pid" "$wsid" "$tid" "$cwd" "$fgcwd"
   done < <(_term_json_objs <<< "$js")
   # v3 元数据孤儿清理（ensure 读快照入口）：当前会话 handle 集合之外的 sidecar 即时删（幂等，仅 warn）。
-  local row
-  for row in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
-    [[ -n "$row" ]] || continue
-    _term_place_pane_fields "$row"
+  local line
+  for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
+    [[ -n "$line" ]] || continue
+    _term_place_pane_fields "$line"
     [[ -n "$_TP_PANE" ]] && printf '%s\n' "$_TP_PANE"
   done | fleet_meta_gc
   _TERM_PLACE_CACHE=1
   return 0
 }
 
-_term_herdr_place_reset() { _TERM_PLACE_CACHE=0; _TERM_PLACE_WS_BY_LABEL=(); _TERM_PLACE_WS_ROWS=(); _TERM_PLACE_PANE_ROWS=(); _TERM_PLACE_TASK_BY_PANE=(); }
+_term_herdr_place_end() { _TERM_PLACE_CACHE=0; _TERM_PLACE_WS_BY_LABEL=(); _TERM_PLACE_WS_ROWS=(); _TERM_PLACE_PANE_ROWS=(); _TERM_PLACE_TASK_BY_PANE=(); }
+_TPW_WS=""; _TPW_LABEL=""
+_TERM_TAB_SPLIT="$(printf '\t')"
+_term_place_ws_fields() {  # <ws-row "wsid<TAB>label"> → _TPW_WS / _TPW_LABEL
+  _TPW_WS=""; _TPW_LABEL=""
+  IFS="$_TERM_TAB_SPLIT" read -r _TPW_WS _TPW_LABEL <<< "${1-}"
+  return 0
+}
+
+_term_herdr_place_rows() {  # 5 列：<space_ref>\t<label>\t<name>\t<handle>\t<cwd>
+  local line wsid label name handle c
+  local -A wslabel=()
+  for line in "${_TERM_PLACE_WS_ROWS[@]:-}"; do
+    [[ -n "$line" ]] || continue
+    _term_place_ws_fields "$line"
+    [[ -n "$_TPW_WS" ]] && wslabel["$_TPW_WS"]="$_TPW_LABEL"
+  done
+  for line in "${_TERM_PLACE_PANE_ROWS[@]:-}"; do
+    [[ -n "$line" ]] || continue
+    _term_place_pane_fields "$line"
+    [[ -n "$_TP_PANE" ]] || continue
+    wsid="${_TP_WS:--}"; name="${_TP_LABEL:--}"; handle="$_TP_PANE"
+    label="${wslabel[$_TP_WS]:-}"; [[ -n "$label" ]] || label="-"
+    c="${_TP_CWD:--}"; [[ "$c" == "-" || -z "$c" ]] && c="${_TP_FGCWD:--}"
+    [[ -n "$c" ]] || c="-"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$wsid" "$label" "$name" "$handle" "$c"
+  done
+}
+
+_term_herdr_place_ws_for_label() {  # <label> → space_ref / 空；未 begin ⇒ rc1
+  (( _TERM_PLACE_CACHE )) || { printf 'term_place_ws_for_label：未调用 term_place_begin\n' >&2; return 1; }
+  printf '%s\n' "${_TERM_PLACE_WS_BY_LABEL[${1-}]:-}"
+  return 0
+}
 
 # 关 workspace 前的**原始复核**（#160 P0 护栏）：返回 `pane list --workspace <wsid>` 的 pane 数。
 #   快照可能失真（解析缺陷/并发变更），但关闭是**破坏性且不可回滚**的（会连带杀掉用户 pi 会话）
