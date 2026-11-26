@@ -169,38 +169,57 @@ check_stash_residue() {
   return 0
 }
 
-# PRD 结构探针（M20261118-prd-structure · **warn-only**：只提示，**不进 warn 计数、不改 rc**）。
+# PRD 结构探针（M20261118-prd-structure · T579 扩扫描面 · **warn-only**：只提示，**不进 warn 计数、不改 rc**）。
 #   动机：ADR 有结构契约（checklists §四），PRD 长期无任何门禁 ⇒ 结构漂移只能靠人眼看。
-#   口径（PM 定，防刷屏）：
-#     · 只在本仓存在 `docs/prds/*.md` 时生效（无目录 / 无 PRD ⇒ 零输出）。
-#     · **只查文件名日期 ≥ `NAO_PRD_STRUCT_SINCE`（默认 2026-11-18）** 的 PRD：老 PRD 不追溯
-#       （前缀 `YYYY-MM-DD-`；无前缀 / 不可解析 ⇒ 不查，`-v` 给一条跳过注记，**不猜**）。
-#     · 三条判据：① 必含 9 个 `## ` 模块标题（TL;DR + 一…九；`## 附录` 可缺）
-#                  ② §七 AC 节内 `### ` 组 ≥5（五覆盖：主路径/异常/边界/负向闭环/设计一致性）
-#                  ③ 全文 ≤150 行（PRD 上限，见 checklists §一）
-#     · 违反 ⇒ **恰一条** `  ! PRD 结构…`（排除计入 warn 的名单见 cmd_check 摘要处）；`-v` 逐文件展开。
-#     · **防假绿**：文件不可读 / 0 字节 **不算通过** —— 单列「不可读/空」，不得当「结构合格」放行。
-#     · 局限（可接受）：统计按行首标记，不区分数围栏内的示例；warn-only 不阻断，误报代价低。
+#   扫描面（T579 起两路，**判据与文案同构**）：
+#     ① `docs/prds/*.md`（历史类别目录）—— **只查文件名日期 ≥ `NAO_PRD_STRUCT_SINCE`（默认 2026-11-18）**：
+#        老 PRD 不追溯（前缀 `YYYY-MM-DD-`；无前缀 / 不可解析 ⇒ 不查，`-v` 给一条跳过注记，**不猜**）。
+#     ② `docs/<任务号>-<slug>/prd.md`（一任务一目录，ADR 2026-11-27；路径约定正文见 checklists/deliverable-docs.md §十）—— 目录形态即「已在新布局」的证据
+#        ⇒ **不套** `NAO_PRD_STRUCT_SINCE`（该变量只回答「旧 PRD 追溯面」，与此问的不是一件事）。
+#   三条判据：① 必含 9 个 `## ` 模块标题（TL;DR + 一…九；`## 附录` 可缺）
+#             ② §七 AC 节内 `### ` 组 ≥5（五覆盖：主路径/异常/边界/负向闭环/设计一致性）
+#             ③ 全文 ≤150 行（PRD 上限，见 checklists §一）
+#   违反 ⇒ **恰一条** `  ! PRD 结构…`（排除计入 warn 的名单见 cmd_check 摘要处）；`-v` 逐文件展开（路径相对仓根）。
+#   **防假绿**：文件不可读 / 0 字节 **不算通过** —— 单列「不可读/空」，不得当「结构合格」放行。
+#   局限（可接受）：统计按行首标记，不区分数围栏内的示例；warn-only 不阻断，误报代价低。
 check_prd_structure() {
-  local dir="$PWD/docs/prds" since="${NAO_PRD_STRUCT_SINCE:-2026-11-18}"
+  local root="$PWD" since="${NAO_PRD_STRUCT_SINCE:-2026-11-18}"
   [[ "$since" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] \
     || { $VERBOSE && printf '  · PRD 结构：NAO_PRD_STRUCT_SINCE=%s 非法（应为 YYYY-MM-DD）⇒ 回落默认 2026-11-18\n' "$since"; since="2026-11-18"; }
-  [[ -d "$dir" ]] || return 0
-  local -a files=()
+  local -a cands=() files=() rels=()
   shopt -s nullglob
-  files=("$dir"/*.md)
+  cands=("$root/docs/prds"/*.md "$root"/docs/T*-*/prd.md "$root"/docs/M*-*/prd.md)
   shopt -u nullglob
+  (( ${#cands[@]} > 0 )) || return 0
+  local f rel base d tdir
+  for f in "${cands[@]}"; do
+    rel="${f#"$root"/}"
+    case "$rel" in
+      docs/prds/*)
+        base="${f##*/}"
+        if [[ ! "$base" =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2})- ]]; then
+          $VERBOSE && printf '  · PRD 结构：跳过 %s（文件名无 `YYYY-MM-DD-` 前缀 ⇒ 无法判定是否追溯面）\n' "$rel"
+          continue
+        fi
+        d="${BASH_REMATCH[1]}"
+        [[ "$d" < "$since" ]] && continue        # ISO 日期可直接按字串比较
+        ;;
+      *)
+        # 任务目录（新布局）：目录形态自证「已在新布局」⇒ 不套日期阈值（AC4 · arch TBD-1）
+        tdir="${rel#docs/}"; tdir="${tdir%%/*}"
+        [[ "$tdir" =~ ^(T[0-9]+|M[0-9]{8}-[a-z0-9-]+)-[a-z0-9-]+$ ]] || {
+          $VERBOSE && printf '  · PRD 结构：跳过 %s（目录形态非 `docs/<任务号>-<slug>/`）\n' "$rel"
+          continue
+        }
+        ;;
+    esac
+    files+=("$f"); rels+=("$rel")
+  done
   (( ${#files[@]} > 0 )) || return 0
-  local f base d nlines ac_groups miss h total=0 bad=0 first="" detail=""
+  local i nlines ac_groups miss h total=0 bad=0 first="" detail=""
   local -a req=("TL;DR" "一、" "二、" "三、" "四、" "五、" "六、" "七、" "八、" "九、")
-  for f in "${files[@]}"; do
-    base="$(basename "$f")"
-    if [[ ! "$base" =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2})- ]]; then
-      $VERBOSE && printf '  · PRD 结构：跳过 %s（文件名无 `YYYY-MM-DD-` 前缀 ⇒ 无法判定是否追溯面）\n' "$base"
-      continue
-    fi
-    d="${BASH_REMATCH[1]}"
-    [[ "$d" < "$since" ]] && continue        # ISO 日期可直接按字串比较
+  for i in "${!files[@]}"; do
+    f="${files[$i]}"; rel="${rels[$i]}"
     total=$((total + 1))
     miss=""
     if [[ ! -r "$f" || ! -s "$f" ]]; then
@@ -228,13 +247,182 @@ check_prd_structure() {
     fi
     [[ -n "$miss" ]] || continue
     bad=$((bad + 1))
-    if [[ -z "$first" ]]; then first="$base：$miss"; fi
-    detail+="  · PRD 结构：docs/prds/$base —— $miss"$'\n'
+    if [[ -z "$first" ]]; then first="$rel：$miss"; fi
+    detail+="  · PRD 结构：$rel —— $miss"$'\n'
   done
   (( bad > 0 )) || return 0
-  printf '  ! PRD 结构（warn-only，不计 warn / 不改 rc）：%s 份新 PRD（≥%s）中 %s 份缺结构（%s）⇒ -v 看明细（规范：checklists/deliverable-docs.md §三）\n' \
-    "$total" "$since" "$bad" "$first"
+  printf '  ! PRD 结构（warn-only，不计 warn / 不改 rc）：%s 份受检 PRD 中 %s 份缺结构（%s；docs/prds 只查 ≥%s）⇒ -v 看明细（规范：checklists/deliverable-docs.md §三）\n' \
+    "$total" "$bad" "$first" "$since"
   $VERBOSE && printf '%s' "$detail"
+  return 0
+}
+
+# docs 一级索引一致性探针（T579 · **warn-only**：只提示，**不进 warn 计数、不改 rc**）。
+#   动机：一任务一目录（ADR 2026-11-27）后 `docs/README.md` 是唯一发现入口 ⇒ 目录 / 版本 / ADR 与表格行
+#     必须**双向**一致：忘加一行 = 全仓不可发现；幽灵行 = 指向已删目录；重复版本 = 双源。
+#   启用谓词（结构自描述，**不加日期开关**）：`docs/README.md` 存在且三段标题**逐字**齐
+#     （`## 一、任务批次` / `## 二、版本` / `## 三、决策时间线`）⇒ 启用。理由见 ADR 决策 3：变量化会让
+#     同仓不同会话 / CI 判定不同，且 `git revert` 后残留环境语义。
+#   反例防护：已有 `docs/<任务号>-*/` 且含契约产物（prd.md / arch-review.md / qa-verify.md）却没有齐三段
+#     ⇒ 单条「半启用」提示（否则「删掉一段索引标题」即静默免责）。
+#   断言（三处双向 + 一级唯一）：目录↔行 · 版本↔文件（同版本唯一 / basename 固定 / 文件须在）· ADR↔时间线 ·
+#     `docs/*.md` ⊆ {README, tasks-state, tasks-archive, INSTALL, ARCHITECTURE}。
+#   解析：**先剥 ``` 围栏**再认表（否则示例表会误报）；逐字表头 / 列数固定 / 单元格禁 `|`，不给 markdown 变体容错。
+#   输出：违反项聚合**恰一条** `  ! 索引…`（`-v` 逐项展开）；一致时默认零输出，`-v` 给一行计数 ✓。
+check_docs_index() {
+  local idx="$PWD/docs/README.md"
+  local -a tdirs=() notes=() adrs=() topmd=()
+  local f base
+  shopt -s nullglob
+  for f in "$PWD"/docs/T*-*/ "$PWD"/docs/M*-*/; do
+    base="${f%/}"; base="${base##*/}"
+    [[ "$base" =~ ^(T[0-9]+|M[0-9]{8}-[a-z0-9-]+)-[a-z0-9-]+$ ]] && tdirs+=("$base")
+  done
+  for base in "${tdirs[@]}"; do
+    for f in "$PWD/docs/$base"/release-notes-v*.md; do notes+=("docs/$base/${f##*/}"); done
+    for f in "$PWD/docs/$base"/adr-*.md; do adrs+=("docs/$base/${f##*/}"); done
+  done
+  for f in "$PWD"/docs/*.md; do [[ -f "$f" ]] && topmd+=("${f##*/}"); done
+  shopt -u nullglob
+
+  # 不可读 ≠ 无索引（防「读不到就当没有」的 fail-open）
+  if [[ -e "$idx" && ! -r "$idx" ]]; then
+    printf '  ! 索引（warn-only，不计 warn / 不改 rc）：docs/README.md 存在但不可读 ⇒ 拒绝判为「无索引」放行（fail loud）\n'
+    return 0
+  fi
+  # 启用谓词：三段标题逐字齐（先剥 ``` 围栏，避免把示例里的标题当锚点）
+  local enabled=0 missing="" body="" h
+  [[ -r "$idx" ]] && body="$(awk '/^[[:space:]]*```/ { fence = !fence; next } !fence { print }' "$idx")"
+  if [[ -r "$idx" ]]; then
+    for h in '## 一、任务批次' '## 二、版本' '## 三、决策时间线'; do
+      printf '%s\n' "$body" | grep -qxF "$h" || { missing="$h"; break; }
+    done
+    [[ -z "$missing" ]] && enabled=1
+  fi
+  if (( ! enabled )); then
+    local half=""
+    for base in "${tdirs[@]}"; do
+      if [[ -e "$PWD/docs/$base/prd.md" || -e "$PWD/docs/$base/arch-review.md" || -e "$PWD/docs/$base/qa-verify.md" ]]; then
+        half="$base"; break
+      fi
+    done
+    [[ -n "$half" ]] || return 0          # 老仓（无索引 / 无任务目录）⇒ 零输出、rc=0（AC7）
+    if [[ -e "$idx" ]]; then
+      printf '  ! 索引（warn-only，不计 warn / 不改 rc）：docs/%s/ 已有契约产物，但 docs/README.md 缺逐字标题 `%s` ⇒ 索引断言停摆（半启用态；补齐三段即恢复，规范：checklists/deliverable-docs.md §十）\n' \
+        "$half" "$missing"
+    else
+      printf '  ! 索引（warn-only，不计 warn / 不改 rc）：docs/%s/ 已有契约产物，但 docs/README.md 不存在 ⇒ 索引断言停摆（半启用态；规范：checklists/deliverable-docs.md §十）\n' \
+        "$half"
+    fi
+    return 0
+  fi
+
+  # 列表按 TAB 拼给 awk（空列表传空串，awk 端判 0）
+  local s_dirs="" s_notes="" s_adrs="" s_top=""
+  (( ${#tdirs[@]} ))  && s_dirs="$(printf 'docs/%s\n' "${tdirs[@]}"  | paste -sd $'\t' -)"
+  (( ${#notes[@]} ))  && s_notes="$(printf '%s\n' "${notes[@]}"  | paste -sd $'\t' -)"
+  (( ${#adrs[@]} ))   && s_adrs="$(printf '%s\n' "${adrs[@]}"   | paste -sd $'\t' -)"
+  (( ${#topmd[@]} ))  && s_top="$(printf '%s\n' "${topmd[@]}"   | paste -sd $'\t' -)"
+
+  local out summary probs cnt p1 p2 p3
+  out="$(awk -v tdirs="$s_dirs" -v notes="$s_notes" -v adrs="$s_adrs" -v topmd="$s_top" '
+    function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+    function cell(s) { s = trim(s); gsub(/`/, "", s); sub(/\/+$/, "", s); return s }
+    function report(m) { np++; P[np] = m }
+    function inlist(v, A, n,   k) { for (k = 1; k <= n; k++) if (A[k] == v) return 1; return 0 }
+    function num(a, k) { return ((k in a) ? a[k] : 0) }
+    BEGIN {
+      HDR[1] = "| 任务号 | 目录 | 一句话 | Issue/PR |"; NCOL[1] = 4; SEG[1] = "任务批次"
+      HDR[2] = "| 版本 | 权威路径 | 发布日期 |";       NCOL[2] = 3; SEG[2] = "版本"
+      HDR[3] = "| 日期 | 决策 | 任务号 | 状态 |";       NCOL[3] = 4; SEG[3] = "决策时间线"
+      nD = (tdirs == "" ? 0 : split(tdirs, DL, "\t"))
+      nN = (notes == "" ? 0 : split(notes, NL, "\t"))
+      nA = (adrs  == "" ? 0 : split(adrs,  AL, "\t"))
+      nT = (topmd == "" ? 0 : split(topmd, TL, "\t"))
+      split("README.md tasks-state.md tasks-archive.md INSTALL.md ARCHITECTURE.md", OK, " ")
+    }
+    { if ($0 ~ /^[ \t]*```/) { fence = !fence; next } }
+    fence { next }
+    $0 == "## 一、任务批次" { sec = 1; next }
+    $0 == "## 二、版本" { sec = 2; next }
+    $0 == "## 三、决策时间线" { sec = 3; next }
+    $0 ~ /^##[ \t]/ { sec = 0; next }
+    { if (sec == 0 || $0 !~ /^\|/) next }
+    {
+      line = trim($0)
+      if (!hdr[sec]) {
+        hdr[sec] = 1
+        if (line != HDR[sec]) { report("第 " FNR " 行：" SEG[sec] " 段表头非逐字（应为 `" HDR[sec] "`）"); bad[sec] = 1 }
+        next
+      }
+      if (bad[sec]) next
+      if (line ~ /^[|: -]+$/) next
+      row = $0
+      sub(/^[ \t]*\|/, "", row); sub(/\|[ \t]*$/, "", row)
+      nc = split(row, C, "|")
+      if (nc != NCOL[sec]) { report("第 " FNR " 行：" SEG[sec] " 段列数 " nc " ≠ " NCOL[sec] "（表头逐字 + 单元格禁 `|`）"); next }
+      for (k = 1; k <= nc; k++) C[k] = trim(C[k])
+      if (sec == 1) { nt++; TT[nt] = C[1]; TD[nt] = cell(C[2]) }
+      else if (sec == 2) { nv++; VV[nv] = C[1]; VP[nv] = cell(C[2]); VD[nv] = C[3] }
+      else { na++; AD[na] = C[1]; ADEC[na] = C[2]; AT[na] = C[3]; AS[na] = C[4] }
+    }
+    END {
+      for (s = 1; s <= 3; s++) if (!hdr[s]) report(SEG[s] " 段缺表格（须逐字表头：" HDR[s] "）")
+      # ---- 任务段：目录 ↔ 行（双向）
+      for (i = 1; i <= nt; i++) {
+        if (TT[i] !~ /^(T[0-9]+|M[0-9]{8}-[a-z0-9-]+)$/) report("任务段第 " i " 行任务号非法：" TT[i])
+        else if (index(TD[i], "docs/" TT[i] "-") != 1) report("任务段第 " i " 行目录与任务号不一致：" TD[i] "（应以 `docs/" TT[i] "-` 开头）")
+        if (!inlist(TD[i], DL, nD)) report(TD[i] " 指向不存在的目录（幽灵行：删行或建目录）")
+        seen[TD[i]]++
+      }
+      for (k in seen) if (seen[k] > 1) report("目录重复登记 " seen[k] " 次：" k)
+      for (j = 1; j <= nD; j++) if (!(DL[j] in seen)) report(DL[j] "/ 未在任务段登记（建目录须同批加一行）")
+      # ---- 版本段：版本 ↔ 文件（同版本唯一 / 权威路径存在 / basename 固定）
+      for (i = 1; i <= nv; i++) {
+        if (VV[i] !~ /^v[0-9]+\.[0-9]+\.[0-9]+$/) { report("版本段第 " i " 行版本号非法：" VV[i] "（版本段只登记 vX.Y.Z；历史说明写正文）"); continue }
+        if (VD[i] !~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/) report("版本段 " VV[i] " 发布日期非法：" VD[i] "（ISO YYYY-MM-DD）")
+        n = split(VP[i], PS, "/")
+        if (PS[n] != "release-notes-" VV[i] ".md") report("版本段 " VV[i] " 权威路径 basename ≠ `release-notes-" VV[i] ".md`：" VP[i])
+        if (!inlist(VP[i], NL, nN)) report("版本段 " VV[i] " 权威路径不存在：" VP[i])
+        vseen[VV[i]]++; nseen[VP[i]]++
+      }
+      for (k in vseen) if (vseen[k] > 1) report("版本重复登记 " vseen[k] " 次：" k "（同一版本只允许一行）")
+      for (j = 1; j <= nN; j++) if (!(NL[j] in nseen)) report(NL[j] " 未在版本段登记（发版说明须指向唯一权威份）")
+      # ---- 时间线段：ADR ↔ 行（双向）
+      for (i = 1; i <= na; i++) {
+        if (AD[i] !~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/) report("时间线段第 " i " 行日期非法：" AD[i] "（ISO YYYY-MM-DD）")
+        if (AT[i] !~ /^(T[0-9]+|M[0-9]{8}-[a-z0-9-]+)$/) report("时间线段第 " i " 行任务号非法：" AT[i])
+        if (AS[i] !~ /^(提议|已接受|已废弃)/) report("时间线段第 " i " 行状态非法：" AS[i] "（只允许 提议 / 已接受 / 已废弃 前缀）")
+        if (match(ADEC[i], /\]\([^)]*adr-[^)]*\.md\)/)) {
+          tgt = substr(ADEC[i], RSTART + 2, RLENGTH - 3)
+          if (index(tgt, "docs/") != 1) tgt = "docs/" tgt
+          if (!inlist(tgt, AL, nA)) report("时间线段第 " i " 行 ADR 链接指向不存在的文件：" tgt)
+          else aseen[tgt]++
+        } else report("时间线段第 " i " 行决策格缺 `[决策](adr-*.md)` 相对链接")
+      }
+      for (j = 1; j <= nA; j++) if (!(AL[j] in aseen)) report(AL[j] " 未在决策时间线段登记一行")
+      # ---- 一级唯一索引：docs/*.md 白名单
+      for (j = 1; j <= nT; j++) {
+        ok = 0
+        for (k = 1; k <= 5; k++) if (OK[k] == TL[j]) ok = 1
+        if (!ok) report("docs/" TL[j] " 不是允许的一级文件（一级只留 README / tasks-state / tasks-archive / INSTALL / ARCHITECTURE）")
+      }
+      printf "SUMMARY\t%d\t%d\t%d\n", nt, nv, na
+      for (i = 1; i <= np; i++) print P[i]
+    }
+  ' "$idx")"
+  summary="${out%%$'\n'*}"
+  if [[ "$out" == *$'\n'* ]]; then probs="${out#*$'\n'}"; else probs=""; fi
+  p1="$(printf '%s' "$summary" | cut -f2)"; p2="$(printf '%s' "$summary" | cut -f3)"; p3="$(printf '%s' "$summary" | cut -f4)"
+  if [[ -z "$probs" ]]; then
+    $VERBOSE && printf '  ✓ 索引：任务 %s 行 / 版本 %s 行 / 决策 %s 行 —— 目录↔行、版本↔文件、ADR↔时间线三处双向一致（docs/README.md）\n' \
+      "${p1:-0}" "${p2:-0}" "${p3:-0}"
+    return 0
+  fi
+  cnt="$(printf '%s\n' "$probs" | grep -c . || true)"
+  printf '  ! 索引（warn-only，不计 warn / 不改 rc）：%s 项不一致（%s）⇒ -v 看明细（规范：checklists/deliverable-docs.md §十）\n' \
+    "$cnt" "$(printf '%s\n' "$probs" | head -1)"
+  $VERBOSE && printf '%s\n' "$probs" | sed 's/^/  · 索引：/'
   return 0
 }
 
@@ -508,6 +696,11 @@ cmd_check() {
 
   # M20261118：PRD 结构探针（warn-only ⇒ 不计 warn、不改 rc；无新 PRD / 结构合格 ⇒ 零输出）
   check_prd_structure || true
+
+  # T579：docs 一级索引一致性探针（warn-only ⇒ 不计 warn、不改 rc；老仓 / 一致 ⇒ 零输出）
+  check_docs_index || true
+
+  # T579：docs 一级索引一致性探针（warn-only ⇒ 不计 warn、不改 rc；老仓 / 一致 ⇒ 零输出）
 
   echo "== 按需技能 =="
   if [[ -d "$SKILLS_SUB" ]]; then
