@@ -8,6 +8,74 @@ title: 让队列自己往前走
 
 能把这件事做完的是一组命令，装在 `.agents/scripts/` 旁边，跟着机制包一起发。它们默认**不启用**，你不开就完全不跑。
 
+## 先说结论：现在要不要用它
+
+**如果你（或 PM 角色）一直在场，暂时不用开它。** 它的价值只有一个场景：没人在盯的时候，让队列里的活自己往前走一步。
+
+而且它**只对「队列里有排队中的任务」有意义**。队列空着，跑多少次都是零动作。
+
+所以正确的启用顺序是：先有活、再开机；不是先装定时器，再想怎么用。
+
+## 怎么开始用（三步）
+
+### 第一步：往队列里加一行
+
+队列是一份 JSONL 文件（一个任务一行）。目前没有「加任务」的命令，直接编辑 `docs/queue.jsonl` 追加一行即可：
+
+```json
+{"id":"T900","kind":"feat","title":"把登录页的错误提示改成中文","state":"queued","prio":"P2","deps":[],"repo":"nao-skills","branch":"","owner":"rd-fe","qa":"qa","acs":["AC1"],"attempt":0,"created":"2026-11-26","updated":"2026-11-26","blocked_reason":""}
+```
+
+几个字段的意思：
+
+| 字段 | 填什么 |
+|---|---|
+| `id` | 任务号，和 Issue 号最好对得上 |
+| `state` | 新任务填 `queued`（排队等派） |
+| `owner` | 派给哪个角色（`rd-fe` / `rd-be` / `rd-infra` / `qa` …） |
+| `acs` | 验收条件编号，给回执和 QA 对照用 |
+| `deps` | 依赖的任务号；写了的必须都完成才会派 |
+
+写完先校验一次，它会告诉你字段有没有漏、状态合不合法：
+
+```bash
+node bin/nao-queue validate
+```
+
+### 第二步：手动跑一次，看它怎么想
+
+**别急着装定时器**，先手动跑一次看清楚：
+
+```bash
+node bin/nao-orch tick      # 跑一次：该派的派出去，然后退出
+node bin/nao-orch board     # 看结果：谁被派了、谁在等、谁卡住了
+```
+
+⚠️ **跑之前知道它会真的动手**：`tick` 会把排队中的任务**真的派出去**（起对应角色的会话、发消息给它）。想先看而不动手，用 `board`——它只读不写。
+
+如果它什么都没做，看输出那一行：`waiting=2` 表示那两个任务在等（目标角色正忙），`skipped=1` 表示跳过了。`dispatch` 为 0 就是没派。
+
+### 第三步：觉得顺手了再装定时
+
+```bash
+node bin/nao-orch doctor                    # 先体检：node/herdr/pi/git/队列/状态查询 都通才装
+node bin/nao-orch install-systemd --enable   # 装成定时任务，默认两分钟一轮
+```
+
+只装不让它跑（先观察）：
+
+```bash
+node bin/nao-orch install-systemd            # 装但不启用；之后 systemctl --user start nao-orch.timer
+```
+
+想关掉：
+
+```bash
+node bin/nao-orch uninstall-systemd
+```
+
+装的时候它会先体检，任一项不通就**拒绝安装并说明缺什么**，不会装好一个跑不动的定时器。
+
 ## 它管什么、不管什么
 
 先说不做的，免得你期待错：
