@@ -144,7 +144,8 @@ cd <repo> && codegraph init                # 建索引（不带 -i；该 flag �
 - **范围**：**全部**舰队会话（常驻 `pm`/`qa`/… 与 `--task` 派生）都由 `ensure` 带 `--session-dir` 落这里；Pi 一旦拒绝该参数或目录不可建 ⇒ **fail loud**（不会静默落回主目录）。
 - **保留（按结果分级，按文件 mtime 判寿命）**：
   - **正常交付**（该 role/task 有 `done` 回执 `docs/queue/<id>.receipt.json`，或 `close` 判定正常）⇒ **24 小时**
-  - **异常**（无回执 / `close --force` / 崩溃 / 判不出）⇒ **7 天**，并在该会话 cwd 的 `docs/tasks-state.md` 留一行 `- [session-retention] …` 点名（角色 + 任务 + 路径；重复跑不重复写）
+  - **异常**（无回执 / `close --force` / 崩溃 / 判不出）⇒ **7 天**，并在**记录所在 state 子目录**的 `.retention.log` 写一行点名（角色 + 任务 + 路径；同一记录只点一次名）—— 机制状态**不写**仓内的 `docs/tasks-state.md`（那是交付台账）
+  - 判据只认**本仓台账**（`<state>/sessions/--<编码 cwd>--/.ledger`）：`done`/`force` 必须落在**该代窗口**内（本代 `spawn` 之后、下一同名 `spawn` 之前），带 `task` 的行按 task 逐字比对 ⇒ 上一代的崩溃记录不会被后一代的 `done` 判成「正常」，跨仓 `done` 也不影响本仓；`spawn` 缺失 ⇒ 判不出 ⇒ 按异常
   - 近 1 小时有写入的记录一律跳过（可能仍在跑）；清理失败只 warn，不改 rc
 - **查看**：
   ```bash

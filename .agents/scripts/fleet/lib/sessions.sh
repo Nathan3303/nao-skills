@@ -12,12 +12,16 @@
 #      目录不可建 ⇒ 调用方 **fail loud**（绝不静默落回主目录）。
 #   ⓑ **按结果分级**短保留（`--days N` 可一次性覆盖；按**文件 mtime** 判寿命，不造日期层）：
 #        · 正常交付（有 `done` 回执，或 close 判定正常）⇒ 24h
-#        · 异常（无回执 / `close --force` / 崩溃 / 判不出）⇒ 7 天，并在该记录 cwd 的
-#          `docs/tasks-state.md` 留一行点名（角色 + 任务 + 路径；去重 ⇒ 幂等）
+#        · 异常（无回执 / `close --force` / 崩溃 / 判不出）⇒ 7 天，并在**记录所在 state 子目录**的
+#          `.retention.log` 留一行点名（角色 + 任务 + 路径；同一记录只点一次 ⇒ 幂等）
+#          —— 机制内部状态**不写**业务仓的 `docs/tasks-state.md`（那是交付台账，T573 返修 D2）
 #      结果来源（fail-closed：判不出 = 异常，绝不猜「正常」）：
 #        · 台账（每仓目录 `.ledger`，append-only TSV：
 #          `<epoch>\t<kind>\t<name>\t<role>\t<task>\t<repo>`；kind = spawn / done / force）
-#          —— ensure 落 spawn、close 落 done|force；记录↔台账按 (name, 起始时刻就近 ≤6h) 归属
+#          —— ensure 落 spawn、close 落 done|force；记录↔台账按 (name, 起始时刻就近 ≤6h) 归属，
+#          **只在记录自己的仓台账里**找（跨仓 done 不得升级本仓记录），且 done/force 必须落在
+#          **该代窗口** = 「本代 spawn 之后、下一同名 spawn 之前」；带 task 的行按 task 逐字比对。
+#          无 spawn 行 ⇒ 代次判不出 ⇒ 不认 done/force（T573 返修 D1：原按名字全仓匹配 ⇒ fail-open）
 #        · 回执 `<cwd>/docs/queue/<task>.receipt.json` 存在 ⇒ 正常交付
 #      清理时机：`ensure`（顺手、静默、全量）与 `logs --purge`；**幂等**、失败只 warn、不改 rc。
 #   ⓒ `logs <role> [--repo <仓名>]`：turn 摘要（user 首行 + assistant 首行 + 工具名）/ `--raw` /
@@ -227,10 +231,13 @@ _fleet_ledger_lines() {  # [dir] —— 给 dir ⇒ 只读该仓台账；否则�
 }
 
 # 台账扫描："<epoch>\t<kind>\t<name>\t<role>\t<task>\t<repo>"；`nearest` = 距 ts 最近的 spawn 行（≤窗口）
-_fleet_ledger_scan() {  # <dir|空> <name> <ts> <nearest|outcome>
-  local dir="${1-}" name="${2-}" ts="${3-}" mode="${4-}"
+_fleet_ledger_scan() {  # <dir|空> <name> <ts> <nearest|outcome|next> [until] [task]
+  #   nearest = 距 ts 最近的 spawn 行（≤窗口）· next = 该代之后**下一个**同名 spawn 的 epoch
+  #   outcome = 代次窗口内的 done/force 行（until = 下一代 spawn 起点，空 = 无上界；task 非空 ⇒ 带 task 的行须逐字相同）
+  local dir="${1-}" name="${2-}" ts="${3-}" mode="${4-}" until="${5-}" task="${6-}"
   [[ -n "$name" ]] || return 0
-  _fleet_ledger_lines "$dir" | LC_ALL=C awk -F'\t' -v n="$name" -v t="$ts" -v w="$FLEET_SESSION_LEDGER_WINDOW" -v mode="$mode" '
+  _fleet_ledger_lines "$dir" | LC_ALL=C awk -F'\t' -v n="$name" -v t="$ts" -v w="$FLEET_SESSION_LEDGER_WINDOW" \
+      -v mode="$mode" -v u="$until" -v tk="$task" '
     mode == "nearest" {
       if ($3 == n && $2 == "spawn") {
         d = $1 - t; if (d < 0) d = -d
@@ -238,24 +245,35 @@ _fleet_ledger_scan() {  # <dir|空> <name> <ts> <nearest|outcome>
       }
       next
     }
-    mode == "outcome" {
-      if ($3 == n && ($2 == "done" || $2 == "force") && ($1 + 60) >= t) print
+    mode == "next" {
+      if ($3 == n && $2 == "spawn" && $1 > t) { if (nd == "" || $1 < nd) nd = $1 }
+      next
     }
-    END { if (mode == "nearest" && best != "" && bestd <= w) print best }
+    mode == "outcome" {
+      if ($3 != n || ($2 != "done" && $2 != "force")) next
+      if (($1 + 60) < t) next
+      if (u != "" && u != "0" && $1 >= u) next
+      if ($5 != "-" && $5 != tk) next
+      print
+    }
+    END {
+      if (mode == "nearest" && best != "" && bestd <= w) print best
+      if (mode == "next" && nd != "") print nd
+    }
   ' 2>/dev/null || true
 }
 
-_fleet_session_spawn_row() {  # <name> <ts> [dir] → 最接近的 spawn 行（≤窗口）；否则空
+_fleet_session_spawn_row() {  # <name> <ts> [dir] → 该仓台账里最接近的 spawn 行（≤窗口）；否则空
+  #   T573 返修 D1：**不再**退回「全部仓台账」—— 跨仓 spawn/done 不得参与本仓记录的分级
+  #   （`dir` 为空 = 调用方本就按全仓视图查询，如 logs 的无仓过滤）
   local name="${1-}" ts="${2-}" dir="${3-}" row=""
   [[ -n "$name" ]] || return 0
-  [[ -n "$dir" ]] && row="$(_fleet_ledger_scan "$dir" "$name" "$ts" nearest)"
-  # 本仓台账没有 ⇒ 退回全部台账（close 可能按另一路径记账）
-  [[ -n "$row" ]] || row="$(_fleet_ledger_scan "" "$name" "$ts" nearest)"
+  row="$(_fleet_ledger_scan "${dir:-}" "$name" "$ts" nearest)"
   printf '%s\n' "$row"
 }
 
-_fleet_session_outcome_rows() {  # <name> <ts> → 记录起始之后的 done/force 行（每行一个）
-  _fleet_ledger_scan "" "${1-}" "${2-}" outcome
+_fleet_session_outcome_rows() {  # <name> <ts> [dir] [until] [task] → 该代窗口内的 done/force 行（每行一个）
+  _fleet_ledger_scan "${3-}" "${1-}" "${2-}" outcome "${4-}" "${5-}"
 }
 
 _fleet_session_task_of() {  # <name> <ts> [dir] → task（无绑定 ⇒ 空）
@@ -269,7 +287,7 @@ _fleet_session_task_of() {  # <name> <ts> [dir] → task（无绑定 ⇒ 空）
 
 # 分级：正常 / 异常（+ 绑定的 task）。判不出 ⇒ 异常（fail-closed）。
 _fleet_session_grade() {  # <name> <ts> <cwd> → "<normal|anomaly>\t<task>"
-  local name="${1-}" ts="${2-}" cwd="${3-}" dir spawn="" task="" repo="" after="" k dir2
+  local name="${1-}" ts="${2-}" cwd="${3-}" dir spawn="" task="" repo="" gen="" until="" after="" k dir2
   dir="$(_fleet_sessions_dir_name "$(nao_phys_path "${cwd:-$PWD}")")"
   dir2="$FLEET_SESSIONS_ROOT/$dir"
   spawn="$(_fleet_session_spawn_row "$name" "$ts" "$dir2")"
@@ -277,8 +295,13 @@ _fleet_session_grade() {  # <name> <ts> <cwd> → "<normal|anomaly>\t<task>"
     task="$(printf '%s\n' "$spawn" | cut -f5)"
     repo="$(printf '%s\n' "$spawn" | cut -f6)"
     [[ "$task" == "-" ]] && task=""
+    # 代次窗口上界 = 本代 spawn 之后的下一个同名 spawn（无 ⇒ 无上界 = 最新一代）
+    gen="$(printf '%s\n' "$spawn" | cut -f1)"
+    until="$(_fleet_ledger_scan "$dir2" "$name" "$gen" next)"
   fi
-  after="$(_fleet_session_outcome_rows "$name" "$ts")"
+  # 无 spawn 行 ⇒ 代次判不出 ⇒ 不认 done/force（fail-closed：宁可留 7 天 + 点名）
+  after=""
+  [[ -n "$spawn" ]] && after="$(_fleet_session_outcome_rows "$name" "$ts" "$dir2" "$until" "$task")"
   # close 判据优先于回执：--force = 明示「非正常收尾」；done = close 判定正常
   k="$(printf '%s\n' "$after" | awk -F'\t' '{ print $2 }' | head -20)"
   if printf '%s\n' "$k" | grep -qx 'force'; then printf 'anomaly\t%s\n' "$task"; return 0; fi
@@ -293,16 +316,17 @@ _fleet_session_grade() {  # <name> <ts> <cwd> → "<normal|anomaly>\t<task>"
   printf 'anomaly\t%s\n' "$task"
 }
 
-# 异常点名（幂等：完全相同的行只写一次；文件缺失/不可写 ⇒ 只 warn）
-_fleet_session_anomaly_note() {  # <name> <task> <cwd> <file>
-  local name="${1-}" task="${2-}" cwd="${3-}" f="${4-}" tf line
-  [[ -n "$cwd" && "$cwd" != "-" && -d "$cwd" ]] || return 0
-  tf="$cwd/docs/tasks-state.md"
-  [[ -f "$tf" ]] || return 0
-  line="- [session-retention] $(date +%Y-%m-%d) · ${name:-?} · task=${task:--} · $f"
-  grep -qxF -- "$line" "$tf" 2>/dev/null && return 0
-  printf '%s\n' "$line" >> "$tf" 2>/dev/null \
-    || { warn "会话异常点名写入失败：$tf（不影响清理结果）"; return 1; }
+# 异常点名（T573 返修 D2：写记录所在 **state 子目录** `.retention.log`，不碰仓内交付台账；
+#   幂等 = 同一记录只点一次名（按记录路径去重，跨天重跑也不重复））
+_fleet_session_anomaly_note() {  # <name> <task> <file>
+  local name="${1-}" task="${2-}" f="${3-}" dir line
+  [[ -n "$f" ]] || return 0
+  dir="$(dirname "$f")"
+  [[ -d "$dir" ]] || return 0
+  grep -qF -- "· $f" "$dir/.retention.log" 2>/dev/null && return 0
+  line="$(date -u +%Y-%m-%dT%H:%M:%SZ) · [session-retention] ${name:-?} · task=${task:--} · $f"
+  printf '%s\n' "$line" >> "$dir/.retention.log" 2>/dev/null \
+    || { warn "会话异常点名写入失败：$dir/.retention.log（不影响清理结果）"; return 1; }
   return 0
 }
 
@@ -318,7 +342,7 @@ _fleet_session_purge_one() {  # <file> <days|""> <now> → "<deleted|kept>\t<gra
   g="$(_fleet_session_grade "$name" "$ts" "$cwd")"
   IFS=$'\t' read -r grade task <<< "$g"
   if [[ "$grade" != "normal" ]]; then
-    _fleet_session_anomaly_note "$name" "$task" "$cwd" "$f" || true
+    _fleet_session_anomaly_note "$name" "$task" "$f" || true
   fi
   if [[ -n "$days" ]]; then
     retain=$(( days * 86400 ))
@@ -370,6 +394,7 @@ fleet_sessions_purge() {  # [--days N] [--role R] [--repo <仓名|all>] [--quiet
   # ensure 顺手清理时静默（真删了才说一句）；显式 logs --purge 恒给一行
   if $quiet && (( deleted == 0 )); then return 0; fi
   log "会话记录清理：删除 ${deleted} 条 · 保留 ${kept} 条（异常 ${anomaly} 条；范围 = $([[ -z "$repo" || "$repo" == "all" ]] && printf '全部仓' || printf '%s' "$repo")；策略 = 正常 24h / 异常 7 天${days:+ · 本次 --days $days}）"
+  (( anomaly > 0 )) && log "  · 异常点名落 state 目录：${FLEET_SESSIONS_ROOT}/<编码 仓路径>/.retention.log（不写仓内 docs/tasks-state.md）"
   return 0
 }
 
@@ -408,7 +433,8 @@ _fleet_session_turns() {  # <file> [max] → 每行 "<HH:MM>\t<user|assistant|mo
     function hhmm(s,   p) {
       p = index(s, "\"timestamp\":\"")
       if (!p) return "??:??"
-      return substr(substr(s, p + 13), 12, 5)
+      # T573 返修 D7：时间恒为 UTC（Pi 记录 ISO8601 以 Z 结尾）⇒ 后缀显式标注，避免 +8 误读
+      return substr(substr(s, p + 13), 12, 5) "Z"
     }
     function toolnames(s,   out, p, q, rest) {
       out = ""

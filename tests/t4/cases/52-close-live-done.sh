@@ -13,6 +13,7 @@
 #   ④ 不撞 name_taken：回收后 `ensure` 同角色成功，且同名终端恰 1 个（旧地址不在）
 #   ⑤ 既有语义不变：live+working 无 --force ⇒ 拒（终端保留）· --force ⇒ 回收 · live+idle ⇒ 直接回收
 #   ⑥ 文档：`docs/INSTALL.md` 记了 `--keep` 的 live+done 边界
+#   ⑦ 守卫（返修 D8）：effect 复核时 `ls` 读不到 ⇒ **fail loud 保留终端**（不把「读不到」当「已消失」）
 #
 # 夹具：`tests/t4/fixtures/hc-double`（确定性替身）+ 私有 XDG 根；绝不碰用户真实桌面版 core。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
@@ -134,5 +135,22 @@ t4_assert_eq "" "$(addrs_named qa)" "⑤ idle 终端已回收"
 # ================================================================ ⑥ 文档：`--keep` 的 live+done 边界已记
 t4_assert_contains "$(cat "$T4_ROOT/docs/INSTALL.md" 2>/dev/null)" "live" "⑥ INSTALL.md 记了 live 形态"
 t4_assert_contains "$(cat "$T4_ROOT/docs/INSTALL.md" 2>/dev/null)" "keep" "⑥ INSTALL.md 记了 --keep 保活边界"
+
+# ================================================================ ⑦ D8：effect 复核读不到 ⇒ fail loud（不是「已消失」）
+#   注入点 = 替身 `kill` 之后让 `ls` 返 error payload + rc=1（找终端那次 ls 在 kill 前，不受影响）
+app_reset; mk_term t8 qa live done
+: > "$BE_APP_STATE/ls_fail_after_kill"
+APP_RC=""; run_app close qa
+rm -f "$BE_APP_STATE/ls_fail_after_kill" "$BE_APP_STATE/ls_fail_now"   # 立刻撤注入，后续断言读得到真相
+t4_assert_ne "0" "$APP_RC" "⑦ hc ls 读不到 ⇒ close 不判成功（rc≠0）"
+t4_assert_contains "$APP_OUT$APP_ERR" "不可判定" "⑦ fail loud：点名「回收结果不可判定」（不当已消失）"
+t4_assert_not_contains "$APP_OUT" "已回收 app 终端" "⑦ 不打印成功行（不假成功）"
+t4_assert_eq "" "$(addrs_named qa)" "⑦ 终端实际已被 rm（kill→rm 已成），但仍**不据此宣称成功**：判据 = ls 读得到"
+
+# 正控：同夹具不注入 ⇒ 正常回收（证明⑦的红不是夹具自身坏）
+app_reset; mk_term t8 qa live done
+APP_RC=""; run_app close qa
+t4_assert_eq "0" "$APP_RC" "⑦ 正控：不注入时同一夹具正常回收 rc=0"
+t4_assert_eq "" "$(addrs_named qa)" "⑦ 正控：终端已回收（七的红确因注入）"
 
 t4_exit

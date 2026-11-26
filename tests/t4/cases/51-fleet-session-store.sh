@@ -6,13 +6,19 @@
 #      仓 + 日期 + 角色 + 大小 + 路径 · `--raw` 原文
 #   ③ 仓维度：默认只看**当前仓**；`--repo <仓名>` 跨仓；同名角色两仓记录**互不串**；
 #      `--purge` 只清当前仓，`--repo all` 才全清
-#   ④ 分级清理：正常交付（有 done 回执）24h 删 · 异常（无回执）7 天留 + `docs/tasks-state.md` 点名
+#   ④ 分级清理：正常交付（有 done 回执）24h 删 · 异常（无回执）7 天留 + state 目录 `.retention.log` 点名
+#      （T573 返修 D2：机制状态**不写**仓内 `docs/tasks-state.md`）
 #   ⑤ 幂等：连跑两次 purge，第二次零删除 + rc=0
+#   ⑥ 无记录 ⇒ rc=0 + 一行提示
+#   ⑦ 跨代（返修 D1）：同名两代（旧代崩溃 / 新代正常）⇒ 各按自己的代次判，旧代留 7 天 + 点名
+#   ⑧ 跨仓（返修 D1）：他仓 `done` 不得升级本仓记录的分级
+#   ⑨ 全清（--repo all --days 0）· ⑩ 无记录 ⇒ rc=0 + 一行提示
 #
 # 口径（判据来源）：
 #   · 落盘面 = 命令行参数（`--session-dir <root>/--<编码 cwd>--`，替身 `pane run` 的原始串）+ 目录实建
 #   · 分级面 = 记录 jsonl（header `cwd` + `session_info.name`）+ 该仓目录 `.ledger`（spawn/done/force）
-#             + `<cwd>/docs/queue/<task>.receipt.json`
+#             + `<cwd>/docs/queue/<task>.receipt.json`；done/force 必须落在**该代窗口**
+#             （本代 spawn 之后、下一同名 spawn 之前）且只认**本仓**台账
 #   · 时间面 = 夹具把 mtime 拨到 3 天前（正常项 > 24h 且异常项 < 7 天）
 # 夹具：`tests/t4/fixtures/herdr-double`（不执行真 pi）+ 隔离 HOME；不碰用户 `~/.pi/agent/sessions`
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
@@ -157,12 +163,14 @@ t4_assert_contains "$T4_OUT_ANSI" "删除 1 条" "④ 本仓正常交付（有 d
 t4_assert_absent "$SESS_DIR/2026-11-23T01-00-00-000Z_ok.jsonl" "④ 本仓正常项记录已删"
 t4_assert_file "$SESS_DIR/2026-11-23T03-00-00-000Z_bad.jsonl" "④ 本仓异常项（无回执，<7 天）仍在"
 t4_assert_file "$OTHER_DIR/2026-11-23T05-00-00-000Z_pm.jsonl" "④ 他仓记录不被本仓 purge 波及（作用域=当前仓）"
-t4_assert_contains "$(cat "$LAB/docs/tasks-state.md" 2>/dev/null)" "[session-retention]" \
-  "④ 异常点名落 docs/tasks-state.md"
-t4_assert_contains "$(cat "$LAB/docs/tasks-state.md" 2>/dev/null)" "T901" "④ 点名含任务编号"
-t4_assert_contains "$(cat "$LAB/docs/tasks-state.md" 2>/dev/null)" "rd-infra" "④ 点名含角色"
-t4_assert_contains "$(cat "$LAB/docs/tasks-state.md" 2>/dev/null)" "2026-11-23T03-00-00-000Z_bad.jsonl" \
+RETLOG="$SESS_DIR/.retention.log"
+t4_assert_file "$RETLOG" "④ 异常点名落 **state 目录**（$(basename "$SESS_DIR")/.retention.log）"
+t4_assert_contains "$(cat "$RETLOG" 2>/dev/null)" "T901" "④ 点名含任务编号"
+t4_assert_contains "$(cat "$RETLOG" 2>/dev/null)" "rd-infra" "④ 点名含角色"
+t4_assert_contains "$(cat "$RETLOG" 2>/dev/null)" "2026-11-23T03-00-00-000Z_bad.jsonl" \
   "④ 点名含记录路径"
+t4_assert_eq "0" "$(grep -cF -- '[session-retention]' "$LAB/docs/tasks-state.md" 2>/dev/null || true)" \
+  "④ D2：仓内交付台账 docs/tasks-state.md 零写入（点名不污染业务仓）"
 
 # ================================================================ ⑤ 幂等（第二次零删除）+ --repo all 才全清
 BEFORE_LIST="$(ls "$SESS_DIR"/*.jsonl 2>/dev/null | sort || true)"
@@ -170,15 +178,51 @@ run_fleet logs --purge
 t4_assert_eq "0" "$T4_RC" "⑤ 连跑第二次 purge rc=0"
 t4_assert_contains "$T4_OUT_ANSI" "删除 0 条" "⑤ 第二次零删除（幂等）"
 t4_assert_eq "$BEFORE_LIST" "$(ls "$SESS_DIR"/*.jsonl 2>/dev/null | sort || true)" "⑤ 记录集合逐字不变"
-t4_assert_eq "1" "$(grep -cF -- '[session-retention]' "$LAB/docs/tasks-state.md" || true)" \
-  "⑤ 异常点名不重复写（仍 1 行）"
+t4_assert_eq "1" "$(grep -cF -- '[session-retention]' "$RETLOG" 2>/dev/null || true)" \
+  "⑤ 异常点名不重复写（.retention.log 仍 1 行）"
+
+# ================================================================ ⑦ 跨代：同名两代各按自己的代次判（返修 D1）
+#   旧代（3 天前崩溃、无 close）⇒ 异常（7 天，留）；新代（30h 前 normal close）⇒ 正常（24h，删）
+#   旧实现按**名字**匹配 done（无代次上界）⇒ 旧代被新代的 done 判成正常 ⇒ 24h 删且不点名（假绿）
+ISO_G1="$(date -u -d '3 days ago 5 hours ago' +%Y-%m-%dT%H:%M:%S.000Z 2>/dev/null || date -u -v-3d -v-5H +%Y-%m-%dT%H:%M:%S.000Z)"
+ISO_G2="$(date -u -d '30 hours ago' +%Y-%m-%dT%H:%M:%S.000Z 2>/dev/null || date -u -v-30H +%Y-%m-%dT%H:%M:%S.000Z)"
+ISO_G2D="$(date -u -d '29 hours ago' +%Y-%m-%dT%H:%M:%S.000Z 2>/dev/null || date -u -v-29H +%Y-%m-%dT%H:%M:%S.000Z)"
+G1="$SESS_DIR/2026-11-23T00-00-00-000Z_gen1.jsonl"; G2="$SESS_DIR/2026-11-23T06-00-00-000Z_gen2.jsonl"
+t51_mk_record "$G1" qa3 "$LAB" "$ISO_G1" "[T700] 旧代崩溃无 close"
+t51_mk_record "$G2" qa3 "$LAB" "$ISO_G2" "[T701] 新代正常收尾"
+t51_ledger "$SESS_DIR" "$ISO_G1"  spawn qa3 T700 "$LAB"
+t51_ledger "$SESS_DIR" "$ISO_G2"  spawn qa3 T701 "$LAB"
+t51_ledger "$SESS_DIR" "$ISO_G2D" done  qa3 T701 "$LAB"
+touch -d '3 days ago'  "$G1"
+touch -d '30 hours ago' "$G2"
+run_fleet logs --purge
+t4_assert_eq "0" "$T4_RC" "⑦ 跨代 purge rc=0"
+t4_assert_file "$G1" "⑦ 同名旧代（崩溃无 close）仍在 —— 不被新代 done 升级（留 7 天）"
+t4_assert_absent "$G2" "⑦ 同名新代（done，>24h）已删 —— 两代各按自己的代次判"
+t4_assert_contains "$(cat "$RETLOG" 2>/dev/null)" "2026-11-23T00-00-00-000Z_gen1.jsonl" \
+  "⑦ 旧代被点名（判不出 = 异常）"
+t4_assert_not_contains "$(cat "$RETLOG" 2>/dev/null)" "2026-11-23T06-00-00-000Z_gen2.jsonl" \
+  "⑦ 新代不被点名（done 命中本代窗口）"
+
+# ================================================================ ⑧ 跨仓 done 不得升级本仓记录（返修 D1）
+#   本仓记录（3 天前、本仓有 spawn 无 done）+ 他仓同名 done ⇒ 仍判异常（留 + 点名）
+G3="$SESS_DIR/2026-11-23T02-00-00-000Z_xrepo.jsonl"
+t51_mk_record "$G3" qa4 "$LAB" "$ISO_G1" "[T702] 本仓跨仓判据"
+t51_ledger "$SESS_DIR" "$ISO_G1" spawn qa4 T702 "$LAB"
+t51_ledger "$OTHER_DIR" "$ISO_G2D" done qa4 T702 "$OTHER"
+touch -d '3 days ago' "$G3"
+run_fleet logs --purge
+t4_assert_eq "0" "$T4_RC" "⑧ 跨仓 purge rc=0"
+t4_assert_file "$G3" "⑧ 他仓 done 不影响本仓分级 ⇒ 本仓记录仍留（7 天）"
+t4_assert_contains "$(cat "$RETLOG" 2>/dev/null)" "2026-11-23T02-00-00-000Z_xrepo.jsonl" \
+  "⑧ 本仓记录被点名（不被他仓 done 升级成正常）"
 
 run_fleet logs --purge --repo all --days 0
-t4_assert_eq "0" "$T4_RC" "⑤ --repo all --days 0 rc=0"
-t4_assert_absent "$OTHER_DIR/2026-11-23T05-00-00-000Z_pm.jsonl" "⑤ --repo all 才清到他仓（--days 0 全清）"
+t4_assert_eq "0" "$T4_RC" "⑨ --repo all --days 0 rc=0"
+t4_assert_absent "$OTHER_DIR/2026-11-23T05-00-00-000Z_pm.jsonl" "⑨ --repo all 才清到他仓（--days 0 全清）"
 
-# ================================================================ ⑥ 无记录 ⇒ rc=0 + 一行提示（不是错误）
+# ================================================================ ⑩ 无记录 ⇒ rc=0 + 一行提示（不是错误）
 run_fleet logs qa
-t4_assert_eq "0" "$T4_RC" "⑥ logs 无记录 rc=0"
-t4_assert_contains "$T4_OUT_ANSI" "无记录" "⑥ 无记录给一行提示"
+t4_assert_eq "0" "$T4_RC" "⑩ logs 无记录 rc=0"
+t4_assert_contains "$T4_OUT_ANSI" "无记录" "⑩ 无记录给一行提示"
 t4_exit
