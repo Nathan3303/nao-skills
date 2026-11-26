@@ -87,6 +87,19 @@ export interface HomeFlow {
   messages: HomeFlowMessage[]
 }
 
+export interface HomeResultLine {
+  /** body 普通行 / ok 通过 / warn 打回 / gap 空隙 */
+  kind: 'body' | 'ok' | 'warn' | 'gap'
+  text: string
+}
+
+export interface HomeResultBlock {
+  /** 面板标题，如「主干上的一条提交」 */
+  label: string
+  head: string
+  lines: HomeResultLine[]
+}
+
 export interface HomeCompareItem {
   title: string
   body: string
@@ -110,6 +123,10 @@ export interface HomeData {
   compareTitle: string
   compareLead: string
   compare: HomeCompareItem[]
+  resultKicker: string
+  resultTitle: string
+  resultLead: string
+  result: HomeResultBlock[]
   problemsKicker: string
   problemsTitle: string
   problemsLead: string

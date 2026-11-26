@@ -1116,3 +1116,68 @@
     gap: var(--nh-sp-5);
   }
 }
+
+/* ── 段六：产物证据（一条提交 + 一份回执） ── */
+.nh .results {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--nh-sp-6);
+}
+
+.nh .result {
+  padding: var(--nh-sp-5);
+  border: 1px solid var(--nh-border);
+  border-left: 3px solid var(--nh-accent);
+  border-radius: 12px;
+  background: var(--nh-sunken);
+}
+
+.nh .result-label {
+  margin: 0 0 var(--nh-sp-3);
+  font-size: var(--nh-fs-12);
+  font-weight: 600;
+  color: var(--nh-text-3);
+}
+
+.nh .result-head {
+  margin: 0 0 var(--nh-sp-4);
+  padding-bottom: var(--nh-sp-3);
+  border-bottom: 1px solid var(--nh-border);
+  font-family: var(--nh-mono);
+  font-size: var(--nh-fs-13);
+  line-height: 1.6;
+  color: var(--nh-text);
+}
+
+.nh .result-lines {
+  display: grid;
+  gap: var(--nh-sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nh .result-line {
+  font-family: var(--nh-mono);
+  font-size: var(--nh-fs-13);
+  line-height: 1.6;
+  color: var(--nh-text-2);
+}
+
+.nh .result-line.is-ok {
+  color: #1f7a45;
+}
+
+.nh .result-line.is-warn {
+  color: #9a5b00;
+}
+
+.nh .result-line.is-gap {
+  height: var(--nh-sp-2);
+}
+
+@media (max-width: 900px) {
+  .nh .results {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

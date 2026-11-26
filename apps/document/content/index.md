@@ -50,10 +50,10 @@ home:
   jumpNav:
     - text: 三个毛病
       href: '#why'
-    - text: 怎么用
-      href: '#flow'
     - text: 七个角色
       href: '#roles'
+    - text: 怎么用
+      href: '#flow'
     - text: 三步装好
       href: '#install'
     - text: 常见问题
@@ -61,7 +61,7 @@ home:
   flow:
     kicker: 怎么用
     title: 一句需求，七步走完
-    lead: 拆单、契约、回执 —— 刚才那三个毛病，就治在这几步上。你只在第 1 步和第 7 步出现，中间是角色之间自己派单、回执、打回。方案与界面两步按需启用，小改动直接进研发。
+    lead: 七个角色不是各干各的。一句需求进来，按这七步流到主干；拆单、契约、回执 —— 那三个毛病就治在这三处。你只在第 1 步和第 7 步出现；方案与界面按需，小改动直接进研发。
     steps:
       - num: '01'
         title: 你说一句话
@@ -157,6 +157,32 @@ home:
       body: 派活带单号，干完回执写清改了什么、怎么验的，不用回头翻聊天。
     - title: 干完能收回去
       body: 会话用完即收，不会留下一排忘关的窗口占着名字。
+  resultKicker: 产物
+  resultTitle: 跑完之后，你收到这两样
+  resultLead: 一条能读的提交，一份能复查的验收记录 —— 都不是聊天记录。
+  result:
+    - label: 主干上的一条提交
+      head: 'feat(login): 邮箱密码登录 —— 会话走 httpOnly cookie，错误码 401 / 423'
+      lines:
+        - kind: body
+          text: '- 登录页两屏四态，错误提示放在输入框下方'
+        - kind: body
+          text: '- POST /api/login 校验入参，401 与 423 分得清'
+        - kind: body
+          text: '- 用例 6 条，含重复提交防抖'
+    - label: QA 的验收回执
+      head: '[T5] 验收 T2 / T3 / T4'
+      lines:
+        - kind: ok
+          text: '✓ 通过 12 项'
+        - kind: warn
+          text: '! 打回 1 项 · 连点提交叠 3 条提示'
+        - kind: ok
+          text: '↻ 复验通过 · 11:52'
+        - kind: gap
+          text: ''
+        - kind: body
+          text: '结论：放行，可合并'
   problemsKicker: 为什么需要
   problemsTitle: 一个人对着 AI 写代码，常见三个毛病
   problemsLead: 不是模型不够强，是缺分工与交付纪律。
