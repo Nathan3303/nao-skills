@@ -718,19 +718,32 @@ _term_app_deliver() {  # <addr> <message> → 0 已投递 / 1 失败（stdout: e
 
 # ---- 回收（M5/BR4）：kill → rm（顺序固定；kill 幂等；live 直接 rm ⇒ rc=1 kind:live）----
 _term_app_find_by_name() {  # <name> → 每行一个地址（ls --all；名字取**顶层** name，见 _term_app_name）
-  local name="${1-}" ls a g
-  ls="$(_term_app_exec ls --all --json 2>/dev/null)" || return 0
-  _term_app_payload_ok "$ls" || return 0
+  #   返回值是三态契约（T573 返修 D8 · Issue #207 AC「后端异常 ⇒ fail loud」）：
+  #     0 = ls **读到了**（命中 0..n 条，stdout 给地址）· 2 = **读不到**（ls rc≠0 / error payload /
+  #     有 get 失败且零命中 ⇒ 该终端被跳过，「没找到」≠「不存在」，调用方不得报成功）
+  local name="${1-}" ls a g n=0 gf=0
+  ls="$(_term_app_exec ls --all --json 2>/dev/null)" || return 2
+  _term_app_payload_ok "$ls" || return 2
   while IFS= read -r a; do
     [[ -n "$a" ]] || continue
-    g="$(_term_app_exec get "$a" --json 2>/dev/null)" || continue
-    [[ "$(_term_app_name "$g")" == "$name" ]] && printf '%s\n' "$a"
+    g="$(_term_app_exec get "$a" --json 2>/dev/null)" || { gf=1; continue; }
+    _term_app_payload_ok "$g" || { gf=1; continue; }
+    if [[ "$(_term_app_name "$g")" == "$name" ]]; then printf '%s\n' "$a"; n=$((n + 1)); fi
   done < <(printf '%s' "$ls" | grep -o '"address":"[^"]*"' | cut -d'"' -f4)
+  (( n == 0 && gf == 1 )) && return 2
+  return 0
 }
 
 _term_app_reclaim() {  # <name> <repo> <force> <core> <scope> <ensure-target> → 0 已回收 / 1 拒绝或失败
-  local name="${1-}" repo="${2-}" force="${3:-false}" addrs=() addr g tstate st
-  mapfile -t addrs < <(_term_app_find_by_name "$name")
+  local name="${1-}" repo="${2-}" force="${3:-false}" addrs=() addr g tstate st _found="" _frc=0
+  # 定位阶段读不到 ⇒ **不可判定**：不打印任何成功行、rc≠0（Issue #207 AC；原实现把空当「未运行」）
+  _found="$(_term_app_find_by_name "$name")"; _frc=$?
+  if (( _frc != 0 )); then
+    warn "回收结果不可判定（hc ls 读不到）：$name ⇒ 不报成功；终端可能仍在（核 app core 是否就绪 / hc ls --all）"
+    return 1
+  fi
+  addrs=()
+  [[ -n "$_found" ]] && mapfile -t addrs < <(printf '%s\n' "$_found")
   if (( ${#addrs[@]} == 0 )); then
     log "未发现 app 终端：$name（已不在运行；幂等成功）"
     return 0
