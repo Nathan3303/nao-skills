@@ -29,6 +29,13 @@ home:
       external: true
       style: text
   trust: MIT 开源 · Node ≥18 · 仅支持 pi
+  preview:
+    kicker: 舰队在跑的样子
+    title: 七个角色，一个界面
+    lead: 左边是仓和角色，右边是它们正在干的事。谁在忙、谁空闲，一眼就看到。
+    alt: nao 舰队在 Herdr 桌面端里协作：pm 提交变更，随后 rd-infra 接手
+    note: 24 秒实录 · 无声 · 无加速
+    fallback: 你的浏览器没有播放这段录屏。
   terminal:
     - kind: cmd
       text: nao-fleet.sh check
@@ -48,6 +55,8 @@ home:
       gap: true
       cursor: true
   jumpNav:
+    - text: 舰队预览
+      href: '#preview'
     - text: 三个毛病
       href: '#why'
     - text: 七个角色

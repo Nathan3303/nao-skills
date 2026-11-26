@@ -51,6 +51,15 @@ export interface HomeFooter {
   legal: string
 }
 
+export interface HomePreview {
+  kicker: string
+  title: string
+  lead: string
+  alt: string
+  note: string
+  fallback: string
+}
+
 export interface HomeData {
   kicker: string
   title: string[]
@@ -62,6 +71,7 @@ export interface HomeData {
   cta: HomeLink[]
   trust: string
   terminal: TerminalLine[]
+  preview: HomePreview
   jumpNav: { text: string; href: string }[]
   problems: HomeProblem[]
   problemsKicker: string
