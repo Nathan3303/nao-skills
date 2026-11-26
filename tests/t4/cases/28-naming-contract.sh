@@ -180,9 +180,12 @@ t4_assert_ge "2" "$(grep -c 'fleet_meta_gc' "$SUBJECT_BUNDLE" || true)" "C3④ �
 t4_assert_contains "$(awk '/^_term_app_identity\(\)/,/^}/' "$(t4_fleet_file_for "$T4_ROOT/.agents/scripts" _term_app_identity)")" \
   'TERM_APP_LABEL_NAME' "C3⑤ 身份还原第一层 = labels.nao.name"
 # 身份还原顺序：nao.name 行 < backend name 行 < argv --name 行
+#   T574（#207）：顶层 name 的取法由 `_term_app_field "$g" name` 改为 `_term_app_name "$g"`
+#   （剔除 foreground/labels 后取首个 name；真 hc 键序下老抽取恒得 foreground.name="pi"）。
+#   本锚随之改为调用点函数名 —— 顺序契约不变，且「剔除嵌套块」另有 cases/52 ① 正反两条。
 id_body="$(awk '/^_term_app_identity\(\)/,/^}/' "$(t4_fleet_file_for "$T4_ROOT/.agents/scripts" _term_app_identity)")"
 ln_label="$(printf '%s\n' "$id_body" | grep -n 'TERM_APP_LABEL_NAME' | head -1 | cut -d: -f1)"
-ln_name="$(printf '%s\n' "$id_body" | grep -n '_term_app_field "$g" name' | head -1 | cut -d: -f1)"
+ln_name="$(printf '%s\n' "$id_body" | grep -n '_term_app_name "$g"' | head -1 | cut -d: -f1)"
 ln_argv="$(printf '%s\n' "$id_body" | grep -n '_term_argv_name' | head -1 | cut -d: -f1)"
 t4_assert_eq "1" "$([ -n "$ln_label" ] && [ -n "$ln_name" ] && [ -n "$ln_argv" ] && (( ln_label < ln_name && ln_name < ln_argv )) && echo 1 || echo 0)" \
   "C3⑤ 身份还原顺序 = nao.name → name → argv --name"
