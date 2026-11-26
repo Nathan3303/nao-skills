@@ -28,7 +28,7 @@ description: 任务完成协议（按需，任务收尾/收尾回执前读取）
 **已处置**（附命令与结果）｜**显式接受**（理由 + 到期日）｜**转台账**（含 owner）。
 
 - **依赖类必须两项决策**：`npm audit`（逐告警处置/接受）与 `install-scripts`（批准或拒绝 pending script）——**不许留空跳过**。
-- 证据落 `docs/reports/<编号>-followups.md`（一行一条：编号/来源/严重度/出口/到期）；可执行项同步进项目 backlog（本仓 = `docs/tasks-state.md` 待派发队列）。
+- 证据落 `docs/<任务号>-<slug>/followups.md`（一行一条：编号/来源/严重度/出口/到期）；可执行项同步进项目 backlog（本仓 = `docs/tasks-state.md` 待派发队列）。
 - 超阈值（安全类 / 到期未决 >30 天）升 Issue。
 - **首个实例**：`docs/reports/M20261014-pi-ext-update-followups.md`（`pi update --extensions` 4 漏洞 + 1 待批脚本，exit 0 但留 3 项遗留）。
 
@@ -43,7 +43,7 @@ description: 任务完成协议（按需，任务收尾/收尾回执前读取）
 
 ## 五、分级复盘
 
-- **L0 一行（默认）**：四字段 `结论 / 遗留 / 日期 / 编号`，落台账（示例：`docs/reports/M20261014-pi-ext-update-followups.md` §四）。
-- **L1 完整复盘**：`docs/reports/<编号>-retro.md` 四节 —— 发生了什么 / 根因 / 改了哪条机制 / 可验证防线。
+- **L0 一行（默认）**：四字段 `结论 / 遗留 / 日期 / 编号`，落台账（示例：`docs/reports/M20261014-pi-ext-update-followups.md` §四 —— 历史路径；2026-11-27 前的报告仍留 `docs/reports/`）。
+- **L1 完整复盘**：`docs/<任务号>-<slug>/retro.md` 四节 —— 发生了什么 / 根因 / 改了哪条机制 / 可验证防线。
 - **L1 触发（五条，命中任一）**：返工 ≥1 次｜漏闸｜事故（线上 / 共享分支受损或用户可见中断）｜同类问题第二次出现｜用户投诉。
 - 反面示例：单次文档笔误改回 → L0 一行即可；同批两次因未读对方卡版本导致返工 → 命中「返工 ≥1」+「同类第二次」→ L1。

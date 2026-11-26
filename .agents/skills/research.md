@@ -39,7 +39,7 @@ description: 按需技能——外部调研协议（产品形态可查；技术�
 
 ## 三、检索纪律（省 token）
 
-1. **先建文件再检索**：先写 `docs/research/YYYY-MM-DD-<主题>.md` 的问题清单与表头——结果有落点，上下文才不留残渣。
+1. **先建文件再检索**：先写 `docs/<任务号>-<slug>/<topic>-调研.md` 的问题清单与表头——结果有落点，上下文才不留残渣。
 2. **只取 3–5 条一手来源**：官方文档 / 规范 / RFC / 一手实现 > 高质量博客 > 二手综述；**拒内容农场与营销页**。
 3. **引用格式**（每条来源必带）：`- [标题](URL) · 访问 YYYY-MM-DD · 一句话结论`。
 4. **全文只落盘**：抓取内容写进报告文件；线程只回 `≤150 字摘要 + 路径`，**禁止贴正文**。
@@ -58,7 +58,7 @@ description: 按需技能——外部调研协议（产品形态可查；技术�
 
 - PM → PRD「用户场景 / 业务规则 / 范围」；引用来源，**技术前提留空**待 arch。
 - arch → ADR：`参考来源` + `对照过的备选模式（含不采纳理由）`（见 @.agents/skills/arch-patterns.md）。
-- 报告统一落盘 `docs/research/`（归档约定见 @.agents/common/intercom-protocol.md「归档约定」）。
+- 报告统一落盘任务目录（`docs/<任务号>-<slug>/`，约定见 @.agents/checklists/deliverable-docs.md §十）（归档约定见 @.agents/common/intercom-protocol.md「归档约定」）。
 - 报告正文按 @.agents/checklists/deliverable-docs.md §六 写：结论摘要 ≤5 行、来源带访问日期、适配三栏、抓取正文不进正文（上限 120 行）。
 
 ## 六、反模式
