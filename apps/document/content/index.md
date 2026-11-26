@@ -43,7 +43,7 @@ home:
       text: 3 个会话窗口逐个亮起（要拉满 7 个，照快速开始里的三步走）
       more: true
     - kind: muted
-      text: 你：想加个「导出 CSV」功能
+      text: 你：想加个登录页
       more: true
       gap: true
       cursor: true
@@ -52,10 +52,137 @@ home:
       href: '#why'
     - text: 七个角色
       href: '#roles'
+    - text: 怎么用
+      href: '#flow'
     - text: 三步装好
       href: '#install'
     - text: 常见问题
       href: '#faq'
+  flow:
+    kicker: 怎么用
+    title: 一句需求，七步走完
+    lead: 七个角色不是各干各的。一句需求进来，按这七步流到主干；拆单、契约、回执 —— 那三个毛病就治在这三处。你只在第 1 步和第 7 步出现；方案与界面按需，小改动直接进研发。
+    steps:
+      - num: '01'
+        title: 你说一句话
+        body: '「做个登录页，邮箱加密码，错了给提示。」不用写规格，不用拆任务。'
+        yours: true
+        you: 你在这里
+      - num: '02'
+        title: pm 拆单派活
+        body: 拆成方案、界面、前端、后端、测试五单，按依赖顺序发出去。
+      - num: '03'
+        title: arch 定方案
+        body: 会话存哪儿、错误码怎么定、接口分几个端点，先写清契约再动工。
+        optional: true
+        optionalNote: 按需
+      - num: '04'
+        title: uiux 出界面
+        body: 两屏稿子、四种状态：默认、错误、加载、禁用，都定死。
+        optional: true
+        optionalNote: 按需
+      - num: '05'
+        title: 研发并行干
+        body: 前端照稿实现，后端照契约实现，两边互不阻塞。
+      - num: '06'
+        title: QA 逐条验
+        body: 过了的回一条放行；不过的当场打回，附复现步骤，改完再看。
+      - num: '07'
+        title: 合并到主干
+        body: 全部放行后由研发合并，主干上留一条可读提交，一个需求一条。
+        yours: true
+        you: 你点确认
+    messagesTitle: 中间实际发生的事（就是会话之间发的消息）
+    messagesNote: 从 09:30 到 11:55 —— 一个小需求走完一轮。
+    messagesDisclaimer: 时间只是示意：快慢取决于所用模型的能力与速率、机器负载，以及需求本身的复杂度。不保证每个需求都在这个时间内完成。
+    messages:
+      - time: '09:30'
+        from: pm
+        to: arch-designer
+        tag: T1
+        text: 定登录方案 · 会话存哪儿 · 401 错误码 · 分几个端点
+      - time: '09:41'
+        from: arch-designer
+        to: pm
+        text: 契约 3 个端点 · 会话走 httpOnly cookie · 错误码 401 / 423
+      - time: '09:45'
+        from: pm
+        to: uiux-designer
+        tag: T2
+        text: 登录页两屏 · 四态：默认 / 错误 / 加载 / 禁用
+      - time: '10:05'
+        from: uiux-designer
+        to: pm
+        text: 稿子两屏四态齐 · 错误提示放输入框下方 · 禁用态置灰
+      - time: '10:08'
+        from: pm
+        to: rd-fe
+        tag: T3
+        text: 照 uiux-designer 的稿实现 · 接口按 arch-designer 的契约接
+      - time: '10:08'
+        from: pm
+        to: rd-be
+        tag: T4
+        text: 照 arch-designer 的契约实现 POST /api/login · 密码不落明文
+      - time: '11:05'
+        from: rd-be
+        to: pm
+        text: done · 3 个文件 · 200 / 401 / 423 都验过
+      - time: '11:08'
+        from: pm
+        to: qa
+        tag: T5
+        text: 验收 T2 / T3 / T4 · 重点看错误提示和重复提交
+      - time: '11:42'
+        from: qa
+        to: pm
+        text: 打回 1 条 · 连点提交会叠出三条提示（附复现步骤）
+      - time: '11:52'
+        from: rd-fe
+        to: pm
+        text: 已修 · 300 毫秒防抖，只留一条提示
+      - time: '11:55'
+        from: pm
+        to: 你
+        text: 都过了，合并？
+  compareKicker: 和直接开几个窗口的区别
+  compareTitle: 这不是多开几个窗口
+  compareLead: 自己开三个 pi，也能让它们干活。差别在这四件上。
+  compare:
+    - title: 角色带规矩
+      body: 每个角色有自己的职责边界和检查清单，不是一句「你是前端」。
+    - title: 状态一眼看到
+      body: 一个仓一个空间、一个角色一个标签，谁在忙、谁空着，不用问。
+    - title: 交接有凭证
+      body: 派活带单号，干完回执写清改了什么、怎么验的，不用回头翻聊天。
+    - title: 干完能收回去
+      body: 会话用完即收，不会留下一排忘关的窗口占着名字。
+  resultKicker: 产物
+  resultTitle: 跑完之后，你收到这两样
+  resultLead: 一条能读的提交，一份能复查的验收记录 —— 都不是聊天记录。
+  result:
+    - label: 主干上的一条提交
+      head: 'feat(login): 邮箱密码登录 —— 会话走 httpOnly cookie，错误码 401 / 423'
+      lines:
+        - kind: body
+          text: '- 登录页两屏四态，错误提示放在输入框下方'
+        - kind: body
+          text: '- POST /api/login 校验入参，401 与 423 分得清'
+        - kind: body
+          text: '- 用例 6 条，含重复提交防抖'
+    - label: QA 的验收回执
+      head: '[T5] 验收 T2 / T3 / T4'
+      lines:
+        - kind: ok
+          text: '✓ 通过 12 项'
+        - kind: warn
+          text: '! 打回 1 项 · 连点提交叠 3 条提示'
+        - kind: ok
+          text: '↻ 复验通过 · 11:52'
+        - kind: gap
+          text: ''
+        - kind: body
+          text: '结论：放行，可合并'
   problemsKicker: 为什么需要
   problemsTitle: 一个人对着 AI 写代码，常见三个毛病
   problemsLead: 不是模型不够强，是缺分工与交付纪律。
@@ -121,6 +248,8 @@ home:
   faq:
     - q: 会改我的代码库吗？
       a: 只会新增三样东西：项目根的 AGENTS.md、.pi/settings.json，以及一个转发入口脚本。角色卡、清单、技能这些机制文件都在依赖包里，不铺进你的仓库，也不碰你原有文件；仓库里已有 AGENTS.md 时是合并追加，不会覆盖。
+    - q: 要花钱吗？
+      a: 机制本身是 MIT，不花钱。真正跑起来用的是你自己的 pi 和模型额度 —— 七个角色同时干活，token 消耗比一个人用多得多。可以先只开 PM 加一个研发角色试水，觉得顺手再补人。
     - q: 除了 pi，能配别的编程 Agent 吗？
       a: 不能。nao 的多会话派活、回执、回收整套机制都建立在 pi 之上，只支持 pi，不为其他编程 Agent 做适配，也不承诺可互换。
     - q: 它会在 GitHub 上开 PR 吗？

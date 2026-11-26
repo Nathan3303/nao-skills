@@ -51,6 +51,60 @@ export interface HomeFooter {
   legal: string
 }
 
+export interface HomeFlowStep {
+  num: string
+  title: string
+  body: string
+  /** 这一步需要用户参与（标出「你在这里」） */
+  yours?: boolean
+  you?: string
+  /** 按需启用（不是每个需求都要走） */
+  optional?: boolean
+  /** 按需步骤的徽标文字，如「按需」 */
+  optionalNote?: string
+}
+
+export interface HomeFlowMessage {
+  /** 时间戳，如 09:30（让流程有「多快」的体感） */
+  time?: string
+  from: string
+  to: string
+  text: string
+  /** 任务号，如 T1 */
+  tag?: string
+}
+
+export interface HomeFlow {
+  kicker: string
+  title: string
+  lead: string
+  steps: HomeFlowStep[]
+  messagesTitle: string
+  /** 日志下方的一句总结，如「一个小需求走完一轮」 */
+  messagesNote?: string
+  /** 紧跟 note 的免责说明（时长只是示意，不是承诺） */
+  messagesDisclaimer?: string
+  messages: HomeFlowMessage[]
+}
+
+export interface HomeResultLine {
+  /** body 普通行 / ok 通过 / warn 打回 / gap 空隙 */
+  kind: 'body' | 'ok' | 'warn' | 'gap'
+  text: string
+}
+
+export interface HomeResultBlock {
+  /** 面板标题，如「主干上的一条提交」 */
+  label: string
+  head: string
+  lines: HomeResultLine[]
+}
+
+export interface HomeCompareItem {
+  title: string
+  body: string
+}
+
 export interface HomeData {
   kicker: string
   title: string[]
@@ -64,6 +118,15 @@ export interface HomeData {
   terminal: TerminalLine[]
   jumpNav: { text: string; href: string }[]
   problems: HomeProblem[]
+  flow: HomeFlow
+  compareKicker: string
+  compareTitle: string
+  compareLead: string
+  compare: HomeCompareItem[]
+  resultKicker: string
+  resultTitle: string
+  resultLead: string
+  result: HomeResultBlock[]
   problemsKicker: string
   problemsTitle: string
   problemsLead: string
