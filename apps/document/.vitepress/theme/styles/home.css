@@ -881,3 +881,163 @@
     transition: background-color 0.12s ease;
   }
 }
+
+/* ── 段三：一个需求五步走完（流程条 + 消息日志） ── */
+.nh .flow-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--nh-sp-4);
+  margin: 0 0 var(--nh-sp-10);
+  padding: 0;
+  list-style: none;
+  counter-reset: flow;
+}
+
+.nh .flow-step {
+  position: relative;
+  padding: var(--nh-sp-5) var(--nh-sp-4) var(--nh-sp-5);
+  border: 1px solid var(--nh-border);
+  border-radius: 12px;
+  background: var(--nh-page);
+}
+
+.nh .flow-step.is-yours {
+  border-color: color-mix(in srgb, var(--nh-accent) 34%, var(--nh-border));
+  background: color-mix(in srgb, var(--nh-accent) 5%, var(--nh-page));
+}
+
+.nh .flow-num {
+  margin: 0 0 var(--nh-sp-2);
+  font-family: var(--nh-mono);
+  font-size: var(--nh-fs-12);
+  font-weight: 600;
+  color: var(--nh-text-3);
+}
+
+.nh .flow-step.is-yours .flow-num {
+  color: var(--nh-accent);
+}
+
+.nh .flow-step h3 {
+  font-size: var(--nh-fs-15);
+  line-height: 1.5;
+}
+
+.nh .flow-body {
+  margin: var(--nh-sp-2) 0 0;
+  font-size: var(--nh-fs-13);
+  line-height: 1.65;
+  color: var(--nh-text-2);
+}
+
+.nh .flow-you {
+  display: inline-block;
+  margin-top: var(--nh-sp-3);
+  font-size: var(--nh-fs-12);
+  font-weight: 600;
+  color: var(--nh-accent);
+}
+
+.nh .flow-log {
+  border: 1px solid var(--nh-border);
+  border-radius: 12px;
+  background: var(--nh-sunken);
+  padding: var(--nh-sp-5) var(--nh-sp-6);
+}
+
+.nh .flow-log-head {
+  margin: 0 0 var(--nh-sp-4);
+  font-size: var(--nh-fs-12);
+  font-weight: 600;
+  color: var(--nh-text-3);
+}
+
+.nh .flow-msgs {
+  display: grid;
+  gap: var(--nh-sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nh .flow-msg {
+  display: grid;
+  grid-template-columns: 4.6rem 0.9rem 4.6rem 2.1rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0 var(--nh-sp-2);
+  font-family: var(--nh-mono);
+  font-size: var(--nh-fs-13);
+  line-height: 1.6;
+}
+
+.nh .flow-from {
+  text-align: right;
+  font-weight: 600;
+  color: var(--nh-accent);
+}
+
+.nh .flow-arrow {
+  color: var(--nh-text-3);
+}
+
+.nh .flow-to {
+  font-weight: 600;
+  color: var(--nh-text);
+}
+
+.nh .flow-tag {
+  padding: 1px var(--nh-sp-2);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--nh-accent) 12%, transparent);
+  color: var(--nh-accent);
+  font-size: var(--nh-fs-11);
+  font-weight: 600;
+}
+
+.nh .flow-tag:empty {
+  visibility: hidden;
+}
+
+.nh .flow-text {
+  color: var(--nh-text-2);
+}
+
+@media (max-width: 1080px) {
+  .nh .flow-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nh .flow-step:last-child {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .nh .flow-steps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* 窄屏：消息头一行（pm → rd-fe [T1]），正文整宽换行 */
+  .nh .flow-msg {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 var(--nh-sp-2);
+  }
+
+  .nh .flow-from {
+    text-align: left;
+  }
+
+  .nh .flow-text {
+    flex-basis: 100%;
+  }
+
+  .nh .flow-step:last-child {
+    grid-column: auto;
+  }
+
+  .nh .flow-log {
+    padding: var(--nh-sp-4);
+  }
+}

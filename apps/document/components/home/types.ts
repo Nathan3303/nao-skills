@@ -51,6 +51,32 @@ export interface HomeFooter {
   legal: string
 }
 
+export interface HomeFlowStep {
+  num: string
+  title: string
+  body: string
+  /** 这一步需要用户参与（标出「你在这里」） */
+  yours?: boolean
+  you?: string
+}
+
+export interface HomeFlowMessage {
+  from: string
+  to: string
+  text: string
+  /** 任务号，如 T1 */
+  tag?: string
+}
+
+export interface HomeFlow {
+  kicker: string
+  title: string
+  lead: string
+  steps: HomeFlowStep[]
+  messagesTitle: string
+  messages: HomeFlowMessage[]
+}
+
 export interface HomeData {
   kicker: string
   title: string[]
@@ -64,6 +90,7 @@ export interface HomeData {
   terminal: TerminalLine[]
   jumpNav: { text: string; href: string }[]
   problems: HomeProblem[]
+  flow: HomeFlow
   problemsKicker: string
   problemsTitle: string
   problemsLead: string

@@ -50,12 +50,64 @@ home:
   jumpNav:
     - text: 三个毛病
       href: '#why'
+    - text: 怎么用
+      href: '#flow'
     - text: 七个角色
       href: '#roles'
     - text: 三步装好
       href: '#install'
     - text: 常见问题
       href: '#faq'
+  flow:
+    kicker: 怎么用
+    title: 一句需求，五步走完
+    lead: 你只在第 1 步和第 5 步出现；中间是角色之间自己在派单、回执、打回。
+    steps:
+      - num: '01'
+        title: 你说一句话
+        body: '「做个登录页，邮箱加密码，错了给提示。」不用写规格，不用拆任务。'
+        yours: true
+        you: 你在这里
+      - num: '02'
+        title: pm 拆单派活
+        body: 拆成前端、后端、测试三单，分别发给对应的角色，同时发出去。
+      - num: '03'
+        title: 角色并行干
+        body: 前端做表单，后端做校验接口，测试写用例。三边互不阻塞。
+      - num: '04'
+        title: QA 逐条验
+        body: 过了的回一条放行；不过的当场打回，附复现步骤，改完再看。
+      - num: '05'
+        title: 合并到主干
+        body: 全部放行后由研发合并，主干上留一条可读提交，一个需求一条。
+        yours: true
+        you: 你点确认
+    messagesTitle: 中间实际发生的事（就是会话之间发的消息）
+    messages:
+      - from: pm
+        to: rd-fe
+        tag: T1
+        text: 登录页表单 · 邮箱密码 · 错误提示放在输入框下方
+      - from: pm
+        to: rd-be
+        tag: T2
+        text: POST /api/login · 401 带错误码 · 密码不做明文比较
+      - from: rd-be
+        to: pm
+        text: done · 3 个文件 · 200 与 401 都验过
+      - from: pm
+        to: qa
+        tag: T3
+        text: 验收 T1 与 T2 · 重点看错误提示和重复提交
+      - from: qa
+        to: pm
+        text: 打回 1 条 · 连点提交会叠出三条提示（附复现步骤）
+      - from: rd-fe
+        to: pm
+        text: 已修 · 300 毫秒防抖，只留一条提示
+      - from: pm
+        to: 你
+        text: 都过了，合并？
   problemsKicker: 为什么需要
   problemsTitle: 一个人对着 AI 写代码，常见三个毛病
   problemsLead: 不是模型不够强，是缺分工与交付纪律。

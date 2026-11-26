@@ -7,6 +7,7 @@ import { useData } from 'vitepress'
 import HomeFaq from './home/HomeFaq.vue'
 import HomeFooter from './home/HomeFooter.vue'
 import HomeHero from './home/HomeHero.vue'
+import HomeFlow from './home/HomeFlow.vue'
 import HomeProblems from './home/HomeProblems.vue'
 import HomeRoles from './home/HomeRoles.vue'
 import HomeSteps from './home/HomeSteps.vue'
@@ -26,6 +27,7 @@ if (!home) {
     <HomeHero :home="home" />
     <JumpNav :items="home.jumpNav" />
     <HomeProblems :home="home" />
+    <HomeFlow :flow="home.flow" />
     <HomeRoles :home="home" />
     <HomeSteps :home="home" />
     <HomeFaq :home="home" />
