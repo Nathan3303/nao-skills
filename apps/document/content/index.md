@@ -33,12 +33,14 @@ home:
     - kind: cmd
       text: nao-fleet.sh check
     - kind: ok
-      text: ✓ exit 0 · 7 个角色可开工
+      text: ✓ 体检通过 · 7 个角色可开工
     - kind: cmd
       text: nao-fleet.sh ensure pm arch rd-fe
       gap: true
     - kind: ok
       text: ✓ 已拉起 3 个会话
+    - kind: muted
+      text: 3 个会话窗口逐个亮起（要拉满 7 个，照快速开始里的三步走）
       more: true
     - kind: muted
       text: 你：想加个「导出 CSV」功能
@@ -143,7 +145,7 @@ home:
         href: https://www.npmjs.com/package/@nathan33/nao-skill
         external: true
         style: text
-    legal: MIT © 2026 Nathan Lee · 仅支持 pi ≥1.4.0 · 零外部依赖：无 CDN、无字体外链、无统计
+    legal: MIT © 2026 Nathan Lee · 仅支持 pi ≥1.4.0 · 零外部依赖：不加载 CDN、不引外链字体、不做统计
 ---
 
 <PortalHome />
