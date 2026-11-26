@@ -14,7 +14,7 @@ bash tests/t4/run.sh --case 03                 # 单跑
 T4_ALLOW_MISSING=1 bash tests/t4/run.sh        # 宽松：缺产物=BLOCKED（仅显式 1）
 T4_REQUIRE_FULL=1 bash tests/t4/run.sh         # 发布前置：SKIP/DEGRADE>0 或非白名单 NOTE 即 FAIL
 bash tests/t4/run.sh --case 27                 # 后端夹具自检（隔离 / 零渗透 / 拆场幂等 / 零残留）
-npm test                                       # 唯一机械门禁 = test:agents + test:t4（全量 43 例，不变）
+npm test                                       # 唯一机械门禁 = test:agents + test:t4（全量 49 例，不变）
 npm run test:fast                              # 快档：test:agents + run.sh --fast（白名单 14 例，≈95s）
 bash tests/t4/run.sh --fast -t                  # 快档 + per-case 耗时（-t 可组合）
 bash tests/t4/run.sh --fast -v                  # 快档 + 逐例展开跳过原因（AC5）
@@ -23,7 +23,7 @@ npm run test:t4:full                           # 发布前置双轴（= 上面�
 # T555：后端唯一（herdr）⇒ 旧 `test:t4:full:dual`（双后端串跑）已删除；`NAO_TEST_TERMINAL=<任意值>` ⇒ rc=1（开关已移除）
 ```
 
-- **快档 / 全量分档（PRD #143）**：`npm run test:fast` 只跑白名单（当前 14 例，实测 ≈95s），**`npm test` 仍是全量唯一机械门禁**（43 例，PR CI / 合并前 / 发布前照跑；发布前置再加 `test:t4:full`）。
+- **快档 / 全量分档（PRD #143）**：`npm run test:fast` 只跑白名单（当前 14 例，实测 ≈95s），**`npm test` 仍是全量唯一机械门禁**（49 例，PR CI / 合并前 / 发布前照跑；发布前置再加 `test:t4:full`）。
   - 白名单与判据**单点**在 `tests/t4/run.sh` 的 `FAST_CASES`（每项一行注释：不 exec 真 pi / 不起真 server / 实测单价 ≤15s）；其余例分三组（真机类 · 替身重档 · 单价超限），起跑即打印「跳过 N 例（真机类/重档）：编号…」+「本档未覆盖」声明，`-v` 逐例展开 —— **禁止静默跳过**（AC5/AC9）。
   - **新增用例必须登记**白名单或跳过分组，否则 `--fast` 硬错（防新用例被悄悄漏测）；未覆盖面、单价与 profile 见 `docs/reports/143-profile.md`。
   - 发布前置 `T4_REQUIRE_FULL=1` 与 `--fast` **互斥**（快档跳过 20 例却可能报 PASS ⇒ 假绿）；发布前置一律 `npm run test:t4:full`。

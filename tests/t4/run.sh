@@ -135,8 +135,12 @@ while [ $# -gt 0 ]; do
     -v|--verbose) verbose=1 ;;
     --case)
       if [ $# -eq 0 ]; then arg_err="--case 缺少参数值"; break; fi
+      # 静默丢参陷阱（T573/T574 QA 实测）：重复 `--case A --case B` 曾只跑最后一个（rc=0 ⇒ 假绿）。
+      if [ "$mode" = "case" ]; then arg_err="重复 --case（已知 ${only}，又给 $1）：一次只跑一例，多例请分次跑或跑全量"; break; fi
       mode="case"; only="$1"; shift ;;
-    --case=*) mode="case"; only="${a#--case=}" ;;
+    --case=*)
+      if [ "$mode" = "case" ]; then arg_err="重复 --case（已知 ${only}，又给 ${a#--case=}）：一次只跑一例，多例请分次跑或跑全量"; break; fi
+      mode="case"; only="${a#--case=}" ;;
     --*) arg_err="未知选项: $a" ;;
     *) arg_err="不支持的裸位置参数: $a（指定用例请用 --case <编号>）" ;;
   esac
