@@ -921,7 +921,7 @@ c6_check() { # <NAO_STASH_ROOT> [check 参数...] · 在真仓跑（**herdr 默�
       NAO_STASH_ROOT="$root" bash .agents/scripts/nao-fleet.sh check "$@" 2>&1 )
 }
 OUT_B1_BASE_CHECK="$(c6_check "$C6_STASH_NONE")"
-CHECK_GOLD_LINE='check: OK · roles=7 · files=68'   # T567-A：脚本拆 11 模块 + functions.txt（53 → 65，+12）；T567-B：+2 systemd 单元模板（65 → 67）；T573：+fleet/lib/sessions.sh（67 → 68）；改机制文件数须同步本行
+CHECK_GOLD_LINE='check: OK · roles=7 · files=69'   # T567-A：脚本拆 11 模块 + functions.txt（53 → 65，+12）；T567-B：+2 systemd 单元模板（65 → 67）；T573：+fleet/lib/sessions.sh（67 → 68）；skills/user-guide-writing（68 → 69，#211）；改机制文件数须同步本行
 t4_assert_eq "$CHECK_GOLD_LINE" "$(printf '%s\n' "$OUT_B1_BASE_CHECK" | head -1)" \
   "P2④ herdr 摘要首行 = roles/files 计数（layout= 字段随 tmux 布局删除 —— D3）"
 t4_assert_eq "3" "$(printf '%s\n' "$OUT_B1_BASE_CHECK" | grep -c . || true)" \
