@@ -28,6 +28,8 @@
 #                     「按名定位恒空」的假成功。
 #     send_fail=1     send 返回 error
 #     app_status_rc=N herdr-app status 的 rc（0=窗口在跑）
+#     ls_fail_after_kill  设了它 ⇒ `kill` 之后建 `ls_fail_now`，此后 `ls` 一律返回 error payload + rc=1
+#                     （T573 返修 D8 演练：验证「effect 复核读不到 ≠ 已消失」；找终端的那次 ls 在 kill 前 ⇒ 不受影响）
 #   —— T565 (#175 放置验证失败) 的收养时序 / 陈旧 id 面 ——
 #     adopt_delay=N   新建终端在 doc 里**尚未收养**：前 N 次 doc.get 只给 tab 不算终端（模拟真 app
 #                     的异步收养：厂方文档「acknowledge with `pending: true`, then apply after the
@@ -116,6 +118,11 @@ case "$cmd" in
     printf '{"schema":1}\n' ;;
 
   ls)
+    # T573 返修 D8 演练：kill 之后注入 ls 失败（读不到 ≠ 已消失）
+    if [ -f "$ST/ls_fail_now" ]; then
+      printf '{"error":{"code":"internal","message":"hc double: ls 注入失败（ls_fail_after_kill）"}}\n'
+      exit 1
+    fi
     all=0
     for a in "$@"; do [ "$a" = "--all" ] && all=1; done
     printf '{"terminals":['
@@ -234,6 +241,7 @@ case "$cmd" in
   kill)
     a="${1:-}"; _addr_ok "$a" || { printf '{"error":{"code":"not-found"}}\n'; exit 1; }
     _put "$a" state finished; _put "$a" app ""; _put "$a" stt ""; _put "$a" reported 0
+    [ -f "$ST/ls_fail_after_kill" ] && : > "$ST/ls_fail_now"
     printf '{"killed":"%s"}\n' "$a" ;;
 
   rm)

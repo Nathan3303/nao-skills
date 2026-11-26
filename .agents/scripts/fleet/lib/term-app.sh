@@ -770,18 +770,28 @@ _term_app_reclaim() {  # <name> <repo> <force> <core> <scope> <ensure-target> �
   if ! _term_app_exec kill "$addr" >/dev/null 2>&1; then
     warn "hc kill 失败（$name ⇒ $addr）"; return 1
   fi
-  local _i=0 _rm_ok=1
+  # T573 返修 D8：`ls` 失败/错误 payload ≠ 「已消失」。读不到 ⇒ 未知 ⇒ **fail loud 保留终端**
+  #   （与分级同向：判不出就不动手；原实现把空输出当「已消失」⇒ 假成功）
+  local _i=0 _rm_ok=1 _ls="" _present=0
   while (( _i < 15 )); do
     if _term_app_exec rm "$addr" >/dev/null 2>&1; then _rm_ok=0; break; fi
-    _term_app_exec ls --all --json 2>/dev/null | grep -qF "\"address\":\"$addr\"" || { _rm_ok=0; break; }
+    _ls="$(_term_app_exec ls --all --json 2>/dev/null)" \
+      || { warn "hc ls 失败（$name ⇒ $addr）：无法确认终端是否已消失 ⇒ 不判成功（请核对 hc ls --all）"; return 1; }
+    _term_app_payload_ok "$_ls" \
+      || { warn "hc ls 返回错误（$name ⇒ $addr）：$(printf '%s' "$_ls" | head -c 160) ⇒ 同上，不判成功"; return 1; }
+    if ! printf '%s' "$_ls" | grep -qF "\"address\":\"$addr\""; then _rm_ok=0; break; fi
     sleep 0.1
     _i=$((_i + 1))
   done
   if (( _rm_ok != 0 )); then
     warn "hc rm 失败（$name ⇒ $addr：kill 后仍不可删？核对 hc ls --all）"; return 1
   fi
-  # effect 判据（不看 rc）：地址必须从 ls --all 消失
-  if _term_app_exec ls --all --json 2>/dev/null | grep -qF "\"address\":\"$addr\""; then
+  # effect 判据（不看 rc）：地址必须从**可读的** ls --all 消失；读不到 ⇒ 不可判定 ⇒ 保留
+  _ls="$(_term_app_exec ls --all --json 2>/dev/null)" \
+    || { warn "回收结果不可判定：hc ls 失败（$name ⇒ $addr）⇒ 按失败处理、不宣称成功（核 hc ls --all）"; return 1; }
+  _term_app_payload_ok "$_ls" \
+    || { warn "回收结果不可判定：hc ls 返回错误（$name ⇒ $addr；$(printf '%s' "$_ls" | head -c 160)）⇒ 按失败处理、不宣称成功"; return 1; }
+  if printf '%s' "$_ls" | grep -qF "\"address\":\"$addr\""; then
     warn "回收未达成：$addr 仍在 hc ls --all 中（effect 判据失败）"; return 1
   fi
   log "已回收 app 终端：$name（$addr）"
