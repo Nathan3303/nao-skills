@@ -33,7 +33,7 @@ title: 常见问题
 <details>
 <summary>为什么需要终端后端？</summary>
 
-舰队要把 7 个角色会话放进终端里，还要能可靠地找回与收掉。后端只有 herdr：每个角色一个 tab，身份靠结构化事实判定。旧的 tmux 后端已经删了，不会悄悄换后端：如果你的配置里还写着 tmux，启动时会直接报错并告诉你改哪儿——把那条设置删掉就行，不设默认就是现在这个。
+舰队要把 7 个角色会话放进终端里，还要能可靠地找回与收掉。后端只有 herdr：每个角色一个 tab，身份靠结构化事实判定。旧的 tmux 后端已经删了，不会悄悄换后端：如果你的环境变量或启动脚本里还设着 `NAO_TERMINAL=tmux`，启动时会直接报错并告诉你改哪儿——把它删掉就行，不设这个变量时默认就是 herdr。
 </details>
 
 ## 装完之后
@@ -89,10 +89,11 @@ title: 常见问题
 <details>
 <summary>怎么卸载？</summary>
 
-第一步，打开 .pi/settings.json，把关于 nao 的那一条删掉。
-第二步，删掉 .agents/scripts/nao-fleet.sh 这个转发脚本。
-第三步，把 AGENTS.md 里跟 nao 有关的段落清掉（不清也不影响使用）。
-你的源码一行都不会被改。
+1. 打开 .pi/settings.json，把关于 nao 的那一条删掉。
+2. 删掉 .agents/scripts/nao-fleet.sh 这个转发脚本。
+3. 把 AGENTS.md 里跟 nao 有关的段落清掉（不清也不影响使用）。
+
+源码一行都不会被改。
 
 源码一行不动。
 </details>
