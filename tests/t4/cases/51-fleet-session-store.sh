@@ -12,6 +12,7 @@
 #   ⑥ 无记录 ⇒ rc=0 + 一行提示
 #   ⑦ 跨代（返修 D1）：同名两代（旧代崩溃 / 新代正常）⇒ 各按自己的代次判，旧代留 7 天 + 点名
 #   ⑧ 跨仓（返修 D1）：他仓 `done` 不得升级本仓记录的分级
+#   ⑧b 无 spawn 行（有 done）⇒ 代次判不出 ⇒ 异常（QA 独立复核补：⑦⑧ 未覆盖该形态）
 #   ⑨ 全清（--repo all --days 0）· ⑩ 无记录 ⇒ rc=0 + 一行提示
 #
 # 口径（判据来源）：
@@ -216,6 +217,17 @@ t4_assert_eq "0" "$T4_RC" "⑧ 跨仓 purge rc=0"
 t4_assert_file "$G3" "⑧ 他仓 done 不影响本仓分级 ⇒ 本仓记录仍留（7 天）"
 t4_assert_contains "$(cat "$RETLOG" 2>/dev/null)" "2026-11-23T02-00-00-000Z_xrepo.jsonl" \
   "⑧ 本仓记录被点名（不被他仓 done 升级成正常）"
+
+# ================================================================ ⑧b 无 spawn 行 ⇒ 代次判不出 ⇒ 异常（返修 D1 · fail-closed）
+#   本仓有 done、但**没有任何 spawn 行** ⇒ 代次不可知 ⇒ 不得升级成正常（QA 独立复核补：原 ⑦⑧ 只覆盖跨代与跨仓）
+G4="$SESS_DIR/2026-11-23T04-00-00-000Z_nospawn.jsonl"
+t51_mk_record "$G4" qa5 "$LAB" "$ISO_G1" "[T703] 无 spawn 行"
+t51_ledger "$SESS_DIR" "$ISO_G2D" done qa5 T703 "$LAB"
+touch -d '3 days ago' "$G4"
+run_fleet logs --purge
+t4_assert_eq "0" "$T4_RC" "⑧b 无 spawn 行 purge rc=0"
+t4_assert_file "$G4" "⑧b 无 spawn ⇒ 判不出 ⇒ 留 7 天（不认 done）"
+t4_assert_contains "$(cat "$RETLOG" 2>/dev/null)" "2026-11-23T04-00-00-000Z_nospawn.jsonl"   "⑧b 无 spawn ⇒ 点名（不静默）"
 
 run_fleet logs --purge --repo all --days 0
 t4_assert_eq "0" "$T4_RC" "⑨ --repo all --days 0 rc=0"
