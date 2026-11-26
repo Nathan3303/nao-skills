@@ -54,10 +54,10 @@
 - 🔁 **接续快照（2026-11-24 晚 · PM 重开前）**：接手者只需读本区。要点：
   - **T566 编排器阶段 1 已收敛**（**已合并 `b6bb4cb`** · PR #179 · Issue #177 已关）：QA 二轮全修 → 43/43 全量门禁绿 → squash 合并，无遗留在飞任务。
   - **编排器三阶段 + 舰队脚本拆分已全部交付并合并**：阶段 1 / 2 / 3 与 11 模块拆分均已 squash 落地，已随 `v0.32.0` 发布（npm 已核验）。
-  - **已发布版本**：v0.33.0（命名契约 v3 + 门面契约中性化；npm 已核验 · tag/Release `v0.33.0` · 发布提交 `23b1a8d` · tarball 288,523 B）。
+  - **已发布版本**：v0.34.0（会话记录治理 + 桌面版 close 回收修复；**待核验** —— 发布 PR 待 PM 验收，tag/Release 由 PM 建，`npm publish` 由用户执行；上一版 v0.33.0 已核验：tag/Release `v0.33.0` · 发布提交 `23b1a8d` · tarball 288,523 B）。
   - **流程事故记录（2026-11-26 · PM）**：`a59d1c3`（原为角色卡变更）因 `git commit` 未先核 index，带入了 v0.33.0 的 4 个发布文件（`package.json`/`package-lock.json`/`docs/releases/v0.33.0.md`/本文件）。内容经核对完整正确，裁定**接受该提交作为发布链一部分**（不改写已推送历史）。教训：提交前必须 `git diff --cached --name-only` 核对。
   - **v0.32.2 已发布并核验**（合并 `86a6b67` · tag/Release `v0.32.2` · npm `latest` 核验通过 integrity 逐字节一致）：桌面版后端 `ensure` 因空标签页名导致判据字段左移、**100% 失败并回滚**的 P1 已修；夹具改真机同形 + `cases/45` 两条断言钉住。**升级后需 `pi install -l npm:@nathan33/nao-skill@0.32.2` 并重开会话。**
-  - **v0.33.0 待发布（2026-11-26）**：T569 caller-space（`e45bf2f`）· T570 ADR（`037eb7b`）· T571 命名契约 v3 + 覆盖补齐（`db43278` / `c65292e`）· T572 门面契约中性化（`13676a2`）均已合并；发布 PR 待 PM 验收，tag/Release 由 PM 建，`npm publish` 由用户执行。
+  - **T573/T574 已合并（2026-11-26 · main `de10427`）**：T573 = 会话记录治理（`nao-fleet.sh logs` 子命令 + 舰队会话独立 state 目录 + 按结果分级短保留 + 分级 fail-closed 返修）；T574 = 桌面版 close「假成功」修复（`live+done` 真回收 + 定位/effect 两处「读不到 ≠ 已消失」）。**session 存放位置变更**：舰队会话记录从 `~/.pi/agent/sessions/` 改落 `${NAO_FLEET_META_DIR:-~/.local/state}/nao-fleet/sessions/--<编码 cwd>--/`（一仓一子目录；旧记录**不迁移不删除**），异常点名落同目录 `.retention.log`（机制状态**不写**本文件）。随 v0.34.0 发布。
   - **队列**：阶段 1/2/3 全部交付（`b6bb4cb` / `718fe2e` / `9edbcdf`）+ 舰队拆分（`e82d8b6`），已随 `v0.32.0` 发布（npm 已核验）；Issue #177/#182/#183 全部关闭。**当前无在飞任务。**
   - **P3 A/B 已全部收口**（A：D6 `c845a0e` + O1 nao-todo `5f37d2e`；B：B1 `b383a13`；B8 接受 / T512-③ 已收口 / T512 附录 无动作），当前无在飞任务。
   - **T566-O1/O2 已收口（本 PR）**：`AGENTS.md` 全量门禁口径 42 → **43 例**；`gates.check.log` 加**存在性**校验（锚点 = 仓库根，PRD §六 已注明；`validate` 与 `receipt-line` 同判据）+ 用例 46 三条负控。
