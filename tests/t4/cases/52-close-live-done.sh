@@ -14,6 +14,8 @@
 #   ⑤ 既有语义不变：live+working 无 --force ⇒ 拒（终端保留）· --force ⇒ 回收 · live+idle ⇒ 直接回收
 #   ⑥ 文档：`docs/INSTALL.md` 记了 `--keep` 的 live+done 边界
 #   ⑦ 守卫（返修 D8）：effect 复核时 `ls` 读不到 ⇒ **fail loud 保留终端**（不把「读不到」当「已消失」）
+#   ⑧ 守卫（返修 D8-2）：**定位阶段** `ls`/`get` 读不到 ⇒ fail loud（不再报「未发现…幂等成功」）
+#      + 正控：读到且无同名 ⇒ 仍报「未发现」rc=0（防修成「任何情况都报错」）
 #
 # 夹具：`tests/t4/fixtures/hc-double`（确定性替身）+ 私有 XDG 根；绝不碰用户真实桌面版 core。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
@@ -146,6 +148,24 @@ t4_assert_ne "0" "$APP_RC" "⑦ hc ls 读不到 ⇒ close 不判成功（rc≠0�
 t4_assert_contains "$APP_OUT$APP_ERR" "不可判定" "⑦ fail loud：点名「回收结果不可判定」（不当已消失）"
 t4_assert_not_contains "$APP_OUT" "已回收 app 终端" "⑦ 不打印成功行（不假成功）"
 t4_assert_eq "" "$(addrs_named qa)" "⑦ 终端实际已被 rm（kill→rm 已成），但仍**不据此宣称成功**：判据 = ls 读得到"
+
+# ================================================================ ⑧ D8 定位阶段：ls 读不到 ≠ 无同名终端（fail loud，不报幂等成功）
+#   注入点在 **kill 之前**（从定位阶段就失败）⇒ 不得打印「未发现 app 终端…幂等成功」；rc≠0 且不动手
+#   断言「终端仍在」直接读夹具状态目录（注入期 hc ls 读不到，addrs_named 不可用）
+app_reset; mk_term t9 qa live done
+: > "$BE_APP_STATE/ls_fail_now"
+APP_RC=""; run_app close qa
+rm -f "$BE_APP_STATE/ls_fail_now"
+t4_assert_ne "0" "$APP_RC" "⑧ 定位阶段 hc ls 读不到 ⇒ close rc≠0（不假成功）"
+t4_assert_contains "$APP_OUT$APP_ERR" "不可判定" "⑧ fail loud：点名「不可判定」"
+t4_assert_not_contains "$APP_OUT$APP_ERR" "幂等成功" "⑧ 不打印「已不在运行；幂等成功」"
+t4_assert_eq "qa" "$(head -1 "$BE_APP_STATE/t/t9/name" 2>/dev/null)" "⑧ 终端保留（定位读不到 ⇒ 不动手）"
+# 正控：读得到且**无同名** ⇒ 仍报「未发现」（幂等语义不变，不修成任何情况都报错）
+app_reset; mk_term t2 other live done
+APP_RC=""; run_app close qa
+t4_assert_eq "0" "$APP_RC" "⑧ 正控：ls 正常且无同名 ⇒ rc=0"
+t4_assert_contains "$APP_OUT$APP_ERR" "未发现 app 终端" "⑧ 正控：仍报「未发现」（幂等成功语义不变）"
+t4_assert_eq "other" "$(head -1 "$BE_APP_STATE/t/t2/name" 2>/dev/null)" "⑧ 正控：无关终端未被误动"
 
 # 正控：同夹具不注入 ⇒ 正常回收（证明⑦的红不是夹具自身坏）
 app_reset; mk_term t8 qa live done
