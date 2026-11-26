@@ -102,8 +102,13 @@ t4_assert_contains "$BE_ERR_ANSI" "web" "S7 列出可用 code"
 t4_assert_eq "$before" "$(be_pane_count)" "S7 零 pane"
 
 # S8 default 读（ensure/status 放行；不再 exit 3）
+#   T573 隔离补丁（QA 批次 573+574）：T40_ENV 原先手写 env、**没带 lab HOME** ⇒ ensure 的
+#   session 台账/`--session-dir` 落到跑测试者的真实 `~/.local/state/nao-fleet/sessions/`（实测造出
+#   `--tmp-nao-t4.*--` 垃圾目录；且 ensure 顺手 purge 会把真实仓的 tasks-state.md 写上
+#   `[session-retention]` 行）。改：净化的唯一来源仍是 `be_clean_env`（禁手写 HOME）。
 env XDG_CONFIG_HOME="$BE_CFGROOT" herdr --session default server >/dev/null 2>&1 || true
-T40_ENV=(env HERDR_ENV=1 HERDR_SESSION=default HERDR_SOCKET_PATH="$BE_CFGROOT/herdr/sessions/default/herdr.sock" \
+mapfile -t T40_CLEAN < <(be_clean_env)
+T40_ENV=(env "${T40_CLEAN[@]}" HERDR_ENV=1 HERDR_SESSION=default HERDR_SOCKET_PATH="$BE_CFGROOT/herdr/sessions/default/herdr.sock" \
   XDG_CONFIG_HOME="$BE_CFGROOT" NAO_TERMINAL=herdr NAO_SKILLS="$LAB" PI_CODING_AGENT_DIR="$LAB/pi-empty")
 t4_run_in_dir "$RC" "${T40_ENV[@]}" timeout 60 bash "$LAB/.agents/scripts/nao-fleet.sh" ensure rd-fe
 t4_assert_eq "0" "$T4_RC" "S8 default 内 ensure rc=0（无 exit 3）"
