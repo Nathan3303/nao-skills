@@ -4,6 +4,10 @@
 - 状态：草稿（待开工确认 + arch 落点回执）
 - 本文件自身即新规范的第一个样板：放在 `docs/T579-docs-per-task/`，不再进 `docs/prds/`
 
+## TL;DR
+
+`docs/` 从「按类别分割」（6 目录 / 319 文件 / 1229 处指针）改为「**一任务一目录** `docs/<任务号>-<slug>/` + `docs/README.md` 唯一索引」，**历史冻结不迁移**。ADR 进任务目录、发版说明进任务目录并在索引版本段登记权威路径（版本只此一处）。判红载体 = `tests/t4/cases/53`（`check` 只 warn-only）。本任务自身是首个样板。
+
 ## 一、问题证据
 
 - **一个任务的产物要跨 2–6 个目录才找得齐**。`docs/` 现有 6 个类别目录：`reports` 167 文件 / 2.2M · `releases` 71 · `prds` 49 · `adr` 26 · `designs` 4 · `research` 2，合计约 **319 个文件**。以最近两批为例：T576 的 3 份审计/勾表/复核全在 `reports/`，其内容改写又在 `apps/document/content/`；T573+T574 的 4 份报告混用复合编号（`573-574-qa-verify.md`、`573-574-rd-infra-fix.md`），靠文件名认领任务。
@@ -31,8 +35,9 @@
 **范围内**
 
 - 目录规范：`docs/<任务号>-<slug>/`，任务号 = `T579` / `M20261014-<slug>` 形态，slug 全小写连字符。
-- 目录内固定文件名集合（扁放，不建子目录）：`prd.md` · `arch-review.md` · `adr-<topic>.md` · `design.md` · `impl-<role>.md` · `qa-verify.md` · `followups.md` · `release-notes-v<X.Y.Z>.md`。
-- `docs/README.md`：唯一一级索引，三段 —— **任务批次**（任务号 · 目录 · 一句话 · Issue/PR · 版本）· **版本**（`vX.Y.Z` → 权威 notes 路径）· **决策时间线**（日期 · 决策 · 任务号 · 状态）。
+- 目录内文件（扁放，唯一允许的子目录是 `assets/`）：**8 类主产物固定名** —— `prd.md` · `arch-review.md` · `adr-<topic>.md` · `design.md` · `impl-<role>.md` · `qa-verify.md` · `followups.md` · `release-notes-v<X.Y.Z>.md`；**其余用自由后缀**（`user-acceptance.md` · `retro.md` · `review.md` · `repro.md` · `<topic>-调研.md` 之类），主产物必须用上面的固定名。
+- 反例（arch 实测）：本仓实存 8 类装不下的产物 —— 缺陷单 · 用户验收 · 复盘 · 交叉评审 · 复现脚本 · 调研 · 图片（`assets/`）⇒ 固定名只锁主产物，不锁全集。
+- `docs/README.md`：唯一一级索引，三段 —— **任务批次**（`任务号` · `目录` · `一句话` · `Issue/PR`，恰 4 列）· **版本**（`版本` · `权威路径` · `发布日期`）· **决策时间线**（`日期` · `决策` · `任务号` · `状态`，决策格带 `adr-*.md` 相对链接）。**逐字表头 + 严格单元格文法**，解析前先剥 ``` 围栏；三处双向断言：目录 ↔ 行 · 版本 ↔ 文件 · ADR ↔ 时间线。
 - 机制文本落点：`github-flow.md`（BR1 全量清单与发布节）· `common/release-notes.md`（落盘路径与同源判据）· `checklists/{pm,qa,rd-infra}.md` · `intercom-protocol.md` §发布说明 · `skills/arch-patterns.md`（ADR 索引登记）· `checklists/deliverable-docs.md`（骨架与路径）· `pm-to-spec.md` 指针。
 - 模板骨架：`.agents/templates/task-docs/`（PRD / 报告 / notes 三份骨架，供 `deliverable-docs` 引用）。
 - `check` 扩展：PRD 结构探针扫描面从 `docs/prds/*.md` 扩到「`docs/prds/*.md` + `docs/T*/prd.md`」；新增「索引一致性」断言（每个任务目录在 `docs/README.md` 有且仅一行、每行指向存在的目录、同一版本号只出现一次）。
@@ -62,7 +67,8 @@
 - **索引即契约**：新任务目录出现但索引无行 ⇒ 判异常；索引行指向不存在的目录 ⇒ 判异常。
 - **单源**：路径约定的正文只写一处（`deliverable-docs.md`），其余机制文本只给指针（防双源，沿用本仓既有纪律）。
 - **活文件例外清单**（仅这 4 个，任何新增需改本节）：`tasks-state.md` · `tasks-archive.md` · `INSTALL.md` · `ARCHITECTURE.md`，以及索引 `README.md` 本身。
-- **发版说明归属**：由 PM 在发布时点名「归属任务」；一个版本只归一个任务。若该版本无对应任务（纯发版），归「本次最后一个合并任务」并在索引备注列写明。
+- **发版说明归属**：由 PM 在发布时点名「归属任务」；一个版本只归一个任务。若该版本无对应任务（纯发版），归「本次最后一个合并任务」。**版本号只登记在索引版本段**（任务段不含版本列），同一事实不写两处。
+- **命名空间**：`T<编号>` 与 `M<YYYYMMDD>-<slug>` **共用同一命名空间**（同一个 `docs/<任务号>-<slug>/` 规则，不靠前缀区分）。
 - **ADR 归属**：`adr-<topic>.md` 进任务目录；同时必须在 `docs/README.md` 决策时间线段登记一行（日期 + 决策 ≤20 字 + 任务号 + 状态），替代原 `docs/adr/README.md` 的角色（旧索引文件冻结保留，不再追加）。
 
 ## 六、NFRs（业务视角，技术指标待 arch 转译）
@@ -70,31 +76,42 @@
 - **可检索性**：任一任务号、版本号、决策关键词，能在 `docs/README.md` 一步命中；`find docs -maxdepth 2` 可枚举全部任务目录。
 - **可回滚**：本任务改动须能 `git revert <sha>` 单条回退，回退后旧路径与新批次目录的判定回到「未启用」，不产生半启用状态。
 - **零静默降级**：新批次目录的登记缺失必须以可观测方式暴露（`check` 摘要可见），不得只写进文档靠人自觉。
+- **判红载体**：`check` 只做 warn-only（不改 rc、不计 `warn=`），**「删一行必须红」由 `tests/t4/cases/53` 承载**（先例 `cases/36`）；本仓只断言「零输出 + md5」，防立项中途假红。
 - **性能**：`check` 新增断言不得让体检明显变慢（目标增量 ≤0.3s，`-v` 同样）。
 - **兼容**：升级到本版本的用户，其仓里只有 `docs/prds/` 老结构时 `check` 必须照旧零输出（不因新规矩报错）。
 
 ## 七、AC
 
+### 主路径
+
 **AC1 · 新目录可建可登记（主路径）**
 Given 一个新任务号 T999 且 `docs/` 无该目录，When 按规范建 `docs/T999-<slug>/prd.md` 并在 `docs/README.md` 任务批次段加一行，Then `check` rc=0，且 `check -v` 的索引小节显示该行已登记、无 warn。
+
+### 负向闭环
 
 **AC2 · 未登记必报（负向闭环）**
 Given 存在 `docs/T998-<slug>/` 但 `docs/README.md` 无对应行，When 跑 `check`，Then 摘要/明细点名该目录「未登记」（先红后绿验证：删掉那一行 ⇒ 必提示；加回 ⇒ 归零）。
 
+**AC4 · PRD 结构探针覆盖新路径（防护不退化）**
+Given 在 `docs/T996-<slug>/prd.md` 造一份缺 AC 分组的 PRD，When 跑 `check`，Then 探针点名该文件缺组（**与 `docs/prds/` 老路径同样的判据与文案**）；把 `docs/prds/` 老路径的同型夹具一起跑，两者都必须红 —— 证明新路径不是「探针看不见所以永远绿」。
+
+### 异常
+
 **AC3 · 幽灵行必报（异常）**
 Given `docs/README.md` 有一行指向不存在的 `docs/T997-<slug>/`，When 跑 `check`，Then 点名该行「目录不存在」。
 
-**AC4 · PRD 结构探针覆盖新路径（防护不退化）**
-Given 在 `docs/T996-<slug>/prd.md` 造一份缺 AC 分组的 PRD，When 跑 `check`，Then 探针点名该文件缺组（**与 `docs/prds/` 老路径同样的判据与文案**）；把 `docs/prds/` 老路径的同型夹具一起跑，两者都必须红 —— 证明新路径不是「探针看不见所以永远绿」。
+**AC7 · 老仓不受影响（兼容）**
+Given 一个只含 `docs/prds/*.md`、无任何 `docs/T*/` 目录的仓，When 跑 `check`，Then 索引与目录相关断言零输出、rc=0（不因新规矩报错）。
+
+### 边界
 
 **AC5 · 版本权威份唯一（边界）**
 Given 索引版本段同时出现 `v0.99.0` 两行（指向两个不同目录），When 跑 `check`，Then 点名重复版本（同一版本只允许一行、且该行指向的 notes 文件存在）。
 
 **AC6 · 历史冻结（不回归）**
-Given 本任务合并前后，When 对比 `git ls-files docs/{prds,reports,adr,designs,research,releases}`，Then 文件集合与行数完全一致；且全仓旧路径指针数仍为 **1229**（`grep -rho 'docs/\(prds\|reports\|adr\|designs\|research\|releases\)/' --include='*.md' . | wc -l`），差值 0。
+Given 本任务合并前后，When ① 对比 `git ls-files docs/{prds,reports,adr,designs,research,releases}`（文件集与行数完全一致）② 对这 6 个冻结目录**只**统计指针数（`grep -rho 'docs/\(prds\|reports\|adr\|designs\|research\|releases\)/' --include='*.md' . | wc -l`），Then ① diff 为空 ② 值仍为 **1229**，差值 0。**判据说明**：不统计「全仓 md 指针总数」——写规范本身就在新增 `docs/T*/` 指针（arch 实测本分支 1229 → 1251），把该数字当判据等于禁止记录规则。
 
-**AC7 · 老仓不受影响（兼容）**
-Given 一个只含 `docs/prds/*.md`、无任何 `docs/T*/` 目录的仓，When 跑 `check`，Then 索引与目录相关断言零输出、rc=0（不因新规矩报错）。
+### 设计一致性
 
 **AC8 · 单源与模板（设计一致性）**
 Given 机制文本，When `grep -c` 路径约定正文（`docs/<任务号>-<slug>/`），Then 正文定义只在 `deliverable-docs.md` 一处，其余文件只出现指针（每处须能在同段找到指向 `deliverable-docs.md` 的引用）；`.agents/templates/task-docs/` 三份骨架存在且被 `deliverable-docs.md` 引用。
@@ -116,8 +133,10 @@ Given 本任务随版本发布，When PM 用 `gh release create --notes-file doc
 
 - **谁定**：该约定的正文归 PM（`deliverable-docs.md`）；`check` 断言归 `rd-infra`；ADR（是否新建「文档布局」决策）由 `arch-designer` 判定 —— **是否需要 ADR 由 arch 出回执时明说**（若判「结构性决策」则写 `adr-docs-per-task.md` 进本目录）。
 - **怎么改**：新增目录内文件名 / 新增例外清单条目，须同时改 `deliverable-docs.md`（正文）+ `check` 断言 + 本 PRD 的 §五，三者缺一视为未完成。
-- **待 arch 裁定的技术细节（TBD，PRD 定稿前须补齐）**
-  - **TBD-1**：新批次判定边界 —— 用「目录存在」判定，还是需要 `NAO_DOCS_LAYOUT_SINCE` 之类开关？现有 `check_prd_structure` 用 `NAO_PRD_STRUCT_SINCE` 判日期，两者是否统一。
-  - **TBD-2**：索引一致性断言的实现形态（解析 markdown 表格还是约定更机读的段落），以及它归 `check` 还是 `tests/` 用例。
-  - **TBD-3**：`docs/README.md` 三段的最小结构（表头字段），需同时满足「人读顺」与「机判稳」。
-  - **TBD-4**：`release-notes` 落盘路径改动的迁移话术 —— 老仓 `docs/releases/` 与新批次目录并存期，`common/release-notes.md` 怎么写才不产生双源歧义。
+- **arch 已裁定（2026-11-27，PRD 定稿）** —— 原文 TBD-1..4 均已定，判据与反例见 `docs/T579-docs-per-task/arch-review.md`：
+  - **TBD-1 判定边界**：用**结构自描述谓词**（`docs/README.md` 三段标题逐字齐 + 目录形态），**不加** `NAO_DOCS_LAYOUT_SINCE`，**不与** `NAO_PRD_STRUCT_SINCE` 统一（后者回答「旧 PRD 追溯面」，本条回答「本仓是否已在新布局」；变量化会让同仓/CI 判定不同、revert 后残留语义）。半启用态用单条提示防「删索引免责」。
+  - **TBD-2 断言载体**：双层 —— `check` 只 warn-only（不计 `warn=`、摘要常驻回显）；**「删一行必须红」由 `tests/t4/cases/53` 承载**（`check` 的 `!` 行永不改 rc，先例 `cases/36`）。
+  - **TBD-3 索引最小机读结构**：见 §三（4 列 + 逐字表头 + 严格单元格文法 + 三处双向断言 + 先剥 ``` 围栏）。
+  - **TBD-4 并存期话术**：**改判据不列路径** —— 权威份 = 归属任务目录的 `release-notes-v<X.Y.Z>.md`（正文只在 `deliverable-docs.md`），`docs/releases/` 冻结只读；并存唯一判据 = **同一版本全仓仅一文件**。实测该文件只有 **3 处**写死路径（L15/L22/L57），非 5 处。
+- **PM 拍板（2026-11-27，对应 arch 待拍 3 项）**：① PRD §七 补 5 个 `###` 组（**不放宽探针**；五覆盖是既有硬规则）② 任务段**去掉版本列**（版本只登记在版本段，防双源）③ `M<YYYYMMDD>-<slug>` **与 `T<编号>` 共用命名空间**（允许）。
+- **ADR**：`arch-designer` 判「需要」（路径契约 + 门禁归位 + 索引机读 API 三项结构性决策）⇒ `docs/T579-docs-per-task/adr-docs-per-task.md`，状态自「提议」转「已接受（待落地）」。
