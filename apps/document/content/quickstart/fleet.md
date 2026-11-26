@@ -52,4 +52,6 @@ PM：逐条核验收标准 → 通过后授权合并 → 归档
 
 派生的临时会话验收完就回收：`.agents/scripts/nao-fleet.sh close --task T1 rd-be`。常驻角色留着下次复用，`status` 会告诉你哪些是残留。
 
+如果想让脚本读这些状态，`status --json` 给的是结构化结果（在线与否、忙闲三态、所属仓、能不能投递）；给人看的文字输出没有变，加它只是多开一扇门。再看某个角色干过什么，用 [翻会话记录](/quickstart/logs)。
+
 卡住了看：[排错](/quickstart/troubleshoot)。
