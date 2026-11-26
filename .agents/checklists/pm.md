@@ -60,7 +60,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] Issue 与 `docs/` 双源（正文抄进 Issue，或状态只留平台）？
 - [ ] 未过验收 / 门禁未绿就打 tag 或 release，或 tag 指向非 main 合并提交？（见 `github-flow.md`）
 - [ ] `git push --force` 到 main/共享分支（未经用户明确授权并指明分支）？
-- [ ] release notes 不可读（纯编号/类名/路径），或未落盘 `docs/releases/`？（规范：@.agents/common/release-notes.md —— 面向用户「本次更新」置顶、内部信息下沉、正文不用表格）
+- [ ] release notes 不可读（纯编号/类名/路径），或未落盘**归属任务目录**的 `release-notes-v<X.Y.Z>.md` + 索引版本段一行？（路径见 @.agents/checklists/deliverable-docs.md §十；写法见 @.agents/common/release-notes.md —— 面向用户「本次更新」置顶、内部信息下沉、正文不用表格）
 - [ ] 输出里有 `warn`/`error`/`pending approval`/`N vulnerabilities` 却判完成，或遗留项未走三出口（「先放着」不算出口）？（见 @.agents/skills/task-completion.md）
 - [ ] 降级（无 `gh` / 无远端）未在 `tasks-state` 与回执中标注？
 
@@ -91,7 +91,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 【仅 feat】需新开的会话已 `ensure` 并经 `list` 验证
 - [ ] 【仅 feat】派生会话已回收（验收通过后 `close --task <编号> <别名>`；常驻会话**不回收**，需重开时 `ensure --force`）
 - [ ] 【仅 feat】全程 PM 未触碰代码
-- [ ] 【仅 feat】PRD 已归档 `docs/prds/` 并同步 README 索引
+- [ ] 【仅 feat】PRD 已落**任务目录** `prd.md` 并在 `docs/README.md` 任务段登记一行（新增目录必须同批加行，否则 `check` 报「未在任务段登记」；约定见 @.agents/checklists/deliverable-docs.md §十）
 - [ ] 【仅 feat】项目 `AGENTS.md` 已建立/同步（项目级属性与约束，见 @.agents/skills/pm-operations.md §四）
 - [ ] 【仅 feat】**QA 报告**含全量门禁精确数字（命令 + exit code + 例数/断言数/红数）与四段结论；PM 只核对报告 + 读变更文件，**不重复跑测试**（2026-11-26 用户拍板：测试只归 QA）
 - [ ] 【仅 feat】派发消息只给引用路径（`docs/...md#section`），无 PRD/方案全文或附件传全文
@@ -99,15 +99,15 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 【仅 feat】派发时已声明回执级别（未声明默认 `done(lite)`；有阻塞/风险/需决策已要求 `done(full)`）；模板已按需读取 `@.agents/checklists/comm-templates.md`
 - [ ] 【仅 feat】用户口头约束已**当场落盘**（`AGENTS.md` 项目级 / PRD「变更治理」），未等归档
 - [ ] 【仅 feat】归档前已更新接续快照 + 记录会话体检（归档后按 @.agents/skills/pm-operations.md §三 重开会话）
-- [ ] 【仅 feat】业界调研（若有）已落盘 `docs/research/`，每条含「适用条件 + 本项目差异（采纳/改造/不采纳）」；引用带访问日期，查不到已写「未检索到」
+- [ ] 【仅 feat】业界调研（若有）已落**任务目录**的 `research.md`（或 `<topic>-调研.md`；约定见 @.agents/checklists/deliverable-docs.md §十），每条含「适用条件 + 本项目差异（采纳/改造/不采纳）」；引用带访问日期，查不到已写「未检索到」
 - [ ] 【仅 feat】派发消息已给出**需求分支** `feat/<issue-id>-<slug>`（或降级 `nao/<批次-slug>`）、PR owner、Reviewer
 - [ ] 【仅 feat】工作期无 WIP 提交落在 main；暂存为路径级（无 `git add -A` 卷走他人改动）
 - [ ] 【仅 feat】**文档随任务 PR**：本任务文档与台账（PRD 定稿 / 报告 / ADR / `docs/tasks-state.md` / 索引 / release notes）已在本需求分支提交并随同一 PR 进 main；main 上无 `docs(<编号>):` 独立提交、无文档-only PR（立项摘要例外仅 1 条且单一文件）
-- [ ] 【仅 feat】Issue 已建（或降级已标注）：body 为摘要 + 指针，正文在 `docs/prds/`；同步仅 5 个节点
+- [ ] 【仅 feat】Issue 已建（或降级已标注）：body 为摘要 + 指针，正文在任务目录 `prd.md`（约定见 @.agents/checklists/deliverable-docs.md §十）；同步仅 5 个节点
 - [ ] 【仅 feat】验收在 PR 上完成：AC 逐条评论核对 + QA 门禁数字；**UI 呈现类已交用户验收清单并获回填**（QA 产出 → PM 审 → 用户执行）；**验收通过后才授权合并**
 - [ ] 【仅 feat】合并由 RD 执行（`--squash` + 显式 `--subject` **与 `--body-file`（用 PR 描述）**）；main 上本需求恰好 1 条提交、**subject 与 body 均无 `wip()`**；需求分支已删除
 - [ ] 【仅 feat】合并前已核「分支无未推送提交」（适用：在分支上提交过的**任何角色**，含 PM 落的文档/台账）：`git rev-list --count origin/<branch>..HEAD` = 0 · `git status --porcelain` 为空 · `HEAD == @{u}`；任一不满足 ⇒ 不得贴验收评论 / 授权合并（T533 孤儿提交教训：`docs/reports/2026-10-30-T533-retro.md`）
-- [ ] 【仅 feat】发布（若有）：版本号符合 SemVer/项目约定；tag 指向 main 合并提交；release notes 用户可读且落盘 `docs/releases/`（核 @.agents/common/release-notes.md）
+- [ ] 【仅 feat】发布（若有）：版本号符合 SemVer/项目约定；tag 指向 main 合并提交；release notes 用户可读且落盘**归属任务目录**的 `release-notes-v<X.Y.Z>.md` + 索引版本段一行（路径见 @.agents/checklists/deliverable-docs.md §十；写法核 @.agents/common/release-notes.md）
 - [ ] 【仅 feat】`gh` 可用则已用 `gh`，降级已注明；发布后事实（含 `tasks-state` 版本/Tag 行）的**落地时机与工作区纪律见 `github-flow.md` BR5**（单源指针，本清单不复写命令细节）
 - [ ] 【仅 feat】任务 DoD 四类已随**开工确认卡**逐任务实例化（产物路径 / 可执行验证判据 / 遗留项 / 交接），验收按同一份核
 - [ ] 【仅 feat】回执含 `遗留：` 字段且遗留项已**三出口**收口（关闭 / 接受含到期日 / 转办；零遗留显式「无」，可执行项已进 `tasks-state` 待派发队列）
@@ -130,10 +130,10 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 > 判据：能写出「期望行为 vs 实际行为」且可复现 → `fix`，否则升 `feat`（判据唯一出处：@.agents/skills/github-flow.md「通道分流判据」，本处不复制条件）。本节只核 8 条，**不减门禁**（`check` + `npm test` 全量 rc=0 照旧；无测试设施的降级见第 3 条）。
 
 - [ ] 分流成立：3 字段齐备（现象 / 复现 / 回退），「期望 vs 实际」可复现；不成立 ⇒ 当场升 `feat` 而非降格开工
-- [ ] 分支与范围：`fix/<issue-id>-<slug>`（无 Issue 降级 `nao/<批次-slug>`；线上问题从受影响版本 tag 切出）；diff 只碰修复路径，无夹带重构 / 格式化；**PM 按 `git diff --name-only` 核：文件集 ⊆ 修复点 + 其测试 + 台账，超出即打回；>3 文件须在 PR 内写书面理由（降级无 PR ⇒ 落 `docs/reports/<编号>-review.md` 或 `tasks-state` 该任务条目相邻行）**
-- [ ] 先红后绿：可失败用例先复现失败（回执贴命令 + 输出）→ 修复后 PM 跑 `check` rc=0，**测试由 QA 复跑**（新用例/回归用例）；**无测试设施**（纯文档仓 / 无 `npm test`）⇒ 用最小复现命令贴「修复前失败 / 修复后通过」的命令 + 输出（可放 `docs/reports/<编号>-repro.*` 或 Issue 内联）；项目 `AGENTS.md` 指定了门禁命令则**以它为准**，未指定则 `check` rc=0
+- [ ] 分支与范围：`fix/<issue-id>-<slug>`（无 Issue 降级 `nao/<批次-slug>`；线上问题从受影响版本 tag 切出）；diff 只碰修复路径，无夹带重构 / 格式化；**PM 按 `git diff --name-only` 核：文件集 ⊆ 修复点 + 其测试 + 台账，超出即打回；>3 文件须在 PR 内写书面理由（降级无 PR ⇒ 落**任务目录内 `review.md`**（约定见 @.agents/checklists/deliverable-docs.md §十）或 `tasks-state` 该任务条目相邻行）**
+- [ ] 先红后绿：可失败用例先复现失败（回执贴命令 + 输出）→ 修复后 PM 跑 `check` rc=0，**测试由 QA 复跑**（新用例/回归用例）；**无测试设施**（纯文档仓 / 无 `npm test`）⇒ 用最小复现命令贴「修复前失败 / 修复后通过」的命令 + 输出（可放**任务目录内 `repro.*`**（约定见 @.agents/checklists/deliverable-docs.md §十）或 Issue 内联）；项目 `AGENTS.md` 指定了门禁命令则**以它为准**，未指定则 `check` rc=0
 - [ ] 回退可执行：`git revert <sha>` 可干净回退；数据 / 契约类在 Issue 上 3 行写影响面
-- [ ] 复核留痕：非作者复核（QA / 另一会话）；单人项目允许**作者自审**，但**唯二载体**才算留痕 —— PR 描述「复核」一节 + `docs/tasks-state.md` 条目一行（理由 + 日期 + 自审声明），缺任一不算留痕；**降级模式（无远端 / 无 `gh`，无 PR）⇒ 首载体改 `docs/reports/<编号>-review.md`（或 `tasks-state` 该条目相邻行），内容与判据不变**
+- [ ] 复核留痕：非作者复核（QA / 另一会话）；单人项目允许**作者自审**，但**唯二载体**才算留痕 —— PR 描述「复核」一节 + `docs/tasks-state.md` 条目一行（理由 + 日期 + 自审声明），缺任一不算留痕；**降级模式（无远端 / 无 `gh`，无 PR）⇒ 首载体改**任务目录内 `review.md`**（约定见 @.agents/checklists/deliverable-docs.md §十；或 `tasks-state` 该条目相邻行），内容与判据不变**
 - [ ] 不可逆动作仍走 `ask-me`（合并 main / 打 tag / 发 npm / 破坏性契约 / 删文件或数据）——`fix` 不豁免
 - [ ] 回执 `lite` 含**QA 报告指针**（测试数字以报告为准）+ 遗留三出口；`docs/tasks-state.md` 已同步；合并前已核「分支无未推送提交」（`git rev-list --count origin/<branch>..HEAD` = 0 · `git status --porcelain` 空）
 - [ ] 文档 / 台账随任务 PR，工作期无 `wip()` 落 main —— **两通道同规**

@@ -5,7 +5,7 @@ description: 按需技能——架构模式速查 + ADR 模板
 # 架构模式对照与 ADR
 
 > 用法：先写清约束，再**对照**候选模式；禁止直接接表选型（同场景不同团队/规模，结论相反）。
-> 检索与引用纪律见 @.agents/skills/research.md（报告落盘 `docs/research/`）。
+> 检索与引用纪律见 @.agents/skills/research.md（新报告落任务目录 `research.md`，目录约定见 @.agents/checklists/deliverable-docs.md §十）。
 
 ## 模式对照表（场景信号 → 候选 → 适用条件 → 代价 → 何时别用）
 
@@ -44,7 +44,7 @@ graph TD
 - **骨架唯一载体（单源）**：@.agents/templates/adr.md.example —— 复制后按「必写 5 节 + 可选 3 节」填空（标题逐字、顺序固定，`参考来源` 恒为末节）。
 - **模式对照法**：写入前先做上面对照四步法，把 ≥2 个候选的「不采纳理由」写进 `## 对照过的备选模式`（含「维持现状」基线）。
 - **字段口径与边界**：状态值域 4 值 / 头部 4 字段 / ≤60 行 / 禁写下沉清单，见 @.agents/checklists/deliverable-docs.md §四。
-- **索引登记**：每篇 ADR 在 `docs/adr/README.md` 追加一行（决策列 ≤20 字），索引骨架见 @.agents/templates/adr-index.md.example。
+- **索引登记**：新 ADR 进**任务目录**（`adr-<topic>.md`）并在 `docs/README.md`「决策时间线」段恰 1 行（日期 + 决策 ≤20 字 + 任务号 + 状态），约定见 @.agents/checklists/deliverable-docs.md §十；`docs/adr/README.md` 为历史索引，冻结不追加。
 
 ## 误区
 
