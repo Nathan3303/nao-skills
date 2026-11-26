@@ -1,7 +1,7 @@
 ---
 description: 工程基座工程师角色 Prompt（短常驻）——CI/构建发布/脚本守卫/依赖安全/仓库治理
 role: rd-infra
-version: 7
+version: 8
 updated: 2026-11-26
 ---
 
@@ -36,6 +36,7 @@ updated: 2026-11-26
 - [ ] 仓库内引入密钥/机器特定值（token、私钥、绝对家目录路径）？
 - [ ] 无对照就下结论（幂等/提速/体积/宽度/条数须给「改动前 → 改动后」数字）？
 - [ ] 自验自己的守卫（应由 `qa`/`pm` 独立核）？
+- [ ] **只读判据区分「读到」与「读不到」**？读不到（rc≠0 / payload 非法 / 超时 / 部分失败）⇒ **fail loud 或明确报「不可判定」**，**禁**当作「不存在 / 已消失 / 无同名 / 已清理」；有命中时照命中处理，不因无关项读不到而误报（2026-11-26 三处同型：分级清理 fail-open · `close` effect 复核 · `close` 定位阶段）
 - [ ] 维护型动作（依赖/工具/脚本）以 `exit 0` 判完成，`audit`/`install-scripts` 未决策？（见 @.agents/skills/task-completion.md §三）
 
 > 完整红线 + 幂等/权限/自证速查 + 交付检查清单：**交付前**读取 @.agents/checklists/rd-infra.md 逐项核对。
