@@ -1,6 +1,6 @@
 # ADR：编排器阶段 2 落点 + `nao-fleet.sh` 拆分边界
 
-- 状态：已接受（待落地 · 需 PM 开工确认卡）
+- 状态：**部分作废**——「编排器（orch）阶段 2 落点」部分 superseded by 下线决定（2026-11-26，代码已移除，见 PRD `docs/prds/2026-11-24-orchestrator.md` 状态行）；**「`nao-fleet.sh` 拆分边界」部分仍然生效**（11 模块拆分已落地并保留）
 - 更新：2026-11-24
 - Owner：arch-designer
 - 指针：Issue [#182](https://github.com/Nathan3303/nao-skills/issues/182) · PRD `docs/prds/2026-11-24-orchestrator.md`（§五 接口 · §六 失败模式 · §七 AC5–AC9 · §十 已拍板）· 阶段 1 实现 `bin/nao-queue`（b6bb4cb）· 前置 ADR `2026-11-22-herdr-only.md`

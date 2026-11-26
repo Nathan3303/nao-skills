@@ -36,10 +36,6 @@ const sidebar = [
     ],
   },
   {
-    text: '没人的时候',
-    items: [{ text: '让队列自己往前走', link: '/orchestrator' }],
-  },
-  {
     text: '七个角色',
     items: roleItems,
   },

@@ -18,7 +18,7 @@
 ### 决策一：命名契约 v3（Step 1，先合）
 
 - 会话名 = `<role>[<N>]`（N 为单字符 2..9，缺省 = 槽位 1）；`<role>(<task>)` 不再写入，task 不进身份。构造器删 task 参数，多传即 fail loud（不静默忽略）；解析签名不变，对只读旧形仍返回 task。
-- `--task <id>` 仍必传，只落**元数据**：app 写 `nao.task=<id>` + `nao.name=<原始名>` 两个 label；herdr **无键值 label**，写本地 sidecar（`${NAO_FLEET_META_DIR:-$HOME/.local/state}/nao-fleet/session-meta/<workspace_ref>/<handle>`，临时文件 + mv 原子写）。**孤儿清理**：任何读快照的入口（status / orch tick / ensure）拿到 handle 集合后，删除 sidecar 中「不在当前集合」的条目（幂等；失败只 warn，不改 rc）；close/cleanup 另按 handle 即时删。两臂经同一读取面进入快照；读写失败降级为 `task=-`（元数据缺失不得阻断启动）。
+- `--task <id>` 仍必传，只落**元数据**：app 写 `nao.task=<id>` + `nao.name=<原始名>` 两个 label；herdr **无键值 label**，写本地 sidecar（`${NAO_FLEET_META_DIR:-$HOME/.local/state}/nao-fleet/session-meta/<workspace_ref>/<handle>`，临时文件 + mv 原子写）。**孤儿清理**：任何读快照的入口（status / ensure）拿到 handle 集合后，删除 sidecar 中「不在当前集合」的条目（幂等；失败只 warn，不改 rc）；close/cleanup 另按 handle 即时删。两臂经同一读取面进入快照；读写失败降级为 `task=-`（元数据缺失不得阻断启动）。
 - `ensure --task`：同 (role,task) 元数据命中 ⇒ 复用该名，否则取空闲槽位（`role` → `role2`…，与现行为一致）。**槽位号不得承载语义**（禁从 `role2` 反推任务，task 只认元数据）。`close --task <id> <role>`：按元数据匹配；0 命中 = 未运行，>1 命中 = 不猜（die）。`status --json` 增 `task` 字段；文本 status 列不变，只在派生节尾注 `task=<id>`。
 - 只读兼容（永不复活为写入面）：`<role>(<task>)`（v2 在跑会话）、`<role>-<task>`、`<role>-<task>@<scope>`；三者 close/status 均可用（task 仍从名字解析）。
 - 名称映射（总函数）：nao 名 → 后端合法名 = 小写化 + 非 `[a-z0-9-_.]` 替换 `-` + 首字符补齐 + 截 32 位（保留槽位后缀）；同 scope 冲突追加 `-<4hex>`。app 的 `hc run --name` 限 `[a-z0-9-_.]{1,32}`，用映射名、原始名存 `nao.name`；herdr pane label 用原始名（无该限制，**零改动**）。v3 正常名（角色 `[a-z0-9-]` + 数字）在两后端本就合法，映射只兜卡名/旧 `--as` 边界。

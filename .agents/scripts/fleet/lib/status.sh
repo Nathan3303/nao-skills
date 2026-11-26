@@ -429,7 +429,7 @@ cmd_status_json() {
   local own online agent busy dl cwd pid
   local -a names=()
   local -A seen=() cwds=() pids=()
-  # 前提：与文本路径同判据、同退出码（rc=3 = 环境级失败；orch 据此「不写 blocked、下 tick 重试」）
+  # 前提：与文本路径同判据、同退出码（rc=3 = 环境级失败，调用方据 rc 决定下一步）
   if ! term_snapshot >/dev/null; then
     if [[ "$(term_label)" == "app" ]]; then
       printf 'status --json: 需要 desktop app core：hc ls / hc get 不可用（核对 desktop app 是否在运行、HC_TERMINAL_SOCKET 是否有效）—— 修好后重试\n' >&2
@@ -445,7 +445,7 @@ cmd_status_json() {
   be="$(term_label)"
   root="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || true)"
   [[ -n "$root" ]] || root="$(nao_phys_path "$PWD")"
-  # 会话全集：先常驻（ROLE_ORDER，未在线也要出现 —— orch 需要「角色缺席」这一事实），再现场名册
+  # 会话全集：先常驻（ROLE_ORDER，未在线也要出现 —— 需要「角色缺席」这一事实），再现场名册
   for nm in "${ROLE_ORDER[@]}"; do
     [[ -n "$nm" && -z "${seen[$nm]:-}" ]] || continue
     names+=("$nm"); seen["$nm"]=1
