@@ -162,6 +162,10 @@ M="$T4_CACHE_DIR/c28-m3.sh"
 if mutate_file "$C1_BASE" "$M" 'core="${core:0:$(( 32 - ${#num} ))}"' 'core="$core"'; then
   mutation_neg "M3 合法名不截 32" "$M"
 else t4_bad "M3 锚点未命中"; fi
+M="$T4_CACHE_DIR/c28-m4.sh"
+if mutate_file "$C1_BASE" "$M" 'fleet_scope_problem "$scope" >/dev/null || { printf '"'"'ERR\n'"'"'; return 0; }' ':'; then
+  mutation_neg "M4 非法 legacy scope 放行" "$M"
+else t4_bad "M4 锚点未命中"; fi
 
 # ---------------------------------------------------------------- C3 静态闸
 t4_assert_eq "1" "$(grep -c 'exec pi --name' "$SUBJECT_BUNDLE" || true)" "C3① 唯一 exec pi --name 点"
@@ -182,6 +186,85 @@ ln_name="$(printf '%s\n' "$id_body" | grep -n '_term_app_field "$g" name' | head
 ln_argv="$(printf '%s\n' "$id_body" | grep -n '_term_argv_name' | head -1 | cut -d: -f1)"
 t4_assert_eq "1" "$([ -n "$ln_label" ] && [ -n "$ln_name" ] && [ -n "$ln_argv" ] && (( ln_label < ln_name && ln_name < ln_argv )) && echo 1 || echo 0)" \
   "C3⑤ 身份还原顺序 = nao.name → name → argv --name"
+
+# C3② 名字拼接 lint（构造器外出现 `name/core = role-task` ⇒ 必红）
+lint2() {
+  awk -v b="$CONTRACT_BEGIN" -v e="$CONTRACT_END" '
+    $0 ~ b { f=1; next } $0 ~ e { f=0; next } f { next } { print }' "$1" \
+    | grep -cE '(^|[^A-Za-z0-9_])(name|disp|core)="?(\$\{[^}]+\}|\$[A-Za-z_][A-Za-z0-9_]*)?-\$(\{)?(task|TASK)' || true
+}
+t4_assert_eq "0" "$(lint2 "$SUBJECT_BUNDLE")" "C3② 真脚本：契约块外 0 处手写名字/core 拼接"
+NEG_A="$T4_CACHE_DIR/c28-c3-neg-a.sh"
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_A" '  local force="$1" task="$2" target="${3:-}"' \
+     '  local force="$1" task="$2" target="${3:-}"
+  name="${NAME}-${task}"'; then
+  t4_assert_ne "0" "$(lint2 "$NEG_A")" "C3② 负控A：注入 name=\"\${NAME}-\${task}\" ⇒ 必红"
+else t4_bad "C3② 负控A 锚点未命中"; fi
+NEG_A2="$T4_CACHE_DIR/c28-c3-neg-a2.sh"
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_A2" '  local force="$1" task="$2" target="${3:-}"' \
+     '  local force="$1" task="$2" target="${3:-}"
+  core="$NAME-$task"'; then
+  t4_assert_ne "0" "$(lint2 "$NEG_A2")" "C3② 负控A2：注入 core=\"\$NAME-\$task\"（无花括号形，历史缺陷同形）⇒ 必红"
+else t4_bad "C3② 负控A2 锚点未命中"; fi
+NEG_MX="$T4_CACHE_DIR/c28-c3-neg-matrix.sh"
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_MX" '  local force="$1" task="$2" target="${3:-}"' \
+     '  local force="$1" task="$2" target="${3:-}"
+  core="${NAME}-${task}"
+  core="$NAME-$task"
+  core="$NAME-${task}"
+  core="${NAME}-$task"
+  name="$NAME-$task"
+  disp="$NAME-$task"
+  core="${t_names[$i]}-${task}"
+  core="$card_role-$task"'; then
+  t4_assert_eq "8" "$(lint2 "$NEG_MX")" "C3② 形态矩阵：8 种拼接写法全抓（判据与声明一致）"
+else t4_bad "C3② 形态矩阵锚点未命中"; fi
+CORE_BODY="$T4_CACHE_DIR/c28-core-body.sh"
+awk '/^fleet_core_build\(\)/{f=1} f{print} f&&/^}/{exit}' "$SUBJECT_BUNDLE" > "$CORE_BODY"
+t4_assert_eq "0" "$(lint2 "$CORE_BODY")" "C3② 正控：唯一构造点自身 0 命中（不误判合法拼法）"
+
+# C3④ herdr 放置键 lint（spawn 内不得取会话名 / 重算仓基键）
+spawn_body() { awk '/^_term_herdr_spawn\(\)/,/^}/' "$1"; }
+lint4()  { spawn_body "$1" | grep -c 'HERDR_SESSION' || true; }
+lint4b() { spawn_body "$1" | grep -c 'place_key_label' || true; }
+t4_assert_eq "0" "$(lint4 "$SUBJECT_BUNDLE" || true)" "C3④ 真脚本：spawn 内不取 HERDR_SESSION（放置键只认入参 label）"
+t4_assert_eq "0" "$(lint4b "$SUBJECT_BUNDLE" || true)" "C3④ 真脚本：spawn 内不重算 place_key_label"
+NEG_D="$T4_CACHE_DIR/c28-c3-neg-d.sh"
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_D" \
+     '  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" task="${7-}" pl="" obj js line' \
+     '  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" task="${7-}" pl="" obj js line; : "${HERDR_SESSION:-}"'; then
+  t4_assert_eq "1" "$(lint4 "$NEG_D" || true)" "C3④ 负控：spawn 内注入 HERDR_SESSION ⇒ 命中 1（判据非空转）"
+else t4_bad "C3④ 负控锚点未命中"; fi
+NEG_D2="$T4_CACHE_DIR/c28-c3-neg-d2.sh"
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_D2" \
+     '  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" task="${7-}" pl="" obj js line' \
+     '  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="$(place_key_label "$repo")" group="${6-}" task="${7-}" pl="" obj js line'; then
+  t4_assert_eq "1" "$(lint4b "$NEG_D2" || true)" "C3④ 负控2：spawn 内重算 slug ⇒ 命中 1（D1 零调用判据不空转）"
+else t4_bad "C3④ 负控2 锚点未命中"; fi
+
+# C3⑤ 起 server 身份禁读环境变量（T544）
+lint5() { grep -nE '\$\{?_TERM_HERDR_SERVER_START|^[[:space:]]*(\([[:space:]]*)?_TERM_HERDR_SERVER_START=' "$1" || true; }
+t4_assert_eq "" "$(lint5 "$SUBJECT_BUNDLE")" "C3⑤ 真脚本：不读 _TERM_HERDR_SERVER_START（唯一形态 = -u 迁移带）"
+NEG_E="$T4_CACHE_DIR/c28-c3-neg-e.sh"
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_E" '  local s="${HERDR_SESSION:-}" v ss=0' \
+     '  local s="${HERDR_SESSION:-}" v ss=0
+  if [[ "${_TERM_HERDR_SERVER_START:-0}" == "1" ]]; then :; fi'; then
+  t4_assert_match "$(lint5 "$NEG_E")" '^[0-9]+:.*_TERM_HERDR_SERVER_START' "C3⑤ 负控1：历史读取形 ⇒ 必红并点名行号"
+else t4_bad "C3⑤ 负控1 锚点未命中"; fi
+NEG_F="$T4_CACHE_DIR/c28-c3-neg-f.sh"
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_F" '  local s="${HERDR_SESSION:-}" v ss=0' \
+     '  local s="${HERDR_SESSION:-}" v ss=0
+  : "$_TERM_HERDR_SERVER_START"'; then
+  t4_assert_match "$(lint5 "$NEG_F")" '^[0-9]+:.*_TERM_HERDR_SERVER_START' "C3⑤ 负控2：裸变量读取形 ⇒ 必红"
+else t4_bad "C3⑤ 负控2 锚点未命中"; fi
+NEG_G="$T4_CACHE_DIR/c28-c3-neg-g.sh"
+if mutate_file "$SUBJECT_BUNDLE" "$NEG_G" '  local s="${HERDR_SESSION:-}" v ss=0' \
+     '  local s="${HERDR_SESSION:-}" v ss=0
+  _TERM_HERDR_SERVER_START=1 :'; then
+  t4_assert_match "$(lint5 "$NEG_G")" '^[0-9]+:.*_TERM_HERDR_SERVER_START=1' "C3⑤ 负控3：命令行位前置赋值形 ⇒ 必红"
+else t4_bad "C3⑤ 负控3 锚点未命中"; fi
+t4_assert_eq "1" "$(grep -c -- '-u _TERM_HERDR_SERVER_START' "$SUBJECT_BUNDLE" || true)" \
+  "C3⑤ 正控：迁移带「-u _TERM_HERDR_SERVER_START」仍在场（不是靠删干净凑绿）"
 
 # ============================================================================
 # 夹具：app 臂（hc-double）
@@ -295,6 +378,71 @@ BE_CACHE_ROOT="$T4_CACHE_DIR"
 be_init "$HLAB" "lab28h-$$" || { t4_bad "herdr be_init 失败"; t4_exit; }
 be_start_server || { t4_bad "herdr server 起不来"; t4_exit; }
 [ -n "$(be_panes)" ] || be_new_pane "$HLAB" >/dev/null
+
+# ---------------------------------------------------------------- herdr golden + 默认值反向断言（T555 / P2①）
+# 旧 cases/28 C2 的 tmux golden 组已随 T555 退役；等价覆盖 = 本组 herdr golden：
+#   未设 NAO_TERMINAL == 显式 =herdr（默认值唯一）· ≠ 冻结的旧 tmux golden ·
+#   缺 herdr 前提 ⇒ exit 3（不静默回落）· 变异「默认改回 tmux」⇒ 未设 golden 必红（先红后绿）。
+GOLD_TMUX_MD5="144f3447c9ff406d6aed828d9c9720e5"
+GOLD_HERDR_MD5_RECORDED="4b7f47b28a141521ec262b2d727348f8"
+# >>> default-value-probe BEGIN（T555 P2①：未设探针 —— 全仓唯一允许 unset NAO_TERMINAL 的位置）
+gold_md5() { printf '%s' "$1" | md5sum | awk '{print $1}'; }
+gold_run() { # <explicit|unset> <script> [extra env...] → GOLD_RC / GOLD_OUT / GOLD_ERR
+  local mode="$1" script="$2"; shift 2
+  local kv
+  local -a clean=() handles=() envs=()
+  mapfile -t clean < <(be_clean_env)
+  mapfile -t handles < <(be_fleet_handles)
+  for kv in "${handles[@]}"; do [[ "$kv" == NAO_TERMINAL=* ]] || envs+=("$kv"); done
+  if [[ "$mode" == "explicit" ]]; then
+    t4_run_in_dir "$HLAB" env "${clean[@]}" "${envs[@]}" "NAO_SKILLS=$HLAB" NAO_TERMINAL=herdr \
+      timeout 180 bash "$script" status "$@"
+  else
+    t4_run_in_dir "$HLAB" env -u NAO_TERMINAL "${clean[@]}" "${envs[@]}" "NAO_SKILLS=$HLAB" \
+      timeout 180 bash "$script" status "$@"
+  fi
+  GOLD_RC=$T4_RC
+  GOLD_OUT="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  GOLD_ERR="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+}
+gold_run explicit "$HLAB/.agents/scripts/nao-fleet.sh"
+GOLD_HERDR_MD5="$(gold_md5 "$GOLD_OUT")"
+t4_assert_eq "0" "$GOLD_RC" "P2① 显式 =herdr ⇒ status rc=0"
+t4_assert_contains "$GOLD_OUT" "本表按 herdr pane label" "P2① herdr golden 确为 herdr 渲染（后端专有头行）"
+t4_assert_eq "$GOLD_HERDR_MD5_RECORDED" "$GOLD_HERDR_MD5" \
+  "P2① herdr golden == 记录值（渲染零漂移；实际=$GOLD_HERDR_MD5）"
+t4_assert_ne "$GOLD_TMUX_MD5" "$GOLD_HERDR_MD5" "P2① 反向断言：herdr golden ≠ 旧 tmux golden"
+t4_info "P2① golden：tmux=$GOLD_TMUX_MD5 · herdr=$GOLD_HERDR_MD5"
+# 未设探针（同一 default-value-probe 块内）
+gold_run unset "$HLAB/.agents/scripts/nao-fleet.sh"
+t4_assert_eq "0" "$GOLD_RC" "P2① 未设 NAO_TERMINAL（herdr 场）⇒ status rc=0（默认已翻 herdr）"
+t4_assert_eq "$GOLD_HERDR_MD5" "$(gold_md5 "$GOLD_OUT")" \
+  "P2① 未设 == herdr golden（默认值唯一：未设与显式 =herdr 不可分叉）"
+t4_assert_ne "$GOLD_TMUX_MD5" "$(gold_md5 "$GOLD_OUT")" "P2① 未设 ≠ 旧 tmux golden（旧口径已失效）"
+# 反向负控 A：未设 + HERDR_* 全缺 ⇒ exit 3（点名 HERDR_ENV；不静默回落）
+mapfile -t GOLD_CLEAN < <(be_clean_env)
+t4_run_in_dir "$HLAB" env -u NAO_TERMINAL "${GOLD_CLEAN[@]}" "NAO_SKILLS=$HLAB" \
+  timeout 180 bash "$HLAB/.agents/scripts/nao-fleet.sh" status
+t4_assert_eq "3" "$T4_RC" "P2① 反向负控A：未设 NAO_TERMINAL 且 herdr 前提全缺 ⇒ exit 3"
+t4_assert_contains "$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')" "HERDR_ENV=1 缺失" \
+  "P2① 反向负控A：点名 herdr 前提（HERDR_ENV）"
+# 变异自证：默认改回 tmux ⇒ 未设 golden 必红（判据非空转）；复原后复绿（先红后绿）
+GOLD_MUT_ROOT="$HLAB/mut-default-$$"
+GOLD_MUT="$(t4_fleet_clone "$HLAB/.agents/scripts" "$GOLD_MUT_ROOT")"
+GOLD_MUT_MOD="$(t4_fleet_file_for "$GOLD_MUT_ROOT" term_backend)"
+sed 's/^NAO_TERMINAL="${NAO_TERMINAL:-herdr}"$/NAO_TERMINAL="${NAO_TERMINAL:-tmux}"/' \
+  "$GOLD_MUT_MOD" > "$GOLD_MUT_MOD.mut" && mv "$GOLD_MUT_MOD.mut" "$GOLD_MUT_MOD"
+t4_assert_eq "1" "$(grep -cE '^NAO_TERMINAL="\$\{NAO_TERMINAL:-tmux\}"$' "$GOLD_MUT_MOD" || true)" \
+  "P2① 变异锚点有效：副本默认已改回 tmux"
+gold_run unset "$GOLD_MUT"
+t4_assert_ne "0" "$GOLD_RC" "P2① 变异自证：默认改回 tmux ⇒ 未设 rc≠0"
+t4_assert_ne "$GOLD_HERDR_MD5" "$(gold_md5 "$GOLD_OUT")" \
+  "P2① 变异自证：默认改回 tmux ⇒ 未设不再等于 herdr golden（必红，不是空转）"
+gold_run unset "$HLAB/.agents/scripts/nao-fleet.sh"
+t4_assert_eq "$GOLD_HERDR_MD5" "$(gold_md5 "$GOLD_OUT")" "P2① 复原后复绿：未设 == herdr golden"
+rm -rf "$GOLD_MUT_ROOT"
+# >>> default-value-probe END
+
 meta_root() { printf '%s/.local/state/nao-fleet/session-meta\n' "$HLAB/.t4-home"; }
 ws_of_label() { be_herdr "$BE_SESSION" pane list 2>/dev/null | _be_json_lines "(r.panes||[]).filter(p=>p.label==='$1').map(p=>p.workspace_id)" | sed -n '1p'; }
 sidecar_for() { # <label> → path（当前会话 + 该 label 的 workspace）
