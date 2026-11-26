@@ -214,7 +214,7 @@ _term_app_doc_guard() {
 _term_app_identity() {  # <get-json> → 身份名（无 ⇒ 空）
   local g="${1-}" nm="" fg="" av=""
   nm="$(_term_app_field "$g" "$TERM_APP_LABEL_NAME")"
-  [[ -n "$nm" ]] || nm="$(_term_app_field "$g" name)"
+  [[ -n "$nm" ]] || nm="$(_term_app_name "$g")"
   # 真 hc 的 name 可为 null：字段抽取会得到 `null` / `null,` 一类裸值 ⇒ 一律视为缺席
   case "$nm" in null|null,*|null\}*) nm="" ;; esac
   if [[ -z "$nm" ]]; then
@@ -229,6 +229,18 @@ _term_app_identity() {  # <get-json> → 身份名（无 ⇒ 空）
     fi
   fi
   printf '%s\n' "$nm"
+}
+
+# 终端名（T574/Issue #207）：真 hc 的 `get` 键序**按字母**排 ⇒ `foreground.name`（= "pi"）先于
+#   顶层 `name` 出现；老实现「取首个同名键」因此永远拿到 "pi" ⇒ 按名定位恒空 ⇒ close 打印
+#   「未发现 app 终端（幂等成功）」而终端仍在（假成功 + 占名撞 name_taken）。
+#   修法：先把 `foreground` / `labels` 两个嵌套块整体剔掉，再取首个 `name`（= 顶层名）；null ⇒ 空。
+_term_app_name() {  # <json> → 终端名（顶层 name；空/null ⇒ 空）
+  local j="${1-}" v=""
+  j="$(printf '%s\n' "$j" | sed -E -e 's/"foreground":\{[^}]*\},?//' -e 's/"labels":\{[^}]*\},?//')"
+  v="$(_term_app_field "$j" name)"
+  case "$v" in null|null,*|null\}*) v="" ;; esac
+  printf '%s' "$v"
 }
 
 _term_app_facts() {
@@ -705,14 +717,15 @@ _term_app_deliver() {  # <addr> <message> → 0 已投递 / 1 失败（stdout: e
 }
 
 # ---- 回收（M5/BR4）：kill → rm（顺序固定；kill 幂等；live 直接 rm ⇒ rc=1 kind:live）----
-_term_app_find_by_name() {  # <name> → 每行一个地址（ls --all）
-  local name="${1-}" ls
+_term_app_find_by_name() {  # <name> → 每行一个地址（ls --all；名字取**顶层** name，见 _term_app_name）
+  local name="${1-}" ls a g
   ls="$(_term_app_exec ls --all --json 2>/dev/null)" || return 0
   _term_app_payload_ok "$ls" || return 0
-  printf '%s' "$ls" | grep -o '"address":"[^"]*"' | cut -d'"' -f4 | while IFS= read -r a; do
-    local g; g="$(_term_app_exec get "$a" --json 2>/dev/null)" || continue
-    [[ "$(_term_app_field "$g" name)" == "$name" ]] && printf '%s\n' "$a"
-  done
+  while IFS= read -r a; do
+    [[ -n "$a" ]] || continue
+    g="$(_term_app_exec get "$a" --json 2>/dev/null)" || continue
+    [[ "$(_term_app_name "$g")" == "$name" ]] && printf '%s\n' "$a"
+  done < <(printf '%s' "$ls" | grep -o '"address":"[^"]*"' | cut -d'"' -f4)
 }
 
 _term_app_reclaim() {  # <name> <repo> <force> <core> <scope> <ensure-target> → 0 已回收 / 1 拒绝或失败
@@ -742,6 +755,10 @@ _term_app_reclaim() {  # <name> <repo> <force> <core> <scope> <ensure-target> �
           return 1
         fi
         warn "强制回收 $name（状态=$st）：--force" ;;
+      done)
+        # T574/Issue #207：`--keep` 保活使「会话已结束」的终端以 live+done 存在
+        #   （历史缺陷：门面状态映射漏 done ⇒ close 报「未运行/幂等成功」，终端残留占名）
+        log "回收「会话已结束、终端保活」（$name ⇒ $addr：state=live · status=done）" ;;
       -|"")
         if [[ "$force" != true ]]; then
           warn "拒绝回收 $name：忙闲不可判定（$addr 无 status 上报）—— 确认无用时加 --force"
@@ -749,11 +766,18 @@ _term_app_reclaim() {  # <name> <repo> <force> <core> <scope> <ensure-target> �
         fi ;;
     esac
   fi
-  # kill（幂等）→ rm（顺序不可反）
+  # kill（幂等）→ rm（顺序不可反）；rm 允许**有界**重试（kill 生效是异步的：live 直接 rm ⇒ kind=live）
   if ! _term_app_exec kill "$addr" >/dev/null 2>&1; then
     warn "hc kill 失败（$name ⇒ $addr）"; return 1
   fi
-  if ! _term_app_exec rm "$addr" >/dev/null 2>&1; then
+  local _i=0 _rm_ok=1
+  while (( _i < 15 )); do
+    if _term_app_exec rm "$addr" >/dev/null 2>&1; then _rm_ok=0; break; fi
+    _term_app_exec ls --all --json 2>/dev/null | grep -qF "\"address\":\"$addr\"" || { _rm_ok=0; break; }
+    sleep 0.1
+    _i=$((_i + 1))
+  done
+  if (( _rm_ok != 0 )); then
     warn "hc rm 失败（$name ⇒ $addr：kill 后仍不可删？核对 hc ls --all）"; return 1
   fi
   # effect 判据（不看 rc）：地址必须从 ls --all 消失
