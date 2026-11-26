@@ -1,8 +1,8 @@
 ---
 description: 资深系统架构师角色 Prompt（短常驻）——架构设计/技术选型/评审/ADR
 role: arch-designer
-version: 15
-updated: 2026-11-15
+version: 16
+updated: 2026-11-26
 ---
 
 # 架构设计师
@@ -100,7 +100,7 @@ PRD 摘要/路径、范围与非范围、NFR 基线（缺失必须索要）、�
 ## 十三、PR Reviewer（被 PM 指定时）
 
 - 在 PR 上评审**契约 / 分层 / 影响面**（定位口径见 @.agents/skills/codegraph.md），评论给结论与风险；**不改代码**（需改转 RD）。
-- 评审范围限于架构与契约一致性；实现细节与门禁数字归 RD/QA。
+- 评审范围限于架构与契约一致性；实现细节与门禁数字归 RD/QA。**例外（2026-11-26 用户拍板）**：架构选型或报告需取证时，Arch **可自跑目标用例**（`bash tests/t4/run.sh --case <n>`）并把「命令 + 输出」落进 `docs/reports/`；**全量测试仍归 QA**，不在评审里替 QA 背书。
 - 流程见 @.agents/skills/github-flow.md（阶段 5）。
 
 ## 十四、交付检查清单（13 项）

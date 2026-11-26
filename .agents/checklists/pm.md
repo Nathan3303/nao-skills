@@ -93,7 +93,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 【仅 feat】全程 PM 未触碰代码
 - [ ] 【仅 feat】PRD 已归档 `docs/prds/` 并同步 README 索引
 - [ ] 【仅 feat】项目 `AGENTS.md` 已建立/同步（项目级属性与约束，见 @.agents/skills/pm-operations.md §四）
-- [ ] 【仅 feat】worker 回执含**全量**门禁精确数字（命令 + exit code + 文件数/例数/红数）；PM 仅核对数字 + 读变更文件 + 异常才抽查（未重复跑）
+- [ ] 【仅 feat】**QA 报告**含全量门禁精确数字（命令 + exit code + 例数/断言数/红数）与四段结论；PM 只核对报告 + 读变更文件，**不重复跑测试**（2026-11-26 用户拍板：测试只归 QA）
 - [ ] 【仅 feat】派发消息只给引用路径（`docs/...md#section`），无 PRD/方案全文或附件传全文
 - [ ] 【仅 feat】派发含「根因 + 修复方向」的指令已附**一条已执行的实测命令与输出**（无实测只能派「诊断/复现任务」，不得先给方向）
 - [ ] 【仅 feat】派发时已声明回执级别（未声明默认 `done(lite)`；有阻塞/风险/需决策已要求 `done(full)`）；模板已按需读取 `@.agents/checklists/comm-templates.md`
@@ -131,11 +131,11 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 
 - [ ] 分流成立：3 字段齐备（现象 / 复现 / 回退），「期望 vs 实际」可复现；不成立 ⇒ 当场升 `feat` 而非降格开工
 - [ ] 分支与范围：`fix/<issue-id>-<slug>`（无 Issue 降级 `nao/<批次-slug>`；线上问题从受影响版本 tag 切出）；diff 只碰修复路径，无夹带重构 / 格式化；**PM 按 `git diff --name-only` 核：文件集 ⊆ 修复点 + 其测试 + 台账，超出即打回；>3 文件须在 PR 内写书面理由（降级无 PR ⇒ 落 `docs/reports/<编号>-review.md` 或 `tasks-state` 该任务条目相邻行）**
-- [ ] 先红后绿：可失败用例先复现失败（回执贴命令 + 输出）→ 修复后全量 `bash .agents/scripts/nao-fleet.sh check` 与 `npm test` rc=0；**无测试设施**（纯文档仓 / 无 `npm test`）⇒ 用最小复现命令贴「修复前失败 / 修复后通过」的命令 + 输出（可放 `docs/reports/<编号>-repro.*` 或 Issue 内联）；项目 `AGENTS.md` 指定了门禁命令则**以它为准**，未指定则 `check` rc=0
+- [ ] 先红后绿：可失败用例先复现失败（回执贴命令 + 输出）→ 修复后 PM 跑 `check` rc=0，**测试由 QA 复跑**（新用例/回归用例）；**无测试设施**（纯文档仓 / 无 `npm test`）⇒ 用最小复现命令贴「修复前失败 / 修复后通过」的命令 + 输出（可放 `docs/reports/<编号>-repro.*` 或 Issue 内联）；项目 `AGENTS.md` 指定了门禁命令则**以它为准**，未指定则 `check` rc=0
 - [ ] 回退可执行：`git revert <sha>` 可干净回退；数据 / 契约类在 Issue 上 3 行写影响面
 - [ ] 复核留痕：非作者复核（QA / 另一会话）；单人项目允许**作者自审**，但**唯二载体**才算留痕 —— PR 描述「复核」一节 + `docs/tasks-state.md` 条目一行（理由 + 日期 + 自审声明），缺任一不算留痕；**降级模式（无远端 / 无 `gh`，无 PR）⇒ 首载体改 `docs/reports/<编号>-review.md`（或 `tasks-state` 该条目相邻行），内容与判据不变**
 - [ ] 不可逆动作仍走 `ask-me`（合并 main / 打 tag / 发 npm / 破坏性契约 / 删文件或数据）——`fix` 不豁免
-- [ ] 回执 `lite` 含门禁精确数字 + 遗留三出口；`docs/tasks-state.md` 已同步；合并前已核「分支无未推送提交」（`git rev-list --count origin/<branch>..HEAD` = 0 · `git status --porcelain` 空）
+- [ ] 回执 `lite` 含**QA 报告指针**（测试数字以报告为准）+ 遗留三出口；`docs/tasks-state.md` 已同步；合并前已核「分支无未推送提交」（`git rev-list --count origin/<branch>..HEAD` = 0 · `git status --porcelain` 空）
 - [ ] 文档 / 台账随任务 PR，工作期无 `wip()` 落 main —— **两通道同规**
 
 ## 会话回收 / 收窗核对（验收通过后 / 手工关窗前）

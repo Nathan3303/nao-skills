@@ -16,7 +16,13 @@
 ## 项目约束（红线）
 
 - **仅 pi 宿主（唯一，无第二宿主）**：机制只支持 **pi ≥1.4.0**；终端后端**默认后端 = herdr ≥0.9.1**（两种形态：herdr TUI 默认 / herdr desktop app 走 `NAO_TERMINAL=app`；二者**不共享会话**；`NAO_TERMINAL` 给其他任何值含 `tmux` ⇒ `rc=2` fail loud，旧 tmux 后端 v0.28.0 已移除；前提链见 `README.md`「前置环境」与 `docs/INSTALL.md`「herdr 后端」「desktop app 后端」）。**不为其他编程 Agent（Claude Code / Codex / Cursor 等）做适配、shim 或兼容承诺**，文档 / `description` / `keywords` 一律不得暗示可互换；需要那类能力时按「新增宿主」立项，不夹带。用户可见边界写在 `README.md`「前置环境」。
-- **全范围门禁口径（本项目）**：`bash .agents/scripts/nao-fleet.sh check` rc=0 + `npm test` rc=0（tests/ 全目录，非子目录）；改任何机制文件/角色卡后必跑 `check`。**日常迭代用快档** `npm run test:fast`（白名单 14 例 · 实测 ≈95s · 显式打印跳过例与未覆盖清单）；**PR CI / 合并前 / 发布前仍跑全量** `npm test`（43 例）与 `test:t4:full`（快档绿 ≠ 全绿，白名单与判据见 `tests/t4/run.sh` 的 `FAST_CASES` + `docs/reports/143-profile.md`）。
+- **测试分工（2026-11-26 用户拍板，取代旧「全范围门禁口径」的重复自证）**：**`tests/` 与 `npm test` 只由 QA 执行**。分工硬约束：
+  - **PM**：合并前只跑 `bash .agents/scripts/nao-fleet.sh check`（静态体检，非测试套件）；验收**以 QA 报告为唯一测试依据**，不重复跑测试、不替 QA 自证用例数；攒批粒度由 PM 定（默认每批 2–3 个任务一次真全量，中间不插测试）。
+  - **RD（rd-infra / rd-fe / rd-be）**：**不跑测试套件**；只允许**单条命令自查**（如 `node bin/x --validate`、手工 echo 验证），不产出测试数字；交付时给 QA「可复现命令 + 改动面 + 预期结果」。
+  - **Arch**：仅在**架构选型或需取证报告**时自跑目标用例（`tests/t4/run.sh --case <n>`），命令与输出落 `docs/reports/`；全量仍归 QA。
+  - **QA**：唯一测试执行者，报告须含「命令 → 实测数字（PASS/FAIL/SKIP/NOTE）→ 未覆盖项与理由 → 放行/不放行」。
+  - **攒批**：每批 2–3 个任务由 QA 跑一次全量 + 逐任务目标用例；**发版前必跑全量** `npm test` 与 `test:t4:full`（快档绿 ≠ 全绿，白名单与判据见 `tests/t4/run.sh` 的 `FAST_CASES` + `docs/reports/143-profile.md`）。
+  - **不变**：改任何机制文件/角色卡后**仍须跑 `check`**（静态体检，归 PM）。
 - **零敏感值**：仓库内禁 token/私钥/绝对家目录路径；grep 复核是 rd-infra 红线的硬门禁。
 - **幂等**：脚本/迁移/安装器连跑 2 次 effect = 0 且 rc = 0；守卫改动带失败演练。
 - **维护型闭环口径**：外部命令 / 依赖 / 环境类动作 = 维护型任务（`M<YYYYMMDD>-<slug>`），**`exit 0` 不算完成** —— `audit` / `install-scripts` / 每条 `warn`/`error`/`pending approval` 逐条归口，遗留项走三出口（关闭 / 接受含到期 / 转办），台账落 `docs/reports/<编号>-followups.md`（协议 `.agents/skills/task-completion.md`；首个实例 `M20261014-pi-ext-update`）。

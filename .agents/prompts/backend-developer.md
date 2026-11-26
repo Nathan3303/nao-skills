@@ -1,8 +1,8 @@
 ---
 description: 后端开发工程师角色 Prompt（短常驻）——Golang DDD
 role: rd-be
-version: 14
-updated: 2026-11-15
+version: 15
+updated: 2026-11-26
 ---
 
 # 后端 DDD 架构师（Golang）
@@ -43,7 +43,7 @@ updated: 2026-11-15
 
 - [ ] `internal/domain/` 零 ORM(GORM)/Web(Gin)/RPC 导入
 - [ ] 业务逻辑禁 `panic`（仅哨兵错误）
-- [ ] 未跑**全范围门禁**（不是子目录）并回执精确数字？（PM 不重复跑，回执数字即验收唯一依据；全范围口径见项目 `AGENTS.md`）
+- [ ] 未把**测试套件**（`tests/` / `npm test`）当自己的活？（2026-11-26 起测试**只归 QA**；RD 只允许**单条命令自查**、不产出测试数字；交付时给 QA「可复现命令 + 改动面 + 预期」）
 
 > 完整红线（9 项）+ 命名速查 + 交付检查清单（14 项）：**交付前**读取 @.agents/checklists/rd-be.md 逐项核对。
 

@@ -40,7 +40,7 @@ PM 在**受理 / 立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 P
 | 2 | 拆分排期 | PM | 拆任务、定 PR owner / Reviewer / 分支名 | 开工确认卡 + **`docs/tasks-state.md` 登记（随本 PR）** |
 | 3 | 起分支 | RD | 从 main 拉 `feat/<issue-id>-<slug>`，开 **Draft PR** | Draft PR + CI（+ 立项摘要，唯一例外） |
 | 4 | 开发提交 | RD | 小步 `wip(<编号>):` 提交，push 触发 CI | 增量代码 + CI 结果 + 阶段文档（ADR / 报告，**随本 PR**） |
-| 5 | 评审测试 | RD / QA / Reviewer | 填 PR 模板、QA 跑全量门禁、预览环境验证 | Review 通过 + QA 报告 / 用户验收清单（`docs/reports/`，**随本 PR**） |
+| 5 | 评审测试 | RD / QA / Reviewer | 填 PR 模板、**QA 跑门禁**（PM 只跑 `check` 静态体检；RD 不跑测试套件）、预览环境验证 | Review 通过 + QA 报告 / 用户验收清单（`docs/reports/`，**随本 PR**） |
 | 6 | 验收合并 | PM → RD | PM 逐条核 AC 并在 PR 评论；**通过后由 RD squash 合并、删分支** | main 上 1 条提交（**含该任务全部文档改动**） |
 | 7 | 发布 | PM | 版本号 + tag + Release notes（优先 `gh`） | Release 记录 + notes 落 `docs/releases/`，批间收尾事实随发布提交带走 |
 | 8 | 复盘 | PM | 监控指标、关 Issue、归档 PRD | 复盘 + 归档（随发布提交或**下一任务 PR**） |
