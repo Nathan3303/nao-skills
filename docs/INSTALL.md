@@ -136,6 +136,27 @@ cd <repo> && codegraph init                # 建索引（不带 -i；该 flag �
 
 > **迁移**：想继续用旧语义 ⇒ 把机制版本 pin 回 `≤0.27.x`。不想迁移 ⇒ 删掉 `--fleet`/`--scope` 调用与 `.agents/fleet-scope` 文件即可，其余不动也能跑。
 
+## session 记录存放与保留（`logs`）
+
+舰队会话的 **Pi session 记录不落 `~/.pi/agent/sessions/`**，而是落舰队自有状态目录 —— 这样用户的 `/resume` 主列表里只剩自己的会话，一天多次重开角色也不会有噪音。
+
+- **位置**：`${NAO_FLEET_META_DIR:-~/.local/state}/nao-fleet/sessions/--<编码 cwd>--/`（**一仓一子目录**，目录名与 Pi 默认布局同款编码：去掉首 `/`、再把 `/` 与 `:` 换成 `-`）。与 herdr sidecar `session-meta/` 同处一个状态根；`NAO_FLEET_META_DIR` 一起搬家。
+- **范围**：**全部**舰队会话（常驻 `pm`/`qa`/… 与 `--task` 派生）都由 `ensure` 带 `--session-dir` 落这里；Pi 一旦拒绝该参数或目录不可建 ⇒ **fail loud**（不会静默落回主目录）。
+- **保留（按结果分级，按文件 mtime 判寿命）**：
+  - **正常交付**（该 role/task 有 `done` 回执 `docs/queue/<id>.receipt.json`，或 `close` 判定正常）⇒ **24 小时**
+  - **异常**（无回执 / `close --force` / 崩溃 / 判不出）⇒ **7 天**，并在该会话 cwd 的 `docs/tasks-state.md` 留一行 `- [session-retention] …` 点名（角色 + 任务 + 路径；重复跑不重复写）
+  - 近 1 小时有写入的记录一律跳过（可能仍在跑）；清理失败只 warn，不改 rc
+- **查看**：
+  ```bash
+  bash .agents/scripts/nao-fleet.sh logs rd-infra            # turn 摘要（user 首行 + assistant 首行 + 工具名）
+  bash .agents/scripts/nao-fleet.sh logs rd-infra --raw      # 原样
+  bash .agents/scripts/nao-fleet.sh logs rd-infra --list     # 仓 / 日期 / 角色 / 大小 / 路径
+  bash .agents/scripts/nao-fleet.sh logs --purge             # 按分级清理（默认只清当前仓）
+  bash .agents/scripts/nao-fleet.sh logs --purge --repo all --days 3   # 跨仓 + 一次性统一保质期
+  ```
+  默认作用域 = **当前仓**（`git rev-parse --show-toplevel` → 仓基键）；`--repo <仓名>` 看/清指定仓，`--repo all` 看/清全部。无记录 ⇒ `rc=0` + 一行提示（不是错误）。
+- **不做长期归档**：Pi session 会被 compaction 截断、单条可达数 MB 且 90% 是 thinking/工具输出。真档案 = `docs/queue/<id>.receipt.json` + `docs/reports/` + intercom 回执 + `docs/tasks-state.md`。
+
 ## 联动仓 manifest（`.agents/fleet.yaml`）
 
 单仓不需要它（不写 = 与以前完全一致）。要让角色能被派到**其它仓**干活、但仍住同一个 workspace，在**主仓根**写：

@@ -715,17 +715,17 @@ t4_assert_eq "5" "$(for _f in t4_scan_term_bare_calls t4_verify_term_ledger t4_s
   "B1: 5 个 lint helper 均已定义（缺任一 ⇒ 其负控断言会因 127/空输出假绿）"
 t4_assert_file "$LEDGER_B1" "B1: 门面台账存在（tests/t4/fixtures/term-legacy-allowlist.txt）"
 
-# ---- T567-A：函数锚三向断言（ADR D3「174 函数锚怎么迁」；T567-B 起 176 = 174 + status --json 两函数；Step 2 门面中性化 200 = 185 + 15）----
+# ---- T567-A：函数锚三向断言（ADR D3「174 函数锚怎么迁」；T567-B 起 176 = 174 + status --json 两函数；Step 2 门面中性化 200 = 185 + 15；T573 起 231 = 200 + sessions.sh 30 + _need_logs）----
 #   判据：① 各模块顶层函数并集 == 清单（无漏登记 / 无重名 / 无孤儿）② 归属模块一致
-#         ③ 总数守恒（清单行数 == 头 total == 实际并集 = 200）
+#         ③ 总数守恒（清单行数 == 头 total == 实际并集 = 231）
 #   锚在**清单**（functions.txt 一处 diff）：新增函数必须同行加一行 + 改头 total，否则本组必红。
 FN_MANIFEST="$T4_ROOT/.agents/scripts/fleet/functions.txt"
 t4_assert_file "$FN_MANIFEST" "T567-A: functions.txt 存在（函数锚的唯一清单）"
 t4_assert_eq "" "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MANIFEST")" \
-  "T567-A: 200 三向守恒（无漏登记/无孤儿/归属一致/总数==total）"
-t4_assert_eq "200" "$(grep -vcE '^[[:space:]]*(#|$)' "$FN_MANIFEST")" "T567-A: 清单行数 == 200（185 + Step 2 中性化 15）"
-t4_assert_eq "200" "$(t4_fleet_count '^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{' "$FLEET_B1")" \
-  "T567-A: 各模块顶层函数并集 == 200（数量守恒）"
+  "T567-A: 231 三向守恒（无漏登记/无孤儿/归属一致/总数==total）"
+t4_assert_eq "231" "$(grep -vcE '^[[:space:]]*(#|$)' "$FN_MANIFEST")" "T567-A: 清单行数 == 231（200 + sessions.sh 30 + _need_logs）"
+t4_assert_eq "231" "$(t4_fleet_count '^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{' "$FLEET_B1")" \
+  "T567-A: 各模块顶层函数并集 == 231（数量守恒）"
 # 失败演练（判据必须承重，不能空转）：三种变异各自必红
 FN_MUT="$T4_CACHE_DIR/fn-manifest-$$.mut"
 grep -v $'\tcmd_check$' "$FN_MANIFEST" > "$FN_MUT"
@@ -734,10 +734,10 @@ t4_assert_contains "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" | grep 
 sed 's#^fleet/lib/check.sh\tcmd_check$#fleet/lib/core.sh\tcmd_check#' "$FN_MANIFEST" > "$FN_MUT"
 t4_assert_contains "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" || true)" "归属不符" \
   "T567-A 负控②：模块归属写错 ⇒ 必红"
-sed 's/^# total: 200$/# total: 199/' "$FN_MANIFEST" > "$FN_MUT"
+sed 's/^# total: 231$/# total: 230/' "$FN_MANIFEST" > "$FN_MUT"
 out="$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" || true)"
 t4_assert_contains "$out" "总数不符" "T567-A 负控③：头 total 与并集不符 ⇒ 必红"
-t4_assert_contains "$out" "清单行数 200 ≠ 头 total 199" "T567-A 负控③b：只改 total 不改行数 ⇒ 同样必红"
+t4_assert_contains "$out" "清单行数 231 ≠ 头 total 230" "T567-A 负控③b：只改 total 不改行数 ⇒ 同样必红"
 
 # ---- T572：业务层后端词静态闸（双向负控 + 判据存在 + 演练）----
 t4_assert_eq "1" "$(type t4_scan_business_backend_words >/dev/null 2>&1 && echo 1 || echo 0)" \
@@ -921,7 +921,7 @@ c6_check() { # <NAO_STASH_ROOT> [check 参数...] · 在真仓跑（**herdr 默�
       NAO_STASH_ROOT="$root" bash .agents/scripts/nao-fleet.sh check "$@" 2>&1 )
 }
 OUT_B1_BASE_CHECK="$(c6_check "$C6_STASH_NONE")"
-CHECK_GOLD_LINE='check: OK · roles=7 · files=67'   # T567-A：脚本拆 11 模块 + functions.txt（53 → 65，+12）；T567-B：+2 systemd 单元模板（65 → 67）；改机制文件数须同步本行
+CHECK_GOLD_LINE='check: OK · roles=7 · files=68'   # T567-A：脚本拆 11 模块 + functions.txt（53 → 65，+12）；T567-B：+2 systemd 单元模板（65 → 67）；T573：+fleet/lib/sessions.sh（67 → 68）；改机制文件数须同步本行
 t4_assert_eq "$CHECK_GOLD_LINE" "$(printf '%s\n' "$OUT_B1_BASE_CHECK" | head -1)" \
   "P2④ herdr 摘要首行 = roles/files 计数（layout= 字段随 tmux 布局删除 —— D3）"
 t4_assert_eq "3" "$(printf '%s\n' "$OUT_B1_BASE_CHECK" | grep -c . || true)" \

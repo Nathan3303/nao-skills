@@ -109,9 +109,15 @@ new_split() { [ -f "$SPLIT_LOG" ] && sed -n "$(( $1 + 1 )),\$p" "$SPLIT_LOG" || 
 launch_lines() { grep -cF -- "[$BE_NAME] 已拉起" <<< "$T4_OUT_ANSI" || true; }
 
 # ---- 期望命令行（逐字重建；AC3 基线 = 缺陷前形态：无任何注入段）----
+# T573（Issue #206）：会话记录落舰队自有目录（隔离 HOME 之下、一仓一子目录、无日期层），
+#   期望命令行 = `--append-system-prompt <file> --session-dir <root>/--<编码 cwd>--`（新增参数唯一位置）。
+sess_dir() { # <repo>
+  local p; p="$(cd "$1" 2>/dev/null && pwd -P)" || p="$1"
+  printf '%s/--%s--' "$LAB/.t4-home/.local/state/nao-fleet/sessions" "$(printf '%s' "${p#/}" | sed -e 's#[/\\:]#-#g')"
+}
 expected_inner() { # <name> <prompt_file>
-  printf 'cd %s && export CODEGRAPH_TELEMETRY=0 && exec pi --name %s --append-system-prompt %s' \
-    "$(printf %q "$LAB")" "$(printf %q "$1")" "$(printf %q "$2")"
+  printf 'cd %s && export CODEGRAPH_TELEMETRY=0 && exec pi --name %s --append-system-prompt %s --session-dir %s' \
+    "$(printf %q "$LAB")" "$(printf %q "$1")" "$(printf %q "$2")" "$(printf %q "$(sess_dir "$LAB")")"
 }
 expected_wrapped() {
   printf '%s' "$(expected_inner "$1" "$2")"

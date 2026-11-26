@@ -171,7 +171,10 @@ repo_contains_path() { [[ -n "$1" && -n "$2" && ( "$2" == "$1" || "$2" == "${1%/
 #   纪律：读写失败只 warn、**不改 rc**（元数据缺失不得阻断启动）；原子写 = 临时文件 + mv。
 #   孤儿清理：任何读快照的入口（status / ensure / orch tick）拿到 handle 集合后调用 fleet_meta_gc。
 # ---------------------------------------------------------------------------
-FLEET_META_ROOT="${NAO_FLEET_META_DIR:-${HOME:-/tmp}/.local/state}/nao-fleet/session-meta"
+# 舰队自有状态根（T573）：`session-meta/`（herdr sidecar）与 `sessions/`（Pi session 记录）同处。
+#   `NAO_FLEET_META_DIR` 覆盖根目录 ⇒ 两者一起搬家（测试用隔离 HOME 即可）。
+FLEET_STATE_ROOT="${NAO_FLEET_META_DIR:-${HOME:-/tmp}/.local/state}/nao-fleet"
+FLEET_META_ROOT="$FLEET_STATE_ROOT/session-meta"
 
 # workspace_ref = <后端上下文句柄>__<workspace_id>：同一个 meta 根下可能有多个 herdr session，
 #   只用 workspace_id 会让 A 会话的 status 把 B 会话的 sidecar 当孤儿删掉（handle 只在 session 内唯一）。

@@ -383,6 +383,9 @@ cmd_close() {
   fi
 
   # ---- 句柄层（B3）：herdr 实现（定位 / self 判据 / liveness / 忙闲 / 回收句柄）----
-  term_reclaim "$name" "$repo" "$force" "$role" "$scope" "${tgt:-$role}"
-  return $?
+  local _cl_rc=0
+  term_reclaim "$name" "$repo" "$force" "$role" "$scope" "${tgt:-$role}" || _cl_rc=$?
+  # T573：close 结果落台账（保留分级用；`--force` = 明示非正常收尾。失败只 warn、不改 rc）
+  (( _cl_rc == 0 )) && { fleet_sessions_note_outcome "$name" "${task:-}" "$repo" "$force" || true; }
+  return "$_cl_rc"
 }

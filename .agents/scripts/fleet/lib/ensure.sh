@@ -37,7 +37,7 @@ build_system_prompt() {
 }
 
 spawn_one() {
-  local name="$1" repo="$2" model="$3" card_override="${4:-}" role_id="${5:-}" card_name="${6:-}" force="${7:-false}" label="${8:-}" group="${9:-}" task="${10:-}" card prompt_file inner
+  local name="$1" repo="$2" model="$3" card_override="${4:-}" role_id="${5:-}" card_name="${6:-}" force="${7:-false}" label="${8:-}" group="${9:-}" task="${10:-}" card prompt_file inner session_dir
   # T537：卡路径可由调用方显式给出（下游仓卡）；未给出时仍走清单（PROMPTS_DIR/<card>）逐字不变
   # #75：**两条取卡通道分两个参数，禁混用** ——
   #   ④ card_override = `--card` 的**完整路径**（下游卡，已由 resolve_card 限定在 <repo>/.agents/prompts/ 内）
@@ -48,12 +48,20 @@ spawn_one() {
   [[ -f "$card" ]] || die "角色卡不存在: $card"
   [[ -d "$repo" ]] || die "工作区不存在: $repo"
 
+  # T573/Issue #206：派生会话的 Pi session 记录落**舰队自有目录**（一仓一子目录），不进 ~/.pi/agent/sessions，
+  #   否则每条 ensure 都往用户的 /resume 主列表里添一条。Pi 显式 `--session-dir` 直接用它（不再按 cwd 分子目录），
+  #   故子目录由本侧按 Pi 默认布局同款编码建好并传入。不可建 ⇒ **fail loud**（绝不静默去掉这个参数落回主目录）。
+  session_dir="$(fleet_sessions_dir "$repo")"
+  fleet_sessions_prepare "$session_dir" \
+    || die "会话记录目录不可建: $session_dir（拒绝静默落回 ~/.pi/agent/sessions）—— 该怎么办：核对 ${FLEET_STATE_ROOT} 的权限/磁盘，或设 NAO_FLEET_META_DIR 指向可写目录后重试"
+
   # 前提已由入口 term_require 硬校验（HERDR_ENV / HERDR_SESSION / protocol 22）；
   #   此处只走唯一路径（BR1/BR3）。
   prompt_file="$(build_system_prompt "$card")"
   inner="cd $(printf %q "$repo") && export CODEGRAPH_TELEMETRY=0 && exec pi --name $(printf %q "$name")"
   [[ -n "$model" ]] && inner+=" --model $(printf %q "$model")"
   inner+=" --append-system-prompt $(printf %q "$prompt_file")"
+  inner+=" --session-dir $(printf %q "$session_dir")"
   # T548/Issue #140：自检**不再**拼进 argv（那会把「要 pi 干活」放在「等 pi 空闲」的就绪门之前 ⇒
   #   就绪门恒超时，rc=1 假失败）。改为 spawn 成功后由 term_deliver 投递（见下方 SPAWN_RC_OK 分支）；
   #   开关关/非 pm ⇒ 整段不执行 ⇒ 命令行与本缺陷前逐字等价（AC3）。
@@ -72,6 +80,8 @@ spawn_one() {
   term_spawn "$name" "$inner" "$repo" "$force" "$label" "$group" "$task" || rc=$?
   case "$rc" in
     "$SPAWN_RC_OK")   SPAWN_OK=$((SPAWN_OK + 1))
+                      # T573：记录↔角色/任务绑定（供保留分级用；失败只 warn，不阻断启动）
+                      fleet_sessions_note_spawn "$name" "${role_id:-}" "${task:-}" "$repo" || true
                       log "[$(term_label)] 已拉起 $name @ $repo${model:+（model=$model）}${_TERM_SPAWN_PANE:+（pane=$_TERM_SPAWN_PANE）}"
                       # T548/AC2/AC4：投递点**唯一**（新 pane / 幽灵复用 / --force 重开均经此处恰 1 次）；
                       #   投递失败 ⇒ **rc 仍 0、不计 SPAWN_FAIL**（会话确实可用；计 FAIL 正是本缺陷的假红灯源）
@@ -440,6 +450,8 @@ cmd_ensure() {
     fi
   done
   term_place_end
+  # T573：顺手清理过期会话记录（幂等；失败只 warn、不改 rc；真删了才打一行）
+  fleet_sessions_purge --quiet || warn "会话记录清理失败（不影响本次 ensure 结果）"
   # 恰一行摘要，三类计数（成功/跳过/失败）
   if (( SPAWN_OK + SPAWN_SKIP + SPAWN_FAIL > 0 )); then
     log "已拉起 ${SPAWN_OK} 个会话（成功 ${SPAWN_OK} / 跳过 ${SPAWN_SKIP} / 失败 ${SPAWN_FAIL}）；就绪后在线状态用 nao-fleet.sh status 查看"

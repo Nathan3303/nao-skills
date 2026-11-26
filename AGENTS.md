@@ -16,6 +16,7 @@
 ## 项目约束（红线）
 
 - **仅 pi 宿主（唯一，无第二宿主）**：机制只支持 **pi ≥1.4.0**；终端后端**默认后端 = herdr ≥0.9.1**（两种形态：herdr TUI 默认 / herdr desktop app 走 `NAO_TERMINAL=app`；二者**不共享会话**；`NAO_TERMINAL` 给其他任何值含 `tmux` ⇒ `rc=2` fail loud，旧 tmux 后端 v0.28.0 已移除；前提链见 `README.md`「前置环境」与 `docs/INSTALL.md`「herdr 后端」「desktop app 后端」）。**不为其他编程 Agent（Claude Code / Codex / Cursor 等）做适配、shim 或兼容承诺**，文档 / `description` / `keywords` 一律不得暗示可互换；需要那类能力时按「新增宿主」立项，不夹带。用户可见边界写在 `README.md`「前置环境」。
+- **session 记录（T573 · Issue #206）**：舰队会话的 Pi session 一律落 `${NAO_FLEET_META_DIR:-~/.local/state}/nao-fleet/sessions/--<编码 cwd>--/`（一仓一子目录，`ensure` 带 `--session-dir`），**不落** `~/.pi/agent/sessions/`；按结果分级短保留（正常 24h / 异常 7 天 + `tasks-state` 点名），入口 `nao-fleet.sh logs <角色> [--repo <仓|all>] [--raw|--list|--purge]`。细节见 `docs/INSTALL.md`「session 记录存放与保留」。
 - **测试分工（2026-11-26 用户拍板，取代旧「全范围门禁口径」的重复自证）**：**`tests/` 与 `npm test` 只由 QA 执行**。分工硬约束：
   - **PM**：合并前只跑 `bash .agents/scripts/nao-fleet.sh check`（静态体检，非测试套件）；验收**以 QA 报告为唯一测试依据**，不重复跑测试、不替 QA 自证用例数；攒批粒度由 PM 定（默认每批 2–3 个任务一次真全量，中间不插测试）。
   - **RD（rd-infra / rd-fe / rd-be）**：**不跑测试套件**；只允许**单条命令自查**（如 `node bin/x --validate`、手工 echo 验证），不产出测试数字；交付时给 QA「可复现命令 + 改动面 + 预期结果」。
