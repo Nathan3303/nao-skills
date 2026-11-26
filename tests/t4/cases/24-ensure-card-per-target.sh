@@ -163,9 +163,14 @@ expect_card() {
   t4_assert_eq "1" "$(grep -cF -- "NAO_SKILLS=$LAB" "$pf" || true)" \
     "$tag：环境锚点行仍在（build_system_prompt 未被绕开）"
 }
+# T573（Issue #206）：命令行的唯一新增参数 = `--session-dir <root>/--<编码 cwd>--`（其余逐字不变）。
+sess_dir() { # <repo>
+  local p; p="$(cd "$1" 2>/dev/null && pwd -P)" || p="$1"
+  printf '%s/--%s--' "$LAB/.t4-home/.local/state/nao-fleet/sessions" "$(printf '%s' "${p#/}" | sed -e 's#[/\\:]#-#g')"
+}
 expected_inner() { # <repo> <name> <prompt_file>
-  printf 'cd %s && export CODEGRAPH_TELEMETRY=0 && exec pi --name %s --append-system-prompt %s' \
-    "$(printf %q "$1")" "$(printf %q "$2")" "$(printf %q "$3")"
+  printf 'cd %s && export CODEGRAPH_TELEMETRY=0 && exec pi --name %s --append-system-prompt %s --session-dir %s' \
+    "$(printf %q "$1")" "$(printf %q "$2")" "$(printf %q "$3")" "$(printf %q "$(sess_dir "$1")")"
 }
 # 后端差异只在「外层包装」：tmux split-window 收 `bash -lc %q(inner)`；herdr pane run 收 inner 本体
 expected_wrapped() {

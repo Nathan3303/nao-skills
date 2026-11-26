@@ -1,14 +1,15 @@
 # fleet/functions.txt — 顶层函数清单（T567-A 拆分基线）
 #
 # 格式：<脚本路径（相对 .agents/scripts/）>\t<函数名>
+# total: 231
 # 断言（tests/t4/cases/06）：① 各模块顶层函数并集 == 本清单（无漏登记/无重名/无孤儿）
 #   ② 总数守恒（纯搬迁 ⇒ 174；新增函数须同行加一行并改本头的 total）
 fleet/lib/status.sh	_status_json_emit
 fleet/lib/status.sh	cmd_status_json
-# total: 200
 # 重排：本文件可机械重排（sort -k1,1 -k2,2），断言不依赖行序。
 nao-fleet.sh	usage
 nao-fleet.sh	_need_ensure
+nao-fleet.sh	_need_logs
 fleet/lib/core.sh	update_check_enabled
 fleet/lib/core.sh	log
 fleet/lib/core.sh	warn
@@ -205,3 +206,33 @@ fleet/lib/ensure.sh	_ensure_slot_taken
 fleet/lib/ensure.sh	_ensure_task_name_in_ws
 fleet/lib/ensure.sh	_ensure_pick_num
 fleet/lib/ensure.sh	cmd_ensure
+fleet/lib/sessions.sh	_fleet_current_repo
+fleet/lib/sessions.sh	_fleet_epoch_of
+fleet/lib/sessions.sh	_fleet_json_field
+fleet/lib/sessions.sh	_fleet_ledger_lines
+fleet/lib/sessions.sh	_fleet_ledger_scan
+fleet/lib/sessions.sh	_fleet_logs_list
+fleet/lib/sessions.sh	_fleet_logs_show
+fleet/lib/sessions.sh	_fleet_mtime
+fleet/lib/sessions.sh	_fleet_repo_key
+fleet/lib/sessions.sh	_fleet_repo_matches
+fleet/lib/sessions.sh	_fleet_role_id
+fleet/lib/sessions.sh	_fleet_session_anomaly_note
+fleet/lib/sessions.sh	_fleet_session_files
+fleet/lib/sessions.sh	_fleet_session_grade
+fleet/lib/sessions.sh	_fleet_session_meta
+fleet/lib/sessions.sh	_fleet_session_outcome_rows
+fleet/lib/sessions.sh	_fleet_session_purge_one
+fleet/lib/sessions.sh	_fleet_session_role_of
+fleet/lib/sessions.sh	_fleet_session_size
+fleet/lib/sessions.sh	_fleet_session_spawn_row
+fleet/lib/sessions.sh	_fleet_session_task_of
+fleet/lib/sessions.sh	_fleet_session_turns
+fleet/lib/sessions.sh	_fleet_sessions_dir_name
+fleet/lib/sessions.sh	cmd_logs
+fleet/lib/sessions.sh	fleet_session_name
+fleet/lib/sessions.sh	fleet_sessions_dir
+fleet/lib/sessions.sh	fleet_sessions_note_outcome
+fleet/lib/sessions.sh	fleet_sessions_note_spawn
+fleet/lib/sessions.sh	fleet_sessions_prepare
+fleet/lib/sessions.sh	fleet_sessions_purge

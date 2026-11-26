@@ -66,6 +66,11 @@
 #                                                 unknown / 无 agent 条目 / 集成缺失 / 进程不可判 ⇒ 拒（fail-closed）
 #   nao-fleet.sh cleanup --session <名>           （herdr 后端）拆专用 session：session stop + delete，
 #                                                 判 **effect** 不看 rc（stop 非幂等）；--session 必填且 ≠default（BR9）
+#   nao-fleet.sh logs <role> [--task <编号>] [--raw|--list|--purge [--days N]]
+#                                                 会话记录入口（T573）：默认按 turn 摘要（user 首行 +
+#                                                 assistant 首行 + 工具名）；--raw 原样；--list 列记录；
+#                                                 --purge 按结果分级清理（正常 24h / 异常 7 天，--days N 一次性
+#                                                 统一保质期）；无记录 ⇒ rc=0 + 一行提示。**不建会话、不调后端**。
 #   nao-fleet.sh cleanup -S <socket>              **已随 tmux 后端移除**（ADR 2026-11-22-herdr-only）：
 #                                                 任一子命令带 -S ⇒ exit 2 + 单行指路 `--session <名>`（fail loud，不静默吞参）
 #
@@ -83,6 +88,9 @@
 #   NAO_TERM_MIN_COLS=<n>                     herdr 放置后空间判据最小列宽（默认 60；不足只 warn 不中断）
 #   NAO_TERM_MIN_ROWS=<n>                     herdr 放置后空间判据最小行数（默认 10；0 尺寸 pane ⇒ 计 SPAWN_FAIL）
 #   NAO_TASKS_STATE=<path>                   任务状态文件（默认 docs/tasks-state.md，供残留检测/回收闸门）
+#   NAO_FLEET_META_DIR=<dir>                 舰队自有状态根（默认 ~/.local/state）：其下 `sessions/<编码 cwd>/` = Pi session 记录
+#                                            （ensure 对**全部**舰队会话以 --session-dir 落此、一仓一子目录，T573）·
+#                                            `session-meta/` = herdr sidecar
 #   NAO_UPDATE_ON_ENSURE=0|false             ensure pm 就绪后的下游版本自检**投递**开关（默认开；0/false ⇒ 不投递）
 #
 # 在线判定与 pane 定位（status / close / ensure 判重共用）
@@ -103,6 +111,7 @@ source "$FLEET_DIR/lib/term.sh"
 source "$FLEET_DIR/lib/term-herdr.sh"
 source "$FLEET_DIR/lib/term-app.sh"
 source "$FLEET_DIR/lib/manifest.sh"
+source "$FLEET_DIR/lib/sessions.sh"
 source "$FLEET_DIR/lib/session.sh"
 source "$FLEET_DIR/lib/check.sh"
 source "$FLEET_DIR/lib/status.sh"
@@ -126,6 +135,9 @@ CMD=""; FORCE=false; STRICT=false; MODEL=""; TASK=""; CLEANUP_SOCK=""; SESSION_A
 JSON_OUT=false
 # T554/D7：`--fleet` / `--scope` 已弃用 —— 只保留「给参但空 ⇒ 用法错」守卫；非空仅打一行 warn 后丢弃（放置键恒为仓基键）
 CLI_FLEET=""; SCOPE_SEEN=false; FLEET_SEEN=false
+# T573：`logs` 入口开关（只用于 logs；其他子命令带 ⇒ 用法错）
+LOGS_RAW=false; LOGS_LIST=false; LOGS_PURGE=false; LOGS_DAYS=""; LOGS_REPO=""
+_need_logs() { [[ "$CMD" == "logs" ]] || die "$1 仅用于 logs 子命令：nao-fleet.sh logs <role> [--task <编号>] [--raw|--list|--purge [--days N]]"; }
 # T537：目标级修饰符（--card / --as）的绑定状态 —— 只作用于**其后第一个 positional**（BR11）
 TARGET_CARD=(); TARGET_AS=(); PEND_CARD=false; PEND_AS=""; LAST_CARD_IDX=-1
 _need_ensure() { [[ "$CMD" == "ensure" ]] || die "$1 仅用于 ensure 子命令：nao-fleet.sh ensure [<角色>[@<code>]] [--card <卡路径>[@<repo>]] [--task <编号>] [--as <会话名>]"; }
@@ -139,6 +151,22 @@ while [[ $# -gt 0 ]]; do
     close)  CMD="close";  shift ;;
     cleanup) CMD="cleanup"; shift ;;
     session-start) CMD="session-start"; shift ;;
+    logs)   CMD="logs";   shift ;;
+    # T573 · logs 专属开关（互斥关系在 cmd_logs 内统一校）
+    --raw)   _need_logs "--raw";   LOGS_RAW=true;   shift ;;
+    --list)  _need_logs "--list";  LOGS_LIST=true;  shift ;;
+    --purge) _need_logs "--purge"; LOGS_PURGE=true; shift ;;
+    --days)
+      _need_logs "--days"
+      LOGS_DAYS="${2:-}"
+      [[ -n "$LOGS_DAYS" ]] || die "--days 需要天数参数（如 --days 3）"
+      [[ "$LOGS_DAYS" =~ ^[0-9]+$ ]] || die "--days 非法: $LOGS_DAYS（须为非负整数）"
+      shift 2 ;;
+    --repo)
+      _need_logs "--repo"
+      LOGS_REPO="${2:-}"
+      [[ -n "$LOGS_REPO" ]] || die "--repo 需要仓名参数（仓基键；或 all = 全部仓）"
+      shift 2 ;;
     # B2/B3 · --session：用于 session-start（起 server）/ cleanup（herdr 拆场）
     #   与 -S 同风格：给参但空 ⇒ 拒；缺参 ⇒ 拒
     --session)
@@ -297,5 +325,6 @@ case "$CMD" in
   cleanup) cmd_cleanup ;;
   session-start) term_session_start "$SESSION_ARG" ;;
   ensure) cmd_ensure "$FORCE" "$MODEL" "$TASK" ;;
+  logs)   cmd_logs ;;
   *) usage ;;
 esac
