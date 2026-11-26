@@ -977,7 +977,7 @@
 
 .nh .flow-msg {
   display: grid;
-  grid-template-columns: 4.6rem 0.9rem 4.6rem 2.1rem minmax(0, 1fr);
+  grid-template-columns: 3.2rem 4.4rem 0.9rem 4.4rem 2.1rem minmax(0, 1fr);
   align-items: baseline;
   gap: 0 var(--nh-sp-2);
   font-family: var(--nh-mono);
@@ -1052,5 +1052,59 @@
 
   .nh .flow-log {
     padding: var(--nh-sp-4);
+  }
+}
+
+.nh .flow-time {
+  color: var(--nh-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.nh .flow-note {
+  margin: var(--nh-sp-4) 0 0;
+  padding-top: var(--nh-sp-3);
+  border-top: 1px solid var(--nh-border);
+  font-size: var(--nh-fs-13);
+  font-weight: 600;
+  color: var(--nh-text-2);
+}
+
+/* ── 段四：和「多开几个窗口」的区别 ── */
+.nh .diffs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--nh-sp-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nh .diff {
+  padding-top: var(--nh-sp-4);
+  border-top: 2px solid var(--nh-text);
+}
+
+.nh .diff h3 {
+  font-size: var(--nh-fs-16);
+  line-height: 1.5;
+}
+
+.nh .diff p {
+  margin: var(--nh-sp-2) 0 0;
+  font-size: var(--nh-fs-14);
+  line-height: 1.7;
+  color: var(--nh-text-2);
+}
+
+@media (max-width: 1080px) {
+  .nh .diffs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .nh .diffs {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--nh-sp-5);
   }
 }

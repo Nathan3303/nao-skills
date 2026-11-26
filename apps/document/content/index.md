@@ -61,7 +61,7 @@ home:
   flow:
     kicker: 怎么用
     title: 一句需求，七步走完
-    lead: 你只在第 1 步和第 7 步出现；中间是角色之间自己在派单、回执、打回。方案与界面两步按需启用，小改动直接进研发。
+    lead: 拆单、契约、回执 —— 刚才那三个毛病，就治在这几步上。你只在第 1 步和第 7 步出现，中间是角色之间自己派单、回执、打回。方案与界面两步按需启用，小改动直接进研发。
     steps:
       - num: '01'
         title: 你说一句话
@@ -93,45 +93,69 @@ home:
         yours: true
         you: 你点确认
     messagesTitle: 中间实际发生的事（就是会话之间发的消息）
+    messagesNote: 从 09:30 到 11:55 —— 一个上午，一个需求。
     messages:
-      - from: pm
+      - time: '09:30'
+        from: pm
         to: arch
         tag: T1
         text: 定登录方案 · 会话存哪儿 · 401 错误码 · 分几个端点
-      - from: arch
+      - time: '09:41'
+        from: arch
         to: pm
         text: 契约 3 个端点 · 会话走 httpOnly cookie · 错误码 401 / 423
-      - from: pm
+      - time: '09:45'
+        from: pm
         to: uiux
         tag: T2
         text: 登录页两屏 · 四态：默认 / 错误 / 加载 / 禁用
-      - from: uiux
+      - time: '10:05'
+        from: uiux
         to: pm
         text: 稿子两屏四态齐 · 错误提示放输入框下方 · 禁用态置灰
-      - from: pm
+      - time: '10:08'
+        from: pm
         to: rd-fe
         tag: T3
         text: 照 uiux 稿实现 · 接口按 arch 的契约接
-      - from: pm
+      - time: '10:08'
+        from: pm
         to: rd-be
         tag: T4
         text: 照 arch 契约实现 POST /api/login · 密码不落明文
-      - from: rd-be
+      - time: '11:05'
+        from: rd-be
         to: pm
         text: done · 3 个文件 · 200 / 401 / 423 都验过
-      - from: pm
+      - time: '11:08'
+        from: pm
         to: qa
         tag: T5
         text: 验收 T2 / T3 / T4 · 重点看错误提示和重复提交
-      - from: qa
+      - time: '11:42'
+        from: qa
         to: pm
         text: 打回 1 条 · 连点提交会叠出三条提示（附复现步骤）
-      - from: rd-fe
+      - time: '11:52'
+        from: rd-fe
         to: pm
         text: 已修 · 300 毫秒防抖，只留一条提示
-      - from: pm
+      - time: '11:55'
+        from: pm
         to: 你
         text: 都过了，合并？
+  compareKicker: 和直接开几个窗口的区别
+  compareTitle: 这不是多开几个窗口
+  compareLead: 自己开三个 pi，也能让它们干活。差别在这四件上。
+  compare:
+    - title: 角色带规矩
+      body: 每个角色有自己的职责边界和检查清单，不是一句「你是前端」。
+    - title: 状态一眼看到
+      body: 一个仓一个空间、一个角色一个标签，谁在忙、谁空着，不用问。
+    - title: 交接有凭证
+      body: 派活带单号，干完回执写清改了什么、怎么验的，不用回头翻聊天。
+    - title: 干完能收回去
+      body: 会话用完即收，不会留下一排忘关的窗口占着名字。
   problemsKicker: 为什么需要
   problemsTitle: 一个人对着 AI 写代码，常见三个毛病
   problemsLead: 不是模型不够强，是缺分工与交付纪律。

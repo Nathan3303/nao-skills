@@ -65,6 +65,8 @@ export interface HomeFlowStep {
 }
 
 export interface HomeFlowMessage {
+  /** 时间戳，如 09:30（让流程有「多快」的体感） */
+  time?: string
   from: string
   to: string
   text: string
@@ -78,7 +80,14 @@ export interface HomeFlow {
   lead: string
   steps: HomeFlowStep[]
   messagesTitle: string
+  /** 日志下方的一句总结，如「一个上午，一个需求」 */
+  messagesNote?: string
   messages: HomeFlowMessage[]
+}
+
+export interface HomeCompareItem {
+  title: string
+  body: string
 }
 
 export interface HomeData {
@@ -95,6 +104,10 @@ export interface HomeData {
   jumpNav: { text: string; href: string }[]
   problems: HomeProblem[]
   flow: HomeFlow
+  compareKicker: string
+  compareTitle: string
+  compareLead: string
+  compare: HomeCompareItem[]
   problemsKicker: string
   problemsTitle: string
   problemsLead: string

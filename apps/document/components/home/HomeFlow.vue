@@ -35,6 +35,7 @@ const props = defineProps<{ flow: HomeFlowData }>()
         <p class="flow-log-head">{{ props.flow.messagesTitle }}</p>
         <ul class="flow-msgs">
           <li v-for="(msg, i) in props.flow.messages" :key="i" class="flow-msg">
+            <span class="flow-time">{{ msg.time ?? '' }}</span>
             <span class="flow-from">{{ msg.from }}</span>
             <span class="flow-arrow" aria-hidden="true">→</span>
             <span class="flow-to">{{ msg.to }}</span>
@@ -42,6 +43,7 @@ const props = defineProps<{ flow: HomeFlowData }>()
             <span class="flow-text">{{ msg.text }}</span>
           </li>
         </ul>
+        <p v-if="props.flow.messagesNote" class="flow-note">{{ props.flow.messagesNote }}</p>
       </div>
     </div>
   </section>
