@@ -144,7 +144,8 @@ cd <repo> && codegraph init                # 建索引（不带 -i；该 flag �
 - **范围**：**全部**舰队会话（常驻 `pm`/`qa`/… 与 `--task` 派生）都由 `ensure` 带 `--session-dir` 落这里；Pi 一旦拒绝该参数或目录不可建 ⇒ **fail loud**（不会静默落回主目录）。
 - **保留（按结果分级，按文件 mtime 判寿命）**：
   - **正常交付**（该 role/task 有 `done` 回执 `docs/queue/<id>.receipt.json`，或 `close` 判定正常）⇒ **24 小时**
-  - **异常**（无回执 / `close --force` / 崩溃 / 判不出）⇒ **7 天**，并在该会话 cwd 的 `docs/tasks-state.md` 留一行 `- [session-retention] …` 点名（角色 + 任务 + 路径；重复跑不重复写）
+  - **异常**（无回执 / `close --force` / 崩溃 / 判不出）⇒ **7 天**，并在**记录所在 state 子目录**的 `.retention.log` 写一行点名（角色 + 任务 + 路径；同一记录只点一次名）—— 机制状态**不写**仓内的 `docs/tasks-state.md`（那是交付台账）
+  - 判据只认**本仓台账**（`<state>/sessions/--<编码 cwd>--/.ledger`）：`done`/`force` 必须落在**该代窗口**内（本代 `spawn` 之后、下一同名 `spawn` 之前），带 `task` 的行按 task 逐字比对 ⇒ 上一代的崩溃记录不会被后一代的 `done` 判成「正常」，跨仓 `done` 也不影响本仓；`spawn` 缺失 ⇒ 判不出 ⇒ 按异常
   - 近 1 小时有写入的记录一律跳过（可能仍在跑）；清理失败只 warn，不改 rc
 - **查看**：
   ```bash
@@ -241,6 +242,12 @@ herdr TUI 与 desktop app **各自管理自己的终端**：TUI 里起的舰队�
 - 同一台机器可以两边各跑一套（互不干扰），也可以只挑一种用。
 - 想换形态 ⇒ 在旧形态里 `close` 收干净，再在新形态里 `ensure`（没有自动迁移）。
 - 测试与 CI 一律建议用 TUI 或**私有 core**（`XDG_RUNTIME_DIR` / `XDG_STATE_HOME` / `HC_SESSION` 指向临时目录），不要连到你自己正在用的桌面版。
+
+### 已知边界：`--keep` 保活留下的 `live+done` 终端
+
+app 后端创建终端时带 **`--keep`**（程序退出后保留终端壳，便于回看/重连）。于是可能出现「**会话已结束、终端还在**」：`hc ls` 显示 `live` + `status=done`，而该终端**仍占着会话名**（下次 `ensure` 同名会撞 `{"kind":"name_taken"}`）。
+
+v0.34 起 `close <role>` 把 `live+done` 判为**可回收**（`kill` → `rm` + `hc ls --all` effect 复核），不再是「未运行／幂等成功」的假成功；确实收不掉（后端异常）⇒ fail loud 并保留终端。`live+working/blocked` 仍需 `--force`（打断当前回合），与既有语义一致。
 
 ## 旧 tmux 布局去哪了
 

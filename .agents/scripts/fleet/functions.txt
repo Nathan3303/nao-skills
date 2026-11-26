@@ -1,7 +1,7 @@
 # fleet/functions.txt — 顶层函数清单（T567-A 拆分基线）
 #
 # 格式：<脚本路径（相对 .agents/scripts/）>\t<函数名>
-# total: 231
+# total: 232
 # 断言（tests/t4/cases/06）：① 各模块顶层函数并集 == 本清单（无漏登记/无重名/无孤儿）
 #   ② 总数守恒（纯搬迁 ⇒ 174；新增函数须同行加一行并改本头的 total）
 fleet/lib/status.sh	_status_json_emit
@@ -114,6 +114,7 @@ fleet/lib/term-app.sh	_term_app_spawn_preflight
 fleet/lib/term-app.sh	_term_app_doc_rows
 fleet/lib/term-app.sh	_term_app_identity
 fleet/lib/term-app.sh	_term_app_doc_guard
+fleet/lib/term-app.sh	_term_app_name
 fleet/lib/term-app.sh	_term_app_facts
 fleet/lib/term-app.sh	_term_app_project5
 fleet/lib/term-app.sh	_term_app_liveness
