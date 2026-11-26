@@ -58,6 +58,10 @@ export interface HomeFlowStep {
   /** 这一步需要用户参与（标出「你在这里」） */
   yours?: boolean
   you?: string
+  /** 按需启用（不是每个需求都要走） */
+  optional?: boolean
+  /** 按需步骤的徽标文字，如「按需」 */
+  optionalNote?: string
 }
 
 export interface HomeFlowMessage {

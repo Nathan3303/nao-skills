@@ -60,8 +60,8 @@ home:
       href: '#faq'
   flow:
     kicker: 怎么用
-    title: 一句需求，五步走完
-    lead: 你只在第 1 步和第 5 步出现；中间是角色之间自己在派单、回执、打回。
+    title: 一句需求，七步走完
+    lead: 你只在第 1 步和第 7 步出现；中间是角色之间自己在派单、回执、打回。方案与界面两步按需启用，小改动直接进研发。
     steps:
       - num: '01'
         title: 你说一句话
@@ -70,14 +70,24 @@ home:
         you: 你在这里
       - num: '02'
         title: pm 拆单派活
-        body: 拆成前端、后端、测试三单，分别发给对应的角色，同时发出去。
+        body: 拆成方案、界面、前端、后端、测试五单，按依赖顺序发出去。
       - num: '03'
-        title: 角色并行干
-        body: 前端做表单，后端做校验接口，测试写用例。三边互不阻塞。
+        title: arch 定方案
+        body: 会话存哪儿、错误码怎么定、接口分几个端点，先写清契约再动工。
+        optional: true
+        optionalNote: 按需
       - num: '04'
+        title: uiux 出界面
+        body: 两屏稿子、四种状态：默认、错误、加载、禁用，都定死。
+        optional: true
+        optionalNote: 按需
+      - num: '05'
+        title: 研发并行干
+        body: 前端照稿实现，后端照契约实现，两边互不阻塞。
+      - num: '06'
         title: QA 逐条验
         body: 过了的回一条放行；不过的当场打回，附复现步骤，改完再看。
-      - num: '05'
+      - num: '07'
         title: 合并到主干
         body: 全部放行后由研发合并，主干上留一条可读提交，一个需求一条。
         yours: true
@@ -85,20 +95,34 @@ home:
     messagesTitle: 中间实际发生的事（就是会话之间发的消息）
     messages:
       - from: pm
-        to: rd-fe
+        to: arch
         tag: T1
-        text: 登录页表单 · 邮箱密码 · 错误提示放在输入框下方
+        text: 定登录方案 · 会话存哪儿 · 401 错误码 · 分几个端点
+      - from: arch
+        to: pm
+        text: 契约 3 个端点 · 会话走 httpOnly cookie · 错误码 401 / 423
+      - from: pm
+        to: uiux
+        tag: T2
+        text: 登录页两屏 · 四态：默认 / 错误 / 加载 / 禁用
+      - from: uiux
+        to: pm
+        text: 稿子两屏四态齐 · 错误提示放输入框下方 · 禁用态置灰
+      - from: pm
+        to: rd-fe
+        tag: T3
+        text: 照 uiux 稿实现 · 接口按 arch 的契约接
       - from: pm
         to: rd-be
-        tag: T2
-        text: POST /api/login · 401 带错误码 · 密码不做明文比较
+        tag: T4
+        text: 照 arch 契约实现 POST /api/login · 密码不落明文
       - from: rd-be
         to: pm
-        text: done · 3 个文件 · 200 与 401 都验过
+        text: done · 3 个文件 · 200 / 401 / 423 都验过
       - from: pm
         to: qa
-        tag: T3
-        text: 验收 T1 与 T2 · 重点看错误提示和重复提交
+        tag: T5
+        text: 验收 T2 / T3 / T4 · 重点看错误提示和重复提交
       - from: qa
         to: pm
         text: 打回 1 条 · 连点提交会叠出三条提示（附复现步骤）

@@ -21,11 +21,12 @@ const props = defineProps<{ flow: HomeFlowData }>()
           v-for="step in props.flow.steps"
           :key="step.num"
           class="flow-step"
-          :class="{ 'is-yours': step.yours }"
+          :class="{ 'is-yours': step.yours, 'is-optional': step.optional }"
         >
           <p class="flow-num">{{ step.num }}</p>
           <h3>{{ step.title }}</h3>
           <p class="flow-body">{{ step.body }}</p>
+          <p v-if="step.optional" class="flow-opt">{{ step.optionalNote }}</p>
           <p v-if="step.yours" class="flow-you">{{ step.you }}</p>
         </li>
       </ol>

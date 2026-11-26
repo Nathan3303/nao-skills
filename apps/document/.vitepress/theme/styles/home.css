@@ -885,8 +885,8 @@
 /* ── 段三：一个需求五步走完（流程条 + 消息日志） ── */
 .nh .flow-steps {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--nh-sp-4);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--nh-sp-3);
   margin: 0 0 var(--nh-sp-10);
   padding: 0;
   list-style: none;
@@ -899,6 +899,21 @@
   border: 1px solid var(--nh-border);
   border-radius: 12px;
   background: var(--nh-page);
+}
+
+.nh .flow-step.is-optional {
+  border-style: dashed;
+}
+
+.nh .flow-opt {
+  display: inline-block;
+  margin-top: var(--nh-sp-3);
+  padding: 1px var(--nh-sp-2);
+  border-radius: 4px;
+  background: var(--nh-sunken);
+  color: var(--nh-text-3);
+  font-size: var(--nh-fs-11);
+  font-weight: 500;
 }
 
 .nh .flow-step.is-yours {
@@ -1002,13 +1017,15 @@
   color: var(--nh-text-2);
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 1200px) {
+  .nh .flow-steps {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
   .nh .flow-steps {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .nh .flow-step:last-child {
-    grid-column: span 2;
   }
 }
 
@@ -1031,10 +1048,6 @@
 
   .nh .flow-text {
     flex-basis: 100%;
-  }
-
-  .nh .flow-step:last-child {
-    grid-column: auto;
   }
 
   .nh .flow-log {
