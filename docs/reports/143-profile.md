@@ -1,5 +1,7 @@
 # 143 profile：T4 per-case 耗时与快档白名单推导（第一步 · 只测量）
 
+> **2026-11-26 更新**：用例 46–50 已随编排器下线删除（T578），下表含此 5 例的历史耗时数据，保留作存档。
+
 - 状态：测量完成 · **门禁未改**（`npm test` 全量语义、白名单生效均未动、未加 `--fast`）· Owner：RD-infra · 更新：2026-11-17
 - 指针：Issue #143 · PRD `docs/prds/2026-11-17-test-tiering.md`（§五 判据 · AC2/AC3/AC4）· 分支 `nao/T549-test-tiering` · 基线 `b4815ca`
 - 命令：`bash tests/t4/run.sh -t`（herdr 默认后端 · 干净树 · 全量 34 例；12/25 为 TMUX-ONLY 直接跳过）。「真/桩」取同 commit 的 `strace -f -ttt -e trace=execve` 全量归因（探针轮 `DEGRADE=1` 仅 04 嵌套 strace 降级，不进门禁口径）

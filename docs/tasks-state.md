@@ -623,12 +623,7 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 ## 待派发队列（真待办 · 需写代码或改文本）
 
-<!-- nao-queue:begin dispatch -->
-<!-- generated: 由 `bin/nao-queue render` 生成 · 唯一事实源 `docs/queue.jsonl` · 禁手改（下次渲染会覆盖） -->
-- （空）
-<!-- nao-queue:end dispatch -->
-
-> 上方渲染块只含 `docs/queue.jsonl` 的行（`bin/nao-queue render` 生成，禁手改）；下方为迁移前的手写台账，尚未迁入 jsonl。
+> 下方为手写台账（原队列工具的渲染块已于 2026-11-26 随编排器下线移除，改为手写维护）。
 
 | 任务编号 | 目标会话 | 概要 | 排队原因 |
 | :--- | :--- | :--- | :--- |
@@ -665,12 +660,7 @@ PR [#142](https://github.com/Nathan3303/nao-skills/pull/142) squash 合并；fix
 
 ## 进行中
 
-<!-- nao-queue:begin active -->
-<!-- generated: 由 `bin/nao-queue render` 生成 · 唯一事实源 `docs/queue.jsonl` · 禁手改（下次渲染会覆盖） -->
-- （空）
-<!-- nao-queue:end active -->
-
-> 上方渲染块只含 `docs/queue.jsonl` 的行（`bin/nao-queue render` 生成，禁手改）；下方为迁移前的手写交付记录，尚未迁入 jsonl。
+> 下方为手写交付记录（原队列工具的渲染块已于 2026-11-26 随编排器下线移除，改为手写维护）。
 
 | 任务编号 | 目标会话 | 概要 | 派发时间 | 对应 AC | WIP 提交 |
 | :--- | :--- | :--- | :--- | :--- | :--- |

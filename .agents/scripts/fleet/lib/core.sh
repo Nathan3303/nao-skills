@@ -169,7 +169,7 @@ repo_contains_path() { [[ -n "$1" && -n "$2" && ( "$2" == "$1" || "$2" == "${1%/
 #   herdr 无键值 label ⇒ 本地 sidecar：<root>/<workspace_ref>/<handle>，内容 `task=<id>` / `name=<原始名>`。
 #   app 用 labels `nao.task` / `nao.name`（写读在 term-app.sh；本组只管 herdr 的持久面）。
 #   纪律：读写失败只 warn、**不改 rc**（元数据缺失不得阻断启动）；原子写 = 临时文件 + mv。
-#   孤儿清理：任何读快照的入口（status / ensure / orch tick）拿到 handle 集合后调用 fleet_meta_gc。
+#   孤儿清理：任何读快照的入口（status / ensure）拿到 handle 集合后调用 fleet_meta_gc。
 # ---------------------------------------------------------------------------
 # 舰队自有状态根（T573）：`session-meta/`（herdr sidecar）与 `sessions/`（Pi session 记录）同处。
 #   `NAO_FLEET_META_DIR` 覆盖根目录 ⇒ 两者一起搬家（测试用隔离 HOME 即可）。
