@@ -10,27 +10,19 @@ title: 多项目布局
 
 机制是**项目级**的：`.pi/settings.json` 的版本 pin 进仓库，团队 clone 下来就是同款；项目约定写在项目根，AI 每次会话都会读。装在全局会变成「谁先装谁生效」，供不了团队。
 
-## 两个仓同时跑：必须设 scope
+## 两个仓同时跑：不用设 scope
 
-会话名形如 `<角色>[-<任务>][@<仓>]`。区分仓库靠末尾那段 scope：
+会话名形如 `<角色>[<槽位号>]`，**不含仓名**。区分仓库靠绑定单位：herdr 是「1 workspace / 仓」，workspace 标签取**仓基键**（仓目录名归一化，如 `api` / `web`），所以两个仓的 `rd-be` 各在自己的 workspace 里，互不干扰、也不会互相顶掉。
 
-```bash
-cd ~/proj/api && printf 'api\n' > .agents/fleet-scope
-cd ~/proj/web && printf 'web\n' > .agents/fleet-scope
-```
-
-于是会话名变成 `rd-be@api` / `rd-be@web`，互不干扰。
-
-**不设 scope 会怎样**：第二个仓 `ensure` 同一角色时**直接报错并列出冲突的会话**，而不是悄悄顶掉第一个。这是故意的——同名会话会互相覆盖，静默成功等于给你一个「看起来有两个、其实只有一个」的舰队。
-
-- scope 语法：小写字母数字开头，可含 `-` `_`，≤16 字符。
-- 一次性指定：`ensure --scope api`（覆盖文件）。
-- `status` 不读文件，它从会话名解析——带 scope 的会话会显示 `·scope=api`。
-- `close rd-be` 用你当前所在仓的 scope；`close rd-be@api` 用全名。
+- **不用写任何配置文件**：两个仓各自在自己的目录里 `ensure rd-be` 即可。
+- **要显式指定目标仓**：`ensure rd-be@main`（走本仓 `.agents/fleet.yaml` 的 `repos:`）或 `ensure rd-be@/path/to/repo`（直指路径）；`@<仓>` 只是选择符，不进会话名。
+- **scope 家族已弃用**：`--scope`、`--fleet`、`.agents/fleet-scope`、`fleet.yaml` 的 `slug:` 都只打一行提示后被忽略，放置键恒为仓基键；旧文档里 `rd-be@api` 那种会话名不会再生成。
+- **同一个仓里的同角色**：已在线就跳过（提示「已在运行」，`--force` 才重开）；并行做两个任务用 `--task <编号>` 开派生会话（会话名仍是 `rd-be` / `rd-be2`，任务号只进元数据）。
+- `status` 按事实判定归属（本仓 / 他仓 / 归属不可判定）；`close <角色>` 按当前仓解析，同名跨仓歧义时直接报错并列出候选，不猜。
 
 ## 跨仓并行
 
-- 布局上，herdr 是「1 workspace / 仓 + 1 tab / 角色」；放置键取 scope（没设就取仓名），所以两个仓的窗格不会混在一起。
+- 布局上，herdr 是「1 workspace / 仓 + 1 tab / 角色」；放置键恒为**仓基键**，所以两个仓的窗格不会混在一起。
 - 派生会话用 `--task <编号>` 隔离，并行两个任务时不要共用同一个常驻会话。
 - 需要从 A 仓回收 B 仓的残留会话也可以：`status` 会给出可执行命令，定位不到时非 0 退出并打印诊断，不假装成功。
 

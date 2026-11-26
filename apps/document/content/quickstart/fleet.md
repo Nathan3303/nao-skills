@@ -17,12 +17,12 @@ npx @nathan33/nao-skill plugins install-all        # 1. 装协作插件（多会
 ## `check` 怎么读
 
 ```
-check: OK · roles=7 · files=54 · layout=main-row2        ← 摘要行：能开工
+check: OK · roles=7 · files=69                            ← 摘要行：能开工
   ✓ codegraph 齐备                                        ← 可选增强状态
-  · 生效后端 NAO_TERMINAL=herdr（默认后端）                 ← 你实际在用哪个后端
+  · 生效后端 NAO_TERMINAL=herdr（形态 TUI …）               ← 你实际在用哪个后端
 ```
 
-看返回码，不看字样：**`rc=0` 才算过**。有想知道细节的提示行，加 `-v` 展开；失败时它一定会展开，不用你猜。
+`files=` 的数字随版本变（装的机制文件多少不同），对不上不算装坏；**`roles=7` 才是判据**。看返回码，不看字样：**`rc=0` 才算过**。有想知道细节的提示行，加 `-v` 展开；失败时它一定会展开，不用你猜。
 
 ## 拉起之后
 
