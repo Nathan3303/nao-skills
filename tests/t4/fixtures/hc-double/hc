@@ -23,6 +23,9 @@
 #     ready=never     run 后**永不上报** status（就绪门超时分支）
 #     status_app=X    默认 pi      status_state=X 默认 idle
 #     run_fail=1      run 返回 error（失败分支）
+#     get_order=real  `get` 的键序按**真 hc 0.1.22 实测**输（foreground 在顶层 name **之前**）——
+#                     默认仍把 name 放前面（历史用例依赖「首个同名键」= 终端名）。T574/#207 用它复现
+#                     「按名定位恒空」的假成功。
 #     send_fail=1     send 返回 error
 #     app_status_rc=N herdr-app status 的 rc（0=窗口在跑）
 #   —— T565 (#175 放置验证失败) 的收养时序 / 陈旧 id 面 ——
@@ -78,8 +81,15 @@ _term_json() { # <addr>
   argv_name="$(_field "$a" argv_name)"; [ -n "$argv_name" ] || argv_name="$name"
   app="$(_field "$a" app)"; stt="$(_field "$a" stt)"; rep="$(_field "$a" reported)"
   par="$(_field "$a" parent)"; fgname="$(_field "$a" fg)"
-  printf '{"address":"%s","id":"%s","name":"%s","cwd":"%s","state":"%s","parent":"%s"' \
-    "$a" "$a" "$(_esc "$name")" "$(_esc "$cwd")" "$state" "$(_esc "$par")"
+  local real_order=0
+  [ -f "$ST/get_order" ] && [ "$(head -1 "$ST/get_order")" = "real" ] && real_order=1
+  printf '{"address":"%s","id":"%s"' "$a" "$a"
+  if [ "$real_order" = "1" ]; then
+    printf ',"foreground":{"name":"%s","cwd":"%s","argv":["%s","--name","%s"]}' \
+      "$(_esc "${fgname:-}")" "$(_esc "$cwd")" "$(_esc "${fgname:-}")" "$(_esc "${argv_name:-}")"
+  fi
+  printf ',"name":"%s","cwd":"%s","state":"%s","parent":"%s"' \
+    "$(_esc "$name")" "$(_esc "$cwd")" "$state" "$(_esc "$par")"
   if [ ! -f "$ST/bare_labels" ]; then
     printf ',"labels":{"herdr.space":"%s","herdr.tab":"%s"' "$(_esc "$space")" "$(_esc "$tab")"
     [ -n "$nao_name" ] && printf ',"nao.name":"%s"' "$(_esc "$nao_name")"
@@ -90,8 +100,12 @@ _term_json() { # <addr>
   if [ -n "$app" ]; then
     printf ',"status":{"app":"%s","state":"%s","state_ms":1}' "$(_esc "$app")" "$(_esc "$stt")"
   fi
-  printf ',"foreground":{"name":"%s","cwd":"%s","argv":["%s","--name","%s"]}}\n' \
-    "$(_esc "${fgname:-}")" "$(_esc "$cwd")" "$(_esc "${fgname:-}")" "$(_esc "${argv_name:-}")"
+  if [ "$real_order" = "1" ]; then
+    printf '}\n'
+  else
+    printf ',"foreground":{"name":"%s","cwd":"%s","argv":["%s","--name","%s"]}}\n' \
+      "$(_esc "${fgname:-}")" "$(_esc "$cwd")" "$(_esc "${fgname:-}")" "$(_esc "${argv_name:-}")"
+  fi
 }
 
 cmd="${1:-}"; shift || true

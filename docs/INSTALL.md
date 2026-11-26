@@ -242,6 +242,12 @@ herdr TUI 与 desktop app **各自管理自己的终端**：TUI 里起的舰队�
 - 想换形态 ⇒ 在旧形态里 `close` 收干净，再在新形态里 `ensure`（没有自动迁移）。
 - 测试与 CI 一律建议用 TUI 或**私有 core**（`XDG_RUNTIME_DIR` / `XDG_STATE_HOME` / `HC_SESSION` 指向临时目录），不要连到你自己正在用的桌面版。
 
+### 已知边界：`--keep` 保活留下的 `live+done` 终端
+
+app 后端创建终端时带 **`--keep`**（程序退出后保留终端壳，便于回看/重连）。于是可能出现「**会话已结束、终端还在**」：`hc ls` 显示 `live` + `status=done`，而该终端**仍占着会话名**（下次 `ensure` 同名会撞 `{"kind":"name_taken"}`）。
+
+v0.34 起 `close <role>` 把 `live+done` 判为**可回收**（`kill` → `rm` + `hc ls --all` effect 复核），不再是「未运行／幂等成功」的假成功；确实收不掉（后端异常）⇒ fail loud 并保留终端。`live+working/blocked` 仍需 `--force`（打断当前回合），与既有语义一致。
+
 ## 旧 tmux 布局去哪了
 
 `main-row2` / `main-col` / `grid` 三布局、窄列回退与对应三个变量随 tmux 后端一起删除（v0.28.0）。herdr 下没有「在同一窗口里分屏」这个概念：1 仓 = 1 workspace、1 角色 = 1 tab，窗口太窄时该做的是**把窗口/显示器换大**或调 herdr 的 `[server] headless_cols/headless_rows`，而不是切布局。迁移逐条见上一节。
