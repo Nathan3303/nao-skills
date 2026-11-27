@@ -526,6 +526,7 @@ check_ledger_structure() {
       }
       # 卡摘要行
       if (nc != 6) { report("卡摘要行 " C[1] " 列数 " nc " ≠ 6") ; next }
+      ids[++nI] = C[1]
       if (C[4] !~ /^(待开工|进行中|待验收|已合并|已发布|已关闭)$/) {
         report("卡摘要行 " C[1] " 状态值域外：" C[4] "（应为 6 值之一：待开工 / 进行中 / 待验收 / 已合并 / 已发布 / 已关闭）")
         next
@@ -540,7 +541,6 @@ check_ledger_structure() {
           if (!inlist(kd, KD, nD)) report("卡摘要行 " C[1] " 卡指针指向不存在的文件：" ptr)
         }
       }
-      ids[++nI] = C[1]
     }
     END {
       if (nlines + 0 > 300) report("主台账 " nlines " 行 > 300（已完成批次搬 docs/tasks-archive.md，主台账只留活批次 + 批次索引）")
