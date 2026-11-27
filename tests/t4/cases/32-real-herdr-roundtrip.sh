@@ -54,6 +54,10 @@ t4_assert_eq "22" "$PROTO" "① 前提：herdr protocol=22（AC1.5 第一类）"
 
 # ---- ① 四件私有 env（结构性隔离：不是「小心别碰」，是「碰不到」）----
 REAL_PI_SNAP_BEFORE="$(find "$REAL_PI" \( -type f -o -type d \) 2>/dev/null | sort)"
+# T584 P3②：真实 agent-dir settings 的**内容快照**（尺寸+mtime+md5）——只断言「本用例没写/没改真实 HOME」，
+#   不依赖「用户恰好没设 defaultProjectTrust」（否则用户哪天自己设了，这例必红）。
+real_settings_snap() { { ls -l "$REAL_PI/agent/settings.json" 2>/dev/null | awk '{print $5, $6, $7, $8}'; md5sum "$REAL_PI/agent/settings.json" 2>/dev/null | awk '{print $1}'; } | paste -sd'|' -; }
+REAL_SETTINGS_SNAP="$(real_settings_snap)"
 REAL_HERDR_SNAP_BEFORE="$(find "$REAL_HERDR_ROOT" \( -type f -o -type d \) 2>/dev/null | sort)"
 export XDG_CONFIG_HOME="$LAB/config"
 export HOME="$LAB/home"
@@ -74,8 +78,7 @@ t4_assert_file "$PI_CODING_AGENT_DIR/settings.json" \
   "① 夹具：agent-dir settings 预置（pi 首启不再停在信任提示）"
 t4_assert_eq "always" "$(node -e 'try{console.log(require(process.argv[1]).defaultProjectTrust||"")}catch(e){console.log("")}' "$PI_CODING_AGENT_DIR/settings.json" 2>/dev/null)" \
   "① 夹具：defaultProjectTrust == always（键名/取值可机判）"
-t4_assert_eq "0" "$(grep -c 'defaultProjectTrust' "$REAL_PI/agent/settings.json" 2>/dev/null || true)" \
-  "① 夹具：预置不污染真实 ~/.pi（用户 agent-dir settings 无该键）"
+
 
 # `integration install pi` 尊重 PI_CODING_AGENT_DIR（PRD 附三实测）⇒ 装到私有目录，不写用户 ~/.pi
 be_herdr "$SESS" integration install pi >"$LAB/install.log" 2>&1 \
@@ -356,10 +359,47 @@ t4_assert_contains "$(sed 's/\x1b\[[0-9;]*m//g' "$NEG_LAB/out.log" 2>/dev/null)"
   "⑦' 反证：指路给出可执行处置（预置 defaultProjectTrust=always）"
 rm -rf "$NEG_LAB"
 
+# ---- ⑦'' P3① 反向持久断言：桩 pi（只睡、预置信任、无 Trust 文本）⇒ 超时输出**不含**指路行 ----
+#   为什么需要：⑦' 只证「有提示 ⇒ 有指路」；若有人放宽匹配串（如把 `Trust project folder` 改空），
+#   就会「凡是超时都报停信任提示」的假绿 —— 本段把**反向**钉死（桩 pi 不说那句话，就不许报）。
+STUB="$LAB/stub"; STUB_SESS="nao-t4-real32-stub-$$"
+mkdir -p "$STUB/home" "$STUB/tmp" "$STUB/repo" "$STUB/config/herdr" "$STUB/pi/extensions" "$STUB/bin"
+printf '[server]\n' > "$STUB/config/herdr/config.toml"
+printf '{"defaultProjectTrust":"always"}\n' > "$STUB/pi/settings.json"
+cat > "$STUB/bin/pi" <<'STUBPI'
+#!/usr/bin/env bash
+# T584 反向桩：只睡不输出（无 Trust 提示文本）⇒ 就绪门不得报「停在信任提示」
+sleep 300
+STUBPI
+chmod +x "$STUB/bin/pi"
+sp_install_pi "$STUB/config" "$STUB/pi" "$STUB_SESS" || t4_bad "⑦'' 夹具：桩场 pi 集成安装失败"
+stub_run() { # <fleet 参数...>：PATH 前置桩目录（pane 继承 server env ⇒ 桩 pi 生效）
+  t4_run_in_dir "$STUB/repo" env XDG_CONFIG_HOME="$STUB/config" HOME="$STUB/home" \
+    PI_CODING_AGENT_DIR="$STUB/pi" TMPDIR="$STUB/tmp" PATH="$STUB/bin:$PATH" \
+    NAO_TERMINAL=herdr HERDR_ENV=1 HERDR_SESSION="$STUB_SESS" \
+    HERDR_SOCKET_PATH="$STUB/config/herdr/sessions/$STUB_SESS/herdr.sock" \
+    NAO_SKILLS="$T4_ROOT" NAO_TASKS_STATE="$LAB/tasks-state.md" \
+    timeout 90 "$BASH_BIN" "$FLEET" "$@"
+  T4_OUT_ANSI="$(printf '%s' "$T4_OUT" | sed -e 's/\x1b\[[0-9;]*m//g')"
+  T4_ERR_ANSI="$(printf '%s' "$T4_ERR" | sed -e 's/\x1b\[[0-9;]*m//g')"
+}
+stub_run session-start --session "$STUB_SESS" >/dev/null 2>&1
+stub_run ensure --task T8 "pm@$STUB/repo"
+t4_assert_ne "0" "$T4_RC" "⑦'' 反向：桩 pi 不就绪 ⇒ ensure rc≠0（就绪门照常超时）"
+t4_assert_contains "$T4_ERR_ANSI" "就绪门超时" "⑦'' 反向：超时结论在位"
+t4_assert_eq "0" "$(printf '%s' "$T4_ERR_ANSI" | grep -c 'Trust project folder' || true)" \
+  "⑦'' 反向：**无** Trust 文本 ⇒ 不出现「停在信任提示」指路（放宽匹配串 ⇒ 本断言必红）"
+t4_assert_eq "0" "$(printf '%s' "$T4_ERR_ANSI" | grep -c 'defaultProjectTrust=always' || true)" \
+  "⑦'' 反向：同一条指路的处置句也不得出现"
+stub_run cleanup --session "$STUB_SESS" >/dev/null 2>&1
+rm -rf "$STUB"
+
 # ---- ⑧ 用户侧零副作用：~/.pi 与 ~/.config/herdr 的路径集合前后一致 ----
 REAL_PI_SNAP_AFTER="$(find "$REAL_PI" \( -type f -o -type d \) 2>/dev/null | sort)"
 REAL_HERDR_SNAP_AFTER="$(find "$REAL_HERDR_ROOT" \( -type f -o -type d \) 2>/dev/null | sort)"
 t4_assert_eq "$REAL_PI_SNAP_BEFORE" "$REAL_PI_SNAP_AFTER" "⑧ 用户 ~/.pi 路径集合前后一致（本用例零新增/零删除）"
+t4_assert_eq "$REAL_SETTINGS_SNAP" "$(real_settings_snap)" \
+  "⑧ 用户 ~/.pi/agent/settings.json 前后一致（预置只写夹具私有 HOME；快照 diff，不依赖用户设置）"
 t4_assert_eq "$REAL_HERDR_SNAP_BEFORE" "$REAL_HERDR_SNAP_AFTER" \
   "⑧ 用户 ~/.config/herdr 路径集合前后一致（未新建会话/未写 config）"
 
