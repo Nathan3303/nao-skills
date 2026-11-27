@@ -8,6 +8,10 @@
  *
  * 双守卫防假绿：命中文件数 0 ⇒ 红；dist/index.html 不存在或 *.html 数量不足 ⇒ 红。
  *
+ * 第三条守卫（T588 / Issue #250）：<link rel="icon"> 的 href 必须在产物里有对应文件 ——
+ * transformHead 写的 `${base}favicon.svg` 曾指向一个从未进 dist 的位置（源文件放在 apps/document/public，
+ * 而 srcDir 是 content，publicDir 跟着走），构建、外链扫描、链接检查全绿但线上 favicon 404。
+ *
  * 用法：node scripts/check-links.mjs   （rc=0 = 通过；rc=1 = 有外链或守卫未过）
  */
 import fs from 'node:fs'
@@ -139,6 +143,59 @@ function checkScript(file, raw) {
   }
 }
 
+/**
+ * 图标守卫：每个 `<link rel="icon" href>` 都要在 dist 里找到对应文件（含 `--base` 前缀两种解析）。
+ * 一个 icon link 都没扫到同样算红 —— 否则「检查器扫了个空」会被当成通过。
+ */
+function checkIcons() {
+  const hrefs = new Set()
+  let iconLinks = 0
+  for (const file of walk(DIST)) {
+    if (path.extname(file) !== '.html') continue
+    const raw = fs.readFileSync(file, 'utf8')
+    for (const match of raw.matchAll(/<link\b[^>]*>/gi)) {
+      const element = match[0]
+      const rel = /\brel\s*=\s*["']([^"']*)["']/i.exec(element)
+      if (!rel || !/(^|\s)icon(\s|$)/i.test(rel[1])) continue
+      const href = /\bhref\s*=\s*["']([^"']*)["']/i.exec(element)
+      if (!href) continue
+      iconLinks += 1
+      hrefs.add(href[1])
+    }
+  }
+
+  if (iconLinks === 0) {
+    problems.push('未扫到任何 <link rel="icon">（页面丢了图标，或本守卫已失效）')
+    return 0
+  }
+
+  for (const href of hrefs) {
+    const clean = href.split(/[?#]/)[0]
+    if (!clean) {
+      problems.push(`<link rel="icon" href="${href}"> 是空值`)
+      continue
+    }
+    const relative = clean.replace(/^\/+/, '')
+    const candidates = [path.join(DIST, relative)]
+    // 带 base 的构建（href=/nao-skills/favicon.svg）在 dist 里是根路径，剥掉第一段再试
+    const withoutBase = relative.split('/').slice(1).join('/')
+    if (withoutBase) candidates.push(path.join(DIST, withoutBase))
+    const hit = candidates.find((candidate) => {
+      try {
+        return fs.existsSync(candidate) && fs.statSync(candidate).size > 0
+      } catch {
+        return false
+      }
+    })
+    if (!hit) {
+      const tried = candidates.map((candidate) => path.relative(DIST, candidate)).join(' 或 ')
+      problems.push(`<link rel="icon" href="${href}"> 在产物里没有对应文件（找过 ${tried}）`)
+    }
+  }
+
+  return hrefs.size
+}
+
 if (!fs.existsSync(DIST)) {
   console.error(`✗ 产物目录不存在：${DIST}（先跑 npm run docs:build）`)
   process.exit(1)
@@ -174,13 +231,15 @@ if (htmlCount < MIN_HTML) {
   process.exit(1)
 }
 
+const iconCount = checkIcons()
+
 if (problems.length) {
-  console.error(`✗ AC7 未过：发现 ${problems.length} 处外链引用`)
+  console.error(`✗ check 未过：发现 ${problems.length} 处问题（外链 / 图标引用）`)
   for (const problem of problems.slice(0, 40)) console.error(`  · ${problem}`)
   if (problems.length > 40) console.error(`  … 其余 ${problems.length - 40} 处略`)
   process.exit(1)
 }
 
 console.log(
-  `✓ AC7 通过：扫描 ${scanned} 个文件（html ${htmlCount}）· 校验 ${attrChecked} 个资源属性 · 外链 0 处`,
+  `✓ AC7 通过：扫描 ${scanned} 个文件（html ${htmlCount}）· 校验 ${attrChecked} 个资源属性 · 外链 0 处 · 图标引用 ${iconCount} 项且文件成对`,
 )
