@@ -160,8 +160,8 @@ expect_card() {
   diff_assert "$(cat "$card")" "$(prompt_card_head "$card" "$pf")" "$tag：提示正文与目标卡逐字一致"
   t4_assert_match "$(basename "$pf")" "^nao-fleet-$(basename "$card" .md)-[A-Za-z0-9]+\.md$" \
     "$tag：提示文件名由**该目标卡**的 stem 生成（$(basename "$card")）"
-  t4_assert_eq "1" "$(grep -cF -- "NAO_SKILLS=$LAB" "$pf" || true)" \
-    "$tag：环境锚点行仍在（build_system_prompt 未被绕开）"
+  t4_assert_eq "1" "$(grep -cF -- "NAO_FLEET=$LAB" "$pf" || true)" \
+    "$tag：环境锚点行仍在（主名 NAO_FLEET=$LAB；build_system_prompt 未被绕开）"
 }
 # T573（Issue #206）：命令行的唯一新增参数 = `--session-dir <root>/--<编码 cwd>--`（其余逐字不变）。
 sess_dir() { # <repo>

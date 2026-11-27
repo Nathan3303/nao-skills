@@ -44,16 +44,16 @@ export function hasRoleMechanism(root) {
   }
 }
 
-/** 锚点用的 NAO_SKILLS：优先 env；env 指向的不是机制包根则回退扩展自身包根（下游 shim-only 场景） */
+/** 锚点用的包根：`NAO_FLEET` 优先（T594 新名），`NAO_SKILLS` 兼容回退；env 指向的不是机制包根则回退扩展自身包根 */
 export function resolveSkillsRoot(env = process.env) {
-  const fromEnv = env && env.NAO_SKILLS;
+  const fromEnv = (env && env.NAO_FLEET) || (env && env.NAO_SKILLS);
   if (fromEnv && hasRoleMechanism(fromEnv)) return resolve(fromEnv);
   return PKG_ROOT;
 }
 
-/** 环境锚点行 —— 与 nao-fleet.sh:1068 的 printf 段逐字一致（cases/17 AC3 cross-assert） */
+/** 环境锚点行 —— 与 fleet/lib/ensure.sh 的 printf 段**逐字一致**（cases/17 AC3 cross-assert）；主名 NAO_FLEET，NAO_SKILLS 为兼容别名 */
 export function buildAnchorLine(skillsRoot) {
-  return `- NAO_SKILLS=${skillsRoot}（nao 机制**包根**；@.agents/... 引用一律以 \`$NAO_SKILLS/.agents/\` 为根解析。注意：项目内 \`.agents/\` 只有 shim，不存机制副本）`;
+  return `- NAO_FLEET=${skillsRoot}（nao 机制**包根**；\`NAO_SKILLS\` 为兼容别名，二者都给时 NAO_FLEET 优先。@.agents/... 引用一律以 \`$NAO_FLEET/.agents/\` 为根解析。注意：项目内 \`.agents/\` 只有 shim，不存机制副本）`;
 }
 
 /** 拆分卡片：frontmatter 文本 + 正文（正文 = 首块 frontmatter 之后，逐字节保留原样） */

@@ -929,7 +929,7 @@ t4_fixture() { # 输出一个 git 初始化过的临时项目目录
 # 从仓库打包（--ignore-scripts：不触发 prepack 门禁，避免与仓库 check 耦合）
 t4_pkg_tarball() {
   if [ -n "$T4_TARBALL" ] && [ -f "$T4_TARBALL" ]; then printf '%s' "$T4_TARBALL"; return 0; fi
-  local cached="$T4_CACHE_DIR/nao-skill-${PKG_VERSION}.tgz"
+  local cached="$T4_CACHE_DIR/nao-fleet-${PKG_VERSION}.tgz"
   if [ ! -f "$cached" ]; then
     ( cd "$T4_ROOT" && npm pack --silent --ignore-scripts --pack-destination "$T4_CACHE_DIR" ) >/dev/null 2>&1 \
       || t4_blocked "npm pack 失败，无法构造被测包"

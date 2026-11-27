@@ -85,7 +85,7 @@ function parseCards(yaml) {
 }
 function expectedAnchor(refRoot) {
   const src = readFileSync(fleetScript, "utf8");
-  const line = src.split("\n").find((l) => l.includes("## 环境锚点") && l.includes("NAO_SKILLS=%s"));
+  const line = src.split("\n").find((l) => l.includes("## 环境锚点") && l.includes("NAO_FLEET=%s"));
   const q1 = line.indexOf("'");
   const q2 = line.indexOf("'", q1 + 1);
   const fmt = line.slice(q1 + 1, q2); // 文件内为字面 \n（反斜杠 n）
