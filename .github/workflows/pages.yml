@@ -74,6 +74,10 @@ jobs:
       - name: Type check
         run: npm --prefix apps/document run check:types
 
+      # 图标守卫自检（T591）：4 个正负控夹具，证明守卫在 prefix 不一致 / 文件缺失 / 空扫时都会红
+      - name: Check icon guard self-test
+        run: npm --prefix apps/document run check:icons
+
       # 线上子路径部署：base 由 CLI 传入，构建失败即红
       - name: Build
         run: npm --prefix apps/document run build -- --base /nao-fleet/
