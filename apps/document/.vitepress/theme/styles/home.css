@@ -389,6 +389,7 @@
 
 /* 比例锁素材原比 1896/1030（=1.841）：套 16:9 会裁切或加黑边，违反「不裁不改」 */
 .nh .banner-figure {
+  position: relative; /* sr-only fallback 的包含块 —— 它属于 figure，不落到更上层 */
   margin: 0;
   aspect-ratio: 1896 / 1030;
   background: var(--nh-sunken);
