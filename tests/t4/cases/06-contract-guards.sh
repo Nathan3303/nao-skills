@@ -1611,12 +1611,22 @@ t4_assert_eq "1" "$(grep -cF '回执必须经 intercom 发到本会话；写在�
   "T585 ③ 派单末句落在 pm-operations §一（逐字，禁改写）"
 t4_assert_eq "1" "$(grep -rl 'rcpt=' "$T4_ROOT/.agents" --include='*.md' | wc -l | tr -d ' ')" \
   "T585 ④ rcpt= 正文单源（全 .agents 只 comm-templates 一处）"
-t4_assert_eq "1" "$(grep -c '^\[编号\] done(lite).*rcpt=' "$T585_TMPL" || true)" \
-  "T585 ④ 回执模板（lite）含 rcpt="
-t4_assert_eq "1" "$(grep -c '^rcpt：<本回执经 intercom 送达的消息 id>$' "$T585_TMPL" || true)" \
-  "T585 ④ 回执模板（full）含 rcpt："
-t4_assert_contains "$(cat "$T585_TMPL")" "有这个 id 才算交付" \
-  "T585 ④ 判据在位：PM 侧核「有这个 id 才算交付」"
+t4_assert_eq "1" "$(grep -c '^\[编号\] done(lite).*rcpt=—｜<对账键' "$T585_TMPL" || true)" \
+  "T585 ④ 回执模板（lite）含 rcpt=—｜<对账键>"
+t4_assert_eq "1" "$(grep -c '^rcpt：—｜<对账键' "$T585_TMPL" || true)" \
+  "T585 ④ 回执模板（full）含 rcpt：—｜<对账键>"
+t4_assert_contains "$(cat "$T585_TMPL")" '审计线索，不是交付依据' \
+  "T585 ④ 判据在位：rcpt 是审计线索、不是交付依据"
+t4_assert_contains "$(cat "$T585_TMPL")" "交付判据 = PM 侧收到回执消息" \
+  "T585 ④ 判据在位：交付判据 = PM 收到回执"
+t4_assert_contains "$(cat "$T585_TMPL")" "worker 不必自报 id" \
+  "T585 ④ 判据在位：id 由 PM 侧对齐、worker 不自报"
+t4_assert_contains "$(cat "$T585_TMPL")" "不构成未交付" \
+  "T585 ④ 判据在位：缺 rcpt / 对账键不全不构成未交付"
+t4_assert_contains "$(cat "$T585_TMPL")" "另立项" \
+  "T585 ④ 判据在位：改插件让 send 返回 id = 另立项（防顺手加依赖）"
+t4_assert_contains "$(cat "$T585_TMPL")" "都不构成未交付" \
+  "T585 ④ 判据在位：缺 rcpt 不得当未交付（防误打回）"
 t4_assert_contains "$(cat "$T4_ROOT/.agents/checklists/deliverable-docs.md")" "常设段（不属批次）" \
   "T585 ⑤ P3：deliverable-docs §十一 点明 5 个常设段不属批次"
 t4_assert_contains "$(cat "$T4_ROOT/tests/README.md")" "迁移 / 血统类计数的基数" \
@@ -1628,7 +1638,7 @@ t4_assert_eq "0" "$(grep -cF '会话内正文 ≠ 回执' "$NEG_IC/intercom-prot
   "T585 负控①：删该条 ⇒ 计数归 0（第一条判据承重）"
 # 变异负控 ②：删掉模板里的 rcpt= ⇒ 模板判据必红
 NEG_TP="$T4_CACHE_DIR/t585-neg-tp-$$"; rm -rf "$NEG_TP"; mkdir -p "$NEG_TP"
-sed 's/ | rcpt=<本回执经 intercom 送达的消息 id>//; s/^rcpt：.*$//' "$T585_TMPL" > "$NEG_TP/comm-templates.md"
+sed 's/ | rcpt=—｜<对账键：commit + 门禁 HEAD + 用例结论>//; s/^rcpt：.*$//' "$T585_TMPL" > "$NEG_TP/comm-templates.md"
 t4_assert_eq "0" "$(grep -c '^\[编号\] done(lite).*rcpt=' "$NEG_TP/comm-templates.md" || true)" \
   "T585 负控②：删模板 rcpt= ⇒ 计数归 0（第四条判据承重）"
 rm -rf "$NEG_IC" "$NEG_TP"
