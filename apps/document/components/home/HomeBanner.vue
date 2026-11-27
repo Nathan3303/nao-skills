@@ -3,7 +3,7 @@
   纯装饰画面：<figure> + <picture> + <img>，无 figcaption / 无 h2 / 无播放按钮 / 无遮罩 / 无下载链接 / 无可见文案。
   介质是动画 WebP（1280w · 12fps · 循环）；prefers-reduced-motion 走 <source media> 换成静态 jpg —— 不裁切、不改内容。
   纯装饰，读屏跳过（img 收 alt="" + aria-hidden）：content/index.md 的 frontmatter.home.banner 只留 fallback，
-  仅在图片解码失败时以 sr-only 出现（正常路径 DOM 里没有这句，屏上也永远没有文字）。
+  只在解码失败时渲染成一行可见状态文案（role="status"，正常路径 DOM 里没有这句 —— 正常态屏上零文字）。
   资源路径一律走 withBase：CI 构建带 --base /nao-fleet/，写死 /xxx.webp 会 404。
 -->
 <script setup lang="ts">
@@ -47,7 +47,7 @@ onMounted(() => {
             @error="failed = true"
           />
         </picture>
-        <span v-if="failed" class="banner-fallback">{{ props.banner.fallback }}</span>
+        <p v-if="failed" class="banner-failed" role="status">{{ props.banner.fallback }}</p>
       </figure>
     </div>
   </section>

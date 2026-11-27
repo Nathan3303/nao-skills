@@ -403,12 +403,11 @@
   -webkit-mask-size: 100% 100%;
 }
 
-/* 解码失败态（T592）：**只在这一态**给底色，并解除 mask —— 正常态绝不能加底色，
-   否则淡出区会露出灰底而不是页面底色；失败态没有画面可淡出，留着 mask 只会把底色也淡掉。 */
+/* 解码失败态（T592）：**只在这一态**给底色；正常态绝不能加底色（否则淡出区露灰）。
+   mask **保留**（uiux 改判）：解除会让失败态出现硬底边 + 灰块描边，与正常态「底边渐隐收口」打架；
+   保留后卡形 / 高度 / 渐隐 / 环四项与正常态同形，只是内容空了 —— 文案在垂直 50% 处，74% 才开始淡。 */
 .nh .banner-figure.is-failed {
   background: var(--nh-sunken);
-  mask-image: none;
-  -webkit-mask-image: none;
 }
 
 /* 失败态把 img 收起：否则浏览器会在左上角画一个「坏图」小图标，比空白更难看；
@@ -434,17 +433,18 @@
   height: auto;
 }
 
-/* 图加载失败时只留读屏一句，屏上不加可见文字行（用户拍板：只要画面） */
-.nh .banner-fallback {
+/* 失败态的唯一允许文字：一行居中状态文案（role="status"），替掉原来的 sr-only 一份 —— 二选一，不重复。 */
+.nh .banner-failed {
   position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 0 var(--nh-sp-4);
+  font-size: var(--nh-fs-13);
+  line-height: 1.6;
+  color: var(--nh-text-3);
+  text-align: center;
 }
 
 /* ── 区块 / 卡片 ──────────────────────────────────────── */

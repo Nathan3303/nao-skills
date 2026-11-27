@@ -47,7 +47,7 @@ home:
       more: true
       gap: true
   banner:
-    fallback: 舰队会话的录屏画面没能加载出来。
+    fallback: 这段录屏没能加载出来 · 刷新可重试
   jumpNav:
     - text: 三个毛病
       href: '#why'
