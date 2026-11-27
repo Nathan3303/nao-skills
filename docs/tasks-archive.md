@@ -1429,6 +1429,11 @@ PR [#148](https://github.com/Nathan3303/nao-skills/pull/148) squash 合并 · �
 
 - ✅ **已合并 `7f778f8`**（PR #244 · Issue #237）：`docs/<任务号>-<slug>/` + `docs/README.md` 唯一索引；`check` 新增 PRD 探针扩面与 `check_docs_index`（warn-only）；判红载体 `tests/t4/cases/53`；32 文件 +1028/−103。
 
+<a id="T580"></a>
+## T580 · kickoff-ledger（开工确认卡表格化 + 台账按批次分割）
+
+- ✅ **已合并 `6d2295b`**（PR #246 · Issue #238）：卡独立落盘 `docs/<任务号>-<slug>/kickoff.md`（10 字段模板）· 台账 `##` 批次分割 + 流转状态 6 值 + 完成日期 + 完成即收 · 主台账 804 → 195 行、历史 102 批迁本文件 · 判红载体 `tests/t4/cases/54`（28 断言）· `check` 台账探针 warn-only · 工作区纪律入 `github-flow.md:73` · 17 文件 +1989/−741。
+
 <a id="T581"></a>
 ## T581 · mechanism-review（机制 Review · 只出报告）
 

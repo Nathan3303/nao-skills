@@ -12,6 +12,7 @@
 
 | 任务号 | 归档锚点 | 状态 | 完成日期 |
 | :--- | :--- | :--- | :--- |
+| T580 | `docs/tasks-archive.md#T580` | 已合并 | 2026-11-27 |
 | T579 | `docs/tasks-archive.md#T579` | 已合并 | 2026-11-27 |
 | T581 | `docs/tasks-archive.md#T581` | 已合并 | 2026-11-27 |
 | I96 | `docs/tasks-archive.md#I96` | 已发布 | 2026-11-11 |
@@ -114,12 +115,6 @@
 | I126 | `docs/tasks-archive.md#I126` | 已关闭 | — |
 | I124 | `docs/tasks-archive.md#I124` | 已关闭 | — |
 | I123 | `docs/tasks-archive.md#I123` | 已关闭 | 2026-11-14 |
-
-## T580 · kickoff-ledger（Issue [#238](https://github.com/Nathan3303/nao-skills/issues/238) · 分支 `nao/T580-kickoff-ledger`）
-
-| 任务号 | 目标 | 角色链 | 状态 | 完成日期 | 卡指针 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| T580 | 开工确认卡表格化 + 独立落盘；台账按批次切 `##` + 流转状态 + 完成日期 + 完成即收 | `pm` → `rd-infra` → `qa` | 进行中 | — | `docs/T580-kickoff-card/kickoff.md` |
 
 ## 活约束与遗留跟踪（长期有效 · 不下沉）
 
