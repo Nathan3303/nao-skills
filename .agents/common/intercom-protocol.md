@@ -142,11 +142,8 @@ bash .agents/scripts/nao-fleet.sh check
 
 ## 归档约定
 
-- PRD：`docs/prds/YYYY-MM-DD-<主题>.md`，索引 `docs/prds/README.md`。
-- ADR：`docs/adr/YYYY-MM-DD-<主题>.md`，索引 `docs/adr/README.md`。
-- 评审/测试报告：`docs/reports/<编号>-<主题>.md`（按需）。
-- 业界调研：`docs/research/YYYY-MM-DD-<主题>.md`（协议与引用格式见 @.agents/skills/research.md）。
-- 发布说明：`docs/releases/<version>.md`（PM 维护，Tag Release 前落盘；gh 不可用时作 Release notes 正文）。
+- **新任务产物**一律进 `docs/<任务目录>/`（PRD `prd.md` · 评审 `arch-review.md` · ADR `adr-<topic>.md` · 实现 `impl-<role>.md` · QA `qa-verify.md` · 发版说明 `release-notes-v<X.Y.Z>.md`），并在 `docs/README.md` 对应段登记一行；**路径、固定名与索引文法见 @.agents/checklists/deliverable-docs.md §十**（本文件不复制）。
+- `docs/{prds,reports,adr,designs,research,releases}/` 为 2026-11-27 前历史，**冻结只读**（不改名 / 不迁移 / 不追加）。
 - PR 模板：`.github/pull_request_template.md`（PM 从 `.agents/templates/github/pull_request_template.md.example` 复制建立）。
 - 所有 `docs/` 长文（PRD/ADR/报告/调研）的正文规范（长度上限、骨架、必写/可省/禁写）见 @.agents/checklists/deliverable-docs.md。
 

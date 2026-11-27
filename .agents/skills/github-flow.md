@@ -21,7 +21,7 @@ PM 在**受理 / 立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 P
 - **默认 `fix`（轻通道）**：硬条件 = **能写出「期望行为 vs 实际行为」且可复现**（第三方按文字即可判定，禁「视情况」「大概率」）。
 - **升 `feat`（全通道）**：写不出期望/实际对比 · 不可复现 · **或超出报告所描述的期望范围**（新增能力 / 改动既有行为约定 / 破坏性契约）⇒ 全量 PRD（9 模块）+ 开工确认卡，按原流程走。**把「实际」改回「期望」不算行为改变**（否则每条修复都命中）。
 - **命名随通道**：`fix/<issue-id>-<slug>`（轻通道，diff 只碰修复路径）｜`feat/<issue-id>-<slug>`（全通道）；两者无 Issue 时统一降级 `nao/<批次-slug>`。
-- **减仪式不减门禁**：`fix` 免 9 模块 PRD / 开工卡降为一问 / 回执 `lite` / 复盘 `L0`，但 `check` + `npm test` 全量 rc=0 与「先红后绿」不变（细则 @.agents/prompts/product-manager.md §二）。**无测试设施**（纯文档仓 / 无 `npm test`）→ 用**最小复现命令**，修复前失败 / 修复后通过的**命令 + 输出**贴回执（可放 `docs/reports/<编号>-repro.*` 或 Issue 内联）；项目 `AGENTS.md` 指定了门禁命令则**以它为准**，未指定则 `check` rc=0。
+- **减仪式不减门禁**：`fix` 免 9 模块 PRD / 开工卡降为一问 / 回执 `lite` / 复盘 `L0`，但 `check` + `npm test` 全量 rc=0 与「先红后绿」不变（细则 @.agents/prompts/product-manager.md §二）。**无测试设施**（纯文档仓 / 无 `npm test`）→ 用**最小复现命令**，修复前失败 / 修复后通过的**命令 + 输出**贴回执（可放**任务目录内 `repro.*`**（约定见 @.agents/checklists/deliverable-docs.md §十）或 Issue 内联）；项目 `AGENTS.md` 指定了门禁命令则**以它为准**，未指定则 `check` rc=0。
 
 ## 阶段 0 受理（triage；被动触发）
 
@@ -36,13 +36,13 @@ PM 在**受理 / 立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 P
 
 | # | 阶段 | 主责 | 动作 | 产出 |
 | :--- | :--- | :--- | :--- | :--- |
-| 1 | 立项 | PM | 建 Issue（用户故事 / AC / 优先级 / 里程碑）+ PRD 正文落 `docs/prds` | 可追踪 Issue + **PRD 定稿（随本 PR）** |
+| 1 | 立项 | PM | 建 Issue（用户故事 / AC / 优先级 / 里程碑）+ PRD 正文落任务目录 `prd.md`（约定见 @.agents/checklists/deliverable-docs.md §十） | 可追踪 Issue + **PRD 定稿 + 索引一行（随本 PR）** |
 | 2 | 拆分排期 | PM | 拆任务、定 PR owner / Reviewer / 分支名 | 开工确认卡 + **`docs/tasks-state.md` 登记（随本 PR）** |
 | 3 | 起分支 | RD | 从 main 拉 `feat/<issue-id>-<slug>`，开 **Draft PR** | Draft PR + CI（+ 立项摘要，唯一例外） |
 | 4 | 开发提交 | RD | 小步 `wip(<编号>):` 提交，push 触发 CI | 增量代码 + CI 结果 + 阶段文档（ADR / 报告，**随本 PR**） |
-| 5 | 评审测试 | RD / QA / Reviewer | 填 PR 模板、**QA 跑门禁**（PM 只跑 `check` 静态体检；RD 不跑测试套件）、预览环境验证 | Review 通过 + QA 报告 / 用户验收清单（`docs/reports/`，**随本 PR**） |
+| 5 | 评审测试 | RD / QA / Reviewer | 填 PR 模板、**QA 跑门禁**（PM 只跑 `check` 静态体检；RD 不跑测试套件）、预览环境验证 | Review 通过 + QA 报告 / 用户验收清单（**任务目录内 `qa-verify.md` / `user-acceptance.md`**，随本 PR） |
 | 6 | 验收合并 | PM → RD | PM 逐条核 AC 并在 PR 评论；**通过后由 RD squash 合并、删分支** | main 上 1 条提交（**含该任务全部文档改动**） |
-| 7 | 发布 | PM | 版本号 + tag + Release notes（优先 `gh`） | Release 记录 + notes 落 `docs/releases/`，批间收尾事实随发布提交带走 |
+| 7 | 发布 | PM | 版本号 + tag + Release notes（优先 `gh`） | Release 记录 + notes 落**归属任务目录**的 `release-notes-v<X.Y.Z>.md` + 索引版本段一行，批间收尾事实随发布提交带走 |
 | 8 | 复盘 | PM | 监控指标、关 Issue、归档 PRD | 复盘 + 归档（随发布提交或**下一任务 PR**） |
 
 ## 非范围（显式 out-of-scope）
@@ -53,14 +53,14 @@ PM 在**受理 / 立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 P
 
 **一个任务 PR = 该任务全量改动**（BR1）：文档与台账不另立载体，`docs/` 改动一律随该任务的 PR 进 main。
 
-- **BR1 全量（一 PR 含全部改动）**：任务 PR 必须包含该任务**全部文件改动** —— 实现 / 测试 / PRD 定稿 / 验收报告 / ADR / `docs/tasks-state.md` / `docs/reports/*-followups.md` / `docs/prds/README.md` 索引 / `docs/releases/<v>.md`。验收读 PR diff 即见文档变化；回滚 `git revert` 单条即整需求。
+- **BR1 全量（一 PR 含全部改动）**：任务 PR 必须包含该任务**全部文件改动** —— 实现 / 测试 / 任务目录内文档（`prd.md` · `arch-review.md` · `adr-*.md` · `impl-<role>.md` · `qa-verify.md` · `followups.md` · 发版说明）/ `docs/tasks-state.md` / **`docs/README.md` 索引**（任务段 + 版本段 + 决策时间线）。验收读 PR diff 即见文档变化；回滚 `git revert` 单条即整需求。目录与索引文法见 @.agents/checklists/deliverable-docs.md §十。
 - **BR2 禁令**：① 禁止为文档 / 台账**单开 PR**；② 禁止任务期文档作为**独立提交直落 main**（唯一例外见 BR3）。发布提交（阶段 7）承载批间收尾事实，不计入本禁令。
 - **BR3 立项例外（三条件同时满足才可用）**：① **仅用于**建 Issue / 定分支名所需的最小摘要；② 内容上限 = **最小摘要三要素**（TL;DR + AC 编号 + PRD 路径指针），正文仍留 `docs/`，**禁抄正文**；③ **单条** `docs(<编号>):` 提交、只含该摘要文件、**不与其它改动混提**。**降级批次（无 Issue）无此例外**。
 - **BR4 谁提交**：PM 在需求分支做**路径级**提交（`git add <具体路径>`，`docs(<编号>):` 前缀，**禁 `-A`**、禁 push main）；RD 最终 squash 时一并带入。同 worktree 并行时，提交方**只暂存自己的路径**。
 - **BR5 批间收尾（发布后事实）**：合并后产生的事实（npm 核验结果 / Release 标题核验 / 角色卡广播登记 / 会话交接快照）随**发布提交一次带走**；**发布提交之后**才产生的事实登记进**下一个任务 PR 的首个文档提交**（随该 PR 一并进 main），**不得单独提交 main**。其间**不得留工作区脏改**：需要先保住改动时用**带标签的 `git stash`**（如 `git stash push -m "<编号>: 发布后事实" -- <路径>`），在下一分支的首个文档提交里 `git stash pop` 后一并提交（机械闸：`check` 见 `git stash list` 非空 ⇒ 一条 warn，不改 rc；见 BR7 上方的引用纪律同节）。理由：实测 PM 把 `tasks-state` 改动留在工作区时，用户执行 `git pull --ff-only` 会被未暂存改动拒绝（`pull.rebase=true` 下周期性阻塞协作）。
 - **BR6 可读性不变**：PR 标题与 `gh pr merge --squash --subject` 仍须用户可读（禁纯编号 / 类名 / 路径）；文档改动不降低该要求。
 - **自查三条（可执行）**：main 上本任务提交数（`git log --oneline main | grep -c '(<编号>)'`）· 本 PR diff 是否含 `docs/` 路径（`git diff --name-only main...HEAD | grep '^docs/'`）· 工作区干净（`git status --porcelain` 为空）。
-- **验证接缝**：文本口径由一次性只读探针核（如 `docs/reports/<日期>-*-probe.sh`），不进 `tests/`。
+- **验证接缝**：文本口径由一次性只读探针核（跑完即删，或作为报告附件留在任务目录内），不进 `tests/`。
 - **BR7 引用纪律（易变载体禁裸行号）**：引用 `docs/tasks-state.md` 这类**高频编辑**文件须写「**条目 ID + as-of `<sha>` + locator**」，**禁裸行号** —— 同一命中行实测在 `fa87517`→`ce94b5b`→`929b51d` 三次台账编辑中由 `:430` 漂到 `:433`→`:434`。locator 必须**唯一**且可自证（`grep -c` = 1）：用行首锚定形 `^| \*\*T543\*\* |`；非锚定 / 正文短语均不可用（实测 @ `f0f533b`：`grep -c 'O2 转办 2026-12-31'` = 4、`| **T543** |` 因被正文引述 = 2 —— 数字随台账编辑漂移，**引用前先 `grep -c` 自证**；引述 locator 自身也会自伤）。
 - **稳定载体（角色卡 / 清单 / 脚本 / ADR）仍可用行号**：低频改动，行号可按 as-of sha 复核；易变与稳定混引时整段按易变处理。
 - **读侧校验（as-of）**：以 `git show <sha>:<path>` 为准；台账已变（as-of 过期）⇒ 用条目 ID + locator 重新定位，**不跟随行号**（行号只作该 sha 下的辅助位标）。
@@ -87,8 +87,8 @@ PM 在**受理 / 立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 P
 ## Issue 与状态（避免双源）
 
 - **一句判据（区分两侧，互不冲突）**：**输入侧 = 别人交来的报障原文，留平台（它是证据，不是规格）；输出侧 = PM 立项摘要，不抄正文（正文在 `docs/`）**。
-- **输入侧（外部 Issue / 线上转来）**：原始报告正文**留在平台**，不搬进仓库；PM 在阶段 0 triage 后**摘录成 `docs/tasks-state.md` 任务条目并以 Issue 号回链**；凡进入 `docs/prds/` 的规格正文仍**只写一处**（规格在 `docs/`，证据在平台）。原文里的**规格建议不算证据** —— 被采纳 ⇒ 写入 `docs/prds/`（规格唯一权威）并在 Issue 回帖指针、**原帖不改**；未采纳 ⇒ 只在 `tasks-state` 记一行决策。
-- **输出侧（PM 立项）**：**Issue = 入口 / 摘要 + 指针**：body 只放 TL;DR、AC 编号、优先级、`docs/prds/...md` 指针。
+- **输入侧（外部 Issue / 线上转来）**：原始报告正文**留在平台**，不搬进仓库；PM 在阶段 0 triage 后**摘录成 `docs/tasks-state.md` 任务条目并以 Issue 号回链**；凡进入任务目录 `prd.md` 的规格正文仍**只写一处**（规格在 `docs/`，证据在平台）。原文里的**规格建议不算证据** —— 被采纳 ⇒ 写入任务目录 `prd.md`（规格唯一权威）并在 Issue 回帖指针、**原帖不改**；未采纳 ⇒ 只在 `tasks-state` 记一行决策。
+- **输出侧（PM 立项）**：**Issue = 入口 / 摘要 + 指针**：body 只放 TL;DR、AC 编号、优先级、`docs/<任务目录>/prd.md`（或等价的仓内相对路径）指针。
 - **`docs/` = 正文权威**（PRD 全文、`tasks-state.md` 运行时状态）：离线可用、会话重开读本地。
 - **同步时机（仅 5 个节点）**：立项、派发、验收通过、合并、发布——其余不动 Issue，省 gh 往返。
 - Issue 上的业务讨论由 PM **摘录进 `docs/`**，不留在平台（**报障原文及其规格建议按输入侧处理，不在此列**）。
@@ -104,10 +104,10 @@ PM 在**受理 / 立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 P
 - 版本号：SemVer，PM 按批次范围定（feat→MINOR / fix→PATCH / 破坏性→MAJOR）；项目 `AGENTS.md` 有约定则从之。
 - 门禁：AC 全过 + 验收闭环 + main 门禁全绿 + 工作区干净 + PR 已合并。
 - **发布前置（严格闸门 · 单后端）**：发布前须 `npm run test:t4:full` **rc=0**（判据 = **SKIP 与 DEGRADE 计数均为 0，且非白名单 NOTE 计数为 0**，任一非零即 FAIL）。T555 起后端唯一（herdr），旧 `test:t4:full:dual` 双环境闸随 tmux 后端删除，**不得**再按「双环境」要求复跑。
-- **优先 `gh`**：`gh release create <tag> --title "vX.Y.Z" --notes-file docs/releases/<version>.md`（**标题口径（强约束）：@.agents/common/release-notes.md** —— 标题仅裸版本号，描述进正文首段）。
+- **优先 `gh`**：`gh release create <tag> --title "vX.Y.Z" --notes-file docs/<归属任务目录>/release-notes-v<X.Y.Z>.md`（**标题口径（强约束）：@.agents/common/release-notes.md** —— 标题仅裸版本号，描述进正文首段）。
 - **`gh release create <tag> --target <短 sha>` 不可用（两次实测：v0.21.0 / v0.21.1）**：会报 `tag_name is not a valid tag` / `target_commitish is invalid`。正确路径 = 先 `git tag -a <tag> -m "<说明>"` → `git push origin <tag>` → `gh release create <tag> --title <裸版本号> --notes-file <file> --verify-tag`（**不要**用 `--target` 指向未 push 的短 sha）。
 - 探测：`gh auth status` 按 **exit code** 判定（`keyring` 警告但 exit 0 **仍可用**，可 `gh api user` 复核）；**不自动 `gh auth login`**（涉用户凭证）。
-- release notes 落盘 `docs/releases/<version>.md`（**写作规范（强约束）：@.agents/common/release-notes.md** —— 面向用户「本次更新」置顶、内部编号 / 文件名 / 属性名一律下沉「技术细节」、正文不用表格；骨架见 @.agents/templates/release-notes.md.example）。
+- release notes 落盘**归属任务目录**的 `release-notes-v<X.Y.Z>.md`（路径与索引登记见 @.agents/checklists/deliverable-docs.md §十；**写作规范（强约束）：@.agents/common/release-notes.md** —— 面向用户「本次更新」置顶、内部编号 / 文件名 / 属性名一律下沉「技术细节」、正文不用表格；骨架见 @.agents/templates/release-notes.md.example）。
 - 回滚：未 push → `git tag -d`；已 push → **不删远端 tag**，改发下一个 PATCH 修正（用户明确要求才删）。
 
 ## 离线 / 无远端降级
@@ -116,12 +116,12 @@ PM 在**受理 / 立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 P
 
 | 环节 | 正常 | 降级 |
 | :--- | :--- | :--- |
-| 立项 | GitHub Issue | 摘要写 `docs/prds` + tasks-state，跳过 Issue |
+| 立项 | GitHub Issue | 摘要写任务目录 `prd.md` + tasks-state，跳过 Issue |
 | 分支 | `feat/<issue-id>-<slug>` | `nao/<批次-slug>` |
 | 评审 | PR + CI + 预览环境 | 本地全量门禁 + PM 读 diff |
 | 合并 | PR squash merge | PM 验收通过后，RD 本地 `git merge --squash feat/… && git commit` + 删分支 |
 | 文档载体 | 随任务 PR（PR diff 含 `docs/`） | 同样在本地分支提交并由 `merge --squash` 带入 main，**不另开文档提交** |
-| 发布 | `gh release create` | `git tag -a` + notes 落 `docs/releases/` |
+| 发布 | `gh release create` | `git tag -a` + notes 落归属任务目录（`release-notes-v<X.Y.Z>.md`） |
 
 降级须在 `tasks-state` 与回执中标注「降级」。
 
@@ -135,7 +135,7 @@ PM 在**受理 / 立项 / 终签 / 发布**时读取；RD 在**起分支 / 开 P
 
 > 依据：`#90`（推送被网络阻断 ⇒ 如实报阻塞 + 给处置选项，未静默重试、未破坏流程）。
 
-- **降级用载体（无 PR 对象时）**：`fix` 通道的「书面理由」（>3 文件）与「复核 / 自审留痕」两个载体均默认落在 PR；降级模式（无远端 / 无 `gh`，无 PR 可写）⇒ 改为 **`docs/reports/<编号>-review.md`**（或 `docs/tasks-state.md` 该任务条目相邻行），内容不变（理由 + 日期 + 自审声明），「>3 文件须写书面理由」同落此处。
+- **降级用载体（无 PR 对象时）**：`fix` 通道的「书面理由」（>3 文件）与「复核 / 自审留痕」两个载体均默认落在 PR；降级模式（无远端 / 无 `gh`，无 PR 可写）⇒ 改为**任务目录内 `review.md`**（或 `docs/tasks-state.md` 该任务条目相邻行），内容不变（理由 + 日期 + 自审声明），「>3 文件须写书面理由」同落此处。
 
 ## 红线
 

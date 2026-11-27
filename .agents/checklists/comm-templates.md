@@ -30,7 +30,7 @@ description: 派发消息与回执模板（按需，派发/回执前读取）
 ## 回执 done(lite)：默认（无阻塞、无风险的常规任务，单行）
 
 ```text
-[编号] done(lite) | <role> | to=<会话 id 或 list 完整名+cwd> | 清单：未过<项 或 无> | 测试：HEAD=<跑门禁时短 sha> · 工作区=<静默|非静默(原因)> · <命令> exit=<n> <文件数>/<例数>/<红数>（每个计数数字后跟「命令 → 输出」） | 变更：<f1,f2（>3 个写前 3 + "等 N 个"）> | 遗留：<无 | n 项 → 台账|tasks-state|Issue|接受(到期)> | commit=<交付提交短 hash，≠ 门禁 HEAD；无则 —> | 详情：docs/reports/<编号>.md
+[编号] done(lite) | <role> | to=<会话 id 或 list 完整名+cwd> | 清单：未过<项 或 无> | 测试：HEAD=<跑门禁时短 sha> · 工作区=<静默|非静默(原因)> · <命令> exit=<n> <文件数>/<例数>/<红数>（每个计数数字后跟「命令 → 输出」） | 变更：<f1,f2（>3 个写前 3 + "等 N 个"）> | 遗留：<无 | n 项 → 台账|tasks-state|Issue|接受(到期)> | commit=<交付提交短 hash，≠ 门禁 HEAD；无则 —> | 详情：docs/<任务号>-<slug>/<主产物>.md
 ```
 
 > `commit=`（仅 git 流程任务）：work 分支最新提交短 hash，便于 PM 核对归因（commit.md 约定）；无 push/纯文档任务写 `commit=—`。
