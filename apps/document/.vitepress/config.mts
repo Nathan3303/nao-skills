@@ -82,6 +82,27 @@ function wrapRoleGuide(html: string): string {
   )
 }
 
+/**
+ * 站点前缀（T590）：VitePress 的静态 `head` 不会替静态资源补 base，所以这里由 `--base` 派生前缀自己拼。
+ * CI 用 `vitepress build --base /nao-skills/`；dev / preview 不带该参数 ⇒ '/'。
+ * 之前图标靠 transformHead 注入（那里能读 siteData.base），代价是 dev 的 HTML 里根本没有这一行 ——
+ * 现在统一成静态 head 单一来源，dev 与产物都走同一处。
+ */
+function resolveBasePrefix(): string {
+  const argv = process.argv
+  const flag = argv.find((arg) => arg === '--base' || arg.startsWith('--base='))
+  const raw =
+    flag === undefined
+      ? ''
+      : flag.startsWith('--base=')
+        ? flag.slice('--base='.length)
+        : (argv[argv.indexOf(flag) + 1] ?? '')
+  if (!raw || raw === '/') return '/'
+  return raw.endsWith('/') ? raw : `${raw}/`
+}
+
+const BASE_PREFIX = resolveBasePrefix()
+
 export default defineConfig({
   lang: 'zh-CN',
   title: 'nao-skills',
@@ -91,16 +112,16 @@ export default defineConfig({
   cleanUrls: true,
   srcDir: 'content',
   head: [
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: `${BASE_PREFIX}favicon.svg` }],
+    ['link', { rel: 'apple-touch-icon', sizes: '180x180', href: `${BASE_PREFIX}apple-touch-icon.png` }],
     ['meta', { name: 'color-scheme', content: 'light dark' }],
     ['meta', { name: 'theme-color', content: '#FFFFFF', media: '(prefers-color-scheme: light)' }],
     ['meta', { name: 'theme-color', content: '#0B0F14', media: '(prefers-color-scheme: dark)' }],
   ],
-  // favicon 走 transformHead：`--base /nao-skills/` 时静态 head 不会被改前缀
-  transformHead({ pageData, title, description, siteData }) {
-    const base = siteData.base || '/'
+  // 图标不在这里注入：见 head 的静态两条（T590：dev 的 HTML 也要有 icon，单一来源）
+  transformHead({ pageData, title, description }) {
     const isHome = pageData.relativePath === 'index.md'
     return [
-      ['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}favicon.svg` }],
       ['meta', { property: 'og:type', content: 'website' }],
       ['meta', { property: 'og:locale', content: 'zh_CN' }],
       ['meta', { property: 'og:title', content: isHome ? HOME_OG.title : title }],

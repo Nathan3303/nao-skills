@@ -156,7 +156,8 @@ function checkIcons() {
     for (const match of raw.matchAll(/<link\b[^>]*>/gi)) {
       const element = match[0]
       const rel = /\brel\s*=\s*["']([^"']*)["']/i.exec(element)
-      if (!rel || !/(^|\s)icon(\s|$)/i.test(rel[1])) continue
+      // 覆盖所有图标语义：icon / apple-touch-icon / mask-icon（T590 起 apple-touch 也在这里把守）
+      if (!rel || !rel[1].toLowerCase().includes('icon')) continue
       const href = /\bhref\s*=\s*["']([^"']*)["']/i.exec(element)
       if (!href) continue
       iconLinks += 1
