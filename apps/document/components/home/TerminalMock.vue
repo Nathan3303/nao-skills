@@ -23,8 +23,7 @@ defineProps<{ lines: TerminalLine[] }>()
         line.more ? 'term-more' : '',
       ]"
     >
-      <span v-if="line.kind === 'cmd'" class="term-prompt">$</span>{{ line.text
-      }}<span v-if="line.cursor" class="term-cursor"></span>
+      <span v-if="line.kind === 'cmd'" class="term-prompt">$</span>{{ line.text }}
     </p>
   </div>
 </template>

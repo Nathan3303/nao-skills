@@ -108,12 +108,12 @@
 }
 
 .nh .pill-ghost {
-  min-height: 36px;
-  padding: 0 var(--nh-sp-5);
+  min-height: 44px;
+  padding: 0 var(--nh-sp-6);
   background: var(--nh-page);
   border: 1px solid var(--nh-border);
   color: var(--nh-text);
-  font-size: var(--nh-fs-13);
+  font-size: var(--nh-fs-15);
 }
 
 .nh .pill-ghost:hover {
@@ -230,6 +230,13 @@
   inset: -6px 0;
 }
 
+/* 复制按钮的焦点环：VitePress 的 `button:focus, button:focus-visible { outline: 4px auto }`（0,1,1）
+   压过 base.css 的全局 `:focus-visible`（0,1,0），实测聚焦是 4px 黑色 auto —— 这里按设计口径显式盖回来。 */
+.nh .cmd-copy:focus-visible {
+  outline: 2px solid var(--nh-accent);
+  outline-offset: 2px;
+}
+
 .nh .copy-status {
   margin-top: var(--nh-sp-2);
   font-size: var(--nh-fs-13);
@@ -314,15 +321,6 @@
 
 .nh .term-muted {
   color: var(--nh-term-muted);
-}
-
-.nh .term-cursor {
-  display: inline-block;
-  width: 7px;
-  height: 14px;
-  margin-left: 6px;
-  background: var(--nh-term-cursor);
-  vertical-align: -2px;
 }
 
 .nh .term-prompt {
@@ -715,6 +713,18 @@
 
 .nh-footer .pill:hover {
   background: var(--nh-accent-solid-hover);
+}
+
+/* 页脚同规则：全页只留 Hero 的「复制」一个实心，页脚主入口降为 ghost（T593：一致性优先）。
+   页脚底本身是 --nh-sunken，所以默认透明、hover 抬到 --nh-page（白底浮起）；hover = 加权重，不是减权重。 */
+.nh-footer .pill-ghost {
+  background: transparent;
+  border-color: var(--nh-border);
+  color: var(--nh-text);
+}
+
+.nh-footer .pill-ghost:hover {
+  background: var(--nh-page);
 }
 
 .nh-footer .cta-text {

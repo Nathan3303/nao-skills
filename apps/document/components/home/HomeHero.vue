@@ -47,6 +47,15 @@ defineProps<{ home: HomeData }>()
               {{ cta.text }}
             </a>
             <a
+              v-else-if="cta.style === 'ghost'"
+              class="pill pill-ghost"
+              :href="cta.external ? cta.href : withBase(cta.href)"
+              :target="cta.external ? '_blank' : undefined"
+              :rel="cta.external ? 'noopener' : undefined"
+            >
+              {{ cta.text }}
+            </a>
+            <a
               v-else
               class="cta-text"
               :href="cta.external ? cta.href : withBase(cta.href)"

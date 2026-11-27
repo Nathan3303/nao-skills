@@ -156,7 +156,7 @@ export default defineConfig({
       { text: '角色', link: '/roles/pm', activeMatch: '^/roles/' },
       { text: '插件', link: '/plugins', activeMatch: '^/plugins' },
       {
-        text: 'GitHub ↗',
+        text: 'GitHub',
         link: 'https://github.com/Nathan3303/nao-fleet',
         target: '_blank',
         rel: 'noopener',
