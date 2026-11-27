@@ -11,7 +11,8 @@
 | :--- | :--- | :--- | :--- |
 | T579 | `docs/T579-docs-per-task/` | docs 按任务分割 + 一级索引（本规矩的样板） | [#237](https://github.com/Nathan3303/nao-skills/issues/237) |
 | T580 | `docs/T580-kickoff-card/` | 开工确认卡表格化 + 台账按批次分割（模板 + `check` 最小断言） | [#238](https://github.com/Nathan3303/nao-skills/issues/238) |
-| T587 | `docs/T587-home-banner/` | 首页 Hero 下 banner 位（舰队录屏）设计规格 | 待开 |
+| T587 | `docs/T587-home-banner/` | 首页 Hero 下纯装饰动画（动画 WebP + 静态降级） | [#249](https://github.com/Nathan3303/nao-skills/issues/249) |
+| T588 | `docs/T588-favicon/` | 站点图标 404 修复 + 图标守卫（本版发版说明在此） | [#250](https://github.com/Nathan3303/nao-skills/issues/250) |
 
 ## 二、版本
 
@@ -19,6 +20,7 @@
 
 | 版本 | 权威路径 | 发布日期 |
 | :--- | :--- | :--- |
+| v0.36.0 | `docs/T588-favicon/release-notes-v0.36.0.md` | 2026-11-27 |
 
 ## 三、决策时间线
 
