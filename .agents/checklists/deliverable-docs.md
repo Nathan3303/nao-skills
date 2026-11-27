@@ -171,6 +171,7 @@ description: 交付文档写作规范（PRD/ADR/报告/调研：简洁、可读�
 - **双向断言**（`check` 的 `  ! 索引` 探针，**warn-only**：不计 `warn=`、不改 rc；「删一行必须红」由 `tests/t4/cases/53` 承载）：目录 ↔ 行 · 版本 ↔ 文件（同版本唯一 + basename = `release-notes-<版本>.md` + 文件须在）· `adr-*.md` ↔ 时间线 · `docs/*.md` ⊆ {README, tasks-state, tasks-archive, INSTALL, ARCHITECTURE}。索引是唯一发现入口 ⇒ 忘加行 = 全仓不可发现，故探针提示常驻摘要。
 - **版本权威份唯一**：发版说明由 PM 在发布时点名**归属任务**，落该目录的 `release-notes-v<X.Y.Z>.md`，索引版本段登记一行；**同一版本全仓只有一份**（并存期的唯一判据 = 同版本仅一文件，不靠路径白名单 —— 「两处都写」是异常而非并存）。`docs/releases/` 冻结只读。
 - **活文件例外**（位置不变、不属于任何任务，**就这 5 项**）：`docs/tasks-state.md` · `docs/tasks-archive.md` · `docs/INSTALL.md` · `docs/ARCHITECTURE.md` · 索引 `docs/README.md` 本身。新增例外须同时改本节 + `check` 断言 + 该 PRD §五。
+- **现行基准例外**（2026-11-27，与上一条**分开列**：基准是活文档，不在那 5 项里）：`docs/designs/2026-11-16-docs-site.md`（站点视觉基准）与 `docs/designs/2026-11-13-portal-site.md`（门户基准）**不随「历史冻结」只读**；改动须在任务 PR 里声明「改的是基准的哪一条、为什么」。判据：冻结的本意是**历史批次产物不许改写**，而现行基准若不能改就会与实现永久漂移（比改它更危险）。本例外**只覆盖这两个文件**；`docs/designs/` 下其它文件仍是历史设计稿，只读。
 - **ADR 登记**：`adr-<topic>.md` 进任务目录，同时必须在索引「决策时间线」恰 1 行；`docs/adr/README.md` 为历史索引，冻结不追加。**出具日** = 时间线那一行的日期（历史 ADR 仍用文件名日期前缀）。
 - **骨架**：@.agents/templates/task-docs/prd.md.example（PRD）· report.md.example（实现 / 评审 / QA / 复盘）· release-notes.md.example（发版说明）。
 
