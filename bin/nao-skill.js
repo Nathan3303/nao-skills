@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * nao-skill — nao 多角色 AI 开发舰队安装器
+ * nao-fleet — nao 多角色 AI 开发舰队安装器（可执行名 nao-fleet；`nao-skill` 为兼容别名，一个版本后弃用）
  *
  * 用法
- *   nao-skill install [dir] [--force]  把 .agents/ 能力安装到目标项目（默认当前目录）
- *   nao-skill --version               版本
- *   nao-skill --help                  帮助
+ *   nao-fleet install [dir] [--force]  把 .agents/ 能力安装到目标项目（默认当前目录）
+ *   nao-fleet --version                版本
+ *   nao-fleet --help                   帮助
  *
  * 行为
  *   - 目标项目无 .agents/ → 完整复制
@@ -620,17 +620,17 @@ function execFleet(args) {
 }
 
 function help() {
-  console.log(`nao-skill v${PKG.version} — nao 多角色 AI 开发舰队（pi 原生分发）
+  console.log(`nao-fleet v${PKG.version} — nao 多角色 AI 开发舰队（pi 原生分发）
 
-用法:
-  nao-skill init [dir] [-v] [--dry-run] [--shim|--no-shim]     干净项目：写 shim + AGENTS.md（默认写）
-  nao-skill migrate [dir] [-v] [--dry-run] [--shim|--no-shim]  迁移旧版全套 .agents/：备份 .nao-obsolete/ + 移除 + shim
-  nao-skill exec <参数...>            转发给包内 nao-fleet.sh（CI/脚本用；NAO_SKILLS=包根）
-  nao-skill plugins list              列出已知 pi 插件与安装状态
-  nao-skill plugins install <名...>   安装指定插件（intercom/ask-me/subagents/web-access/codegraph）
-  nao-skill plugins install-all       安装全部舰队插件
-  nao-skill --version                 显示版本
-  nao-skill --help                    显示本帮助
+用法（命令主名 nao-fleet；\`nao-skill\` 是兼容别名，一个版本后弃用，两者等价）:
+  nao-fleet init [dir] [-v] [--dry-run] [--shim|--no-shim]     干净项目：写 shim + AGENTS.md（默认写）
+  nao-fleet migrate [dir] [-v] [--dry-run] [--shim|--no-shim]  迁移旧版全套 .agents/：备份 .nao-obsolete/ + 移除 + shim
+  nao-fleet exec <参数...>            转发给包内 nao-fleet.sh（CI/脚本用；NAO_FLEET=包根，NAO_SKILLS 兼容）
+  nao-fleet plugins list              列出已知 pi 插件与安装状态
+  nao-fleet plugins install <名...>   安装指定插件（intercom/ask-me/subagents/web-access/codegraph）
+  nao-fleet plugins install-all       安装全部舰队插件
+  nao-fleet --version                 显示版本
+  nao-fleet --help                    显示本帮助
 
 预演（--dry-run，仅 init/migrate）:
   只打印将备份/移除的清单与目标（含 shim、版本标记、AGENTS.md 动作），**盘面零写入**
@@ -643,8 +643,8 @@ shim 判定式（migrate 默认；init 默认装）:
   判定为纯文档迁移时不写 shim，并打印显式告知；用 --shim / --no-shim 覆盖（互斥 → exit 2）
 
 兼容（旧流程，建议迁移到 init/migrate）:
-  nao-skill install [dir] [--force]   复制全套 .agents/ 到项目（--plugins 顺带装插件）
-  nao-skill update [dir]              源优先覆盖升级旧版全套安装
+  nao-fleet install [dir] [--force]   复制全套 .agents/ 到项目（--plugins 顺带装插件）
+  nao-fleet update [dir]              源优先覆盖升级旧版全套安装
 
 安装后: bash .agents/scripts/nao-fleet.sh check / ensure pm arch-designer uiux-designer rd-fe rd-be qa rd-infra
 说明: 新形态项目内只有 shim；机制单一事实来源在 npm 包内（pi install --local 物化到 .pi/npm）。

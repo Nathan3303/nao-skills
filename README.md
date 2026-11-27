@@ -21,6 +21,7 @@ nao-fleet 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，�
 
 - **仓名 = `nao-fleet`**（2026-11-27 由旧名 `nao-skills` 改名）· **npm 包名 = `nao-fleet`**（旧 `@nathan33/nao-skill` 已停用）。
 - **命令不变 = `nao-fleet.sh`**（下游项目调用的是这个文件名，改名不影响调用方式）。
+- **安装器命令 = `nao-fleet`**（`npx nao-fleet init` 等）；**`nao-skill` 为兼容别名**（同一文件，一个版本后弃用）。
 - **环境变量**：包根用 **`NAO_FLEET`**（新，优先）；**`NAO_SKILLS` 为兼容别名**，一个版本后弃用 —— 两者同时存在时以 `NAO_FLEET` 为准。
 
 ## 前置环境

@@ -1667,6 +1667,18 @@ t4_assert_eq "$REAL_FILES" "$(rm_lab_files NAO_FLEET="$T4_ROOT" NAO_SKILLS="$RM_
   "T594 ③' 反向：NAO_FLEET=真仓 胜（优先级非路径巧合）"
 t4_assert_eq "1" "$(grep -c '^  check_env_alias || rc=1$' "$(t4_fleet_file_for "$T4_ROOT/.agents/scripts" cmd_check)" || true)" \
   "T594 ④ check 侧硬断言在位（check_env_alias 调用恰 1 处）"
+# ⑤ npm CLI 可执行名：bin 双键（nao-fleet 主名 + nao-skill 兼容别名），同指一个文件
+RM_BIN_KEYS="$(node -e "const b=require('$T4_ROOT/package.json').bin||{}; console.log(Object.keys(b).sort().join(',')); console.log(new Set(Object.values(b)).size)" 2>/dev/null | paste -sd'|' -)"
+t4_assert_eq "nao-fleet,nao-skill|1" "$RM_BIN_KEYS" \
+  "T594 ⑤ package.json 的 bin 双键：nao-fleet + nao-skill（兼容别名），且同指 1 个文件"
+t4_assert_contains "$(node "$T4_ROOT/bin/nao-skill.js" --help 2>&1)" "命令主名 nao-fleet" \
+  "T594 ⑤ 帮助文案主名为 nao-fleet，并注明兼容别名"
+# 负控：删掉 nao-fleet 键 ⇒ 断言必红
+RM_PKG="$T4_CACHE_DIR/t594-bin-$$"; rm -rf "$RM_PKG"; mkdir -p "$RM_PKG"
+node -e "const p=require('$T4_ROOT/package.json'); delete p.bin['nao-fleet']; require('fs').writeFileSync('$RM_PKG/package.json', JSON.stringify(p,null,2))"
+RM_BIN_NEG="$(node -e "const b=require('$RM_PKG/package.json').bin||{}; console.log(Object.keys(b).sort().join(','))" 2>/dev/null)"
+t4_assert_eq "nao-skill" "$RM_BIN_NEG" "T594 ⑤ 负控：删 nao-fleet 键后只剩 nao-skill（旧判据必反差集 ⇒ 必红）"
+rm -rf "$RM_PKG"
 RM_NEG="$T4_CACHE_DIR/t594-neg-$$"; rm -rf "$RM_NEG"; mkdir -p "$RM_NEG"
 cp -r "$T4_ROOT/.agents" "$RM_NEG/.agents"
 sed -i 's/^SKILLS_DIR=.*$/SKILLS_DIR="${NAO_SKILLS:-$(cd "$SCRIPT_DIR\/..\/.." \&\& pwd)}"/' "$RM_NEG/.agents/scripts/fleet/lib/core.sh"
