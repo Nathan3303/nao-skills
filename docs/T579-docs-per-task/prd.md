@@ -6,15 +6,15 @@
 
 ## TL;DR
 
-`docs/` 从「按类别分割」（6 目录 / 319 文件 / 1229 处指针）改为「**一任务一目录** `docs/<任务号>-<slug>/` + `docs/README.md` 唯一索引」，**历史冻结不迁移**。ADR 进任务目录、发版说明进任务目录并在索引版本段登记权威路径（版本只此一处）。判红载体 = `tests/t4/cases/53`（`check` 只 warn-only）。本任务自身是首个样板。
+`docs/` 从「按类别分割」（6 目录 / **322 文件** / **1233 处指针**）改为「**一任务一目录** `docs/<任务号>-<slug>/` + `docs/README.md` 唯一索引」，**历史冻结不迁移**。ADR 进任务目录、发版说明进任务目录并在索引版本段登记权威路径（版本只此一处）。判红载体 = `tests/t4/cases/53`（`check` 只 warn-only）。本任务自身是首个样板。
 
 ## 一、问题证据
 
-- **一个任务的产物要跨 2–6 个目录才找得齐**。`docs/` 现有 6 个类别目录：`reports` 167 文件 / 2.2M · `releases` 71 · `prds` 49 · `adr` 26 · `designs` 4 · `research` 2，合计约 **319 个文件**。以最近两批为例：T576 的 3 份审计/勾表/复核全在 `reports/`，其内容改写又在 `apps/document/content/`；T573+T574 的 4 份报告混用复合编号（`573-574-qa-verify.md`、`573-574-rd-infra-fix.md`），靠文件名认领任务。
+- **一个任务的产物要跨 2–6 个目录才找得齐**。`docs/` 现有 6 个类别目录：`reports` 167 文件 / 2.2M · `releases` 71 · `prds` 49 · `adr` 26 · `designs` 4 · `research` 2，合计 **322 个文件**。以最近两批为例：T576 的 3 份审计/勾表/复核全在 `reports/`，其内容改写又在 `apps/document/content/`；T573+T574 的 4 份报告混用复合编号（`573-574-qa-verify.md`、`573-574-rd-infra-fix.md`），靠文件名认领任务。
 - **命名四种写法并存**：`118-mechanism-review.md`（纯编号）· `T538-gate-number-provenance-rd.md`（T 前缀 + 角色后缀）· `143-profile.md`（Issue 号）· `M20261014-pi-ext-update-followups.md`（维护型编号）。同一目录里同类产物无法按形态区分。
 - **索引是两个分散 README**：`docs/prds/README.md` + `docs/adr/README.md`（`reports` 无索引）。新增一份 PRD 要记得改前者，新增一篇 ADR 要改后者，`docs/` 一级没有任何入口。
 - **归档与检索代价**：回看一批时要先 `grep` 台账拿到若干路径再逐个打开；`find docs -name '*576*'` 只能命中命名里带编号的那部分。
-- **反证（不是问题）**：全仓指向这六个目录的 markdown 指针共 **1229 处**（台账 245 / 归档 52 / `github-flow.md` 14 等），且既有 Issue、PR 评论里的链接不可改写 ⇒ 历史路径必须冻结，否则会成片失效。
+- **反证（不是问题）**：全仓指向这六个目录的 markdown 指针共 **1233 处**（台账 245 / 归档 52 / `github-flow.md` 14 等），且既有 Issue、PR 评论里的链接不可改写 ⇒ 历史路径必须冻结，否则会成片失效。
 
 ## 优先级（RICE + 战略筛子）
 
@@ -27,7 +27,7 @@
 
 - **找齐率**：新批次任务的 PRD、架构评审、ADR、实现报告、QA 报告、发版说明，**100% 落在同一个任务目录内**（验收方式：任取 T580 之后的一个任务，`ls docs/<该任务号>-*/` 一屏可见全部产物）。
 - **入口唯一**：新批次任务在 `docs/README.md` 恰好 1 行登记；`docs/` 一级不再有第二份索引文件（现状 2 份 ⇒ 目标 1 份）。
-- **零迁移成本**：历史 319 个文件的路径改动 **0 个**、`docs/{prds,reports,adr,designs,research,releases}` 下文件数基线不变；全仓旧路径指针数 **1229 → 1229**（只增新批次的新路径，不改旧路径）。
+- **零迁移成本**：历史 **322** 个文件的路径改动 **0 个**、`docs/{prds,reports,adr,designs,research,releases}` 下文件集与行数基线不变（322 文件 / 29378 行）；旧路径指针数的下降**必须是可枚举的有意改写**（见 AC6 ②），而不是「数字不变」。
 - **防护不退化**：PRD 结构探针（AC 分组、行数阈值、`warn` 不污染摘要）对新路径同样生效，且**负控必红**。
 
 ## 三、范围 / 非范围
@@ -45,7 +45,7 @@
 
 **范围外**
 
-- 历史 319 个文件不迁移、不改名、不建软链、不改写任何旧路径指针（含 Issue/PR 正文）。
+- 历史 322 个文件不迁移、不改名、不建软链、不改写任何旧路径指针（含 Issue/PR 正文）。
 - 站点 `apps/document/content/**` 的结构与内容（另有任务）。
 - 台账 `docs/tasks-state.md` / `tasks-archive.md` 位置不变（活文件，不属于任何任务）。
 - `docs/INSTALL.md` / `ARCHITECTURE.md` 位置不变。
@@ -109,7 +109,8 @@ Given 一个只含 `docs/prds/*.md`、无任何 `docs/T*/` 目录的仓，When �
 Given 索引版本段同时出现 `v0.99.0` 两行（指向两个不同目录），When 跑 `check`，Then 点名重复版本（同一版本只允许一行、且该行指向的 notes 文件存在）。
 
 **AC6 · 历史冻结（不回归）**
-Given 本任务合并前后，When ① 对比 `git ls-files docs/{prds,reports,adr,designs,research,releases}`（文件集与行数完全一致）② 对这 6 个冻结目录**只**统计指针数（`grep -rho 'docs/\(prds\|reports\|adr\|designs\|research\|releases\)/' --include='*.md' . | wc -l`），Then ① diff 为空 ② 值仍为 **1229**，差值 0。**判据说明**：不统计「全仓 md 指针总数」——写规范本身就在新增 `docs/T*/` 指针（arch 实测本分支 1229 → 1251），把该数字当判据等于禁止记录规则。
+Given 本任务合并前后，When ① `git diff origin/main...HEAD -- docs/{prds,reports,adr,designs,research,releases}` ② 枚举本 PR 里「旧路径指针数下降」的文件清单 ③ 统计未被本 PR 改写的文件内旧路径指针数，Then ① **diff 为空**（内容与文件集都不动；基线 322 文件 / 29378 行）② 清单恰好 **14 个**（机制文本 6 组 + PM 侧 8 文件），**无第 15 个**，且这些文件的 diff 内只允许路径/指针变更 ③ 未改写文件 **1169 → 1169（Δ=0）**。
+**判据说明（两次订正留下的教训）**：不拿「指针总数不变」当判据 —— 单源化本身就是在删机制文本里的旧路径，数字必然下降；也不拿「全仓 md 指针总数」当判据 —— 写规范本身就在新增 `docs/T*/` 指针。**只有「冻结面 diff 空 + 改写文件可枚举 + 未改写面 Δ=0」三者合起来才是可核的。**
 
 ### 设计一致性
 
