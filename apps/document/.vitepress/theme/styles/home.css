@@ -380,6 +380,13 @@
   padding: var(--nh-sp-8) 0;
 }
 
+/* Hero 紧跟 banner 时让出下内边距，避免「Hero 下内边距 + banner 上内边距」叠加：
+   本段留白以 banner 自己的 padding 为准（宽 32 / 窄 24，即设计值），Hero 的 40 / 48 只在没有 banner 时才需要。
+   用相邻关系选择器限定场景，banner 一旦移除 Hero 立刻恢复原值；不支持 :has() 的旧浏览器退化为原叠加（不影响结构）。 */
+.nh .hero:has(+ .banner) {
+  padding-bottom: 0;
+}
+
 /* 比例锁素材原比 1896/1030（=1.841）：套 16:9 会裁切或加黑边，违反「不裁不改」 */
 .nh .banner-figure {
   margin: 0;
