@@ -5,7 +5,7 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 任务号 | T580（Issue [#238](https://github.com/Nathan3303/nao-skills/issues/238)） |
+| 任务号 | T580（Issue [#238](https://github.com/Nathan3303/nao-fleet/issues/238)） |
 | 目标（一句话） | 开工确认卡表格化并独立落盘；台账按批次切成二级标题，加流转状态与完成日期，完成后删卡摘要与指针 |
 | 角色链 | `pm`（结构 + 正文单源）→ `rd-infra`（台账/卡断言 + `cases/54`）→ `qa`（复核 + 全量门禁） |
 | AC 指针 | `docs/T580-kickoff-card/prd.md` §七（AC1–AC10，五覆盖分组） |

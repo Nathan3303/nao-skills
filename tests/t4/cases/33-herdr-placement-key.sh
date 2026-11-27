@@ -138,10 +138,10 @@ t4_assert_eq "1" "$(grep -c '弃用：--fleet' <<< "$BE_ERR_ANSI" || true)" "AC3
 t4_assert_eq "1" "$(ws_label_count "repo-priority")" "AC3 放置 = 仓基键（label=repo-priority）"
 t4_assert_eq "0" "$(ws_label_count "cli")" "AC3 不按 --fleet 放置"
 
-NAODIR="$LAB/nao-skills"; mkdir -p "$NAODIR"
+NAODIR="$LAB/nao-fleet"; mkdir -p "$NAODIR"
 fleet ensure "pm@$NAODIR"
-t4_assert_eq "0" "$BE_RC" "AC4 正向：nao-skills 目录零配置可用"
-t4_assert_eq "1" "$(ws_label_count "nao-skills")" "AC4 正向：label=nao-skills"
+t4_assert_eq "0" "$BE_RC" "AC4 正向：nao-fleet 目录零配置可用"
+t4_assert_eq "1" "$(ws_label_count "nao-fleet")" "AC4 正向：label=nao-fleet"
 
 AC4_BEFORE="$(be_pane_count)"; fleet ensure --fleet 'BAD' "rd-be@$PRIO"
 t4_assert_eq "0" "$BE_RC" "AC4 异常：--fleet BAD 本版忽略（rc=0）"

@@ -11,7 +11,7 @@ description: 按需技能——PM 运行手册（调度细则 / 开工确认卡 
 
 - **准入判定**：先 `intercom status` + `list`；不可用立即降级不重试。
 - **会话登记**：用户提供名称**及角色标注**（`fe-dev`/`be-dev`/`qa`/`infra`）；**未标注禁止猜测**，必须补问。
-- **舰队启动**：不在线先拉起再 `list` 验证（`ask` 仅对在线会话）：`bash .agents/scripts/nao-fleet.sh ensure <别名>[@<repo目录>]`；项目独立于 nao-skills 仓库时用 `bash "$NAO_SKILLS/.agents/scripts/nao-fleet.sh" ...`。**端前提**：唯一后端 = **herdr**（须在其 pane 内、`HERDR_SESSION` 有效、protocol 22），需 `pi ≥1.4.0`；旧值（含 tmux 回退）⇒ `exit 2` 用法守卫，前提不满足 ⇒ `exit 3`（不自动回落）。细节见 `README.md`「前置环境」与 `docs/INSTALL.md`「herdr 后端」。
+- **舰队启动**：不在线先拉起再 `list` 验证（`ask` 仅对在线会话）：`bash .agents/scripts/nao-fleet.sh ensure <别名>[@<repo目录>]`；项目独立于 nao-fleet 仓库时用 `bash "$NAO_SKILLS/.agents/scripts/nao-fleet.sh" ...`。**端前提**：唯一后端 = **herdr**（须在其 pane 内、`HERDR_SESSION` 有效、protocol 22），需 `pi ≥1.4.0`；旧值（含 tmux 回退）⇒ `exit 2` 用法守卫，前提不满足 ⇒ `exit 3`（不自动回落）。细节见 `README.md`「前置环境」与 `docs/INSTALL.md`「herdr 后端」。
 - **环境自检（开工确认后、派发前）**：`bash .agents/scripts/nao-fleet.sh check`——默认 2–3 行摘要（摘要行 + codegraph 状态行；herdr 后端另加「生效后端」行；完整报告不进 PM 上下文），`warn>0` 或失败加 `-v`；**exit code 非 0（硬错误）→ 停止派发**（白名单 / CodeGraph 处置见 intercom-protocol「开工前自检」）。
 - **架构评审闸门**：PRD 涉及架构/NFR/选型时，开工确认后、派发前 `send` arch-designer 评审。纯 CRUD 跳过。
 - **派发协议（省 token）**：一条消息给 `编号 + 范围 + 引用路径（docs/...md#section）+ AC 编号 + 回执级别 + 需求分支（feat/<issue-id>-<slug>）`；**设计类任务的开工卡另须写明「设计稿验收模型」**（未出图同样必问；不答 = 用户本人确认，形状见 §二）；**不贴 PRD/方案全文、不用 `attachments` 传全文**（worker 自己读文件，PM 上下文不留副本）；worker `ask` → PM `reply`。
@@ -71,7 +71,7 @@ PM 是舰队唯一常驻长寿会话：上下文过长时丢的是**纪律**（�
 
 - 项目属性：仓库结构 / 技术栈与版本 / 构建·测试·lint 命令 / 运行方式 / 环境变量 / 目录约定。
 - 项目约束：领域红线、依赖与命令纪律、与 nao 机制衔接（CodeGraph 索引位置、UI tokens/ux-playbook 路径、checklists 位置）。
-- **指针而非复制**：角色级/团队级内容留在 nao-skills（roles.yaml / common / checklists），AGENTS.md 只写「在哪里」。
+- **指针而非复制**：角色级/团队级内容留在 nao-fleet（roles.yaml / common / checklists），AGENTS.md 只写「在哪里」。
 
 **接入已有 AGENTS.md（项目已存在且非空时）**
 
@@ -91,7 +91,7 @@ PM 是舰队唯一常驻长寿会话：上下文过长时丢的是**纪律**（�
 
 **自查（PM 交付前）**
 
-- [ ] AGENTS.md 掺入角色级/团队级内容？（应留在 nao-skills）
+- [ ] AGENTS.md 掺入角色级/团队级内容？（应留在 nao-fleet）
 - [ ] AGENTS.md 超长（>120 行）或含易变细节？（应精简/移除）
 - [ ] 技术决策或约束变化后未同步 AGENTS.md？
 
@@ -112,23 +112,23 @@ PM 是舰队唯一常驻长寿会话：上下文过长时丢的是**纪律**（�
 
 **检查顺序（只读）**
 
-1. 本地 pin：读 `.pi/settings.json` 里 `@nathan33/nao-skill` 的版本 X；无该文件/无该 pin ⇒ 走输出 ④。
-2. 远端：`npm view @nathan33/nao-skill version --fetch-timeout=5000`（内置 5s 超时；**不要**用外部 `timeout` 命令——macOS 原生无该命令，rc=127 会被误判成「离线或超时」）；超时/报错 ⇒ 走输出 ③。
+1. 本地 pin：读 `.pi/settings.json` 里 `nao-fleet` 的版本 X；无该文件/无该 pin ⇒ 走输出 ④。
+2. 远端：`npm view nao-fleet version --fetch-timeout=5000`（内置 5s 超时；**不要**用外部 `timeout` 命令——macOS 原生无该命令，rc=127 会被误判成「离线或超时」）；超时/报错 ⇒ 走输出 ③。
 3. 仅当 Y > X 才取要点：`gh release view v<Y>`，**压成不超过两句**；无 `gh` 或取不到 ⇒ 走输出 ⑤。
 
 **输出（恰好一行，按序命中即止）**
 
 - ① 有新版：`当前 X → 可升 Y（要点）。要升吗？`
 - ② 已最新：`版本检查：已是最新 X。`
-- ③ 离线或超时：`版本检查：离线或超时，跳过（可稍后手动 npx @nathan33/nao-skill --version 核对）。`
+- ③ 离线或超时：`版本检查：离线或超时，跳过（可稍后手动 npx nao-fleet --version 核对）。`
 - ④ 未检测到下游 pin：`版本检查：未检测到下游 pin（本仓为机制源），跳过。`
-- ⑤ 无 `gh`：`版本检查：当前 X → 可升 Y（要点取不到，见 https://github.com/Nathan3303/nao-skills/releases）。要升吗？`
+- ⑤ 无 `gh`：`版本检查：当前 X → 可升 Y（要点取不到，见 https://github.com/Nathan3303/nao-fleet/releases）。要升吗？`
 
 **零改动保证**：检查阶段只读（`.pi/settings.json` 只读、`npm view` / `gh release view` 均为查询）；**「未获我同意前不要改任何文件、不要升级」**（逐字引自注入常量；不改 pin、不跑 `pi install` / `pi update`）。
 
 **用户同意后的动作序列**（升级属不可逆动作，按 ask-me 口径确认后再执行）
 
-1. `pi install -l npm:@nathan33/nao-skill@<Y>`（更新项目 `.pi/settings.json` 的 pin；**若提示安装脚本授权 ⇒ 停下来交给用户确认，不自行放行**）；
+1. `pi install -l npm:nao-fleet@<Y>`（更新项目 `.pi/settings.json` 的 pin；**若提示安装脚本授权 ⇒ 停下来交给用户确认，不自行放行**）；
 2. `pi update --extensions`；
 3. 提醒用户「本轮会话仍是旧角色卡，建议重开」（`ensure --force pm`）。
 

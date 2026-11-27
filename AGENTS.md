@@ -1,4 +1,4 @@
-# AGENTS.md — nao-skills（nao 机制包根）
+# AGENTS.md — nao-fleet（nao 机制包根）
 
 > 本仓即 nao 机制包本身：`$NAO_SKILLS` 指向这里；项目安装侧只有 shim。维护人：PM。
 > 角色级/团队级内容在 `.agents/`（roles.yaml / common / checklists），本文件只写「项目级属性 + 约束」。

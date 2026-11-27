@@ -197,8 +197,8 @@ else
   t4_bad "AC1③ 提示文件前缀与卡正文不一致"
 fi
 t4_assert_contains "$(cat "${PROMPT_CR:-/dev/null}" 2>/dev/null)" "## 环境锚点" "AC1③ 提示文件含 ## 环境锚点 行"
-t4_assert_contains "$(cat "${PROMPT_CR:-/dev/null}" 2>/dev/null)" "NAO_SKILLS=$LAB" "AC1③ 锚点行指向机制包根（NAO_SKILLS=$LAB）"
-ANCHOR_CR="$(grep -F -- 'NAO_SKILLS=' "${PROMPT_CR:-/dev/null}" 2>/dev/null | tail -1)"
+t4_assert_contains "$(cat "${PROMPT_CR:-/dev/null}" 2>/dev/null)" "NAO_FLEET=$LAB" "AC1③ 锚点行指向机制包根（主名 NAO_FLEET=$LAB）"
+ANCHOR_CR="$(grep -F -- 'NAO_FLEET=' "${PROMPT_CR:-/dev/null}" 2>/dev/null | tail -1)"
 
 # ============================================================ AC3④ 混合批次：qa 走清单、卡走默认名
 reset_lab
@@ -211,7 +211,7 @@ NAMES="$(while IFS= read -r p; do [ -n "$p" ] && name_of "$p"; done <<< "$NEWS" 
 t4_assert_contains "$NAMES" "data-reviewer" "AC3④ 卡目标默认名 = 卡 role（data-reviewer）"
 t4_assert_contains "$NAMES" "qa" "AC3④ 同批 qa 仍走清单常驻（不与卡互相污染）"
 P_QA="$(while IFS= read -r p; do [ -n "$p" ] || continue; [ "$(name_of "$p")" = "qa" ] && { printf '%s' "$p"; break; }; done <<< "$NEWS")"
-ANCHOR_QA="$(grep -F -- 'NAO_SKILLS=' "$(prompt_of "$P_QA")" 2>/dev/null | tail -1)"
+ANCHOR_QA="$(grep -F -- 'NAO_FLEET=' "$(prompt_of "$P_QA")" 2>/dev/null | tail -1)"
 t4_assert_eq "$ANCHOR_CR" "$ANCHOR_QA" "AC1③ 卡会话与常驻角色的锚点行**逐字相同**（cross-assert）"
 
 # 收尾：把这两个 pane 关掉，后续各段从干净场开始（有界确认，不写死 sleep）

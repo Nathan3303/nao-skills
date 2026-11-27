@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# T4 用例公共库 —— PRD #18「nao-skills 单 SKILL 化 + pi 原生分发」
+# T4 用例公共库 —— PRD #18「nao-fleet 单 SKILL 化 + pi 原生分发」
 #
 # 约束（路径纪律）：本套用例只新增 tests/ 与 docs/reports/2026-10-08-T4-*.md，
 # 不修改 package.json / bin/ / .agents/。所有夹具建在临时目录，不改仓库工作区。
@@ -17,7 +17,7 @@ T4_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 T4_TESTS_DIR="$(cd "$T4_LIB_DIR/.." && pwd)"
 T4_ROOT="${T4_ROOT:-$(cd "$T4_TESTS_DIR/.." && pwd)}"
 
-PKG_NAME="@nathan33/nao-skill"
+PKG_NAME="nao-fleet"
 PKG_VERSION="$(node -p "try{require('${T4_ROOT}/package.json').version}catch(e){'0.0.0'}" 2>/dev/null || echo 0.0.0)"
 T4_ALLOW_MISSING="${T4_ALLOW_MISSING:-0}"
 T4_REQUIRE_FULL="${T4_REQUIRE_FULL:-0}"
@@ -929,7 +929,7 @@ t4_fixture() { # 输出一个 git 初始化过的临时项目目录
 # 从仓库打包（--ignore-scripts：不触发 prepack 门禁，避免与仓库 check 耦合）
 t4_pkg_tarball() {
   if [ -n "$T4_TARBALL" ] && [ -f "$T4_TARBALL" ]; then printf '%s' "$T4_TARBALL"; return 0; fi
-  local cached="$T4_CACHE_DIR/nao-skill-${PKG_VERSION}.tgz"
+  local cached="$T4_CACHE_DIR/nao-fleet-${PKG_VERSION}.tgz"
   if [ ! -f "$cached" ]; then
     ( cd "$T4_ROOT" && npm pack --silent --ignore-scripts --pack-destination "$T4_CACHE_DIR" ) >/dev/null 2>&1 \
       || t4_blocked "npm pack 失败，无法构造被测包"

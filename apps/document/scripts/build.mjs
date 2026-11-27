@@ -5,7 +5,7 @@
  *   npm run build            默认：卡源缺失 ⇒ 跳过注入 + 一条显式告警，rc=0
  *   npm run build -- --strict 卡源缺失 ⇒ rc≠0（真命令行参数，非 env 口径）
  *
- * 其余参数原样透传给 `vitepress build`（例如 CI 的 `--base /nao-skills/`）。
+ * 其余参数原样透传给 `vitepress build`（例如 CI 的 `--base /nao-fleet/`）。
  */
 import fs from 'node:fs'
 import path from 'node:path'

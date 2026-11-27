@@ -1,8 +1,8 @@
 name: Deploy docs site to GitHub Pages
 
 # 构建后部署（ADR 2026-11-16-docs-site-pipeline D4）：
-#   npm ci → 类型检查 → 构建（--base /nao-skills/）→ 卡一致性 / 零外链 → 上传 dist → 部署
-# 线上地址：https://nathan3303.github.io/nao-skills/（项目页子路径；base 只在这里传，
+#   npm ci → 类型检查 → 构建（--base /nao-fleet/）→ 卡一致性 / 零外链 → 上传 dist → 部署
+# 线上地址：https://nathan3303.github.io/nao-fleet/（项目页子路径；base 只在这里传，
 # apps/document/.vitepress/config.mts 保持 '/'，否则 dev / preview 也要带前缀）
 #
 # 失败必须红：无 continue-on-error；build job 内任一 step 失败即不产出产物，
@@ -76,7 +76,7 @@ jobs:
 
       # 线上子路径部署：base 由 CLI 传入，构建失败即红
       - name: Build
-        run: npm --prefix apps/document run build -- --base /nao-skills/
+        run: npm --prefix apps/document run build -- --base /nao-fleet/
 
       # 以下两项读 apps/document/.vitepress/dist，必须在 Build 之后
       - name: Check role cards (AC3)

@@ -12,7 +12,8 @@
 FLEET_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FLEET_DIR="$(cd "$FLEET_LIB_DIR/.." && pwd)"
 SCRIPT_DIR="$(cd "$FLEET_DIR/.." && pwd)"
-SKILLS_DIR="${NAO_SKILLS:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+# T594：包根环境变量 —— `NAO_FLEET` **优先**，`NAO_SKILLS` 为兼容别名（一个版本后弃用；弃用期两者都给时以 NAO_FLEET 为准）。
+SKILLS_DIR="${NAO_FLEET:-${NAO_SKILLS:-$(cd "$SCRIPT_DIR/../.." && pwd)}}"
 PROMPTS_DIR="$SKILLS_DIR/.agents/prompts"
 COMMON_DIR="$SKILLS_DIR/.agents/common"
 SKILLS_SUB="$SKILLS_DIR/.agents/skills"
@@ -63,17 +64,17 @@ CODEGRAPH_PKG="@sean_pedersen/pi-codegraph"
 # 开关（R6）：NAO_UPDATE_ON_ENSURE=0/false ⇒ 不投递（命令行与本缺陷前逐字等价；T548 起自检不再进 argv）。
 NAO_UPDATE_MSG='【nao 机制包版本自检 · ensure pm 注入 · 仅提示，不自动升级】
 这条自检是本回合唯一额外动作；一行汇报后立即回到用户原来的消息，不要展开其它话题。
-1) 本地 pin：读 .pi/settings.json 里 @nathan33/nao-skill 的版本（X）；本仓若无该文件或无此 pin ⇒ 直接走 4 的情形 ④（不要说成必然有 pin）。
-2) 远端最新版：npm view @nathan33/nao-skill version --fetch-timeout=5000（内置 5s 超时；不要用外部 timeout 命令，macOS 原生没有；超时/报错 ⇒ 情形 ③）。
+1) 本地 pin：读 .pi/settings.json 里 nao-fleet 的版本（X）；本仓若无该文件或无此 pin ⇒ 直接走 4 的情形 ④（不要说成必然有 pin）。
+2) 远端最新版：npm view nao-fleet version --fetch-timeout=5000（内置 5s 超时；不要用外部 timeout 命令，macOS 原生没有；超时/报错 ⇒ 情形 ③）。
 3) 仅当有新版（Y 大于 X）才取要点：gh release view v<Y>（要点压成不超过两句，不要贴全文）；无 gh 或取不到 ⇒ 情形 ⑤。
 4) 只输出以下**恰好一行**（按 ①–⑤ 顺序命中即止，不解释、不追加）：
    ① 有新版：当前 X → 可升 Y（要点）。要升吗？
    ② 已最新：版本检查：已是最新 X。
-   ③ 离线或超时：版本检查：离线或超时，跳过（可稍后手动 npx @nathan33/nao-skill --version 核对）。
+   ③ 离线或超时：版本检查：离线或超时，跳过（可稍后手动 npx nao-fleet --version 核对）。
    ④ 未检测到下游 pin：版本检查：未检测到下游 pin（本仓为机制源），跳过。
-   ⑤ 无 gh 只报版本号：版本检查：当前 X → 可升 Y（要点取不到，见 https://github.com/Nathan3303/nao-skills/releases）。要升吗？
+   ⑤ 无 gh 只报版本号：版本检查：当前 X → 可升 Y（要点取不到，见 https://github.com/Nathan3303/nao-fleet/releases）。要升吗？
 5) 硬约束：检查阶段只读；**未获我同意前不要改任何文件、不要升级**（不改 .pi/settings.json、不跑 pi install / pi update）。
-6) 只有我明确同意后才按序执行：pi install -l npm:@nathan33/nao-skill@<Y>（若提示安装脚本授权，停下来交给我确认，不要自行放行）→ pi update --extensions → 提醒我「本轮会话仍是旧角色卡，建议重开」。
+6) 只有我明确同意后才按序执行：pi install -l npm:nao-fleet@<Y>（若提示安装脚本授权，停下来交给我确认，不要自行放行）→ pi update --extensions → 提醒我「本轮会话仍是旧角色卡，建议重开」。
 7) 我未表态或说稍后：原样待命，不要重试、不要轮询、不要后台检查。'
 
 

@@ -1,6 +1,6 @@
 # 实现报告 · T579 docs 按任务分割（rd-infra 侧）
 
-- 任务：**T579** · 角色：rd-infra · Issue [#237](https://github.com/Nathan3303/nao-skills/issues/237) · 更新：2026-11-27
+- 任务：**T579** · 角色：rd-infra · Issue [#237](https://github.com/Nathan3303/nao-fleet/issues/237) · 更新：2026-11-27
 - 指针：PRD `docs/T579-docs-per-task/prd.md` · 评审 `arch-review.md` · 落点 `arch-landing-list.md` · ADR `adr-docs-per-task.md`
 
 ## 范围 / 不测

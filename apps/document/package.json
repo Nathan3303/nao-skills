@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "nao-skills 文档站（VitePress + Vue 3 + TS）：门户首页 + 用户文档；角色卡原文构建期从 .agents/prompts/ 注入",
+  "description": "nao-fleet 文档站（VitePress + Vue 3 + TS）：门户首页 + 用户文档；角色卡原文构建期从 .agents/prompts/ 注入",
   "engines": {
     "node": ">=22"
   },

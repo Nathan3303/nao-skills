@@ -573,6 +573,38 @@ check_ledger_structure() {
   return 0
 }
 
+# 包根环境变量兼容层（T594 · **硬断言**：违反 ⇒ rc=1）。
+#   契约：`NAO_FLEET` 是新名且**优先**；`NAO_SKILLS` 是兼容别名（一个版本后弃用）。
+#   判据（三条，全部机械）：① 包根解析**恰 1 处**（`SKILLS_DIR=` 行）② 该行同时含两变量且 **NAO_FLEET 在前**
+#     ③ shim 的解析顺序里 `NAO_FLEET` 先于 `NAO_SKILLS`。
+check_env_alias() {
+  local rc=0 core="$SKILLS_DIR/.agents/scripts/fleet/lib/core.sh" shim="$SKILLS_DIR/bin/shim/nao-fleet.sh" n line lf ls
+  n="$(grep -rc '^SKILLS_DIR=' "$SKILLS_DIR/.agents/scripts" 2>/dev/null | awk -F: '$2>0{c+=$2} END{print c+0}')"
+  if [[ "$n" != "1" ]]; then
+    printf '  ✗ 包根解析点应恰 1 处（SKILLS_DIR=），实测 %s 处 ⇒ 兼容层无法单点维护\n' "$n"; rc=1
+  fi
+  line="$(sed -n 's/^\(SKILLS_DIR=.*\)$/\1/p' "$core" 2>/dev/null | head -1)"
+  if [[ "$line" != *'NAO_FLEET'* || "$line" != *'NAO_SKILLS'* ]]; then
+    printf '  ✗ 包根解析行须同时支持 NAO_FLEET 与 NAO_SKILLS（实测：%s）\n' "${line:-<未取到>}"; rc=1
+  elif [[ "${line%%NAO_SKILLS*}" != *'NAO_FLEET'* ]]; then
+    printf '  ✗ 包根解析行须 **NAO_FLEET 优先**（NAO_FLEET 应在 NAO_SKILLS 之前；实测：%s）\n' "$line"; rc=1
+  fi
+  if [[ ! -f "$shim" ]]; then
+    # 夹具 / 安装态可能只带 `.agents`（无 `bin/shim`）⇒ shim 序不判，但显式记一条（不静默）
+    (( rc == 0 )) && printf '  ✓ 包根 env 兼容层：NAO_FLEET 优先、NAO_SKILLS 回退（单点 %s 处；无 bin/shim ⇒ 序检查跳过）\n' "$n"
+    return "$rc"
+  fi
+  lf="$(grep -n 'NAO_FLEET' "$shim" 2>/dev/null | head -1 | cut -d: -f1)"
+  ls="$(grep -n 'NAO_SKILLS' "$shim" 2>/dev/null | head -1 | cut -d: -f1)"
+  if [[ -z "$lf" || -z "$ls" ]]; then
+    printf '  ✗ shim 解析序须同时支持 NAO_FLEET 与 NAO_SKILLS（兼容期）\n'; rc=1
+  elif (( lf > ls )); then
+    printf '  ✗ shim 解析序须 NAO_FLEET 先于 NAO_SKILLS（实测行号 %s > %s）\n' "$lf" "$ls"; rc=1
+  fi
+  (( rc == 0 )) && printf '  ✓ 包根 env 兼容层：NAO_FLEET 优先、NAO_SKILLS 回退（单点 %s 处）\n' "$n"
+  return "$rc"
+}
+
 # roles.yaml 缩进契约：角色 id 2 空格 / 字段 4 空格 / 禁 Tab（与 load_manifest 解析器同契约，独立报行号）
 check_roles_indent() {
   awk '
@@ -716,6 +748,7 @@ cmd_check() {
     printf '  ✗ roles.yaml 缺失: %s\n' "$MANIFEST"; rc=1
   fi
   check_eol || rc=1
+  check_env_alias || rc=1
 
   echo "== 角色清单 roles.yaml =="
   load_manifest

@@ -2,32 +2,31 @@
 # 用例 07 —— 真实 `pi install -l --approve` 与 tarball 复现布局对照
 #
 # 目的：确认 T4 夹具的物化方式（npm install 本地 tarball）与 pi 实际落盘布局一致。
-# 版本动态读取：优先 PIN 版本（若已发布），否则用已发布 latest，仅做布局对照并标注。
+# T594（#262）：**改为零网络** —— 用 `npm pack` 产出的本地 tgz 走 `pi install -l --approve npm:<pkg>@file:<tgz>`，
+#   不再依赖 registry 是否已发布（否则「必须先发布才能验证发布前置」逻辑倒置；同族消掉 registry 延迟/不可达的 flake）。
+#   registry 可达时只打一行 `t4_info` 观察（**不计门禁**：既不是 SKIP 也不产生 NOTE）。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 
 t4_require_cmd node
 t4_require_cmd npm
 command -v pi >/dev/null 2>&1 || t4_skip "pi CLI 不可用，跳过真实安装对照"
 
-pubver="$(timeout 40 npm view "${PKG_NAME}@${PKG_VERSION}" version 2>/dev/null | tail -1 | tr -d "'\"[:space:]")"
-exact="1"
-if [ "$pubver" != "$PKG_VERSION" ]; then
-  exact="0"
-  pubver="$(timeout 40 npm view "$PKG_NAME" version 2>/dev/null | tail -1 | tr -d "'\"[:space:]")"
-  t4_note pin-fallback "pin 版本 $PKG_VERSION 未发布；改用已发布 latest=$pubver 做**布局**对照（内容差异不计）"
-fi
-[ -n "$pubver" ] || t4_skip "npm registry 不可达，无法做真实安装对照"
-t4_info "对照版本: pubver=$pubver · pin=$PKG_VERSION · 版本一致=$exact"
+TARBALL="$(t4_pkg_tarball)"
+t4_assert_file "$TARBALL" "前置：本地 tarball 已产出（npm pack --ignore-scripts，零网络）"
+t4_info "对照版本: 本地 pack=$PKG_NAME@$PKG_VERSION（tgz=$(basename "$TARBALL")）"
+# registry 观察行（非门禁）：可达就打印 latest，仅作背景；不可达同样不改变本用例结论
+REG_LATEST="$(timeout 20 npm view "$PKG_NAME" version 2>/dev/null | tail -1 | tr -d "'\"[:space:]")"
+t4_info "registry 观察（不计门禁）：latest=${REG_LATEST:-<不可达或未发布>}"
 
 # A: 真实 pi install
 A="$(t4_fixture)"
 of="$(mktemp)"; ef="$(mktemp)"
-( cd "$A" && timeout 180 pi install -l --approve "npm:${PKG_NAME}@${pubver}" ) >"$of" 2>"$ef"
+( cd "$A" && timeout 180 pi install -l --approve "npm:${PKG_NAME}@file:${TARBALL}" ) >"$of" 2>"$ef"
 rcA=$?; outA="$(cat "$of")"; errA="$(cat "$ef")"; rm -f "$of" "$ef"
-t4_info "pi install rc=$rcA（$(printf '%s' "$outA" | tail -1)）"
+t4_info "pi install（本地 tgz）rc=$rcA（$(printf '%s' "$outA" | tail -1)）"
 # BR10 极性：外部不可达 / 未成功启动 ⇒ SKIP（不得假红）；只有拿到真实落盘后内容不符才 FAIL
 if [ "$rcA" -ne 0 ]; then
-  t4_skip "pi install 未成功启动（rc=$rcA；可能 registry/网络/凭据不可达）：$(printf '%s' "$errA" | tail -1)"
+  t4_skip "pi install（本地 tgz）未成功启动（rc=$rcA）：$(printf '%s' "$errA" | tail -1)"
 fi
 
 # B: tarball 复现

@@ -178,7 +178,7 @@ function checkIcons() {
     }
     const relative = clean.replace(/^\/+/, '')
     const candidates = [path.join(DIST, relative)]
-    // 带 base 的构建（href=/nao-skills/favicon.svg）在 dist 里是根路径，剥掉第一段再试
+    // 带 base 的构建（href=/nao-fleet/favicon.svg）在 dist 里是根路径，剥掉第一段再试
     const withoutBase = relative.split('/').slice(1).join('/')
     if (withoutBase) candidates.push(path.join(DIST, withoutBase))
     const hit = candidates.find((candidate) => {
