@@ -105,6 +105,13 @@ export interface HomeCompareItem {
   body: string
 }
 
+export interface HomeBanner {
+  /** 视频的无障碍名称（屏上无可见文案） */
+  alt: string
+  /** 浏览器不支持播放时的读屏降级文案（视觉上不显示，卡仍占位） */
+  fallback: string
+}
+
 export interface HomeData {
   kicker: string
   title: string[]
@@ -116,6 +123,7 @@ export interface HomeData {
   cta: HomeLink[]
   trust: string
   terminal: TerminalLine[]
+  banner: HomeBanner
   jumpNav: { text: string; href: string }[]
   problems: HomeProblem[]
   flow: HomeFlow
