@@ -278,6 +278,17 @@ npx nao-fleet migrate   # 旧文件备份到 .agents/.nao-obsolete/，再按需�
 - **版本权威口径**：`.pi/settings.json` 的 pin 是**唯一权威**；`.agents/.nao-version` 的语义是「本机已安装机制包版本」，**不作为版本依据**；两者不一致时以 pin 为准。
 - **fmt 边界**：包内 `.agents/**` 按原始存储形态发布（部分 YAML / Markdown / MTS 未按 oxfmt / prettier 归一）。仍持有旧版全套 `.agents/**` 的仓库，继续把 `.agents/**` 排除出 fmt 校验即可，⛔ **不要为过 fmt 就地格式化**；新形态项目内只有转发入口，无需处理。
 
+## `close` 的忙闲闸门（`idle` 为什么会被拒）
+
+`close` 回收前先判忙闲，**拿不到证据就不动手**（fail-closed）。各状态处置：
+
+- `working` / `blocked` ⇒ **拒**（在跑回合）；`unknown` / 无状态上报 / 集成缺失 ⇒ **拒**（证据不足）。
+- `done`（会话已结束、终端靠 `--keep` 保活）⇒ **可回收**。
+- **`idle` ⇒ 视后端而定**：
+  - **desktop app（`NAO_TERMINAL=app`）**：`idle` **归「忙」** ⇒ 拒绝并提示 `--force`。理由：`idle` 可能是「刚拉起、还没跑首轮」，静默回收会让人以为「ensure 起来了但什么都没干」；带 `--force` 时照常回收并打印一行说明。
+  - **herdr TUI（默认）**：`idle` 可回收，但叠加**名册第二信号**（pi-intercom 报 `thinking` / `tool:*` ⇒ 判忙）。原因：`agent_status` 从 `idle` 迁到 `working` 有约 0.3–0.75s 滞后窗口，单靠 agent_status 会误杀刚开工的会话。
+- **`cleanup`（拆场）不看这条**：它是「用户明确要拆这一场」的整场回收，`idle` 直接拆；两者语义不同，别混用。
+
 ## 无人值守与信任提示（`ensure` 卡在 `Trust project folder?`）
 
 `pi` 在**未信任的目录**首次交互启动会停在 `Trust project folder?` 提示；此时 herdr 的 agent-state 扩展不加载 ⇒

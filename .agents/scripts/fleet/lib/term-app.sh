@@ -768,6 +768,14 @@ _term_app_reclaim() {  # <name> <repo> <force> <core> <scope> <ensure-target> �
           return 1
         fi
         warn "强制回收 $name（状态=$st）：--force" ;;
+      idle)
+        # T582/Issue #240：`idle` **不算「空闲可回收」** —— 它可能是「刚拉起、还没跑首轮」，
+        #   静默回收会让人以为「ensure 起来了但什么都没干」；与 working/blocked 同侧（fail-closed，T558 教训）。
+        if [[ "$force" != true ]]; then
+          warn "拒绝回收 $name：状态=idle（可能是刚启动、尚未开工；idle 不算空闲证据）—— 确认无用再加 --force"
+          return 1
+        fi
+        warn "强制回收 $name（状态=idle）：--force（idle 可能是刚拉起而未开工，回收后无法确认它是否干过活）" ;;
       done)
         # T574/Issue #207：`--keep` 保活使「会话已结束」的终端以 live+done 存在
         #   （历史缺陷：门面状态映射漏 done ⇒ close 报「未运行/幂等成功」，终端残留占名）
