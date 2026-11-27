@@ -17,13 +17,13 @@ home:
   commandNoteHref: https://github.com/Nathan3303/nao-fleet/blob/main/README.md
   commandNoteLinkText: README 安装段
   cta:
+    - text: 快速开始
+      href: /quickstart/prereq
+      style: ghost
     - text: GitHub
       href: https://github.com/Nathan3303/nao-fleet
       external: true
-      style: solid
-    - text: 快速开始
-      href: /quickstart/prereq
-      style: solid
+      style: text
     - text: npm 最新版 ↗
       href: https://www.npmjs.com/package/nao-fleet
       external: true
@@ -40,13 +40,12 @@ home:
     - kind: ok
       text: ✓ 已拉起 3 个会话
     - kind: muted
-      text: 3 个会话窗口逐个亮起（要拉满 7 个，照快速开始里的三步走）
+      text: → pm 接单 · 已派给 arch / rd-fe
       more: true
     - kind: muted
-      text: 你：想加个登录页
+      text: ❯ 想加一个登录页
       more: true
       gap: true
-      cursor: true
   banner:
     fallback: 舰队会话的录屏画面没能加载出来。
   jumpNav:
@@ -267,7 +266,7 @@ home:
       - text: GitHub
         href: https://github.com/Nathan3303/nao-fleet
         external: true
-        style: solid
+        style: ghost
       - text: 读 README ↗
         href: https://github.com/Nathan3303/nao-fleet/blob/main/README.md
         external: true

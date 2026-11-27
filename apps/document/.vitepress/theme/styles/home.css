@@ -120,6 +120,16 @@
   background: var(--nh-sunken);
 }
 
+/* Hero 的次级入口（「快速开始」）：基准 ghost 是 36px/13px，hero 与主 CTA 同排，覆盖成 44px/15px。
+   描边用 --nh-border，与实心主 CTA 形成主次（T593 review §一）。 */
+.nh .hero .pill-ghost {
+  min-height: 44px;
+  padding: 0 var(--nh-sp-6);
+  border: 1px solid var(--nh-border);
+  color: var(--nh-text);
+  font-size: var(--nh-fs-15);
+}
+
 .nh .arrow {
   font-size: 0.9em;
   color: currentColor;
@@ -314,15 +324,6 @@
 
 .nh .term-muted {
   color: var(--nh-term-muted);
-}
-
-.nh .term-cursor {
-  display: inline-block;
-  width: 7px;
-  height: 14px;
-  margin-left: 6px;
-  background: var(--nh-term-cursor);
-  vertical-align: -2px;
 }
 
 .nh .term-prompt {
@@ -715,6 +716,17 @@
 
 .nh-footer .pill:hover {
   background: var(--nh-accent-solid-hover);
+}
+
+/* 页脚同规则：全页只留 Hero 的「复制」一个实心，页脚主入口降为 ghost（T593：一致性优先） */
+.nh-footer .pill-ghost {
+  background: var(--nh-page);
+  border-color: var(--nh-border);
+  color: var(--nh-text);
+}
+
+.nh-footer .pill-ghost:hover {
+  background: var(--nh-sunken);
 }
 
 .nh-footer .cta-text {

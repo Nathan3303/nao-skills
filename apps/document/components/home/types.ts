@@ -5,7 +5,7 @@ export interface HomeLink {
   /** 站内路径（以 / 开头）或外链 */
   href: string
   external?: boolean
-  style?: 'solid' | 'text'
+  style?: 'solid' | 'ghost' | 'text'
 }
 
 export interface TerminalLine {
@@ -15,8 +15,6 @@ export interface TerminalLine {
   gap?: boolean
   /** 窄屏（<1080）隐藏 */
   more?: boolean
-  /** 行尾光标 */
-  cursor?: boolean
 }
 
 export interface HomeProblem {

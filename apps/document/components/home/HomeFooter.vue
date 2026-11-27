@@ -23,6 +23,15 @@ defineProps<{ footer: HomeFooter }>()
             {{ item.text }}
           </a>
           <a
+            v-else-if="item.style === 'ghost'"
+            class="pill pill-ghost"
+            :href="item.href"
+            :target="item.external ? '_blank' : undefined"
+            :rel="item.external ? 'noopener' : undefined"
+          >
+            {{ item.text }}
+          </a>
+          <a
             v-else
             class="cta-text"
             :href="item.href"
