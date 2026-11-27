@@ -31,5 +31,5 @@
 - 兼容层：`NAO_FLEET` 优先 / `NAO_SKILLS` 别名；`bin` 双键同指一文件（`nao-fleet` / `nao-skill`）；`check` 新增 `check_env_alias` 断言（单点 + 优先序 + shim 序）
 - 门禁：`check: OK · roles=7 · files=71`；全量 46 例 → 45 PASS / 1 环境红（真机就绪门 `case 32`，基线同红，另案 #245）
 - 仓库改名后 GitHub 会 301 重定向旧 URL；**GitHub Pages 不跳转**，旧子路径 404
-- 文档示例 pin 与首发版本强绑定：本版统一 `0.37.0`；跨包世系（旧包 ≤0.27.x 才有 tmux 后端）已写入 README / INSTALL / 站点
+- 想继续用旧的终端（tmux）后端：只有旧包有那条路 —— 截至 0.27.x 才有 tmux 后端；`pi install -l npm:@nathan33/nao-skill@≤0.27.x` 可取旧版，新包 `nao-fleet` 从 0.37.0 起没有此后端。
 - 回退：`git revert` 对应合并提交；若需回到旧包，pin 回 `@nathan33/nao-skill@0.36.0`
