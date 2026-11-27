@@ -64,6 +64,19 @@ t4_assert_eq "$LAB/home" "$HOME" "① 隔离：HOME 私有（$HOME）"
 t4_assert_eq "$LAB/pi" "$PI_CODING_AGENT_DIR" "① 隔离：PI_CODING_AGENT_DIR 私有（$PI_CODING_AGENT_DIR）"
 t4_assert_eq "$LAB/tmp" "$TMPDIR" "① 隔离：TMPDIR 私有（$TMPDIR）"
 
+# ---- T584（#245）：夹具预置「项目信任」，解除 pi 首启信任提示对就绪门的阻断 ----
+#   病根：pi 在**未信任目录**首次交互启动会停在 `Trust project folder?` ⇒ herdr 的 agent-state 扩展不加载
+#     ⇒ `agent_session` / `screen_detection_skipped` 两条 hook 信号恒缺 ⇒ 就绪门只报「超时」。
+#   修法（测试侧，不改产品）：agent-dir settings 预置 `defaultProjectTrust=always`（pi 文档：该键只能在 agent-directory settings 里设）。
+#   承重证明见本文件末尾「⑦' 反证」段：删掉本文件 ⇒ 同一用例复现红。
+printf '{"defaultProjectTrust":"always"}\n' > "$PI_CODING_AGENT_DIR/settings.json"
+t4_assert_file "$PI_CODING_AGENT_DIR/settings.json" \
+  "① 夹具：agent-dir settings 预置（pi 首启不再停在信任提示）"
+t4_assert_eq "always" "$(node -e 'try{console.log(require(process.argv[1]).defaultProjectTrust||"")}catch(e){console.log("")}' "$PI_CODING_AGENT_DIR/settings.json" 2>/dev/null)" \
+  "① 夹具：defaultProjectTrust == always（键名/取值可机判）"
+t4_assert_eq "0" "$(grep -c 'defaultProjectTrust' "$REAL_PI/agent/settings.json" 2>/dev/null || true)" \
+  "① 夹具：预置不污染真实 ~/.pi（用户 agent-dir settings 无该键）"
+
 # `integration install pi` 尊重 PI_CODING_AGENT_DIR（PRD 附三实测）⇒ 装到私有目录，不写用户 ~/.pi
 be_herdr "$SESS" integration install pi >"$LAB/install.log" 2>&1 \
   || { t4_bad "① herdr integration install pi 失败：$(tail -1 "$LAB/install.log")"; t4_exit; }
@@ -275,6 +288,8 @@ sp_field() { # <几何场根> <cols> <rows> <session>：建私有根 + config.to
   local d="$1" cols="$2" rows="$3" sess="$4"
   mkdir -p "$d/home" "$d/tmp" "$d/repo" "$d/config/herdr" "$d/pi/extensions"
   printf '[server]\nheadless_cols = %s\nheadless_rows = %s\n' "$cols" "$rows" > "$d/config/herdr/config.toml"
+  # T584（#245）：每个场各有独立 PI 目录 ⇒ 各自预置信任（否则 40×8/60×20 场同样停在信任提示）
+  printf '{"defaultProjectTrust":"always"}\n' > "$d/pi/settings.json"
   sp_install_pi "$d/config" "$d/pi" "$sess"
 }
 
@@ -312,6 +327,34 @@ t4_info "J1/J4 实测：headless 60×20 ⇒ 无 warn（pane 60×20 ≥ 60×10）
 sp_run "$SP3/config" "$SP3/home" "$SP3/pi" "$SP3/tmp" "$SP3_SESS" "$SP3/repo" cleanup --session "$SP3_SESS"
 t4_assert_eq "0" "$(ls -A "$SP3/config/herdr/sessions" 2>/dev/null | wc -l | tr -d ' ')" \
   "⑦ 40×8 场：拆场后 sessions/ 为空"
+
+# ---- ⑦' T584 反证（#245）：删掉预置 ⇒ 同一用例复现红；且就绪门点名「信任提示」而非只报超时 ----
+#   做法：另起一套私有夹具（无 settings.json），ensure 一个角色 ⇒ 期望 rc≠0 且 stderr 出现信任提示指路；
+#   这不依赖环境（凡 pi 首启未信任目录都会走到），故是本任务的**承重反证**，不是「碰巧绿」。
+NEG_LAB="$T4_CACHE_DIR/real32-neg-$$"
+mkdir -p "$NEG_LAB/home" "$NEG_LAB/tmp" "$NEG_LAB/pi/extensions" "$NEG_LAB/repo"
+NEG_SESS="nao-t4-neg-$$"
+(
+  export XDG_CONFIG_HOME="$NEG_LAB/config" HOME="$NEG_LAB/home" \
+         PI_CODING_AGENT_DIR="$NEG_LAB/pi" TMPDIR="$NEG_LAB/tmp" \
+         NAO_TERMINAL=herdr HERDR_ENV=1 HERDR_SESSION="$NEG_SESS" \
+         HERDR_SOCKET_PATH="$NEG_LAB/config/herdr/sessions/$NEG_SESS/herdr.sock" \
+         NAO_SKILLS="$T4_ROOT" NAO_TASKS_STATE="$NEG_LAB/tasks-state.md"
+  printf '# T584 反证夹具 tasks-state\n\n## 进行中\n\n（无）\n' > "$NEG_LAB/tasks-state.md"
+  timeout 60 "$BASH_BIN" "$FLEET" session-start --session "$NEG_SESS" >/dev/null 2>&1
+  timeout 60 "$BASH_BIN" "$FLEET" integration install pi >/dev/null 2>&1 || \
+    timeout 60 herdr --session "$NEG_SESS" integration install pi >/dev/null 2>&1 || true
+  timeout 90 "$BASH_BIN" "$FLEET" ensure --task T9 "pm@$NEG_LAB/repo" >"$NEG_LAB/out.log" 2>&1
+  echo "rc=$?" > "$NEG_LAB/rc"
+  timeout 30 "$BASH_BIN" "$FLEET" cleanup --session "$NEG_SESS" >/dev/null 2>&1 || true
+)
+t4_assert_eq "rc=1" "$(cat "$NEG_LAB/rc" 2>/dev/null)" \
+  "⑦' 反证：无 settings.json ⇒ ensure rc=1（就绪门超时；删预置即复现红）"
+t4_assert_contains "$(sed 's/\x1b\[[0-9;]*m//g' "$NEG_LAB/out.log" 2>/dev/null)" "Trust project folder" \
+  "⑦' 反证：超时输出点名「pi 的 Trust project folder? 提示」（B 的指路行生效，不是只报超时）"
+t4_assert_contains "$(sed 's/\x1b\[[0-9;]*m//g' "$NEG_LAB/out.log" 2>/dev/null)" "defaultProjectTrust=always" \
+  "⑦' 反证：指路给出可执行处置（预置 defaultProjectTrust=always）"
+rm -rf "$NEG_LAB"
 
 # ---- ⑧ 用户侧零副作用：~/.pi 与 ~/.config/herdr 的路径集合前后一致 ----
 REAL_PI_SNAP_AFTER="$(find "$REAL_PI" \( -type f -o -type d \) 2>/dev/null | sort)"

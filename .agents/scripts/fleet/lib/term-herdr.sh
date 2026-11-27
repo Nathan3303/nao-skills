@@ -1231,6 +1231,20 @@ _term_herdr_ready_state() {  # <pane_id> <expected name>
   return 0
 }
 
+# pi 首启「Trust project folder?」识别（T584 · #245 · **只做指路，不做自动变绿**）。
+#   为什么：pi 在未信任目录首次交互启动会停在该提示 ⇒ herdr 的 agent-state 扩展不加载 ⇒
+#     `agent_session` / `screen_detection_skipped` 两条 hook 信号恒缺 ⇒ 就绪门只会报「超时」，人看不出病根。
+#   **不能拿它当就绪证据**：屏幕文案随 pi 版本漂移（改了文案 ⇒ 本函数静默失配，回归到「只有超时」的旧行为，不产生假绿）。
+_term_herdr_trust_hint() {  # <pane_id> → 0 命中 / 1 未命中（读不到也按未命中，不无声当命中）
+  local pid="${1-}" out=""
+  [[ -n "$pid" ]] || return 1
+  # 注意：`herdr pane read` 取**位置参数** <pane_id>（没有 `--pane`；写错会 rc≠0 ⇒ 静默失配）
+  out="$(_term_herdr_exec pane read "$pid" --source recent --lines 40 2>/dev/null)" || return 1
+  [[ -n "${out//[[:space:]]/}" ]] || return 1
+  case "$out" in *'Trust project folder'*) return 0 ;; esac
+  return 1
+}
+
 _term_herdr_wait_ready() {  # <pane_id> <name> → 0 就绪 / 1 超时（逐条报缺 + 指路）
   local pid="${1-}" want="${2-}" i max="${TERM_READY_POLL_MAX:-50}" int="${TERM_READY_POLL_INT:-0.1}"
   local budget="${TERM_READY_TIMEOUT_MS:-5000}" start_ms now_ms elapsed
@@ -1253,6 +1267,10 @@ _term_herdr_wait_ready() {  # <pane_id> <name> → 0 就绪 / 1 超时（逐条�
   [[ "$_TR_STAT" == "idle" ]] || warn "  · agent_status == idle：实际 ${_TR_STAT:-<无条目>}"
   { [[ "$_TR_SEQ" =~ ^[0-9]+$ ]] && (( _TR_SEQ >= 1 )); } || warn "  · state_change_seq ≥ 1：实际 ${_TR_SEQ:-0}（未观测到状态迁移）"
   [[ "$_TR_SKIP" == "1" ]] || warn "  · screen_detection_skipped == true：实际 false（状态来自屏幕启发式，不可作就绪判据）"
+  # T584：停在信任提示时单列一条人话指路（不是新条件、不改判据：判据仍是那七条）
+  if _term_herdr_trust_hint "$pid"; then
+    warn "  · 该 pane 停在 pi 的「Trust project folder?」提示（首启信任门）⇒ 扩展不加载、hook 信号恒缺：在 pane 内按 Enter 选 Trust 一次即可；无人值守场景请在 agent-dir settings 预置 defaultProjectTrust=always（见 docs/INSTALL「无人值守与信任提示」）"
+  fi
   warn "  · 诊断指路：herdr --session ${HERDR_SESSION:-<session>} agent explain $pid"
   warn "  · 若 pi 首次启动停在 What's New / 信任提示（如 lastChangelogVersion 落后于 pi 版本），先手工关闭再重试"
   return 1
