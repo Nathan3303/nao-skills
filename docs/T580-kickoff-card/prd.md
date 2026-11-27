@@ -1,6 +1,6 @@
 # PRD · 开工确认卡表格化 + 台账按批次分割
 
-- 任务：**T580** · Issue [#238](https://github.com/Nathan3303/nao-skills/issues/238) · 分支 `nao/T580-kickoff-ledger`
+- 任务：**T580** · Issue [#238](https://github.com/Nathan3303/nao-fleet/issues/238) · 分支 `nao/T580-kickoff-ledger`
 - 类型：机制约定 + 文档结构（含 `check` 最小断言）
 - 依赖：**T579 先合并**（本任务的 `kickoff.md` 落在任务目录里，靠 T579 的目录约定）
 

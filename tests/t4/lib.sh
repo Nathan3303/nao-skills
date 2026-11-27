@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# T4 用例公共库 —— PRD #18「nao-skills 单 SKILL 化 + pi 原生分发」
+# T4 用例公共库 —— PRD #18「nao-fleet 单 SKILL 化 + pi 原生分发」
 #
 # 约束（路径纪律）：本套用例只新增 tests/ 与 docs/reports/2026-10-08-T4-*.md，
 # 不修改 package.json / bin/ / .agents/。所有夹具建在临时目录，不改仓库工作区。
@@ -17,7 +17,7 @@ T4_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 T4_TESTS_DIR="$(cd "$T4_LIB_DIR/.." && pwd)"
 T4_ROOT="${T4_ROOT:-$(cd "$T4_TESTS_DIR/.." && pwd)}"
 
-PKG_NAME="@nathan33/nao-skill"
+PKG_NAME="nao-fleet"
 PKG_VERSION="$(node -p "try{require('${T4_ROOT}/package.json').version}catch(e){'0.0.0'}" 2>/dev/null || echo 0.0.0)"
 T4_ALLOW_MISSING="${T4_ALLOW_MISSING:-0}"
 T4_REQUIRE_FULL="${T4_REQUIRE_FULL:-0}"

@@ -3,7 +3,7 @@
  * 架构：docs/adr/2026-11-16-docs-site-pipeline.md（独立包 / 编译期注入 / 构建后部署）
  *
  * 约定：
- *   - `base` 保持 '/'：CI 用 `vitepress build --base /nao-skills/`，dev/preview 不带前缀；
+ *   - `base` 保持 '/'：CI 用 `vitepress build --base /nao-fleet/`，dev/preview 不带前缀；
  *   - 首页走 `layout: page` + 自建 PortalHome（默认 home 版式承载不了六段结构）；
  *   - 侧栏「七个角色」组由 `.agents/roles.yaml` 生成（顺序与名称不手写）。
  */
@@ -63,7 +63,7 @@ const sidebar = [
 
 // 首页 og 文案与旧门户逐字一致（基线 §八 SEO 条目）；纯静态、无统计
 const HOME_OG = {
-  title: 'nao-skills · 给你的 pi 配一支开发小队',
+  title: 'nao-fleet · 给你的 pi 配一支开发小队',
   description: '7 个 AI 角色分工干活，各管一段。你只做两件事：回答问题、点确认。纯静态、零外部依赖。',
 }
 
@@ -84,7 +84,7 @@ function wrapRoleGuide(html: string): string {
 
 /**
  * 站点前缀（T590）：VitePress 的静态 `head` 不会替静态资源补 base，所以这里由 `--base` 派生前缀自己拼。
- * CI 用 `vitepress build --base /nao-skills/`；dev / preview 不带该参数 ⇒ '/'。
+ * CI 用 `vitepress build --base /nao-fleet/`；dev / preview 不带该参数 ⇒ '/'。
  * 之前图标靠 transformHead 注入（那里能读 siteData.base），代价是 dev 的 HTML 里根本没有这一行 ——
  * 现在统一成静态 head 单一来源，dev 与产物都走同一处。
  */
@@ -105,8 +105,8 @@ const BASE_PREFIX = resolveBasePrefix()
 
 export default defineConfig({
   lang: 'zh-CN',
-  title: 'nao-skills',
-  titleTemplate: ':title · nao-skills',
+  title: 'nao-fleet',
+  titleTemplate: ':title · nao-fleet',
   description: '给你的 pi 配一支开发小队：7 个 AI 角色分工干活，你只回答问题、点确认。',
   appearance: 'force-auto',
   cleanUrls: true,
@@ -157,7 +157,7 @@ export default defineConfig({
       { text: '插件', link: '/plugins', activeMatch: '^/plugins' },
       {
         text: 'GitHub ↗',
-        link: 'https://github.com/Nathan3303/nao-skills',
+        link: 'https://github.com/Nathan3303/nao-fleet',
         target: '_blank',
         rel: 'noopener',
       },

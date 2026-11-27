@@ -1,6 +1,6 @@
-# T4 用例集 —— nao-skills 单 SKILL 化 + pi 原生分发（PRD #18）
+# T4 用例集 —— nao-fleet 单 SKILL 化 + pi 原生分发（PRD #18）
 
-独立验证 PRD `docs/prds/2026-10-08-nao-skills-pi-package.md` 的 AC1/AC3/AC4/AC6 与
+独立验证 PRD `docs/prds/2026-10-08-nao-fleet-pi-package.md` 的 AC1/AC3/AC4/AC6 与
 NFR2/NFR3，契约来源另含 §11 D3/D5/D6/D7、§12 闸门 A–D，以及
 `docs/reports/2026-10-08-T1-pi-package-verify.md`（pi 1.1.0 实测）。
 

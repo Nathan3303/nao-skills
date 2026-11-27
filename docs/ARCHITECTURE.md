@@ -61,8 +61,8 @@
 | 层 | 载体 | 维护者 | 内容 |
 | --- | --- | --- | --- |
 | **项目级（最高）** | 项目根 `AGENTS.md` | PM（§七） | 项目属性/约束/机制衔接；pi 自动注入所有会话，**优先于角色默认习惯** |
-| **团队级** | `roles.yaml` + `common/` | npm 包 `@nathan33/nao-skill`（`.agents/`） | 角色清单、协作协议、终态回执、缓存纪律 |
-| **角色级** | `prompts/` + `skills/` + `checklists/` | npm 包 `@nathan33/nao-skill`（`.agents/`） | 角色身份/边界、按需技能、交付清单 |
+| **团队级** | `roles.yaml` + `common/` | npm 包 `nao-fleet`（`.agents/`） | 角色清单、协作协议、终态回执、缓存纪律 |
+| **角色级** | `prompts/` + `skills/` + `checklists/` | npm 包 `nao-fleet`（`.agents/`） | 角色身份/边界、按需技能、交付清单 |
 
 各层各写各的、不互相复制；项目已有非空 `AGENTS.md` 时**合并追加**（保留原文 + `## nao 舰队接入` 区块，可回退），不覆盖。
 
@@ -88,5 +88,5 @@
 | 角色红线与交付清单 | `.agents/checklists/*.md` |
 | 外部调研（产品形态 / 架构模式对照） | `.agents/skills/research.md`、`.agents/skills/arch-patterns.md` |
 | 工具命令与闸门（体检 / 拉起 / 回收） | `bash .agents/scripts/nao-fleet.sh --help`（项目内为转发 shim，机制在 `$NAO_SKILLS/.agents/scripts/`） |
-| 机制包化与项目侧 shim / 物化 / 版本 pin | `docs/adr/2026-10-08-nao-skills-single-skill-pi-package.md`（D1–D8）· README「发布形态与完整性判据」 |
+| 机制包化与项目侧 shim / 物化 / 版本 pin | `docs/adr/2026-10-08-nao-fleet-single-skill-pi-package.md`（D1–D8）· README「发布形态与完整性判据」 |
 | CLI（`init` / `exec` / `migrate`） | `bin/nao-skill.js`（包内，非项目收缩面） |

@@ -1,21 +1,27 @@
-<h1 align="center">nao-skills</h1>
+<h1 align="center">nao-fleet</h1>
 
 <p align="center"><b>给你的 pi 配一支「开发小队」——你提需求，它自己找人干活、自己验收交付。</b></p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@nathan33/nao-skill"><img src="https://img.shields.io/npm/v/@nathan33/nao-skill?label=npm&color=cb3837&logo=npm&logoColor=white" alt="npm version"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/Nathan3303/nao-skills?label=license&color=3da639" alt="license: MIT"></a>
+  <a href="https://www.npmjs.com/package/nao-fleet"><img src="https://img.shields.io/npm/v/nao-fleet?label=npm&color=cb3837&logo=npm&logoColor=white" alt="npm version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Nathan3303/nao-fleet?label=license&color=3da639" alt="license: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A518-3c873a?logo=nodedotjs&logoColor=white" alt="node >= 18">
   <a href="https://pi.dev"><img src="https://img.shields.io/badge/host-pi%20only-6e56cf" alt="host: pi only"></a>
 </p>
 
 <p align="center"><sub>推荐配合模型 <b>deepseek-v4.1-flash</b> · 基于 <a href="https://pi.dev">pi</a> · Made by <a href="https://github.com/nathan">Nathan Lee</a></sub></p>
 
-[前置环境](#前置环境) · [三步装好](#三步装好) · [第一次跑起来](#第一次跑起来) · [七个角色](#七个角色) · [常见问题](#常见问题) · [想深入](#想深入) · [官网](https://nathan3303.github.io/nao-skills/)
+[前置环境](#前置环境) · [三步装好](#三步装好) · [第一次跑起来](#第一次跑起来) · [七个角色](#七个角色) · [常见问题](#常见问题) · [想深入](#想深入) · [官网](https://nathan3303.github.io/nao-fleet/)
 
-nao-skills 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，你的项目里会有 7 个分工明确的 AI 会话——产品经理负责拆需求、派活、验收；架构师把关方案；设计师管界面与交互；前端、后端、测试各自干活；工程基座管构建发布与治理。你只做两件事：**回答问题**、**点确认**。
+nao-fleet 是一套 **角色卡 + 协作规矩 + 小工具**。装上以后，你的项目里会有 7 个分工明确的 AI 会话——产品经理负责拆需求、派活、验收；架构师把关方案；设计师管界面与交互；前端、后端、测试各自干活；工程基座管构建发布与治理。你只做两件事：**回答问题**、**点确认**。
 
 > **推荐配合模型：`deepseek-v4.1-flash`。** 舰队是 7 个常驻会话 + 长链路交接（派活 → 回执 → 验收），这个模型在长上下文稳定性和单轮成本上实测最省心；换成别的模型也能跑，只是纪律遵守与回执质量会有差异。
+
+## 名字与命令（先看这一段）
+
+- **仓名 = `nao-fleet`**（2026-11-27 由旧名 `nao-skills` 改名）· **npm 包名 = `nao-fleet`**（旧 `@nathan33/nao-skill` 已停用）。
+- **命令不变 = `nao-fleet.sh`**（下游项目调用的是这个文件名，改名不影响调用方式）。
+- **环境变量**：包根用 **`NAO_FLEET`**（新，优先）；**`NAO_SKILLS` 为兼容别名**，一个版本后弃用 —— 两者同时存在时以 `NAO_FLEET` 为准。
 
 ## 前置环境
 
@@ -45,7 +51,7 @@ pi --version && node -v && git --version && herdr --version
 
 一个人对着 AI 写代码，常见三个毛病：
 
-| 毛病 | nao-skills 的做法 |
+| 毛病 | nao-fleet 的做法 |
 | --- | --- |
 | 一个会话什么都干，聊到后面就糊涂了 | 拆成 7 个专业角色，各管一段，互不干扰 |
 | 需求没问清楚就开写，写完发现不对 | PM 先追问、写清 PRD 和目标，你点头才开工 |
@@ -59,16 +65,16 @@ pi --version && node -v && git --version && herdr --version
 
    ```bash
    cd 你的项目
-   pi install --local npm:@nathan33/nao-skill@0.30.0   # 声明 pin，并把机制包物化到项目内 .pi/npm
-   npx @nathan33/nao-skill init                        # 写入转发入口 shim + 生成 AGENTS.md
+   pi install --local npm:nao-fleet@0.30.0   # 声明 pin，并把机制包物化到项目内 .pi/npm
+   npx nao-fleet init                        # 写入转发入口 shim + 生成 AGENTS.md
    ```
 
-   > 示例带版本 pin（团队 clone 即得同款）。只想装最新版，可省略 `@0.30.0`：`pi install --local npm:@nathan33/nao-skill`。
+   > 示例带版本 pin（团队 clone 即得同款）。只想装最新版，可省略 `@0.30.0`：`pi install --local npm:nao-fleet`。
 
 3. **装协作插件**（多会话派活必需）：
 
    ```bash
-   npx @nathan33/nao-skill plugins install-all
+   npx nao-fleet plugins install-all
    ```
 
 升级同理：改 `.pi/settings.json` 里的 pin 版本，再 `pi update --extensions`。机制以 npm 包为准，项目里只有转发入口，不需要你手动同步文件。
@@ -126,7 +132,7 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 **为什么需要终端后端？** 舰队要把 7 个角色会话放进终端里，且要能可靠地「找回来」与「收掉」。
 
 - **唯一后端 = herdr**：每个角色一个 tab，身份靠结构化事实（pane label + agent 状态）判定，不依赖终端标题；需要 `herdr integration install pi` 且命令要在 herdr 的 pane 内执行。
-- **旧的 tmux 后端已在 v0.28.0 移除**：`NAO_TERMINAL=tmux` 会 **rc=2 并给一行指路**（不会静默按 herdr 跑）。还需要 tmux 的话请把 `@nathan33/nao-skill` pin 回 `≤0.27.x`。
+- **旧的 tmux 后端已在 v0.28.0 移除**：`NAO_TERMINAL=tmux` 会 **rc=2 并给一行指路**（不会静默按 herdr 跑）。还需要 tmux 的话请把 `nao-fleet` pin 回 `≤0.27.x`。
 
 **不能自动回落**（静默换后端会让同一命令在不同机器上跑出不同结果）—— 所以移除时也选了 fail loud，而不是悄悄换掉。
 
@@ -165,9 +171,9 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 | 工具命令 | `bash .agents/scripts/nao-fleet.sh --help`（转发入口） |
 | 项目自己的约定 | 项目根 `AGENTS.md` |
 
-想**本地起文档站**：首次先 `npm install --prefix apps/document`（独立私有包，不进发布包），之后 `npm run docs:dev` 预览、`npm run docs:build` 构建；站点的内容与用法以[官网](https://nathan3303.github.io/nao-skills/)为准。
+想**本地起文档站**：首次先 `npm install --prefix apps/document`（独立私有包，不进发布包），之后 `npm run docs:dev` 预览、`npm run docs:build` 构建；站点的内容与用法以[官网](https://nathan3303.github.io/nao-fleet/)为准。
 
-`$NAO_SKILLS` 指机制包根目录（会话里 fleet 会自动注入该变量），也就是 npm 包 `@nathan33/nao-skill` 的安装位置。
+`$NAO_SKILLS` 指机制包根目录（会话里 fleet 会自动注入该变量），也就是 npm 包 `nao-fleet` 的安装位置。
 
 ## 设计技能与致谢
 

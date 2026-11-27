@@ -68,7 +68,7 @@ t4_assert_contains "$T4_OUT" "check: OK" "3d 显式覆盖 check 成功"
 rm -rf "$fx/.pi/npm/node_modules"           # 去掉 tier-2
 home_ok="$(mktemp -d "$T4_CACHE_DIR/homeok.XXXXXX")"
 mkdir -p "$home_ok/.pi/agent/npm/node_modules/@nathan33"
-cp -a "$alt" "$home_ok/.pi/agent/npm/node_modules/@nathan33/nao-skill"
+cp -a "$alt" "$home_ok/.pi/agent/npm/node_modules/nao-fleet"
 t4_run_shim "$fx" -u NAO_SKILLS -u NAO_SHIM_ENTERED \
   "HOME=$home_ok" "PI_CODING_AGENT_DIR=$home_ok/.pi/agent"
 t4_info "3e-ok rc=$T4_RC"
@@ -76,12 +76,12 @@ t4_assert_eq "0" "$T4_RC" "3e 全局兜底版本==pin：check exit=0（D6 第 3 
 
 home_bad="$(mktemp -d "$T4_CACHE_DIR/homebad.XXXXXX")"
 mkdir -p "$home_bad/.pi/agent/npm/node_modules/@nathan33"
-cp -a "$alt" "$home_bad/.pi/agent/npm/node_modules/@nathan33/nao-skill"
+cp -a "$alt" "$home_bad/.pi/agent/npm/node_modules/nao-fleet"
 node -e '
 const fs=require("fs"),p=process.argv[1];
 const j=JSON.parse(fs.readFileSync(p,"utf8"));j.version="0.0.1";
 fs.writeFileSync(p,JSON.stringify(j,null,2));
-' "$home_bad/.pi/agent/npm/node_modules/@nathan33/nao-skill/package.json"
+' "$home_bad/.pi/agent/npm/node_modules/nao-fleet/package.json"
 t4_run_shim "$fx" -u NAO_SKILLS -u NAO_SHIM_ENTERED \
   "HOME=$home_bad" "PI_CODING_AGENT_DIR=$home_bad/.pi/agent"
 t4_info "3e-bad rc=$T4_RC"

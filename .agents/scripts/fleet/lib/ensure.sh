@@ -31,7 +31,7 @@ build_system_prompt() {
   f="$(mktemp "/tmp/nao-fleet-$(basename "$card" .md)-XXXXXX.md")"
   {
     cat "$card"
-    printf '\n## 环境锚点\n- NAO_SKILLS=%s（nao 机制**包根**；@.agents/... 引用一律以 `$NAO_SKILLS/.agents/` 为根解析。注意：项目内 `.agents/` 只有 shim，不存机制副本）\n' "$SKILLS_DIR"
+    printf '\n## 环境锚点\n- NAO_FLEET=%s（nao 机制**包根**；`NAO_SKILLS` 为兼容别名，二者都给时 NAO_FLEET 优先。@.agents/... 引用一律以 `$NAO_FLEET/.agents/` 为根解析。注意：项目内 `.agents/` 只有 shim，不存机制副本）\n' "$SKILLS_DIR"
   } > "$f"
   echo "$f"
 }

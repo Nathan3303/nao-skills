@@ -4,7 +4,7 @@
   介质是动画 WebP（1280w · 12fps · 循环）；prefers-reduced-motion 走 <source media> 换成静态 jpg —— 不裁切、不改内容。
   纯装饰，读屏跳过（img 收 alt="" + aria-hidden）：content/index.md 的 frontmatter.home.banner 只留 fallback，
   仅在图片解码失败时以 sr-only 出现（正常路径 DOM 里没有这句，屏上也永远没有文字）。
-  资源路径一律走 withBase：CI 构建带 --base /nao-skills/，写死 /xxx.webp 会 404。
+  资源路径一律走 withBase：CI 构建带 --base /nao-fleet/，写死 /xxx.webp 会 404。
 -->
 <script setup lang="ts">
 import { ref } from 'vue'

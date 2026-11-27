@@ -3,6 +3,8 @@
 > 面向**已经决定要用 nao** 的读者：装什么、怎么升级、可选增强怎么配、CI/离线怎么跑、老项目怎么迁。
 > 只想知道「这东西是什么、怎么在 3 分钟内跑起来」的，看 [README](../README.md)。
 
+> **包根环境变量（2026-11-27 起）**：`NAO_FLEET` 为**新名（优先）**，`NAO_SKILLS` 保留为**兼容别名**，一个版本后弃用；两者同时设置时以 `NAO_FLEET` 为准。下游项目里的 shim 会自行解析包根（`NAO_FLEET` → `NAO_SKILLS` → 项目 `.pi/npm` → 全局安装），通常无需手工设置。
+
 ## 前置环境（硬性）
 
 缺任何一项都跑不起来，且不会「降级偷偷跑」——`check` / `ensure` 会直接报错退出。
@@ -35,13 +37,13 @@ gh --version                          # 可选
 
 ## 安装（项目级）
 
-机制以 npm 包 `@nathan33/nao-skill` 为**单一事实来源**，你的项目里只留一个转发入口。版本 pin 写在 `.pi/settings.json`，团队 clone 后按同一个 pin 物化，天然同款。
+机制以 npm 包 `nao-fleet` 为**单一事实来源**，你的项目里只留一个转发入口。版本 pin 写在 `.pi/settings.json`，团队 clone 后按同一个 pin 物化，天然同款。
 
 ```bash
 cd <你的项目>
-pi install --local npm:@nathan33/nao-skill@0.29.1   # 声明 pin + 把机制包物化到 .pi/npm
-npx @nathan33/nao-skill init                        # 写转发 shim + 生成 AGENTS.md
-npx @nathan33/nao-skill plugins install-all         # 装协作插件（多会话派活必需）
+pi install --local npm:nao-fleet@0.29.1   # 声明 pin + 把机制包物化到 .pi/npm
+npx nao-fleet init                        # 写转发 shim + 生成 AGENTS.md
+npx nao-fleet plugins install-all         # 装协作插件（多会话派活必需）
 ```
 
 **升级**：把 `.pi/settings.json` 里的 pin 改成新版本，再执行 `pi update --extensions`。机制以包为准，项目里没有需要你手动同步的副本。
@@ -66,7 +68,7 @@ npx @nathan33/nao-skill plugins install-all         # 装协作插件（多会�
 
 ### 术语表
 
-- **机制包 / 包根**：npm 包 `@nathan33/nao-skill` 的安装目录，会话里用环境变量 `NAO_SKILLS` 指向它。凡是文档里出现 `$NAO_SKILLS/.agents/...` 的路径，都相对包根解析。
+- **机制包 / 包根**：npm 包 `nao-fleet` 的安装目录，会话里用环境变量 `NAO_SKILLS` 指向它。凡是文档里出现 `$NAO_SKILLS/.agents/...` 的路径，都相对包根解析。
 - **shim（转发入口）**：项目里那一个 `.agents/scripts/nao-fleet.sh`，不含机制，只负责找到包内的真脚本并转发。
 - **物化**：`pi install` 把 npm 包内容落盘到 `.pi/npm/` 的过程。这一步需要 pi 与网络，是有意为之的显式动作。
 - **派生会话**：由 `ensure` 在 herdr 里新拉起的会话（例如 `ensure --task T1 rd-be`），任务结束即可回收。
@@ -208,7 +210,7 @@ NAO_TERMINAL=herdr .agents/scripts/nao-fleet.sh status
 
 **从 tmux 迁过来（v0.28.0 破坏性变更）**：
 
-- `NAO_TERMINAL=tmux` ⇒ **`rc=2`** + 一行指路（不会静默改用 herdr）。**还需要 tmux 就 pin 回 `@nathan33/nao-skill@≤0.27.x`**（`pi install -l npm:@nathan33/nao-skill@0.27.0`）。
+- `NAO_TERMINAL=tmux` ⇒ **`rc=2`** + 一行指路（不会静默改用 herdr）。**还需要 tmux 就 pin 回 `nao-fleet@≤0.27.x`**（`pi install -l npm:nao-fleet@0.27.0`）。
 - `NAO_TMUX_LAYOUT` / `NAO_TMUX_MAIN_WIDTH` / `NAO_TMUX_MIN_PANE_WIDTH` 三个变量与 `check` 的「tmux 布局」节**整组删除**（布局改由 herdr 的 tab 拓扑决定，不再有几何算式与窄列回退）。
 - `cleanup -S <socket>` **已移除**（`-S` 是 tmux 调用面）⇒ 改用 `cleanup --session <名>`；`-S` 现在是 `rc=2` + 指路。
 - 自检命令统一为 `herdr --version`（旧的 `herdr --version || tmux -V` 写法随回退面一起作废，见上节自检）。
@@ -256,12 +258,12 @@ v0.34 起 `close <role>` 把 `live+done` 判为**可回收**（`kill` → `rm` +
 ## 老项目迁移（曾在项目里铺开整套 `.agents/`）
 
 ```bash
-npx @nathan33/nao-skill migrate   # 旧文件备份到 .agents/.nao-obsolete/，再按需写入转发入口
+npx nao-fleet migrate   # 旧文件备份到 .agents/.nao-obsolete/，再按需写入转发入口
 ```
 
 迁移默认按**判定式**决定是否写 shim：仓里还有旧的 `nao-fleet.sh`、或已存在 shim、或全仓有 `nao-fleet` / `nao-skill` / `NAO_SKILLS` 引用，就写；**无脚本、无引用的纯文档仓会被判定跳过**，并打印一行告知。要改变判定结果，显式加 `--shim`（强制写）或 `--no-shim`（强制不写），两者不能同时给（`exit 2`）。
 
-**已知边界（按目录名判定）**：迁移把 `.agents/{prompts,common,checklists,templates}` 按**目录名**视为旧版 nao 资产 —— 项目自有的同名目录也会被备份后移除（备份在 `.agents/.nao-obsolete/`，可回滚）。操作前先预演：`npx @nathan33/nao-skill migrate --dry-run`（`init --dry-run` 同口径）—— 只打印将备份/移除的清单与目标，**盘面零写入**；与 `--force` 互斥（`exit 2`）。去掉 `--dry-run` 才真跑，预演清单与真跑动作逐项一致。
+**已知边界（按目录名判定）**：迁移把 `.agents/{prompts,common,checklists,templates}` 按**目录名**视为旧版 nao 资产 —— 项目自有的同名目录也会被备份后移除（备份在 `.agents/.nao-obsolete/`，可回滚）。操作前先预演：`npx nao-fleet migrate --dry-run`（`init --dry-run` 同口径）—— 只打印将备份/移除的清单与目标，**盘面零写入**；与 `--force` 互斥（`exit 2`）。去掉 `--dry-run` 才真跑，预演清单与真跑动作逐项一致。
 
 旧版的 `.agents/.nao-migrated` 标记**已废弃**：迁移不再读写它，可安全删除。`.agents/.nao-version` 的语义是「本机已安装机制包版本」（供升级检测），**不表达迁移状态**——迁移状态由「是否还有旧资产」推断。
 
@@ -270,7 +272,7 @@ npx @nathan33/nao-skill migrate   # 旧文件备份到 .agents/.nao-obsolete/，
 **从 0.12 起，机制不再铺进项目**：项目里只留转发入口，单一事实来源是 npm 包内的 `.agents/`。
 
 - **旧的完整性判据已失效**：以前靠「项目内 `.agents/**` 与包内逐字节 sha 一致」证明机制没漏没改；现在项目内没有机制副本，这条判据不再适用。
-- **新的完整性判据：以 pin 的包版本为准**。`.pi/settings.json` 记录版本，`pi install/update` 从包物化；包里是什么就是什么，不存在「项目内被就地改动」。转发入口是生成的固定文本，可用 `npx @nathan33/nao-skill init` 幂等重写核对。
+- **新的完整性判据：以 pin 的包版本为准**。`.pi/settings.json` 记录版本，`pi install/update` 从包物化；包里是什么就是什么，不存在「项目内被就地改动」。转发入口是生成的固定文本，可用 `npx nao-fleet init` 幂等重写核对。
 - **版本权威口径**：`.pi/settings.json` 的 pin 是**唯一权威**；`.agents/.nao-version` 的语义是「本机已安装机制包版本」，**不作为版本依据**；两者不一致时以 pin 为准。
 - **fmt 边界**：包内 `.agents/**` 按原始存储形态发布（部分 YAML / Markdown / MTS 未按 oxfmt / prettier 归一）。仍持有旧版全套 `.agents/**` 的仓库，继续把 `.agents/**` 排除出 fmt 校验即可，⛔ **不要为过 fmt 就地格式化**；新形态项目内只有转发入口，无需处理。
 
@@ -280,12 +282,12 @@ npx @nathan33/nao-skill migrate   # 旧文件备份到 .agents/.nao-obsolete/，
 - **本地**：`npm install --prefix apps/document` → `npm run docs:dev`（预览）/ `npm run docs:build`（产物 `apps/document/.vitepress/dist/`）。
 - **顺序（易错）**：`check:types → build → check:cards → check:links`；后两者读 `dist`，**先跑必红**。
 - **内容单一源**：角色卡正文由构建期从 `.agents/prompts/*.md` 注入（禁手抄）；其余文案在 `apps/document/content/**`；缺 `.agents/prompts` 时降级为一条告警，`--strict` 则失败。
-- **部署**：`.github/workflows/pages.yml` 构建后上传 dist（`--base /nao-skills/`），失败必红、不回传旧产物；`paths` 含 `.agents/prompts/**` 与 `roles.yaml`（改卡即重建，否则线上静默过期）。
+- **部署**：`.github/workflows/pages.yml` 构建后上传 dist（`--base /nao-fleet/`），失败必红、不回传旧产物；`paths` 含 `.agents/prompts/**` 与 `roles.yaml`（改卡即重建，否则线上静默过期）。
 
 ## 物化与离线（CI / 无 pi 环境必读）
 
 - `.pi/npm/` 由 pi 管理并 **gitignore**。因此 **fresh clone 上没有 `.pi/npm/package.json` 与 lockfile**，`npm ci --prefix .pi/npm` 当前**不可用**。
-- 物化只有一条路：**显式执行** `pi install -l --approve npm:@nathan33/nao-skill@<pin>`（需要 pi 与网络，是有意为之的一步）。
+- 物化只有一条路：**显式执行** `pi install -l --approve npm:nao-fleet@<pin>`（需要 pi 与网络，是有意为之的一步）。
 - **联动条款**：若某个仓库想把机制体检 `check` 放进 CI，**必须同时**用 `git add -f` 把 `.pi/npm/package.json`、`.pi/npm/package-lock.json` 纳入版本控制，`npm ci` 才有输入。
 - **pi 启动的隐式安装**：当 `.pi/npm/node_modules` 缺失时，pi 启动会隐式执行 `npm install --prefix .pi/npm --legacy-peer-deps`；离线且缓存为空会得到可读的 npm 报错，并让 pi 以非 0 退出（不会静默假装成功）。
 - **运行纪律**：**先显式物化，再 `PI_OFFLINE=1` 运行**。nao 机制自身（转发入口 / fleet / CLI / check）**零网络调用**；入口找不到机制包时不静默成功，而是 `exit 2` 并打印一行 `DEGRADED:` + 恢复命令。

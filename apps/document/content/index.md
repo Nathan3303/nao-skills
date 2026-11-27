@@ -12,20 +12,20 @@ home:
   lead:
     - 7 个 AI 角色分工干活，各管一段。
     - 你只做两件事：回答问题、点确认。
-  command: pi install --local npm:@nathan33/nao-skill
+  command: pi install --local npm:nao-fleet
   commandNote: 项目内版本 pin 见
-  commandNoteHref: https://github.com/Nathan3303/nao-skills/blob/main/README.md
+  commandNoteHref: https://github.com/Nathan3303/nao-fleet/blob/main/README.md
   commandNoteLinkText: README 安装段
   cta:
     - text: GitHub
-      href: https://github.com/Nathan3303/nao-skills
+      href: https://github.com/Nathan3303/nao-fleet
       external: true
       style: solid
     - text: 快速开始
       href: /quickstart/prereq
       style: solid
     - text: npm 最新版 ↗
-      href: https://www.npmjs.com/package/@nathan33/nao-skill
+      href: https://www.npmjs.com/package/nao-fleet
       external: true
       style: text
   trust: MIT 开源 · Node ≥18 · 仅支持 pi
@@ -236,13 +236,13 @@ home:
       body: 项目级安装：pin 写进 `.pi/settings.json` 进仓库，团队 clone 即得同款。
       code:
         - cd 你的项目
-        - pi install --local npm:@nathan33/nao-skill
-        - npx @nathan33/nao-skill init
+        - pi install --local npm:nao-fleet
+        - npx nao-fleet init
     - num: '03'
       title: 装协作插件，拉队开工
       body: 插件负责多会话派活；体检 exit 0 就能拉动 7 个常驻会话。
       code:
-        - npx @nathan33/nao-skill plugins install-all
+        - npx nao-fleet plugins install-all
         - .agents/scripts/nao-fleet.sh check
         - .agents/scripts/nao-fleet.sh ensure pm arch rd-fe rd-be qa rd-infra uiux
   faqKicker: 常见问题
@@ -265,15 +265,15 @@ home:
     lead: 装完只要一句话：在 PM 会话里说需求，剩下的它自己流转。
     cta:
       - text: GitHub
-        href: https://github.com/Nathan3303/nao-skills
+        href: https://github.com/Nathan3303/nao-fleet
         external: true
         style: solid
       - text: 读 README ↗
-        href: https://github.com/Nathan3303/nao-skills/blob/main/README.md
+        href: https://github.com/Nathan3303/nao-fleet/blob/main/README.md
         external: true
         style: text
       - text: npm 最新版 ↗
-        href: https://www.npmjs.com/package/@nathan33/nao-skill
+        href: https://www.npmjs.com/package/nao-fleet
         external: true
         style: text
     legal: MIT © 2026 Nathan Lee · 仅支持 pi ≥1.4.0 · 零外部依赖：不加载 CDN、不引外链字体、不做统计

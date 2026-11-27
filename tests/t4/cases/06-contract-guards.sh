@@ -715,17 +715,17 @@ t4_assert_eq "5" "$(for _f in t4_scan_term_bare_calls t4_verify_term_ledger t4_s
   "B1: 5 个 lint helper 均已定义（缺任一 ⇒ 其负控断言会因 127/空输出假绿）"
 t4_assert_file "$LEDGER_B1" "B1: 门面台账存在（tests/t4/fixtures/term-legacy-allowlist.txt）"
 
-# ---- T567-A：函数锚三向断言（ADR D3「174 函数锚怎么迁」；T567-B 起 176 = 174 + status --json 两函数；Step 2 门面中性化 200 = 185 + 15；T573 起 231 = 200 + sessions.sh 30 + _need_logs；T574 起 232；T579 起 233 = 232 + check_docs_index；T580 起 234 = 233 + check_ledger_structure）----
+# ---- T567-A：函数锚三向断言（ADR D3「174 函数锚怎么迁」；T567-B 起 176 = 174 + status --json 两函数；Step 2 门面中性化 200 = 185 + 15；T573 起 231 = 200 + sessions.sh 30 + _need_logs；T574 起 232；T579 起 233 = 232 + check_docs_index；T580 起 234 = 233 + check_ledger_structure；T594 起 235 = 234 + check_env_alias）----
 #   判据：① 各模块顶层函数并集 == 清单（无漏登记 / 无重名 / 无孤儿）② 归属模块一致
-#         ③ 总数守恒（清单行数 == 头 total == 实际并集 = 234）
+#         ③ 总数守恒（清单行数 == 头 total == 实际并集 = 235）
 #   锚在**清单**（functions.txt 一处 diff）：新增函数必须同行加一行 + 改头 total，否则本组必红。
 FN_MANIFEST="$T4_ROOT/.agents/scripts/fleet/functions.txt"
 t4_assert_file "$FN_MANIFEST" "T567-A: functions.txt 存在（函数锚的唯一清单）"
 t4_assert_eq "" "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MANIFEST")" \
-  "T567-A: 234 三向守恒（无漏登记/无孤儿/归属一致/总数==total）"
-t4_assert_eq "234" "$(grep -vcE '^[[:space:]]*(#|$)' "$FN_MANIFEST")" "T567-A: 清单行数 == 234（233 + T580 的 check_ledger_structure）"
-t4_assert_eq "234" "$(t4_fleet_count '^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{' "$FLEET_B1")" \
-  "T567-A: 各模块顶层函数并集 == 234（数量守恒）"
+  "T567-A: 235 三向守恒（无漏登记/无孤儿/归属一致/总数==total）"
+t4_assert_eq "235" "$(grep -vcE '^[[:space:]]*(#|$)' "$FN_MANIFEST")" "T567-A: 清单行数 == 235（234 + T594 的 check_env_alias）"
+t4_assert_eq "235" "$(t4_fleet_count '^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{' "$FLEET_B1")" \
+  "T567-A: 各模块顶层函数并集 == 235（数量守恒）"
 # 失败演练（判据必须承重，不能空转）：三种变异各自必红
 FN_MUT="$T4_CACHE_DIR/fn-manifest-$$.mut"
 grep -v $'\tcmd_check$' "$FN_MANIFEST" > "$FN_MUT"
@@ -734,10 +734,10 @@ t4_assert_contains "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" | grep 
 sed 's#^fleet/lib/check.sh\tcmd_check$#fleet/lib/core.sh\tcmd_check#' "$FN_MANIFEST" > "$FN_MUT"
 t4_assert_contains "$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" || true)" "归属不符" \
   "T567-A 负控②：模块归属写错 ⇒ 必红"
-sed 's/^# total: 234.*$/# total: 233/' "$FN_MANIFEST" > "$FN_MUT"
+sed 's/^# total: 235.*$/# total: 234/' "$FN_MANIFEST" > "$FN_MUT"
 out="$(t4_verify_functions_manifest "$FLEET_B1" "$FN_MUT" || true)"
 t4_assert_contains "$out" "总数不符" "T567-A 负控③：头 total 与并集不符 ⇒ 必红"
-t4_assert_contains "$out" "清单行数 234 ≠ 头 total 233" "T567-A 负控③b：只改 total 不改行数 ⇒ 同样必红"
+t4_assert_contains "$out" "清单行数 235 ≠ 头 total 234" "T567-A 负控③b：只改 total 不改行数 ⇒ 同样必红"
 
 # ---- T572：业务层后端词静态闸（双向负控 + 判据存在 + 演练）----
 t4_assert_eq "1" "$(type t4_scan_business_backend_words >/dev/null 2>&1 && echo 1 || echo 0)" \
@@ -1642,6 +1642,38 @@ sed 's/ | rcpt=—｜<对账键：commit + 门禁 HEAD + 用例结论>//; s/^rcp
 t4_assert_eq "0" "$(grep -c '^\[编号\] done(lite).*rcpt=' "$NEG_TP/comm-templates.md" || true)" \
   "T585 负控②：删模板 rcpt= ⇒ 计数归 0（第四条判据承重）"
 rm -rf "$NEG_IC" "$NEG_TP"
+
+# ============================================================================
+# T594（#262）：包根 env 兼容层 —— `NAO_FLEET` 优先、`NAO_SKILLS` 回退（同一结果）
+#   做法：拷一份 `.agents` 并删掉 1 个模板（files= 与真仓不同）⇒ 用 files= 区分「读的是哪个根」。
+#   判据：① NAO_FLEET=副本 ⇒ 读副本 ② NAO_SKILLS=副本 ⇒ 同一结果（兼容成立）
+#         ③ 两者同给且不同 ⇒ NAO_FLEET 胜（两向）④ check 侧硬断言在位 + 删调用 ⇒ 必红
+RM_LAB="$T4_CACHE_DIR/t594-env-$$"; rm -rf "$RM_LAB"; mkdir -p "$RM_LAB"
+cp -r "$T4_ROOT/.agents" "$RM_LAB/.agents"
+# 用「加一个无关文本文件」而不是删文件来区分母数（删模板会破交叉引用 ⇒ rc=1、无摘要行）
+printf 'T594 env probe\n' > "$RM_LAB/.agents/t594-env-probe.txt"
+rm_lab_files() { # <env 赋值...> → files 数字（摘要行或完整报告的「N 个文本文件全 LF」都认）
+  ( cd "$T4_ROOT" && env -u NAO_SKILLS -u NAO_FLEET "$@" bash .agents/scripts/nao-fleet.sh check 2>/dev/null \
+      | sed -n -e 's/.*files=\([0-9]*\).*/\1/p' -e 's/^  ✓ \([0-9]*\) 个文本文件全 LF$/\1/p' | head -1 )
+}
+REAL_FILES="$(rm_lab_files)"
+LAB_FILES="$(rm_lab_files NAO_FLEET="$RM_LAB")"
+t4_assert_eq "$REAL_FILES" "$(rm_lab_files)" "T594 基线：真仓 files= 取数（$REAL_FILES）"
+t4_assert_eq "$(( REAL_FILES + 1 ))" "$LAB_FILES" "T594 ① NAO_FLEET=副本 ⇒ 读副本（files=$LAB_FILES）"
+t4_assert_eq "$LAB_FILES" "$(rm_lab_files NAO_SKILLS="$RM_LAB")" "T594 ② NAO_SKILLS=副本 ⇒ 兼容别名成立（同一结果）"
+t4_assert_eq "$LAB_FILES" "$(rm_lab_files NAO_FLEET="$RM_LAB" NAO_SKILLS="$T4_ROOT")" \
+  "T594 ③ 两都给：NAO_FLEET=副本 胜（不吃 NAO_SKILLS）"
+t4_assert_eq "$REAL_FILES" "$(rm_lab_files NAO_FLEET="$T4_ROOT" NAO_SKILLS="$RM_LAB")" \
+  "T594 ③' 反向：NAO_FLEET=真仓 胜（优先级非路径巧合）"
+t4_assert_eq "1" "$(grep -c '^  check_env_alias || rc=1$' "$(t4_fleet_file_for "$T4_ROOT/.agents/scripts" cmd_check)" || true)" \
+  "T594 ④ check 侧硬断言在位（check_env_alias 调用恰 1 处）"
+RM_NEG="$T4_CACHE_DIR/t594-neg-$$"; rm -rf "$RM_NEG"; mkdir -p "$RM_NEG"
+cp -r "$T4_ROOT/.agents" "$RM_NEG/.agents"
+sed -i 's/^SKILLS_DIR=.*$/SKILLS_DIR="${NAO_SKILLS:-$(cd "$SCRIPT_DIR\/..\/.." \&\& pwd)}"/' "$RM_NEG/.agents/scripts/fleet/lib/core.sh"
+RM_NEG_OUT="$( cd "$T4_ROOT" && NAO_FLEET="$RM_NEG" bash "$RM_NEG/.agents/scripts/nao-fleet.sh" check 2>&1 || true )"
+t4_assert_contains "$RM_NEG_OUT" "包根解析行须同时支持" \
+  "T594 负控：把解析行改回只读 NAO_SKILLS ⇒ check 必红（硬断言承重）"
+rm -rf "$RM_LAB" "$RM_NEG"
 
 rm -rf "$B1BIN" "$B1_LOG" "$NEG_B1A" "$NEG_B1B" "$NEG_B1C" "$NEG_B1D" "$NEG_LED"
 

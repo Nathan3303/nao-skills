@@ -1,6 +1,6 @@
 # 实现报告 · T580 开工卡表格化 + 台账按批次分割（rd-infra）
 
-- 任务：**T580** · 角色：rd-infra · Issue [#238](https://github.com/Nathan3303/nao-skills/issues/238) · 更新：2026-11-27
+- 任务：**T580** · 角色：rd-infra · Issue [#238](https://github.com/Nathan3303/nao-fleet/issues/238) · 更新：2026-11-27
 - 指针：PRD `docs/T580-kickoff-card/prd.md` · 卡 `kickoff.md` · 结构正文 `checklists/deliverable-docs.md` §十一
 
 ## 范围 / 不测

@@ -6,7 +6,7 @@
 #       `<包根>/.agents/scripts/nao-fleet.sh`。
 #
 # 解析序（D6）：
-#   1) NAO_SKILLS（显式）—— 直接采用（须含 .agents/scripts/nao-fleet.sh）
+#   1) NAO_FLEET（显式，优先）/ NAO_SKILLS（兼容别名）—— 直接采用（须含 .agents/scripts/nao-fleet.sh）
 #   2) 项目 .pi/npm（pin 主）—— 遍历 .pi/settings.json 的 npm 声明，node resolve
 #      出「含 nao 机制」的包，版本须与声明一致
 #   3) ~/.pi/agent/npm —— 仅当版本与 pin 完全一致时采用
@@ -28,7 +28,7 @@ PROJ_ROOT="$(cd "$AGENTS_DIR/.." && pwd)"
 SETTINGS="$PROJ_ROOT/.pi/settings.json"
 GLOBAL_MOD="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/npm/node_modules"
 
-DEGRADED_HINT='恢复：在项目根执行 `pi install -l --approve npm:@nathan33/nao-skill@<pin>`（或运行 pi 让其自动物化），再重试'
+DEGRADED_HINT='恢复：在项目根执行 `pi install -l --approve npm:nao-fleet@<pin>`（或运行 pi 让其自动物化），再重试'
 
 degrade() {
   printf 'DEGRADED: %s；%s\n' "$1" "$DEGRADED_HINT" >&2
@@ -79,11 +79,15 @@ resolve_nao_pkg() { # $1 = node_modules 目录
 PKG_ROOT=""
 PIN_VER=""
 
-# 1) 显式 NAO_SKILLS
-if [[ -n "${NAO_SKILLS:-}" ]]; then
-  [[ -d "$NAO_SKILLS" ]] || degrade "NAO_SKILLS 不是目录：$NAO_SKILLS"
-  PKG_ROOT="$(cd "$NAO_SKILLS" && pwd)"
-  [[ -f "$PKG_ROOT/.agents/scripts/nao-fleet.sh" ]] || degrade "NAO_SKILLS 指向的不是 nao 机制包：$PKG_ROOT"
+# 1) 显式包根：NAO_FLEET 优先（T594 起），NAO_SKILLS 为兼容别名
+PKG_ENV_NAME=""
+[[ -n "${NAO_FLEET:-}" ]] && PKG_ENV_NAME="NAO_FLEET"
+[[ -z "$PKG_ENV_NAME" && -n "${NAO_SKILLS:-}" ]] && PKG_ENV_NAME="NAO_SKILLS"
+if [[ -n "$PKG_ENV_NAME" ]]; then
+  PKG_ROOT_RAW="${!PKG_ENV_NAME}"
+  [[ -d "$PKG_ROOT_RAW" ]] || degrade "$PKG_ENV_NAME 不是目录：$PKG_ROOT_RAW"
+  PKG_ROOT="$(cd "$PKG_ROOT_RAW" && pwd)"
+  [[ -f "$PKG_ROOT/.agents/scripts/nao-fleet.sh" ]] || degrade "$PKG_ENV_NAME 指向的不是 nao 机制包：$PKG_ROOT"
 else
   # 2) 项目 .pi/npm（pin 主）
   FOUND="$(resolve_nao_pkg "$PROJ_ROOT/.pi/npm/node_modules")"

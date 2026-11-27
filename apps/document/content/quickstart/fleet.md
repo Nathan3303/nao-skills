@@ -7,7 +7,7 @@ title: 拉队开工
 ## 三步
 
 ```bash
-npx @nathan33/nao-skill plugins install-all        # 1. 装协作插件（多会话派活必需）
+npx nao-fleet plugins install-all        # 1. 装协作插件（多会话派活必需）
 .agents/scripts/nao-fleet.sh check                 # 2. 体检，返回 0 才能开工
 .agents/scripts/nao-fleet.sh ensure pm arch rd-fe rd-be qa rd-infra uiux   # 3. 拉起 7 个会话
 ```

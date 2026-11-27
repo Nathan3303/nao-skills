@@ -78,7 +78,8 @@
 #   当前：pm / arch-designer(arch) / uiux-designer(uiux, ui-designer) / rd-fe / rd-be / qa / rd-infra(infra)
 #
 # 环境变量
-#   NAO_SKILLS=<dir>                          nao 机制包根目录（默认 <脚本>/../..；项目内 shim 会显式指向包根）
+#   NAO_FLEET=<dir>                           nao 机制包根目录（默认 <脚本>/../..；项目内 shim 会显式指向包根）
+#   NAO_SKILLS=<dir>                          兼容别名（旧名，一个版本后弃用；与 NAO_FLEET 同给时以前者为准）
 #   NAO_MODEL_WHITELIST=<glob,...>            -m 白名单（默认空=不校验，支持 glob）
 #   NAO_CLOSE_BUSY_PATTERN=<ERE>             close 的在跑 turn 判定正则（默认内置 pi 状态行标记）
 #   NAO_TERMINAL=<值>                        后端形态：herdr（TUI，默认）/ app（desktop app）；给**其他任何值**（含已移除的 tmux）

@@ -1,5 +1,5 @@
 {
-  "name": "@nathan33/nao-skill",
+  "name": "nao-fleet",
   "version": "0.36.0",
   "description": "nao 多角色 AI 开发舰队（仅 pi）：角色卡 / 技能 / 协作协议 / 工具链，一键接入项目",
   "type": "module",
@@ -58,10 +58,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Nathan3303/nao-skills.git"
+    "url": "git+https://github.com/Nathan3303/nao-fleet.git"
   },
-  "homepage": "https://github.com/Nathan3303/nao-skills",
+  "homepage": "https://github.com/Nathan3303/nao-fleet",
   "bugs": {
-    "url": "https://github.com/Nathan3303/nao-skills/issues"
+    "url": "https://github.com/Nathan3303/nao-fleet/issues"
   }
 }

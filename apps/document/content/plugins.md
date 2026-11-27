@@ -7,10 +7,10 @@ title: 插件选择
 舰队不是「装上就能跑」的空壳——它同时要装 5 个 pi 插件才凑齐能力。一条命令装全部：
 
 ```bash
-npx @nathan33/nao-skill plugins install-all
+npx nao-fleet plugins install-all
 ```
 
-想知道装到哪了：`npx @nathan33/nao-skill plugins list`（列出已装、缺失）。
+想知道装到哪了：`npx nao-fleet plugins list`（列出已装、缺失）。
 
 ## 五个插件
 
