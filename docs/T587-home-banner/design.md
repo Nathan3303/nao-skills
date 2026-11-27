@@ -81,3 +81,4 @@
 ## 变更记录
 
 - 2026-11-27 用户改判：去播放按钮、去 caption，形态 = 纯装饰画面（参照 herdr.dev 首屏，页面上一行字都不加）；介质 = 动画 WebP（1280w/12fps） + 静态 jpg 降级（`prefers-reduced-motion`）；WCAG 2.2.2 偏差见实现报告（PR #252）。
+- 2026-11-27 用户追加：banner 底边渐隐（照 herdr.dev 的 mask 62%→98% + 环改 shadow）

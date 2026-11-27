@@ -387,21 +387,25 @@
   padding-bottom: 0;
 }
 
-/* 比例锁素材原比 1896/1030（=1.841）：套 16:9 会裁切或加黑边，违反「不裁不改」 */
+/* 比例锁素材原比 1896/1030（=1.841）：套 16:9 会裁切或加黑边，违反「不裁不改」。
+   底边渐隐照 herdr.dev：mask 加在外层，下 36% 淡出（62% 起、98% 全透明），让画面「融进页面」而不是被边线切断。
+   因此这里不放背景色 —— 淡出区要露出页面底色；1px 环也一并挪到内层 img 上（见 .banner-image）。 */
 .nh .banner-figure {
   position: relative; /* sr-only fallback 的包含块 —— 它属于 figure，不落到更上层 */
   margin: 0;
   aspect-ratio: 1896 / 1030;
-  background: var(--nh-sunken);
-  border: 1px solid var(--nh-border);
   border-radius: var(--nh-r-14);
   overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 62%, transparent 98%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent 98%);
 }
 
+/* 1px 环用 shadow 画在内层：跟着 mask 一起淡出（外扩 1px 会被 overflow: hidden 裁掉，故用 inset，视觉同为 1px） */
 .nh .banner-image {
   display: block;
   width: 100%;
   height: auto;
+  box-shadow: inset 0 0 0 1px var(--nh-border);
 }
 
 /* 图加载失败时只留读屏一句，屏上不加可见文字行（用户拍板：只要画面） */
