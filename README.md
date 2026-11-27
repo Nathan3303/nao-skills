@@ -66,11 +66,11 @@ pi --version && node -v && git --version && herdr --version
 
    ```bash
    cd 你的项目
-   pi install --local npm:nao-fleet@0.30.0   # 声明 pin，并把机制包物化到项目内 .pi/npm
+   pi install --local npm:nao-fleet@0.37.0   # 声明 pin，并把机制包物化到项目内 .pi/npm（版本随发版更新）
    npx nao-fleet init                        # 写入转发入口 shim + 生成 AGENTS.md
    ```
 
-   > 示例带版本 pin（团队 clone 即得同款）。只想装最新版，可省略 `@0.30.0`：`pi install --local npm:nao-fleet`。
+   > 示例带版本 pin（团队 clone 即得同款）。只想装最新版，可省略 `@0.37.0`：`pi install --local npm:nao-fleet`。
 
 3. **装协作插件**（多会话派活必需）：
 
@@ -133,7 +133,7 @@ PM：在 PR 核 AC 并评论 → 验收通过（授权合并）→ rd-be squash 
 **为什么需要终端后端？** 舰队要把 7 个角色会话放进终端里，且要能可靠地「找回来」与「收掉」。
 
 - **唯一后端 = herdr**：每个角色一个 tab，身份靠结构化事实（pane label + agent 状态）判定，不依赖终端标题；需要 `herdr integration install pi` 且命令要在 herdr 的 pane 内执行。
-- **旧的 tmux 后端已在 v0.28.0 移除**：`NAO_TERMINAL=tmux` 会 **rc=2 并给一行指路**（不会静默按 herdr 跑）。还需要 tmux 的话请把 `nao-fleet` pin 回 `≤0.27.x`。
+- **旧的 tmux 后端已在 v0.28.0 移除**：`NAO_TERMINAL=tmux` 会 **rc=2 并给一行指路**（不会静默按 herdr 跑）。还需要 tmux 的话请把**旧包** `@nathan33/nao-skill` pin 回 `≤0.27.x`（新包 `nao-fleet` 从 0.37.0 起，无 tmux 后端）。
 
 **不能自动回落**（静默换后端会让同一命令在不同机器上跑出不同结果）—— 所以移除时也选了 fail loud，而不是悄悄换掉。
 

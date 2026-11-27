@@ -17,7 +17,7 @@ npx nao-fleet init                 # 写转发入口 + 生成 AGENTS.md
 - 第一条只做两件事：声明依赖，把包下载到项目里。它把版本写进 `.pi/settings.json`，而这个文件进仓库——团队 clone 下来就是同款机制。
 - 第二条才真正落地：写一个转发脚本、生成项目级约定文件。
 
-想钉版本就写全：`pi install --local npm:nao-fleet@0.24.0`；只想跟最新版就省略 `@版本号`。
+想钉版本就写全：`pi install --local npm:nao-fleet@0.37.0`；只想跟最新版就省略 `@版本号`。
 
 ## 你项目里多了什么
 
