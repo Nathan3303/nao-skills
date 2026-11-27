@@ -28,7 +28,7 @@ bash tests/t4/run.sh --case 06                     # 函数锚/用例编号/摘�
 
 ## 缺陷与风险
 
-- **AC6 ② 的字面判据不可达**（发现即报，未自行放宽）：基线文件集的 `docs/{6 目录}/` 指针数 origin/main 1233 → 本分支 1200（**−33，全部**来自 PRD §三 要求改写的 6 组机制文本旧路径：github-flow 14→0 · pm 11→3 · intercom-protocol 7→0 · release-notes 3→1 · arch-patterns 2→1 · qa 1→0）；冻结目录文件集与行数 diff 为空；**未被本任务改写的文件内指针数 1190 → 1190（差值 0）**。判据订正建议见回执。
+- **AC6 ② 的字面判据不可达**（发现即报，未自行放宽）：基线文件集的 `docs/{6 目录}/` 指针数 origin/main 1233 → 本分支 1181（**−52**，全部来自本任务按 §三/§十 有意改写的机制文本旧路径；改写文件集 = **14 个**，无第 15 个）；冻结目录文件集与行数 diff 为空；**未改写面 Δ = 0**（口径：排除本任务全部改动文件后统计该 6 目录指针数，origin/main 与本分支相等；绝对值随排除口径浮动，故只主张差值）。判据已由 PM 定稿为「冻结目录 diff 空 + 可枚举的 14 文件 + 只允许路径/指针变更」。
 - 索引是单点：PM 忘加行 ⇒ `check` 摘要常驻回显（已实现），「删一行必须红」由 `cases/53` 承载。
 - 约 8 个落点文件（`output-format.md` / `comm-templates.md` / `skills/{test-design,task-completion,pm-to-spec,pm-operations,research,design-loop}.md`）仍写旧路径 —— 按派单 Owner 归 PM（落点清单 §二/§八/§九），本 PR 未改。
 

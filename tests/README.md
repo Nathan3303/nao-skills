@@ -14,7 +14,7 @@ bash tests/t4/run.sh --case 03                 # 单跑
 T4_ALLOW_MISSING=1 bash tests/t4/run.sh        # 宽松：缺产物=BLOCKED（仅显式 1）
 T4_REQUIRE_FULL=1 bash tests/t4/run.sh         # 发布前置：SKIP/DEGRADE>0 或非白名单 NOTE 即 FAIL
 bash tests/t4/run.sh --case 27                 # 后端夹具自检（隔离 / 零渗透 / 拆场幂等 / 零残留）
-npm test                                       # 唯一机械门禁 = test:agents + test:t4（全量 44 例，不变）
+npm test                                       # 唯一机械门禁 = test:agents + test:t4（全量 45 例，不变）
 npm run test:fast                              # 快档：test:agents + run.sh --fast（白名单 14 例，≈95s）
 bash tests/t4/run.sh --fast -t                  # 快档 + per-case 耗时（-t 可组合）
 bash tests/t4/run.sh --fast -v                  # 快档 + 逐例展开跳过原因（AC5）
@@ -23,7 +23,7 @@ npm run test:t4:full                           # 发布前置双轴（= 上面�
 # T555：后端唯一（herdr）⇒ 旧 `test:t4:full:dual`（双后端串跑）已删除；`NAO_TEST_TERMINAL=<任意值>` ⇒ rc=1（开关已移除）
 ```
 
-- **快档 / 全量分档（PRD #143）**：`npm run test:fast` 只跑白名单（当前 14 例，实测 ≈95s），**`npm test` 仍是全量唯一机械门禁**（44 例，PR CI / 合并前 / 发布前照跑；发布前置再加 `test:t4:full`）。
+- **快档 / 全量分档（PRD #143）**：`npm run test:fast` 只跑白名单（当前 14 例，实测 ≈95s），**`npm test` 仍是全量唯一机械门禁**（45 例，PR CI / 合并前 / 发布前照跑；发布前置再加 `test:t4:full`）。
   - 白名单与判据**单点**在 `tests/t4/run.sh` 的 `FAST_CASES`（每项一行注释：不 exec 真 pi / 不起真 server / 实测单价 ≤15s）；其余例分三组（真机类 · 替身重档 · 单价超限），起跑即打印「跳过 N 例（真机类/重档）：编号…」+「本档未覆盖」声明，`-v` 逐例展开 —— **禁止静默跳过**（AC5/AC9）。
   - **新增用例必须登记**白名单或跳过分组，否则 `--fast` 硬错（防新用例被悄悄漏测）；未覆盖面、单价与 profile 见 `docs/reports/143-profile.md`。
   - 发布前置 `T4_REQUIRE_FULL=1` 与 `--fast` **互斥**（快档跳过 30 例却可能报 PASS ⇒ 假绿）；发布前置一律 `npm run test:t4:full`。
@@ -103,6 +103,7 @@ npm run test:t4:full                           # 发布前置双轴（= 上面�
 | 27 | 后端抽象层自检（`tests/t4/lib-backend.sh`，生产脚本零改动）：两实验场互不可见（`terminal_id` 交集空 / 会话名含 `$$` / A 增建 pane 不动 B）· 零渗透（`^TMUX`==0 · `HERDR_SESSION` · `HERDR_SOCKET_PATH` 前缀 · 只隔离 `XDG_CONFIG_HOME` 且 `XDG_STATE_HOME` 透传）· `stop` 容忍非 0 + `delete` 幂等（effect 判据）· 零残留（`sessions/` 空 / 无 server / 无进程）· `default` 不可达 · 护栏「缺 `--session` ⇒ FAIL」变异自证 · 静态守卫（裸 tmux 恒带 `-S` / 裸 herdr 恒带 `--session` / 无固定 sleep） | #96 一期 AC1.4/AC1.5/AC1.7 · BR4/BR6/BR9 | `tmux`（缺则 SKIP）或 `herdr`（缺则 SKIP；另需 `protocol 22`）；零网络、无真 `pi` |
 | 35 | `check` 的 **stash 滞留机械闸**（#126 · B2-2）：无 stash ⇒ **零输出**（`^  ! ` 计数 0 / 摘要无 `warn=` 字段 / rc=0）· 有 stash ⇒ **恰 1 条** `  ! ` + 摘要 `warn=1` + rc **仍 0**（warn-only）+ 文案含 BR5/pop/归口 + 点名最新一条消息 · pop 掉 ⇒ 消失（双向）· 多条 ⇒ 仍一条并给出条数（不逐条刷屏）· 根上无 `.git` ⇒ 零输出（**不向上 walk**，防临时目录被父仓误判）· **零副作用自证**：真实仓库 stash 存量前后一致 + 哨兵 stash 未出现 · 静态面：单点 + `|| true` + 机制脚本**只读**（无 push/pop/apply/drop） | #126 B2-2 · BR5 | 无（`git` + 临时仓 `git init` + 桩 `herdr`/`tmux`/`pi`；不建 server、不碰真实仓库 stash） |
 | 32 | 真机整轮 herdr（#96 三期 P1 · AC3.5/AC3.1/AC3.2）：四件私有 env（`XDG_CONFIG_HOME`/`HOME`/`PI_CODING_AGENT_DIR`/`TMPDIR`）⇒ 结构性不碰用户 `default`/`~/.pi` · `integration install pi` 尊重 `PI_CODING_AGENT_DIR` · `session-start` → 2 角色（pm + rd-fe）→ **布局 A**（1 workspace/仓 + 1 tab/角色 + 每 tab 恰 1 pane；判据 = `tab list` 的 `pane_count` + `pane list` 的 `tab_id`，结构非几何）· 就绪七条件在 `agent list` 复核 · `status` 双在线 · **迁移无损**（`pane move … --tab … --split right` ⇒ pane_id 不变 + 空 tab 自关 + status 仍在线）· `close` + `cleanup` ⇒ `sessions/` 空 + 零残留 · J1/J4 真小空间（`[server] headless_cols/headless_rows` 60×20 不 warn / 40×8 warn + 三件套 + 无 0 尺寸 pane）· 用户 `~/.pi` 与 `~/.config/herdr` 路径集合前后一致 | #96 三期 AC3.1/AC3.2/AC3.5 | 真 `herdr`（≥0.9.1，protocol 22；缺则按 AC1.5 **SKIP 给原因**）+ 真 `pi`（集成装进私有 agent dir）；~24s（整轮 13.8s + 两场小空间夹具） |
+| 53 | docs 一级索引一致性探针（T579）：三段标题启用谓词 + 剥 ``` 围栏 + 目录↔行 / 版本↔文件 / ADR↔时间线三处双向 + 半启用提示 · warn-only（不计 `warn=`、不改 rc、摘要常驻）· 老仓零输出 · 本仓零输出 + md5 · 三条变异负控（删调用 / 去排除名单 / 取反幽灵判据） | AC1/AC2/AC3/AC5/AC7 · PRD #237 | 无（纯 bash + `.agents` 夹具；不建 terminal server、不跑真 pi） |
 
 ## NOTE 白名单（T531 · `t4_note <tag> <msg>`）
 

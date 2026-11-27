@@ -700,8 +700,6 @@ cmd_check() {
   # T579：docs 一级索引一致性探针（warn-only ⇒ 不计 warn、不改 rc；老仓 / 一致 ⇒ 零输出）
   check_docs_index || true
 
-  # T579：docs 一级索引一致性探针（warn-only ⇒ 不计 warn、不改 rc；老仓 / 一致 ⇒ 零输出）
-
   echo "== 按需技能 =="
   if [[ -d "$SKILLS_SUB" ]]; then
     shopt -s nullglob
