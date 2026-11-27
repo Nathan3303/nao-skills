@@ -14,7 +14,8 @@
     "check:links": "node scripts/check-links.mjs",
     "check:types": "tsc -p tsconfig.json",
     "check:cards": "node scripts/check-cards.mjs",
-    "check:plugins": "node scripts/check-plugins.mjs"
+    "check:plugins": "node scripts/check-plugins.mjs",
+    "check:icons": "node scripts/check-links.mjs --self-test"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.1.2",
