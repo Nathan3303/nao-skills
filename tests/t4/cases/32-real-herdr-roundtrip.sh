@@ -56,7 +56,9 @@ t4_assert_eq "22" "$PROTO" "① 前提：herdr protocol=22（AC1.5 第一类）"
 REAL_PI_SNAP_BEFORE="$(find "$REAL_PI" \( -type f -o -type d \) 2>/dev/null | sort)"
 # T584 P3②：真实 agent-dir settings 的**内容快照**（尺寸+mtime+md5）——只断言「本用例没写/没改真实 HOME」，
 #   不依赖「用户恰好没设 defaultProjectTrust」（否则用户哪天自己设了，这例必红）。
-real_settings_snap() { { ls -l "$REAL_PI/agent/settings.json" 2>/dev/null | awk '{print $5, $6, $7, $8}'; md5sum "$REAL_PI/agent/settings.json" 2>/dev/null | awk '{print $1}'; } | paste -sd'|' -; }
+# T584 P3②'：粒度必须**亚秒** —— `ls -l` 的分钟串对「同一分钟内同内容覆写」检测不到（QA 撞到）。
+#   取 `stat -c '%s %y'`：字节数 + mtime（含纳秒）⇒ 任何一次写入都变化；再叠 md5 兜住「内容变了但 mtime 复刻」。
+real_settings_snap() { { stat -c '%s %y' "$REAL_PI/agent/settings.json" 2>/dev/null; md5sum "$REAL_PI/agent/settings.json" 2>/dev/null | awk '{print $1}'; } | paste -sd'|' -; }
 REAL_SETTINGS_SNAP="$(real_settings_snap)"
 REAL_HERDR_SNAP_BEFORE="$(find "$REAL_HERDR_ROOT" \( -type f -o -type d \) 2>/dev/null | sort)"
 export XDG_CONFIG_HOME="$LAB/config"
