@@ -43,7 +43,7 @@ home:
       text: → pm 接单 · 已派给 arch / rd-fe
       more: true
     - kind: muted
-      text: ❯ 想加一个登录页
+      text: 'pi> 想加一个登录页'
       more: true
       gap: true
   banner:
