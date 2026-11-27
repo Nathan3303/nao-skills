@@ -91,6 +91,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 【仅 feat】需新开的会话已 `ensure` 并经 `list` 验证
 - [ ] 【仅 feat】派生会话已回收（验收通过后 `close --task <编号> <别名>`；常驻会话**不回收**，需重开时 `ensure --force`）
 - [ ] 【仅 feat】全程 PM 未触碰代码
+- [ ] 【仅 feat】**判据先造反例**：写 AC 的 Then 前，按 R1–R6 自查（聚合轴 / 基数混轴 / 空集 / 截断 / 语义隔层 / 采样点不稳）+ **第 7 类「盘点靠 grep 不靠记」**；语义变更类还须附一份 `grep` 产出的调用点清单（**该动 / 该留** 两个数）。规则正文见 @.agents/skills/pm-to-spec.md「判据可核性」
 - [ ] 【仅 feat】**开工确认卡已落盘** `docs/<任务号>-<slug>/kickoff.md`（10 字段齐，模板 `@.agents/templates/task-docs/kickoff.md.example`），且台账该批次段有 6 列卡摘要行（字段与表头正文见 @.agents/checklists/deliverable-docs.md §十一）
 - [ ] 【仅 feat】台账结构合规：`## 批次索引` 一行对应一条归档批次 · 活批次段内 6 列摘要 · 状态 6 值之一 · 完成即收（完成后删摘要只留索引行）—— 正文见 @.agents/checklists/deliverable-docs.md §十一
 - [ ] 【仅 feat】PRD 已落**任务目录** `prd.md` 并在 `docs/README.md` 任务段登记一行（新增目录必须同批加行，否则 `check` 报「未在任务段登记」；约定见 @.agents/checklists/deliverable-docs.md §十）
