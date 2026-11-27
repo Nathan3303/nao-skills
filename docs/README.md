@@ -10,6 +10,7 @@
 | 任务号 | 目录 | 一句话 | Issue/PR |
 | :--- | :--- | :--- | :--- |
 | T579 | `docs/T579-docs-per-task/` | docs 按任务分割 + 一级索引（本规矩的样板） | [#237](https://github.com/Nathan3303/nao-skills/issues/237) |
+| T580 | `docs/T580-kickoff-card/` | 开工确认卡表格化 + 台账按批次分割（模板 + `check` 最小断言） | [#238](https://github.com/Nathan3303/nao-skills/issues/238) |
 
 ## 二、版本
 
