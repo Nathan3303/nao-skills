@@ -278,6 +278,18 @@ npx nao-fleet migrate   # 旧文件备份到 .agents/.nao-obsolete/，再按需�
 - **版本权威口径**：`.pi/settings.json` 的 pin 是**唯一权威**；`.agents/.nao-version` 的语义是「本机已安装机制包版本」，**不作为版本依据**；两者不一致时以 pin 为准。
 - **fmt 边界**：包内 `.agents/**` 按原始存储形态发布（部分 YAML / Markdown / MTS 未按 oxfmt / prettier 归一）。仍持有旧版全套 `.agents/**` 的仓库，继续把 `.agents/**` 排除出 fmt 校验即可，⛔ **不要为过 fmt 就地格式化**；新形态项目内只有转发入口，无需处理。
 
+## 无人值守与信任提示（`ensure` 卡在 `Trust project folder?`）
+
+`pi` 在**未信任的目录**首次交互启动会停在 `Trust project folder?` 提示；此时 herdr 的 agent-state 扩展不加载 ⇒
+`ensure` 的就绪门只会报「超时」（`agent_session` / `screen_detection_skipped` 两条 hook 信号恒缺），人看不出病根。
+
+- **诊断**：`ensure` 超时时若 pane 屏上命中该提示，会单列一行指路（`herdr pane read <pane>` 也能自己看）。**这一行只是指路**，不构成「已就绪」的证据 —— 屏幕文案随 pi 版本变，判据仍是就绪门那七条。
+- **处置（按场景选一）**：
+  - 交互使用：在 pane 里按 <kbd>Enter</kbd> 选 `Trust`（选 `Trust parent folder` 可覆盖同一父目录下的后续仓）；事后可用 `/trust` 固化。
+  - **无人值守 / 自动化**：在该 pi 的 **agent-dir settings** 里预置 `{"defaultProjectTrust":"always"}`（此键只能在 agent-directory settings 里设，即 `$PI_CODING_AGENT_DIR/settings.json`；仓库内 `.agents/tests` 的夹具就是这么做）。也可对单次运行显式 `pi --approve`。
+  - 信任决策的优先级（pi 文档）：`--approve/--no-approve` > 扩展的 `project_trust` > `~/.pi/agent/trust.json` 的已存决策 > `defaultProjectTrust`。
+- **边界**：`defaultProjectTrust=always` 等于「该 agent-dir 下的项目都免确认」——只在自己的机器/一次性夹具里用，别写进共享配置。
+
 ## 文档站（`apps/document`）
 
 - **形态**：独立私有包（不进发布包——`npm pack` 白名单不含 `apps/`），VitePress 1.6 + Vue 3 + TS；CI 与 `.nvmrc` 锁 Node 22（根 `engines>=18` 不变）。
