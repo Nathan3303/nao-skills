@@ -1584,6 +1584,55 @@ rm -rf "$E2_LAB2" "$E2_NONE"
 #     ③ 行为负控（镜像）：同一制品去掉 `-u NAO_SKILLS` ⇒ 读到真仓 ⇒ 报不出夹具行数（证明②承重）。
 #   `E1_ENV` / `E1_ENV_LEAK` 与审计断言都在 E1 段（那里有现成的垫卡夹具 `$E1_LAB`）。
 
+# ============================================================================
+# T585（#247）：回执送达机制的文本契约（「正文 ≠ 回执」+ `ask` 口径 + `rcpt=` + 派单末句）
+#   判据：① 三段文本**各恰 1 处正文**（其余只许指针）② 关键要素在位（删掉 ⇒ 本组必红）
+#         ③ 两条变异负控（删正文句 / 删模板里的 rcpt= ⇒ 必红）
+IC_PROTO="$T4_ROOT/.agents/common/intercom-protocol.md"
+T585_TMPL="$T4_ROOT/.agents/checklists/comm-templates.md"
+T585_PMOPS="$T4_ROOT/.agents/skills/pm-operations.md"
+t4_assert_eq "1" "$(grep -cF '会话内正文 ≠ 回执' "$IC_PROTO" || true)" \
+  "T585 ① 协议：'会话内正文 ≠ 回执' 正文恰 1 处"
+t4_assert_contains "$(cat "$IC_PROTO")" "未经 intercom 送达派单方会话的交付一律视为" \
+  "T585 ① 协议：点明「未经 intercom 送达 = 未交付」（不默认成功）"
+t4_assert_eq "1" "$(grep -rlF '唯一带回话保证的形态' "$T4_ROOT/.agents" --include='*.md' | wc -l | tr -d ' ')" \
+  "T585 ② 'ask 口径' 正文单源（全 .agents 只 1 个文件）"
+t4_assert_eq "1" "$(grep -cF '唯一带回话保证的形态' "$IC_PROTO" || true)" \
+  "T585 ② 'ask 口径' 正文落在 intercom-protocol（恰 1 处）"
+for _tok in '永远唤醒' '阻塞等待' '工具结果' '10 分钟超时是明确失败'; do
+  t4_assert_contains "$(cat "$IC_PROTO")" "$_tok" "T585 ② ask 语义要素在位：$_tok"
+done
+for _tok in '单 pending ask' '长任务两段式' '答复必须自足'; do
+  t4_assert_contains "$(cat "$IC_PROTO")" "$_tok" "T585 ② ask 操作约束在位：$_tok"
+done
+t4_assert_eq "1" "$(grep -rlF '回执必须经 intercom 发到本会话；写在自己会话里的文字我看不到。' "$T4_ROOT/.agents" --include='*.md' | wc -l | tr -d ' ')" \
+  "T585 ③ 派单末句正文单源（全 .agents 只 1 个文件）"
+t4_assert_eq "1" "$(grep -cF '回执必须经 intercom 发到本会话；写在自己会话里的文字我看不到。' "$T585_PMOPS" || true)" \
+  "T585 ③ 派单末句落在 pm-operations §一（逐字，禁改写）"
+t4_assert_eq "1" "$(grep -rl 'rcpt=' "$T4_ROOT/.agents" --include='*.md' | wc -l | tr -d ' ')" \
+  "T585 ④ rcpt= 正文单源（全 .agents 只 comm-templates 一处）"
+t4_assert_eq "1" "$(grep -c '^\[编号\] done(lite).*rcpt=' "$T585_TMPL" || true)" \
+  "T585 ④ 回执模板（lite）含 rcpt="
+t4_assert_eq "1" "$(grep -c '^rcpt：<本回执经 intercom 送达的消息 id>$' "$T585_TMPL" || true)" \
+  "T585 ④ 回执模板（full）含 rcpt："
+t4_assert_contains "$(cat "$T585_TMPL")" "有这个 id 才算交付" \
+  "T585 ④ 判据在位：PM 侧核「有这个 id 才算交付」"
+t4_assert_contains "$(cat "$T4_ROOT/.agents/checklists/deliverable-docs.md")" "常设段（不属批次）" \
+  "T585 ⑤ P3：deliverable-docs §十一 点明 5 个常设段不属批次"
+t4_assert_contains "$(cat "$T4_ROOT/tests/README.md")" "迁移 / 血统类计数的基数" \
+  "T585 ⑤ P3：tests/README 补血统计数基数口径"
+# 变异负控 ①：删掉「会话内正文 ≠ 回执」整条 ⇒ 判据必红
+NEG_IC="$T4_CACHE_DIR/t585-neg-ic-$$"; rm -rf "$NEG_IC"; mkdir -p "$NEG_IC"
+sed '/会话内正文 ≠ 回执/d' "$IC_PROTO" > "$NEG_IC/intercom-protocol.md"
+t4_assert_eq "0" "$(grep -cF '会话内正文 ≠ 回执' "$NEG_IC/intercom-protocol.md" || true)" \
+  "T585 负控①：删该条 ⇒ 计数归 0（第一条判据承重）"
+# 变异负控 ②：删掉模板里的 rcpt= ⇒ 模板判据必红
+NEG_TP="$T4_CACHE_DIR/t585-neg-tp-$$"; rm -rf "$NEG_TP"; mkdir -p "$NEG_TP"
+sed 's/ | rcpt=<本回执经 intercom 送达的消息 id>//; s/^rcpt：.*$//' "$T585_TMPL" > "$NEG_TP/comm-templates.md"
+t4_assert_eq "0" "$(grep -c '^\[编号\] done(lite).*rcpt=' "$NEG_TP/comm-templates.md" || true)" \
+  "T585 负控②：删模板 rcpt= ⇒ 计数归 0（第四条判据承重）"
+rm -rf "$NEG_IC" "$NEG_TP"
+
 rm -rf "$B1BIN" "$B1_LOG" "$NEG_B1A" "$NEG_B1B" "$NEG_B1C" "$NEG_B1D" "$NEG_LED"
 
 t4_exit

@@ -15,6 +15,7 @@ description: 按需技能——PM 运行手册（调度细则 / 开工确认卡 
 - **环境自检（开工确认后、派发前）**：`bash .agents/scripts/nao-fleet.sh check`——默认 2–3 行摘要（摘要行 + codegraph 状态行；herdr 后端另加「生效后端」行；完整报告不进 PM 上下文），`warn>0` 或失败加 `-v`；**exit code 非 0（硬错误）→ 停止派发**（白名单 / CodeGraph 处置见 intercom-protocol「开工前自检」）。
 - **架构评审闸门**：PRD 涉及架构/NFR/选型时，开工确认后、派发前 `send` arch-designer 评审。纯 CRUD 跳过。
 - **派发协议（省 token）**：一条消息给 `编号 + 范围 + 引用路径（docs/...md#section）+ AC 编号 + 回执级别 + 需求分支（feat/<issue-id>-<slug>）`；**设计类任务的开工卡另须写明「设计稿验收模型」**（未出图同样必问；不答 = 用户本人确认，形状见 §二）；**不贴 PRD/方案全文、不用 `attachments` 传全文**（worker 自己读文件，PM 上下文不留副本）；worker `ask` → PM `reply`。
+- **派单末句（固定 · 逐字照抄，T585）**：每条派单消息**末行**写 —— `回执必须经 intercom 发到本会话；写在自己会话里的文字我看不到。` 交付时刻由 PM `ask` 拉一次（`ask` 语义 / 单 pending / 10 分钟上限 / 答复须自足见 @.agents/common/intercom-protocol.md §终态回执）；拉不到即按**未交付**追讨，不等 worker 主动 `send`。
 - **投递寻址（多仓同名 ⇒ 协议层是唯一防线）**：`to` **一律用会话 id**（`list` 括号里的短 id，**≥8 位**十六进制 —— 长度由冲突决定，以 `list` 现值为准，别假设恒 8 位）**，或 `to` + `cwd` 同给**；**禁裸名跨仓投递**。PM→worker 派单与 worker→PM 终态回执**同规**。
   - **「名称 + `cwd`」形态的两行限定**：① 名称 = `list` 的 `name` 列**原样字符串**——**无任何限定的 `pm` 也是某仓的完整名**（如「`pm`」既可指本仓 PM，也可指 nue-ui 的 PM），**不是**「带任务号 / 槽位才算完整名」；写角色别名（如 `rd-infra` 而非 `rd-infra2`）属裸名；**⇒ 跨仓回 PM 一律用 id**；② **含 `@` 的名字只能给 id**（`<role>@<repo>` 是旧命名，v2 下不作准）。
   - **「名称 + `cwd`」是机制层 fail-loud**（`resolveTargetInCwd` 只在**同一物理 `cwd`** 内解析，且该形态传 `rawTo:""` ⇒ **不做名称前缀回退**）：名字写错（哪怕写角色别名）只会报 missing，**不会静默落他仓**。⇒ **静默误投路径只剩「裸名 + 无 `cwd`」一条**。

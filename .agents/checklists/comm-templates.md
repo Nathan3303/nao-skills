@@ -30,13 +30,14 @@ description: 派发消息与回执模板（按需，派发/回执前读取）
 ## 回执 done(lite)：默认（无阻塞、无风险的常规任务，单行）
 
 ```text
-[编号] done(lite) | <role> | to=<会话 id 或 list 完整名+cwd> | 清单：未过<项 或 无> | 测试：HEAD=<跑门禁时短 sha> · 工作区=<静默|非静默(原因)> · <命令> exit=<n> <文件数>/<例数>/<红数>（每个计数数字后跟「命令 → 输出」） | 变更：<f1,f2（>3 个写前 3 + "等 N 个"）> | 遗留：<无 | n 项 → 台账|tasks-state|Issue|接受(到期)> | commit=<交付提交短 hash，≠ 门禁 HEAD；无则 —> | 详情：docs/<任务号>-<slug>/<主产物>.md
+[编号] done(lite) | <role> | to=<会话 id 或 list 完整名+cwd> | 清单：未过<项 或 无> | 测试：HEAD=<跑门禁时短 sha> · 工作区=<静默|非静默(原因)> · <命令> exit=<n> <文件数>/<例数>/<红数>（每个计数数字后跟「命令 → 输出」） | 变更：<f1,f2（>3 个写前 3 + "等 N 个"）> | 遗留：<无 | n 项 → 台账|tasks-state|Issue|接受(到期)> | commit=<交付提交短 hash，≠ 门禁 HEAD；无则 —> | rcpt=<本回执经 intercom 送达的消息 id> | 详情：docs/<任务号>-<slug>/<主产物>.md
 ```
 
 > `commit=`（仅 git 流程任务）：work 分支最新提交短 hash，便于 PM 核对归因（commit.md 约定）；无 push/纯文档任务写 `commit=—`。
 > 两档回执的 `to=` 同派发模板形态（id 或 list 完整名+cwd），**禁裸名**。
 > `遗留：` 取值枚举 `无 | <n> 项 → <台账|tasks-state|Issue|接受(到期)>`；零遗留写 `无`，禁省略字段（三出口定义见 @.agents/skills/task-completion.md §四）。
 > **`测试：` 段三件套口径单源见 @.agents/common/output-format.md「回执硬性」第 3 条** —— 本文件只给可复制形态，**不复写三件套全文**（PM / QA / RD 三侧同源）。
+> **`rcpt=` = 交付凭证（T585 · 判据单源在本条）**：回执同段给 `rcpt=<本回执经 intercom 送达的消息 id>`（`send` / `ask` 返回的 messageId）。**PM 侧核：有这个 id 才算交付** —— 缺 id、或 id 与本会话收到的消息对不上 ⇒ 按**未交付**追讨（口径见 @.agents/common/intercom-protocol.md §终态回执「会话内正文 ≠ 回执」）。
 > **`HEAD=` ≠ `commit=`**：前者 = **跑门禁时**的 HEAD（数字的归属），后者 = **交付提交**（归因）；门禁后又补提交时两者必然不同 —— 混用即「同一命令两种结论」的根源。
 
 ## 回执 done(full)：出现阻塞/风险/需决策，或 PM 指定
@@ -48,6 +49,7 @@ description: 派发消息与回执模板（按需，派发/回执前读取）
 变更：<文件/模块级>
 测试：HEAD=<跑门禁时短 sha> · 工作区=<静默（`git status --porcelain` 空 + 本会话独占 worktree）| 非静默(原因)> · <命令> exit=<n> · <文件数>/<例数>/<红数>（每个计数数字后跟「命令 → 输出」）
 commit：<交付提交短 hash（**≠ 门禁 HEAD**；本分支最新交付提交）或 —>
+rcpt：<本回执经 intercom 送达的消息 id>
 遗留：<无 | n 项 → 台账|tasks-state|Issue|接受(到期)>（每条附出处与 owner；接受类必须带到期日）
 风险/阻塞：<无 或 列出>
 在线复核：<已做（列出在线核过的项）| 未做/部分（逐条标注哪些结论属「间接确认、未做在线复核」+ **旁证命令与输出**，如 `curl -m 8 -o /dev/null -w '%{http_code}' https://github.com`）—— 网络降级时**不得**给整体 PASS>
