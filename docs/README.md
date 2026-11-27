@@ -13,7 +13,7 @@
 | T580 | `docs/T580-kickoff-card/` | 开工确认卡表格化 + 台账按批次分割（模板 + `check` 最小断言） | [#238](https://github.com/Nathan3303/nao-skills/issues/238) |
 | T587 | `docs/T587-home-banner/` | 首页 Hero 下纯装饰动画（动画 WebP + 静态降级） | [#249](https://github.com/Nathan3303/nao-skills/issues/249) |
 | T588 | `docs/T588-favicon/` | 站点图标 404 修复 + 图标守卫（本版发版说明在此） | [#250](https://github.com/Nathan3303/nao-skills/issues/250) |
-| T590 | `docs/T590-favicon/` | favicon 重设计（3 方向 + 推荐 A）+ 附产物结论 | [#256](https://github.com/Nathan3303/nao-skills/issues/256) |
+| T590 | `docs/T590-favicon/` | favicon 重设计（3 方向 + A 案落地：`>_` 图标 + apple-touch + dev 注入修复） | [#256](https://github.com/Nathan3303/nao-skills/issues/256) |
 
 ## 二、版本
 
