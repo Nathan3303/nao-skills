@@ -396,8 +396,12 @@
   aspect-ratio: 1896 / 1030;
   border-radius: var(--nh-r-14);
   overflow: hidden;
-  mask-image: linear-gradient(to bottom, #000 62%, transparent 98%);
-  -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent 98%);
+  mask-image: linear-gradient(to bottom, #000 74%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 74%, transparent 100%);
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
 }
 
 /* 1px 环用 shadow 画在内层：跟着 mask 一起淡出（外扩 1px 会被 overflow: hidden 裁掉，故用 inset，视觉同为 1px） */

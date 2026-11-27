@@ -48,7 +48,6 @@ home:
       gap: true
       cursor: true
   banner:
-    alt: 七个 AI 角色在同一次舰队会话中同时处理各自子任务
     fallback: 舰队会话的录屏画面没能加载出来。
   jumpNav:
     - text: 三个毛病

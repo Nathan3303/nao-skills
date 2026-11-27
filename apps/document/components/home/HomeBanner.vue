@@ -2,10 +2,12 @@
   段一之后：15 秒真实舰队会话录屏，作 Hero 的「画面证据」（最终形态：docs/T587-home-banner/design.md §变更记录）。
   纯装饰画面：<figure> + <picture> + <img>，无 figcaption / 无 h2 / 无播放按钮 / 无遮罩 / 无下载链接 / 无可见文案。
   介质是动画 WebP（1280w · 12fps · 循环）；prefers-reduced-motion 走 <source media> 换成静态 jpg —— 不裁切、不改内容。
-  文案只在 content/index.md 的 frontmatter.home.banner（AC2 单一源）：alt 作无障碍名，fallback 仅读屏可见。
+  纯装饰，读屏跳过（img 收 alt="" + aria-hidden）：content/index.md 的 frontmatter.home.banner 只留 fallback，
+  仅在图片解码失败时以 sr-only 出现（正常路径 DOM 里没有这句，屏上也永远没有文字）。
   资源路径一律走 withBase：CI 构建带 --base /nao-skills/，写死 /xxx.webp 会 404。
 -->
 <script setup lang="ts">
+import { ref } from 'vue'
 import { withBase } from 'vitepress'
 import type { HomeBanner as HomeBannerData } from './types'
 
@@ -13,6 +15,9 @@ const props = defineProps<{ banner: HomeBannerData }>()
 
 const animatedSrc = withBase('/nao-fleet-demo.webp')
 const staticSrc = withBase('/nao-fleet-demo-static.jpg')
+
+/** 只在解码失败时出现（正常路径不渲染任何文字）；见 design.md §八 */
+const failed = ref(false)
 </script>
 
 <template>
@@ -24,14 +29,16 @@ const staticSrc = withBase('/nao-fleet-demo-static.jpg')
           <img
             class="banner-image"
             :src="animatedSrc"
-            :alt="props.banner.alt"
+            alt=""
+            aria-hidden="true"
             width="1280"
             height="696"
             loading="lazy"
             decoding="async"
+            @error="failed = true"
           />
         </picture>
-        <span class="banner-fallback">{{ props.banner.fallback }}</span>
+        <span v-if="failed" class="banner-fallback">{{ props.banner.fallback }}</span>
       </figure>
     </div>
   </section>

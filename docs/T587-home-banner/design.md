@@ -11,7 +11,7 @@
 - 顺序：Hero → **banner** → JumpNav → 五个内容段 → 页脚。banner 是 Hero 的「证据条」，不是新章节。
 - 层级 2：`<section id="preview">` → `<figure>` → `<picture>` → `<img>`；**无 h2 / 无 kicker / 无 lead / 无 figcaption / 无按钮**，**屏上零文字**（用户拍板「只要画面」）。
 - 跳读条**保持 5 项**，不加锚点（没有可读段落标题，加了没意义）；section 不设 `scroll-margin-top`。
-- 判据回答：不再用文字解释「Hero 的终端是示意、这段是真实会话」—— 用户否决了 caption，区分靠画面本身；可访问性交给 `img` 的 `alt`。
+- 判据回答：不再用文字解释「Hero 的终端是示意、这段是真实会话」—— 用户否决了 caption，区分靠画面本身；纯装饰 ⇒ 读屏跳过（`img` 收 `alt=""` + `aria-hidden`），不提供替代文本。
 
 ## 二、流程
 
@@ -24,7 +24,8 @@
 
 - 版心：套在 `.wrap` 内（1128 / 内容 1080），画面卡宽 100%，不破栏。
 - 间距：section 上 `--nh-sp-8`（32）下 `--nh-sp-8`（32）；≤720 上下 `--nh-sp-6`（24）。紧跟 Hero 时 Hero 让出下内边距，避免叠加（实现见 PR #252）。
-- 卡：`1px solid var(--nh-border)` + `border-radius: var(--nh-r-14)` + `background: var(--nh-sunken)` + `overflow: hidden`；**内边距 0**（画面满宽，不嵌边）。
+- 卡：`border-radius: var(--nh-r-14)` + `overflow: hidden` + 底边渐隐 `mask-image: linear-gradient(to bottom, #000 74%, transparent 100%)`（`mask-repeat: no-repeat` · `mask-size: 100% 100%` · 带 `-webkit-` 同值）；**内边距 0**（画面满宽，不嵌边）；**不设 `background`** —— 淡出区要露页面底色。
+- 环：1px 用**内层 img 的 `box-shadow: inset 0 0 0 1px var(--nh-border)`**（外扩 1px 会被卡上的 `overflow: hidden` 整条裁掉，实测见 PR #259），这样环跟着 mask 一起淡出，亮暗自动取 token。
 - 比例：`aspect-ratio: 1896 / 1030`（=1.841），`img{display:block;width:100%;height:auto}`。不套 16:9 —— 套则必裁切或加黑边，违反「不裁不改」。
 - **不用 `--nh-shadow-1`**：该档只服务可交互卡片 hover；静态媒体卡用描边分层，暗色亦不加投影。
 - 屏上零文字：无 caption / 无 h2 / 无播放图标遮罩（用户拍板「只要画面」）。
@@ -52,21 +53,22 @@
 
 ## 七、可用性
 
-- 点击数：看 0（自动循环）· 暂停 0（无控件，偏差见 §八）· 降级 0；主任务（读定位 → 点 CTA）不被 banner 增加点击。
+- 点击数：看 0；主任务（读定位 → 点 CTA）不受 banner 影响。
 - 反馈：不适用（无控件）；不自动全屏、不弹层、不出声。性能：动画 WebP ≤1MB（实测 893KiB）、静态 jpg ≤60KB；`prefers-reduced-motion` 落静态态（§八）。
 
 ## 八、无障碍
 
 - 裁定：`prefers-reduced-motion: reduce` ⇒ **只渲染静态图**（`<source media>` 换源），无播放按钮、无替代链接 —— 用户拍板取舍。
 - 已知偏差：普通模式动画自动循环（15s > 5s）且**无暂停入口** ⇒ **与 WCAG 2.2.2 存在偏差**；理由是用户拍板「装饰性小动画不带控件」，缓解只有静态替代。**不声称满足 2.2.2**，偏差记录见实现报告（PR #252）。
-- 语义：`<figure>` + `<picture>` + `<img>`；`img` 收 `alt`；`fallback` 以 sr-only 呈现（屏上无可见文字）；无音轨 ⇒ 不需字幕与音量；**不用**任何原生控件。
+- 语义：`<figure>` + `<picture>` + `<img>`；`img` 收 **`alt=""` + `aria-hidden="true"`** —— 纯装饰、无替代信息，读屏跳过（原 `alt`「七个 AI 角色…」改判删除：媒体本身没有可比对的替代文本，念了反而更差）。
+- 降级：`fallback` 只在**解码失败**时以 sr-only 渲染（正常路径 DOM 里没有这句，屏上永远无文字）。无音轨 ⇒ 不需字幕与音量；**不用**任何原生控件。
 - 键盘：无控件 ⇒ Tab 顺序 Hero CTA → 跳读条，不插入额外停点。
 
 ## 九、降级产物
 
 - 档位 ①（无画板需求，不出图）：banner 不引入新视觉语言（现有卡 + 现有 token），画板只会复述 §三 数值；效果验收走实现真机截图（QA 口径），不另出稿。
 - 素材与命名（落地值）：`content/public/nao-fleet-demo.webp`（1280×696 · 12fps · 循环 · 893KiB）· `content/public/nao-fleet-demo-static.jpg`（1280×696 · 机械取 t≈0.5s · ≤60KB）；路径一律 `withBase()`，禁写死 `/`。转码命令与体积对照见 PR #252。
-- 文案（frontmatter `home.banner`，仅 **2** 键）：`alt`「七个 AI 角色在同一次舰队会话中同时处理各自子任务」· `fallback`「舰队会话的录屏画面没能加载出来。」；`types.ts` 为 `HomeBanner { alt; fallback }`，**不增** kicker / title / lead / caption。
+- 文案（frontmatter `home.banner`，仅 **1** 键）：`fallback`「舰队会话的录屏画面没能加载出来。」；`types.ts` 为 `HomeBanner { fallback }`（`alt` 键已随无障碍改判删除，图片用 `alt=""`）。**不增** kicker / title / lead / caption。
 - 与昨日撤除案（`79b2f23` → `b121775`）的差别：本次无标题说明段、无大投影、无 24s 大块，15s 直贴 Hero 之下 —— 规模与位置都更克制。
 
 ## AC 逐条结论
@@ -75,10 +77,10 @@
 - A2 容器规格：**PASS** —— `--nh-r-14` / 无阴影 / `.wrap` 内 / 窄屏 `--nh-r-12` 可接受 / 上下 `--nh-sp-8`（窄 `--nh-sp-6`）/ 卡内 0。
 - A3 `prefers-reduced-motion`：**PASS** —— 换静态 jpg，无按钮（与 2.2.2 的偏差见 §八）。
 - A4 不改素材内容：**PASS** —— 原比例渲染，不挑帧、不裁切、不加字幕；静态图仅机械取 t≈0.5s 一帧。
-- A5 单一源与路径：**PASS** —— 2 键 frontmatter（`alt` / `fallback`）+ `withBase()`；文案不进组件。
+- A5 单一源与路径：**PASS** —— 1 键 frontmatter（`fallback`）+ `withBase()`；文案不进组件。
 - 自评：**PASS**（可交 rd-fe 写码；若 PM 已另有 PRD 编号，替换本节 A1–A5 为对应 AC 即可）。
 
 ## 变更记录
 
 - 2026-11-27 用户改判：去播放按钮、去 caption，形态 = 纯装饰画面（参照 herdr.dev 首屏，页面上一行字都不加）；介质 = 动画 WebP（1280w/12fps） + 静态 jpg 降级（`prefers-reduced-motion`）；WCAG 2.2.2 偏差见实现报告（PR #252）。
-- 2026-11-27 用户追加：banner 底边渐隐（照 herdr.dev 的 mask 62%→98% + 环改 shadow）
+- 2026-11-27 用户追加：banner 底边渐隐（照 herdr.dev 的做法，但停点按 uiux 实测改为 **74%→100%**，不用 62/98；环改内层 shadow 以随 mask 淡出）；**按钮与 caption 已于同批作废**（用户否决，不改成右上按钮），`alt` 一并删除、只留 `fallback`。
