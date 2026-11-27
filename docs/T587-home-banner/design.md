@@ -25,7 +25,8 @@
 - 版心：套在 `.wrap` 内（1128 / 内容 1080），画面卡宽 100%，不破栏。
 - 间距：section 上 `--nh-sp-8`（32）下 `--nh-sp-8`（32）；≤720 上下 `--nh-sp-6`（24）。紧跟 Hero 时 Hero 让出下内边距，避免叠加（实现见 PR #252）。
 - 卡：`border-radius: var(--nh-r-14)` + `overflow: hidden` + 底边渐隐 `mask-image: linear-gradient(to bottom, #000 74%, transparent 100%)`（`mask-repeat: no-repeat` · `mask-size: 100% 100%` · 带 `-webkit-` 同值）；**内边距 0**（画面满宽，不嵌边）；**不设 `background`** —— 淡出区要露页面底色。
-- 环：1px 用**内层 img 的 `box-shadow: inset 0 0 0 1px var(--nh-border)`**（外扩 1px 会被卡上的 `overflow: hidden` 整条裁掉，实测见 PR #259），这样环跟着 mask 一起淡出，亮暗自动取 token。
+- 环：1px 用 **`:after` 伪元素边框**（`inset: 0` + `border: 1px solid var(--nh-border)` + `border-radius: inherit` + `pointer-events: none`）—— 外扩 `box-shadow` 会被卡上的 `overflow: hidden` 整条裁掉、`inset` shadow 又会被不透明位图盖住（两轮实测见 PR #259），伪元素是唯一既在圆角内、又不被图片遮挡、还能随 mask 淡出的写法；不用 `outline`（四角直角）。亮暗自动取 token。
+- 可执行判据（环）：**顶边中点 + 距左 20px（共三点）** 取色 = `--nh-border` 的计算值 —— 亮 `rgb(227,232,239)` / 暗 `rgb(39,49,63)`；不写「灰阶 231/48」这种要换算的口径。
 - 比例：`aspect-ratio: 1896 / 1030`（=1.841），`img{display:block;width:100%;height:auto}`。不套 16:9 —— 套则必裁切或加黑边，违反「不裁不改」。
 - **不用 `--nh-shadow-1`**：该档只服务可交互卡片 hover；静态媒体卡用描边分层，暗色亦不加投影。
 - 屏上零文字：无 caption / 无 h2 / 无播放图标遮罩（用户拍板「只要画面」）。
@@ -41,7 +42,8 @@
 
 - 无交互状态：没有播放/暂停、没有 hover/focus 反馈（纯装饰画面）。
 - 结束态：不适用：动画循环、无结束画面。
-- 资源不可用：静态首帧或 `--nh-sunken` 占位，卡仍占位不塌陷；读屏只读 `fallback` 一句，屏上不加文字。
+- 资源不可用（解码失败，T592）：`failed` 态给 `.banner-figure` 加 `--nh-sunken` 底色并**解除 mask**（失败态没有画面可淡出，留着 mask 会把底色也淡掉），`aspect-ratio` 保住占位高度、不塌陷；**正常态绝不能有底色**（否则淡出区露灰）。读屏只读 `fallback` 一句，屏上不加文字。
+- 失败态竞态（T592）：`loading="lazy"` 的请求可能早于水合，`@error` 会错过 ⇒ 挂载时补判 `img.complete && img.naturalWidth === 0`。
 
 ## 六、断点
 

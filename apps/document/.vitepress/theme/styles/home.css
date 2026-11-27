@@ -403,6 +403,20 @@
   -webkit-mask-size: 100% 100%;
 }
 
+/* 解码失败态（T592）：**只在这一态**给底色，并解除 mask —— 正常态绝不能加底色，
+   否则淡出区会露出灰底而不是页面底色；失败态没有画面可淡出，留着 mask 只会把底色也淡掉。 */
+.nh .banner-figure.is-failed {
+  background: var(--nh-sunken);
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+
+/* 失败态把 img 收起：否则浏览器会在左上角画一个「坏图」小图标，比空白更难看；
+   高度由 figure 的 aspect-ratio 保住，不塌陷。 */
+.nh .banner-figure.is-failed .banner-image {
+  display: none;
+}
+
 /* 1px 环画在 ::after 上：外扩 shadow 会被 overflow: hidden 裁掉，inset shadow 又会被不透明位图盖住，
    伪元素边框是唯一既在圆角内、又不被图片遮挡、还能跟着 mask 淡出的写法（outline 的四角是直角，不用）。 */
 .nh .banner-figure::after {

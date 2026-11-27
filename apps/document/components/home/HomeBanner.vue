@@ -7,7 +7,7 @@
   资源路径一律走 withBase：CI 构建带 --base /nao-fleet/，写死 /xxx.webp 会 404。
 -->
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { withBase } from 'vitepress'
 import type { HomeBanner as HomeBannerData } from './types'
 
@@ -18,15 +18,24 @@ const staticSrc = withBase('/nao-fleet-demo-static.jpg')
 
 /** 只在解码失败时出现（正常路径不渲染任何文字）；见 design.md §八 */
 const failed = ref(false)
+const imageEl = ref<HTMLImageElement>()
+
+onMounted(() => {
+  // 竞态（T592）：lazy 图的请求可能早于水合，@error 已经错过 —— 那时 img.complete 为 true、
+  // naturalWidth 为 0，但 failed 仍是 false。挂载后再判一次，把「水合前就失败」的路径补上。
+  const img = imageEl.value
+  if (img && img.complete && img.naturalWidth === 0) failed.value = true
+})
 </script>
 
 <template>
   <section id="preview" class="banner">
     <div class="wrap">
-      <figure class="banner-figure">
+      <figure class="banner-figure" :class="{ 'is-failed': failed }">
         <picture>
           <source media="(prefers-reduced-motion: reduce)" :srcset="staticSrc" />
           <img
+            ref="imageEl"
             class="banner-image"
             :src="animatedSrc"
             alt=""
