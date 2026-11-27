@@ -16,7 +16,7 @@
 | T590 | `docs/T590-favicon/` | favicon 重设计（3 方向 + A 案落地：`>_` 图标 + apple-touch + dev 注入修复） | [#256](https://github.com/Nathan3303/nao-fleet/issues/256) |
 | T593 | `docs/T593-home-hero/` | 首页 Hero 走查提案 + 实现（CTA 主次 / 终端内容 / 导航箭头 / 基准小修） | [#261](https://github.com/Nathan3303/nao-fleet/issues/261) |
 | T594 | `docs/T594-rename/` | 仓库改名 nao-fleet（包名去 scope + env/bin 别名 + CI base，本版发版说明在此） | [#262](https://github.com/Nathan3303/nao-fleet/issues/262) |
-| T589 | `docs/T589-criteria-check/` | 判据体检：6 类真实反例 → R1–R6 可机械拦的形态 + 夹具 + 自检判据（规格先行） | [#253](https://github.com/Nathan3303/nao-fleet/issues/253) |
+| T589 | `docs/T589-criteria-check/` | 判据体检：7 类不可达判据静态拦截 + 反例夹具（本版发版说明在此） | [#253](https://github.com/Nathan3303/nao-fleet/issues/253) |
 
 ## 二、版本
 
@@ -24,6 +24,7 @@
 
 | 版本 | 权威路径 | 发布日期 |
 | :--- | :--- | :--- |
+| v0.37.1 | `docs/T589-criteria-check/release-notes-v0.37.1.md` | 2026-11-28 |
 | v0.37.0 | `docs/T594-rename/release-notes-v0.37.0.md` | 2026-11-27 |
 | v0.36.0 | `docs/T588-favicon/release-notes-v0.36.0.md` | 2026-11-27 |
 
