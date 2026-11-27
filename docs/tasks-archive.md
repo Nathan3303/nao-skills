@@ -1429,6 +1429,36 @@ PR [#148](https://github.com/Nathan3303/nao-fleet/pull/148) squash 合并 · 六
 
 - ✅ **已合并 `7f778f8`**（PR #244 · Issue #237）：`docs/<任务号>-<slug>/` + `docs/README.md` 唯一索引；`check` 新增 PRD 探针扩面与 `check_docs_index`（warn-only）；判红载体 `tests/t4/cases/53`；32 文件 +1028/−103。
 
+<a id="T589"></a>
+## T589 · criteria-check（判据体检）
+
+- ✅ **已合并 `6fa88ac`**（PR #271 · Issue #253）· 发布 v0.37.1：7 类不可达判据静态拦截（lint 探针 `cases/58`，不并入 `check`）+ 反例夹具（11 个逐字节复制，未另造）+ `pm-to-spec.md`「判据可核性」正文单源（R1–R7）+ `pm.md` 勾选项（该动/该留 两个数）。
+
+<a id="T593"></a>
+## T593 · home-hero（首页 Hero 走查与实现）
+
+- ✅ **已合并 `3694ee6`**（PR #266 · Issue #261）· 发布 v0.37.1：实心 CTA 全场 1 个（只留「复制」，快速开始→ghost、GitHub→文字链、页脚同批降级）· 终端两行改真实输出（`→ pm 接单` / `pi> …`，删死光标与三处死代码）· nav 去字面 `↗` · 基准文档补「实心数量形态」与「终端四类行纪律」。
+
+<a id="T591"></a>
+## T591 · icon-prefix（图标守卫前缀一致性）
+
+- ✅ **已合并 `ef59b7b`**（PR #267 · Issue #258）· 发布 v0.37.1：同页基准比对（不校验配置、只校验产物事实）· `--self-test` 4 夹具 + CI 接线（Build 之前）· 摘要口径改「46 条 / 2 个唯一文件」。
+
+<a id="T584"></a>
+## T584 · case32-trust（真机就绪门）
+
+- ✅ **已合并 `18f462a`**（PR #269 · Issue #245）· 发布 v0.37.1：夹具预置 `defaultProjectTrust=always`（含 `sp60/sp40` 两独立 PI 目录）· 真实 `~/.pi` 改快照 diff（`stat %s %y` 纳秒 + md5）· 就绪门超时点名 Trust 提示并给指路 · `docs/INSTALL` 新增「无人值守与信任提示」节。全量由此恢复 46/46 → 47/47。
+
+<a id="T592"></a>
+## T592 · banner-fallback（失败态与竞态）
+
+- ✅ **已合并 `18e7923`**（PR #268 · Issue #260）· 发布 v0.37.1：失败态**保留 mask**（uiux 改判：解除会与正常态渐隐打架）· 加一行可见文案 `role="status"`（取代 sr-only，二选一不重复）· `onMounted` 补判竞态（6/6 生效）· 环判据改可执行采样点。
+
+<a id="T582"></a>
+## T582 · idle-reclaim（close 对 idle 的处置）
+
+- ✅ **已合并 `f373606`**（PR #270 · Issue #240）· 发布 v0.37.1：`idle` 两后端显式归「忙」需 `--force`（保留 herdr 名册第二信号）· `cases/38` ⑧ 段 13 条 · `cases/52` ⑤ 改写 · 8 夹具最小跟改（`33/40` 恢复 idle）· `cases/32` ⑥ 两步法。**行为变更**已写 `docs/INSTALL` 与发版说明。
+
 <a id="T594"></a>
 ## T594 · rename（仓库改名 nao-skills → nao-fleet）
 
