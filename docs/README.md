@@ -14,6 +14,7 @@
 | T587 | `docs/T587-home-banner/` | 首页 Hero 下纯装饰动画（动画 WebP + 静态降级） | [#249](https://github.com/Nathan3303/nao-fleet/issues/249) |
 | T588 | `docs/T588-favicon/` | 站点图标 404 修复 + 图标守卫（本版发版说明在此） | [#250](https://github.com/Nathan3303/nao-fleet/issues/250) |
 | T590 | `docs/T590-favicon/` | favicon 重设计（3 方向 + A 案落地：`>_` 图标 + apple-touch + dev 注入修复） | [#256](https://github.com/Nathan3303/nao-fleet/issues/256) |
+| T593 | `docs/T593-home-hero/` | 首页 Hero 走查提案 + 实现（CTA 主次 / 终端内容 / 导航箭头 / 基准小修） | [#261](https://github.com/Nathan3303/nao-fleet/issues/261) |
 | T594 | `docs/T594-rename/` | 仓库改名 nao-fleet（包名去 scope + env/bin 别名 + CI base，本版发版说明在此） | [#262](https://github.com/Nathan3303/nao-fleet/issues/262) |
 
 ## 二、版本
