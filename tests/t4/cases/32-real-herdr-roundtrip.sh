@@ -248,8 +248,16 @@ _r32_no_residue() {
   [ -z "$(residue_procs "XDG_CONFIG_HOME=$XDG_CONFIG_HOME" | head -1)" ] \
     && [ -z "$(residue_procs "PI_CODING_AGENT_DIR=$PI_CODING_AGENT_DIR" | head -1)" ]
 }
+# T582（#240）：`idle` 属「忙」⇒ **真 herdr 上无法把 idle 改成 done**（`pane report-agent` 对已接钩子权威的
+#   pane 是静默 no-op；done 只有「会话真的结束」才会出现，而本用例的私有 HOME 无凭据、跑不出一个回合）。
+#   所以这里分两步：① 无 `--force` ⇒ 必须被忙闲闸门拒（语义钉住，与 cases/38 ⑧ 对称）
+#   ② `--force` ⇒ 照常回收 + **effect 判据仍在**（pane 必须真的消失，T574 核心不变）。
 run_fleet close --task T1 rd-fe
-t4_assert_eq "0" "$T4_RC" "⑥ close rd-fe rc=0（T4_ERR=$(printf '%s' "$T4_ERR_ANSI" | head -1)）"
+t4_assert_ne "0" "$T4_RC" "⑥ close idle 会话无 --force ⇒ 被忙闲闸门拒（rc≠0；T582 语义）"
+t4_assert_contains "$T4_ERR_ANSI" "状态=idle" "⑥ 拒收文案点名状态=idle（不是别的原因）"
+t4_assert_ne "" "$(obj_for "$(json_rows pane list)" pane_id "$P_FE")" "⑥ 拒收时 pane 保留（不静默成功）"
+run_fleet close --task T1 rd-fe --force
+t4_assert_eq "0" "$T4_RC" "⑥ close rd-fe --force rc=0（T4_ERR=$(printf '%s' "$T4_ERR_ANSI" | head -1)）"
 t4_assert_eq "" "$(obj_for "$(json_rows pane list)" pane_id "$P_FE")" \
   "⑥ close 后 rd-fe 的 pane 已消失（effect 判据）"
 run_fleet cleanup --session "$SESS"

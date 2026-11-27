@@ -249,7 +249,8 @@ _term_herdr_liveness() {  # <name> [repo] → verdict/state/seq/hook（只读快
 #   · 定位：pane label 精确匹配（跨仓，不按 repo 过滤，label 即路由标签）；>1 ⇒ warn 点名 + **不猜**
 #   · self 判据：(session, pane_id) 对 + process-info.shell_pid 祖先链（T530 三态 fail-closed）；
 #     不可判定时**只对**「(session,pane) 全等」（HERDR_PANE_ID）保守拒 —— 宁可少回收一次
-#   · 忙闲（BR7）：working/blocked ⇒ 拒；idle/done ⇒ 放行；unknown / 无 agent 条目 / 集成缺失 ⇒ 拒
+#   · 忙闲（BR7 · T582 起两后端统一）：working/blocked/**idle** ⇒ 拒（idle 可能是刚拉起未开工）；done ⇒ 放行；
+#     unknown / 无 agent 条目 / 集成缺失 ⇒ 拒
 #     （fail-closed）+ `--force` + 指路；**保留名册第二信号（OR）**：prompt 后 ~300–400ms
 #     agent_status 仍 idle（实测 744ms 才见 working）⇒ 单信号会误杀
 #   · 回收句柄唯一 = `pane close`（**不做** kill -9 兜底）；effect 复核（新 pane list），不静默成功
@@ -301,7 +302,11 @@ _term_herdr_busy() {  # <name> [repo]
   IFS=$'\t' read -r verdict state seq hook <<< "$vline"
   case "$verdict" in
     online)
-      if ! term_deliverable "$state"; then
+      if [[ "$state" == "idle" ]]; then
+        # T582/Issue #240（**两后端统一**）：`idle` 不算「空闲可回收」—— 它可能是「刚拉起、还没跑首轮」；
+        #   名册第二信号只能防「状态滞后把在忙判成闲」，防不了「一开始就闲」⇒ 归忙侧（fail-closed）。
+        why="状态=idle（可能是刚启动未开工；不算空闲证据）⇒ 需要 --force"
+      elif ! term_deliverable "$state"; then
         why="agent_status=${state:-?}（BR7：working/blocked/unknown ⇒ 不可投递）"
       fi ;;
     ghost)               why="agent list 无该 pane 条目（幽灵 pane）⇒ 无忙闲证据，保守拒（BR7 无条目 ⇒ 不可投递）" ;;

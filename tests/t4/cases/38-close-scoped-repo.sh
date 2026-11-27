@@ -104,10 +104,13 @@ roster() { # <条目...> → JSON 数组（顺序即名册顺序，由调用方�
   for e in "$@"; do out="${out:+$out,}$e"; done
   printf '[%s]' "$out"
 }
-stage38() { # <cwd> <会话名> → pane_id
-  local cwd="$1" nm="$2" p
+stage38() { # <cwd> <会话名> [agent_status] → pane_id
+  # T582（#240）：默认 `done`（可回收态）—— 旧默认 `idle` 自本批起属「忙」，夹具若沿用会把
+  #   「应回收」的场景变成「被忙闲闸门拒收」的假红（波及面由本参数显式化，而不是靠全局旋钮）。
+  local cwd="$1" nm="$2" stt="${3:-done}" p
   p="$(be_new_pane "$cwd")" || return 1
   be_fixture_session "$p" "$nm" "$(basename "$cwd")" >/dev/null || return 1
+  be_herdr "$BE_SESSION" pane report-agent --pane "$p" --status "$stt" >/dev/null 2>&1
   printf '%s' "$p"
 }
 kill38() { local p; for p in "$@"; do [ -n "$p" ] && be_kill_pane "$p"; done; return 0; }
@@ -452,6 +455,40 @@ kill38 "$P_M6"
   t4_expect_red "$(v_dup_label_refuse "$P_M7A" "$P_M7B")" \
     "负控⑦ 拒绝理由文本被改写 ⇒ g2-herdr 必红（断言绑的是理由，不是「任何拒绝」）"
   kill38 "$P_M7A" "$P_M7B"
+
+# ================================================================ ⑧ T582（Issue #240）：忙闲闸门 —— herdr 侧 idle 也要 --force（与 app 侧一致）
+#   语义：`idle` 可能是「刚拉起、还没跑首轮」⇒ 不算空闲证据（名册第二信号防不了「一开始就闲」）。
+#   不回归：working 仍拒 · done 仍可收 · cleanup（拆场）不看忙闲。
+P_IDLE="$(stage38 "$RA" "$CORE" idle)" || { t4_bad "⑧ 夹具：idle pane 建立失败"; t4_exit; }
+run38 "$RA" - "$CORE"
+t4_assert_ne "0" "$T4_RC" "⑧ idle 无 --force ⇒ 拒（rc≠0）"
+t4_assert_contains "$T4_ALL" "状态=idle" "⑧ 拒收文案点名「状态=idle（可能刚启动未开工）」"
+t4_assert_contains "$T4_ALL" "--force" "⑧ 拒收文案给出 --force 出口"
+t4_assert_eq "1" "$(alive38 "$P_IDLE")" "⑧ 拒收时 idle pane 保留（不静默成功）"
+run38 "$RA" - "$CORE" --force
+t4_assert_eq "0" "$T4_RC" "⑧ idle 带 --force ⇒ 回收成功"
+t4_assert_contains "$T4_ALL" "idle" "⑧ --force 回收时打印一行说明（回收的是 idle 实例）"
+t4_assert_eq "0" "$(alive38 "$P_IDLE")" "⑧ --force 后 idle pane 已消失"
+
+# 不回归 ①：working 无 --force 仍拒
+P_W="$(stage38 "$RA" "$CORE" working)" || { t4_bad "⑧ 夹具：working pane 建立失败"; t4_exit; }
+run38 "$RA" - "$CORE"
+t4_assert_ne "0" "$T4_RC" "⑧ 不回归：working 无 --force 仍拒"
+t4_assert_eq "1" "$(alive38 "$P_W")" "⑧ 不回归：working 拒收时 pane 保留"
+kill38 "$P_W"
+
+# 不回归 ②：done 无 --force 仍可收（会话已结束、终端保活）
+P_D="$(stage38 "$RA" "$CORE" done)" || { t4_bad "⑧ 夹具：done pane 建立失败"; t4_exit; }
+run38 "$RA" - "$CORE"
+t4_assert_eq "0" "$T4_RC" "⑧ 不回归：done 无 --force 仍可回收"
+t4_assert_eq "0" "$(alive38 "$P_D")" "⑧ 不回归：done pane 已回收"
+
+# 不回归 ③：cleanup（拆场）不看忙闲 —— idle pane 直接拆
+P_C="$(stage38 "$RA" "$CORE" idle)" || { t4_bad "⑧ 夹具：cleanup 场 pane 建立失败"; t4_exit; }
+NAO_QA_FAKE_ROSTER='[]' NAO_SKILLS="$RA" NAO_TASKS_STATE="$NONE_MD" BE_FLEET_SCRIPT="$RA/.agents/scripts/nao-fleet.sh" \
+  be_run_fleet "$RA" cleanup --session "$BE_SESSION"
+t4_assert_eq "0" "$BE_RC" "⑧ cleanup 不回归：拆场不看忙闲（rc=0）"
+t4_assert_eq "0" "$(alive38 "$P_C")" "⑧ cleanup 不回归：idle pane 被拆（拆场与单会话回收语义不同）"
 
 t4_assert_eq "$SRC_MD5" "$(t4_fleet_md5 "$FLEET_SRC")" \
   "变异只动副本：夹具脚本 md5 与用例开始时逐字节一致（无残留改写）"

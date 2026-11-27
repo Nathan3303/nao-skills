@@ -100,6 +100,8 @@ BASE="$(basename "$LAB")"
 BE_CACHE_ROOT="$T4_CACHE_DIR"
 be_init "$LAB" "lab" || { t4_bad "be_init 失败（后端=$BE_NAME）"; t4_exit; }
 be_ensure_scene || { t4_bad "be_ensure_scene 失败（后端=$BE_NAME）"; t4_exit; }
+# T582（#240）：`idle` 自本批起属「忙」⇒ close 夹具的默认态落到 `done`（会话已结束、终端保活）
+be_fixture_status done || { t4_bad "夹具：默认 agent_status 置 done 失败"; t4_exit; }
 CALLER="$(be_caller_pane)"
 
 t4_assert_ne "" "$CALLER" "夹具：调用者 pane 建立（$CALLER；后端=$BE_NAME）"
@@ -258,6 +260,9 @@ fi
 
 # ============================================================ AC4③B 一次性会话不弹常驻警告 + AC4② 回收
 ROSTER_JSON="$(mk_roster "code-reviewer(T537)")"
+# T582（#240）：`idle` 属「忙」⇒ 回收前把会话态落到 done（否则会被忙闲闸门拒收）
+be_fixture_status done || t4_bad "AC4② 夹具：agent_status 置 done 失败"
+be_fixture_status done || t4_bad "close 前夹具：agent_status 置 done 失败"
 run_fleet close --task T537 code-reviewer
 t4_assert_eq "0" "$T4_RC" "AC4② close（卡会话）rc=0"
 t4_assert_contains "$T4_ERR" "一次性会话 code-reviewer（下游卡）" "AC4③B stderr 含新固定前缀「一次性会话 …（下游卡）」"
@@ -281,6 +286,7 @@ BEFORE="$(pane_ids)"
 run_fleet ensure qa
 P_QA="$(new_panes "$BEFORE" | head -1)"
 set_title "$P_QA" "qa"
+be_fixture_status done || t4_bad "close 前夹具：agent_status 置 done 失败"
 run_fleet close qa
 t4_assert_eq "0" "$T4_RC" "AC4③A close qa rc=0"
 t4_assert_contains "$T4_ERR_ANSI" "[fleet] 常驻会话 qa：" \
@@ -296,6 +302,7 @@ BEFORE="$(pane_ids)"
 run_fleet ensure --card .agents/prompts/code-reviewer.md
 P_CR2="$(new_panes "$BEFORE" | head -1)"
 set_title "$P_CR2" "code-reviewer"
+be_fixture_status done || t4_bad "close 前夹具：agent_status 置 done 失败"
 run_fleet close code-reviewer
 t4_assert_eq "0" "$T4_RC" "AC4③C （B 路径：裸名卡会话）close rc=0"
 t4_assert_contains "$T4_ERR" "一次性会话 code-reviewer（下游卡）" "AC4③C B 路径含一次性标识"
@@ -303,6 +310,7 @@ BEFORE="$(pane_ids)"
 run_fleet ensure qa
 P_QA="$(new_panes "$BEFORE" | head -1)"
 set_title "$P_QA" "qa"
+be_fixture_status done || t4_bad "close 前夹具：agent_status 置 done 失败"
 run_fleet close qa
 t4_assert_contains "$T4_ERR_ANSI" "[fleet] 常驻会话 qa：" \
   "AC4③C B 之后 A 的常驻警告仍出现（禁整体静音蒙过 B）"
@@ -315,12 +323,14 @@ BEFORE="$(pane_ids)"
 run_fleet ensure --card .agents/prompts/code-reviewer.md --task T537
 P_CR3="$(new_panes "$BEFORE" | head -1)"
 set_title "$P_CR3" "code-reviewer"
+be_fixture_status done || t4_bad "close 前夹具：agent_status 置 done 失败"
 run_fleet close --task T537 code-reviewer
 t4_assert_eq "0" "$T4_RC" "AC4③D 卡会话在 task active 时仍可回收（跳过 tasks-state 闸门）"
 BEFORE="$(pane_ids)"
 run_fleet ensure qa --task T537
 P_QA="$(new_panes "$BEFORE" | head -1)"
 set_title "$P_QA" "qa"
+be_fixture_status done || t4_bad "close 前夹具：agent_status 置 done 失败"
 run_fleet close --task T537 qa
 t4_assert_ne "0" "$T4_RC" "AC4③D 反例：常驻派生 qa(T537) 仍被 active 闸门拒绝（放宽只对卡生效）"
 t4_assert_contains "$T4_ERR" "tasks-state 中 T537 仍在进行态" "AC4③D 反例拒绝理由为 tasks-state active 闸门"
@@ -394,6 +404,7 @@ if [ "$TSX_OK" = "1" ]; then
   t4_assert_match "$L_NOTE" "^  · code-reviewer-notes" "AC3⑤ 正控 ⇒ status 按该名解析到卡会话"
   t4_assert_contains "$L_NOTE" "下游卡 code-reviewer" "AC3⑤ 正控 ⇒ 该行仍归到卡 role（前缀识别）"
 fi
+be_fixture_status done || t4_bad "close 前夹具：agent_status 置 done 失败"
 run_fleet close code-reviewer-notes
 t4_assert_eq "0" "$T4_RC" "AC3⑤ 正控 ⇒ close 按该名回收（闭环）"
 t4_assert_contains "$T4_ERR_ANSI" "一次性会话 code-reviewer-notes（下游卡）" "AC3⑤ 正控 ⇒ close 走一次性语义"

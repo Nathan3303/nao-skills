@@ -129,10 +129,21 @@ run_app close qa --force
 t4_assert_eq "0" "$APP_RC" "⑤ --force ⇒ 放行"
 t4_assert_eq "" "$(addrs_named qa)" "⑤ --force 后终端已回收"
 
+# T582/Issue #240：`idle` 显式归「忙」（需 --force）—— 它可能是刚拉起、尚未开工（idle 不是「空闲证据」）
 app_reset; mk_term t7 qa live idle
 run_app close qa
-t4_assert_eq "0" "$APP_RC" "⑤ live+idle ⇒ 直接回收（既有语义不变）"
-t4_assert_eq "" "$(addrs_named qa)" "⑤ idle 终端已回收"
+t4_assert_ne "0" "$APP_RC" "⑤ live+idle 无 --force ⇒ 拒（rc≠0；idle 不算空闲证据）"
+t4_assert_contains "$APP_ERR" "状态=idle" "⑤ 拒收文案点名状态=idle（不让人猜为什么被拒）"
+t4_assert_contains "$APP_ERR" "--force" "⑤ 拒收文案给出 --force 出口"
+t4_assert_eq "t7" "$(addrs_named qa)" "⑤ 拒收时 idle 终端保留（不静默成功）"
+run_app close qa --force
+t4_assert_eq "0" "$APP_RC" "⑤ live+idle 带 --force ⇒ 回收成功"
+t4_assert_contains "$APP_ERR" "状态=idle" "⑤ --force 回收时打印一行说明（回收的是 idle 实例）"
+t4_assert_eq "" "$(addrs_named qa)" "⑤ --force 后 idle 终端已回收"
+# 不回归：done 无 --force 仍可收（T574 语义）
+app_reset; mk_term t7d qa live done
+run_app close qa
+t4_assert_eq "0" "$APP_RC" "⑤ live+done 无 --force 仍可回收（不回归 T574）"
 
 # ================================================================ ⑥ 文档：`--keep` 的 live+done 边界已记
 t4_assert_contains "$(cat "$T4_ROOT/docs/INSTALL.md" 2>/dev/null)" "live" "⑥ INSTALL.md 记了 live 形态"

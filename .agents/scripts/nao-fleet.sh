@@ -60,7 +60,7 @@
 #                                                 裸别名 = 本仓锚内同 core（v2 各槽位 → legacy 旧形候选
 #                                                 → 全 session 唯一同 core → 否则拒绝列候选）；带 `@` 的 legacy
 #                                                 （跨仓定位；定位失败/名册报在线但无句柄 ⇒ 非 0 + 诊断）
-#                                                 （闸门：在跑 turn / tasks-state 未推进 → 拒绝，--force 跳过；
+#                                                 （闸门：在跑 turn / tasks-state 未推进 / app 侧 status=idle → 拒绝，--force 跳过；
 #                                                  常驻缺席而其派生在场 ⇒ 目标歧义拒绝，T516 AC3）
 #                                                 herdr 后端：忙闲闸门 = agent_status（BR7）+ 名册第二信号（OR）；
 #                                                 unknown / 无 agent 条目 / 集成缺失 / 进程不可判 ⇒ 拒（fail-closed）
