@@ -12,12 +12,14 @@
 
 | 任务号 | 归档锚点 | 状态 | 完成日期 |
 | :--- | :--- | :--- | :--- |
-| T588 | `docs/tasks-archive.md#T588` | 已合并 | 2026-11-27 |
-| T587 | `docs/tasks-archive.md#T587` | 已合并 | 2026-11-27 |
-| T585 | `docs/tasks-archive.md#T585` | 已合并 | 2026-11-27 |
-| T580 | `docs/tasks-archive.md#T580` | 已合并 | 2026-11-27 |
-| T579 | `docs/tasks-archive.md#T579` | 已合并 | 2026-11-27 |
-| T581 | `docs/tasks-archive.md#T581` | 已合并 | 2026-11-27 |
+| T594 | `docs/tasks-archive.md#T594` | 已发布 | 2026-11-27 |
+| T590 | `docs/tasks-archive.md#T590` | 已发布 | 2026-11-27 |
+| T588 | `docs/tasks-archive.md#T588` | 已发布 | 2026-11-27 |
+| T587 | `docs/tasks-archive.md#T587` | 已发布 | 2026-11-27 |
+| T585 | `docs/tasks-archive.md#T585` | 已发布 | 2026-11-27 |
+| T580 | `docs/tasks-archive.md#T580` | 已发布 | 2026-11-27 |
+| T579 | `docs/tasks-archive.md#T579` | 已发布 | 2026-11-27 |
+| T581 | `docs/tasks-archive.md#T581` | 已发布 | 2026-11-27 |
 | I96 | `docs/tasks-archive.md#I96` | 已发布 | 2026-11-11 |
 | M20261109-queue-slim | `docs/tasks-archive.md#M20261109-queue-slim` | 已关闭 | 2026-11-09 |
 | I93 | `docs/tasks-archive.md#I93` | 已关闭 | 2026-11-09 |

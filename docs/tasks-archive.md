@@ -1429,6 +1429,16 @@ PR [#148](https://github.com/Nathan3303/nao-fleet/pull/148) squash 合并 · 六
 
 - ✅ **已合并 `7f778f8`**（PR #244 · Issue #237）：`docs/<任务号>-<slug>/` + `docs/README.md` 唯一索引；`check` 新增 PRD 探针扩面与 `check_docs_index`（warn-only）；判红载体 `tests/t4/cases/53`；32 文件 +1028/−103。
 
+<a id="T594"></a>
+## T594 · rename（仓库改名 nao-skills → nao-fleet）
+
+- ✅ **已合并 `794c570`**（PR #263 · Issue #262）· 已发布 v0.37.0：仓名与 npm 包名同改为 `nao-fleet`（去 `@nathan33` scope）；`NAO_FLEET` 优先 + `NAO_SKILLS` 兼容别名；`bin` 双键同指一文件；CI base 改 `/nao-fleet/`；50 文件 +522/−427；全量 46 例 45 PASS / 1 环境红（case 32）。
+
+<a id="T590"></a>
+## T590 · favicon（站点图标重设计 + dev 注入修复）
+
+- ✅ **已合并 `20bedd1`**（PR #257 · Issue #256）· 已发布 v0.37.0：图标换成终端提示符 `>_`（16px 可辨）+ `apple-touch-icon` 180；图标引用改单一来源（config 静态 head + `--base` 派生）⇒ 本地 dev 也注入；`check:links` 图标守卫放宽到 rel 含 icon。
+
 <a id="T588"></a>
 ## T588 · favicon（站点图标 404 + 图标守卫）
 
