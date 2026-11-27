@@ -280,14 +280,13 @@ npx nao-fleet migrate   # 旧文件备份到 .agents/.nao-obsolete/，再按需�
 
 ## `close` 的忙闲闸门（`idle` 为什么会被拒）
 
-`close` 回收前先判忙闲，**拿不到证据就不动手**（fail-closed）。各状态处置：
+`close` 回收前先判忙闲，**拿不到证据就不动手**（fail-closed）。**两后端一致**（T582/#240 起）：
 
-- `working` / `blocked` ⇒ **拒**（在跑回合）；`unknown` / 无状态上报 / 集成缺失 ⇒ **拒**（证据不足）。
+- `working` / `blocked` ⇒ **拒**（在跑回合）；`unknown` / 无状态上报 / 集成缺失 / 幽灵 pane ⇒ **拒**（证据不足）。
 - `done`（会话已结束、终端靠 `--keep` 保活）⇒ **可回收**。
-- **`idle` ⇒ 视后端而定**：
-  - **desktop app（`NAO_TERMINAL=app`）**：`idle` **归「忙」** ⇒ 拒绝并提示 `--force`。理由：`idle` 可能是「刚拉起、还没跑首轮」，静默回收会让人以为「ensure 起来了但什么都没干」；带 `--force` 时照常回收并打印一行说明。
-  - **herdr TUI（默认）**：`idle` 可回收，但叠加**名册第二信号**（pi-intercom 报 `thinking` / `tool:*` ⇒ 判忙）。原因：`agent_status` 从 `idle` 迁到 `working` 有约 0.3–0.75s 滞后窗口，单靠 agent_status 会误杀刚开工的会话。
-- **`cleanup`（拆场）不看这条**：它是「用户明确要拆这一场」的整场回收，`idle` 直接拆；两者语义不同，别混用。
+- **`idle` ⇒ 拒，需 `--force`**。理由：`idle` 可能是「刚拉起、还没跑首轮」——静默回收会让人以为「ensure 起来了但什么都没干」；`agent_status` 从 idle 到 working 还有约 0.3–0.75s 滞后窗口，名册第二信号只能防「在忙被判闲」，防不了「一开始就闲」。带 `--force` 时照常回收并打印一行说明。
+- **`cleanup`（拆场）不走这条闸门**：它是「用户明确要拆这一场」的整场回收，`idle` 直接拆 —— 想保持旧行为就用 `cleanup` 或 `close --force`。
+- ⚠️ **行为变更（v0.37.1）**：旧版 **herdr 后端**对 `idle` 直接回收；自本版起两后端都要求 `--force`。
 
 ## 无人值守与信任提示（`ensure` 卡在 `Trust project folder?`）
 

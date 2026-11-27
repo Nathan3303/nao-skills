@@ -164,7 +164,9 @@ t4_assert_contains "$BE_OUT_ANSI" "已拉起 pm2 " "AC7 新会话名 = pm2"
 LEGACY_REPO="$LAB/repo-legacy"; mkdir -p "$LEGACY_REPO"
 fleet ensure "pm@$LEGACY_REPO"
 t4_assert_eq "0" "$BE_RC" "AC11 ensure pm rc=0"
+be_fixture_status done || t4_bad "AC11 夹具：agent_status 置 done 失败"
 be_run_fleet "$LEGACY_REPO" close pm
+be_fixture_status idle || t4_bad "AC11 夹具：close 后恢复 idle（后续 ensure 就绪门依赖）失败"
 t4_assert_eq "0" "$BE_RC" "AC11 close pm rc=0（v2 裸名，锚=本仓）"
 t4_assert_contains "$BE_OUT_ANSI" "已回收 pm" "AC11 close 命中 pm"
 

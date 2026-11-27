@@ -25,6 +25,8 @@ LAB="$T4_CACHE_DIR/lab09-$$"; mkdir -p "$LAB"
 BE_CACHE_ROOT="$T4_CACHE_DIR"
 be_init "$LAB" "lab" || { t4_bad "be_init 失败（后端=$BE_NAME）"; t4_exit; }
 be_ensure_scene || { t4_bad "be_ensure_scene 失败（后端=$BE_NAME）"; t4_exit; }
+# T582（#240）：`idle` 自本批起属「忙」⇒ close 夹具的默认态落到 `done`（会话已结束、终端保活）
+be_fixture_status done || { t4_bad "夹具：默认 agent_status 置 done 失败"; t4_exit; }
 # 后端场（socket / herdr 私有根）由 be_* 单点管理；本用例下面的 tmux 夹具只用于 tmux 后端的 AC3 组。
 FIX_SESS="t4c09-$$"
 # T529：真回收组用**隔离 socket**（不碰生产默认 server；T516 纪律），并以其作 $TMUX 过入口闸门。

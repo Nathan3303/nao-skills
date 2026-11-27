@@ -787,6 +787,20 @@ be_run_fleet() { # <cwd 目录> <args...>
 # 造一个「可被舰队识别」的夹具会话（D 类用例的唯一身份入口）：
 #   herdr = 先 `pane rename` 写 label，再在 pane 内起 `pi --name <名>`（在线证据链要求
 #           pane.label ∧ 前台 pi ∧ argv --name 三者自洽；替身按命令推导前台进程与 agent 条目）。
+be_fixture_status() { # <idle|working|blocked|done>：设替身 agent_status 旋钮（直接改 state，无需 pane 在场）
+  # T582（#240）：`idle` 自本批起属「忙」（close 需 --force）⇒「应回收」的夹具必须显式落到 `done`。
+  #   herdr 替身的 pi_status 是**会话级**旋钮 ⇒ 这里直接改 double-state.json（可在 be_init 后立即调用）。
+  local st="${1-}" f
+  [ -n "$st" ] || { be_guard_fail "be_fixture_status 缺状态"; return 1; }
+  case "$st" in idle|working|blocked|done) ;; *) be_guard_fail "be_fixture_status 非法状态：$st"; return 1 ;; esac
+  # 私有根由 be_init 单点派生（`BE_CFGROOT`），不是调用方 shell 的 XDG_CONFIG_HOME
+  f="${BE_CFGROOT:-}/herdr/sessions/${BE_SESSION:-}/double-state.json"
+  [ -f "$f" ] || { be_guard_fail "be_fixture_status 找不到替身 state：$f"; return 1; }
+  node -e 'const fs=require("fs");const p=process.argv[1];const st=JSON.parse(fs.readFileSync(p,"utf8"));st.knobs=st.knobs||{};st.knobs.pi_status=process.argv[2];fs.writeFileSync(p,JSON.stringify(st));' "$f" "$st" \
+    || { be_guard_fail "be_fixture_status 写 state 失败：$f"; return 1; }
+}
+
+
 be_fixture_session() { # <pane_id> <会话名> [仓标签]
   local p="${1:-}" n="${2:-}" repo="${3:-}"
   [ -n "$p" ] && [ -n "$n" ] || { be_guard_fail "be_fixture_session 缺 pane/name"; return 1; }

@@ -198,6 +198,8 @@ t4_assert_eq "1" "$(grep -rlF "task=$I_TASK" "$LAB/.t4-home/.local/state/nao-fle
 # ================================================================ J 旧形全名 close（只读面）
 JP="$(be_new_pane "$API")" || t4_bad "J 夹具：be_new_pane 失败"
 be_fixture_session "$JP" "rd-fe@api" "fx39-api" || t4_bad "J 夹具：fixture 未就绪"
+# T582（#240）：`idle` 属「忙」⇒ 「应回收」场景先把会话态落到 done
+be_fixture_status done || t4_bad "J 夹具：agent_status 置 done 失败"
 fleet_in "$MAIN" close "rd-fe@api"
 t4_assert_eq "0" "$BE_RC" "J close rd-fe@api rc=0（legacy 只读）"
 t4_assert_contains "$BE_OUT_ANSI" "已回收 rd-fe@api" "J 回收行在位"

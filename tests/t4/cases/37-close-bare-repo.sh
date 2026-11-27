@@ -80,6 +80,8 @@ PRB="$(cd "$RB" && pwd -P)"
 BE_CACHE_ROOT="$T4_CACHE_DIR"
 be_init "$LAB" "lab37" || { t4_bad "be_init 失败（后端=$BE_NAME）"; t4_exit; }
 be_ensure_scene || { t4_bad "be_ensure_scene 失败（后端=$BE_NAME）"; t4_exit; }
+# T582（#240）：`idle` 自本批起属「忙」⇒ close 夹具的默认态落到 `done`（会话已结束、终端保活）
+be_fixture_status done || { t4_bad "夹具：默认 agent_status 置 done 失败"; t4_exit; }
 
 w37_exit_trap() {
   local rc=$?

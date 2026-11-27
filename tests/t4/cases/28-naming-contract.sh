@@ -328,6 +328,8 @@ A2="$(addr_of rd-fe2)"
 t4_assert_eq "0" "$APP_RC" "app③ 不同 task 取空闲槽位 rc=0"
 t4_assert_ne "" "$A2" "app③ 新会话名 = rd-fe2（槽位 2）"
 t4_assert_eq "T2" "$(app_field "$A2" nao_task)" "app③ 新会话 nao.task=T2"
+# T582（#240）：app 侧 `idle` 属「忙」⇒ 回收前把该终端状态落到 done（会话已结束、终端保活）
+printf 'done' > "$(app_state_file "$A1" stt)"
 run_app close --task T1 rd-fe
 t4_assert_eq "0" "$APP_RC" "app④ close --task T1 rd-fe rc=0"
 t4_assert_eq "" "$(addr_of rd-fe)" "app④ T1 终端已回收"
@@ -336,6 +338,7 @@ run_app close --task T404 rd-fe
 t4_assert_eq "0" "$APP_RC" "app⑤ close --task 无匹配 ⇒ rc=0（未运行）"
 t4_assert_contains "$APP_OUT" "已不在运行" "app⑤ 明确「已不在运行」（app 后端幂等文案）"
 t4_assert_ne "" "$(addr_of rd-fe2)" "app⑤ 无匹配不误杀同名会话"
+printf 'done' > "$(app_state_file "$A2" stt)"
 run_app close --task T2 rd-fe
 app_reset
 
@@ -470,6 +473,7 @@ t4_assert_contains "$BE_OUT" "（成功 0 / 跳过 1 / 失败 0）" "herdr② �
 be_run_fleet "$HLAB" ensure --task T2 rd-fe
 t4_assert_eq "0" "$BE_RC" "herdr③ 不同 task ensure rc=0"
 t4_assert_ne "" "$(be_pane_by_name rd-fe2)" "herdr③ 取空闲槽位 2 = rd-fe2"
+be_fixture_status done || t4_bad "herdr④ 夹具：agent_status 置 done 失败"
 be_run_fleet "$HLAB" close --task T1 rd-fe
 t4_assert_eq "0" "$BE_RC" "herdr④ close --task T1 rd-fe rc=0"
 t4_assert_eq "" "$(be_pane_by_name rd-fe)" "herdr④ T1 pane 已回收"
@@ -481,6 +485,7 @@ P_LEG="$(be_new_pane "$HLAB")"; be_fixture_session "$P_LEG" "qa(T99)" "$HLAB" >/
 be_run_fleet "$HLAB" status
 t4_assert_contains "$BE_OUT" "qa(T99)" "herdr⑤ legacy/v2 名仍列在派生节"
 t4_assert_contains "$BE_OUT" "task=T99" "herdr⑤ 旧形 task 从名字解析"
+be_fixture_status done || t4_bad "herdr⑤ 夹具：agent_status 置 done 失败"
 be_run_fleet "$HLAB" close --task T99 qa
 t4_assert_eq "0" "$BE_RC" "herdr⑤ close --task T99 qa rc=0（只读旧形可回收）"
 t4_assert_eq "" "$(be_pane_by_name 'qa(T99)')" "herdr⑤ 旧形 pane 已回收"
@@ -491,6 +496,7 @@ WD="$(ws_of_label rd-be)"
 mkdir -p "$(meta_root)/${BE_SESSION}__${WD}"
 printf 'task=T5\nname=rd-be\n' > "$(meta_root)/${BE_SESSION}__${WD}/$P_D1"
 printf 'task=T5\nname=rd-be\n' > "$(meta_root)/${BE_SESSION}__${WD}/$P_D2"
+be_fixture_status done || t4_bad "herdr⑥ 夹具：agent_status 置 done 失败"
 be_run_fleet "$HLAB" close --task T5 rd-be
 t4_assert_ne "0" "$BE_RC" "herdr⑥ 同 (role,task) 两 pane ⇒ close 拒绝（不猜）"
 t4_assert_contains "$BE_ERR_ANSI" "目标歧义" "herdr⑥ 文案点名歧义"

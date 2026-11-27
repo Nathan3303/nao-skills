@@ -76,6 +76,8 @@ LAB_BASE="$(basename "$LAB")"
 BE_CACHE_ROOT="$T4_CACHE_DIR"
 be_init "$LAB" "lab" || { t4_bad "be_init 失败（后端=$BE_NAME）"; t4_exit; }
 be_ensure_scene || { t4_bad "be_ensure_scene 失败（后端=$BE_NAME）"; t4_exit; }
+# T582（#240）：`idle` 自本批起属「忙」⇒ close 夹具的默认态落到 `done`（会话已结束、终端保活）
+be_fixture_status done || { t4_bad "夹具：默认 agent_status 置 done 失败"; t4_exit; }
 
 # ---- 调用 / 观察封装 ----
 # 业务 env 由本用例 export；后端句柄（TMUX/TMUX_PANE 或 HERDR_*/XDG_CONFIG_HOME）由 be_run_fleet 注入
@@ -169,6 +171,8 @@ if [ "$TSX_OK" = "1" ]; then
   assert_pane_alive "$P" "T5 不触父 pane"
 
   # ---------------------------------------------------------------- T6 正控 close qa
+  # T582（#240）：`idle` 属「忙」⇒ 「应回收」的场景先把会话态落到 done（会话已结束、终端保活）
+  be_fixture_status done || t4_bad "T6 夹具：agent_status 置 done 失败"
   run_fleet "$R_PARENT" close qa
   t4_assert_eq "0" "$RC" "T6 正控：close qa 正常回收父 pane（rc=0）"
   t4_assert_contains "$OUT" "已回收 qa" "T6 日志含「已回收 qa」"

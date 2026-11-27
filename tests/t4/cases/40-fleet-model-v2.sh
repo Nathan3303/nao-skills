@@ -136,9 +136,11 @@ t4_note backend-gate "S10 三条护栏（自面板 / 归属不可判定 / 忙闲
 LR="$LAB/fx40-legacy"; mkdir -p "$LR"
 P_LEG="$(be_new_pane "$LR")"
 be_fixture_session "$P_LEG" "pm@todo" "fx40-legacy" >/dev/null || t4_bad "S11 夹具：legacy pane 未就绪"
+be_fixture_status done || t4_bad "S11 夹具：agent_status 置 done 失败"
 fin "$LR" close pm
 t4_assert_eq "0" "$BE_RC" "S11 close pm（本仓锚内命中 legacy pm@todo）rc=0"
 t4_assert_contains "$BE_OUT_ANSI" "已回收 pm@todo" "S11 回收行点名 legacy 名（不谎报未运行）"
+be_fixture_status idle || t4_bad "S11 夹具：回收后恢复 idle（后续 ensure 就绪门依赖）失败"
 
 # S12 弃用 warn（--fleet 恰一行；放置仍 = 仓基键）
 fin "$RB" ensure --fleet x qa
