@@ -1429,6 +1429,21 @@ PR [#148](https://github.com/Nathan3303/nao-skills/pull/148) squash 合并 · �
 
 - ✅ **已合并 `7f778f8`**（PR #244 · Issue #237）：`docs/<任务号>-<slug>/` + `docs/README.md` 唯一索引；`check` 新增 PRD 探针扩面与 `check_docs_index`（warn-only）；判红载体 `tests/t4/cases/53`；32 文件 +1028/−103。
 
+<a id="T588"></a>
+## T588 · favicon（站点图标 404 + 图标守卫）
+
+- ✅ **已合并 `0d3186c`**（PR #254 · Issue #250）：`favicon.svg` 从 `apps/document/public/` 搬到生效目录 `content/public/`（rename 100% · sha256 一致）；`check-links.mjs` 加第三条守卫（icon 引用与产物文件成对 · 一个都没扫到也判红），先红后绿已验。
+
+<a id="T587"></a>
+## T587 · home-banner（文档站首页纯装饰动画）
+
+- ✅ **已合并 `66b3415`**（PR #252 · Issue #249）：Hero 之后纯装饰画面（无标题/无按钮/无可见文字）；动画 WebP 1280×696/12fps/893KiB + 静态 jpg 57.5KiB（`prefers-reduced-motion` 降级）；比例锁 1896/1030 不裁切；留白 75→34.5px。WCAG 2.2.2 偏差按用户拍板如实记录。
+
+<a id="T585"></a>
+## T585 · intercom-ack（回执送达机制）
+
+- ✅ **已合并 `61344f9`**（PR #251 · Issue #247）：协议明示「会话内正文 ≠ 回执」+ `ask` 六要素三约束（禁调大超时）+ 回执模板 `rcpt=—｜<对账键>`（审计线索非交付依据）+ 派单末句固定要求；`cases/06` +25 断言含两条变异负控。
+
 <a id="T580"></a>
 ## T580 · kickoff-ledger（开工确认卡表格化 + 台账按批次分割）
 
