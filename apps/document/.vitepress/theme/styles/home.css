@@ -387,15 +387,33 @@
   padding-bottom: 0;
 }
 
-/* 比例锁素材原比 1896/1030（=1.841）：套 16:9 会裁切或加黑边，违反「不裁不改」 */
+/* 比例锁素材原比 1896/1030（=1.841）：套 16:9 会裁切或加黑边，违反「不裁不改」。
+   底边渐隐照 herdr.dev 的做法：mask 加在外层，**下 26% 淡出（74% 起、100% 全透明）**，让画面「融进页面」而不是被边线切断。
+   停点用 74/100 而非 herdr 的 62/98：本素材 1.84 比 herdr 的竖图扁，36% 会把底部角色 pane 的终端行淡没（uiux 实测）。
+   因此这里不放背景色 —— 淡出区要露出页面底色；1px 环画在 ::after 上（见下）。 */
 .nh .banner-figure {
   position: relative; /* sr-only fallback 的包含块 —— 它属于 figure，不落到更上层 */
   margin: 0;
   aspect-ratio: 1896 / 1030;
-  background: var(--nh-sunken);
-  border: 1px solid var(--nh-border);
   border-radius: var(--nh-r-14);
   overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 74%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 74%, transparent 100%);
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
+}
+
+/* 1px 环画在 ::after 上：外扩 shadow 会被 overflow: hidden 裁掉，inset shadow 又会被不透明位图盖住，
+   伪元素边框是唯一既在圆角内、又不被图片遮挡、还能跟着 mask 淡出的写法（outline 的四角是直角，不用）。 */
+.nh .banner-figure::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--nh-border);
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 .nh .banner-image {

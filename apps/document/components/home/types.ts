@@ -106,9 +106,7 @@ export interface HomeCompareItem {
 }
 
 export interface HomeBanner {
-  /** 视频的无障碍名称（屏上无可见文案） */
-  alt: string
-  /** 浏览器不支持播放时的读屏降级文案（视觉上不显示，卡仍占位） */
+  /** 图片解码失败时给读屏的一句降级文案（正常路径不渲染，屏上永远无文字） */
   fallback: string
 }
 
