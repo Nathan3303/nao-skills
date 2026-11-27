@@ -86,6 +86,12 @@ bash .agents/scripts/nao-fleet.sh check
 
 - **两级回执**（模板见 @.agents/checklists/comm-templates.md，回执前读取）：默认 `done(lite)` 单行（含门禁精确数字）；**出现阻塞/风险/需决策或 PM 指定时用 `done(full)`**。前缀 `[编号] done` 不变（PM 追讨/红线均按 `done` 匹配）。
 - 每次派发的任务（含架构评审）**必须以终态回执结束**：按 @.agents/checklists/comm-templates.md `[编号] done(lite|full) | <role>`，经 intercom `send` 回**派单方会话** —— `to` 用**会话 id**（或 `to` + `cwd`），**禁裸名**；寻址规则单源见 @.agents/skills/pm-operations.md §一「投递寻址」。
+- **会话内正文 ≠ 回执（T585 · 硬性）**：把 `done(...)` 写在自己会话的回复里、或只写进 PR 描述 / 报告，**都不算交付** —— 未经 intercom 送达派单方会话的交付一律视为**未交付**，PM 按未交付追讨（**不默认成功**）。回执自证字段见 @.agents/checklists/comm-templates.md 回执模板（本条不复写字段）。
+- **`ask` = 唯一带回话保证的形态（正文单源 · T585）**：`ask` **永远唤醒**接收方；asker **阻塞等待**；答复以**工具结果**返回（不是「另开一条消息」）；**10 分钟超时是明确失败** —— 既不是静默丢失，也不是「大概没收到」；接收方在 pending ask 期间 `send` 会被推断为**对该 ask 的答复**。三条操作约束：
+  - ① **单 pending ask**：同一会话同时只允许一条未答 ask ⇒ 派单 / 追问前先 `pending` 看，答完再 ask（否则新 ask 挤在旧的后面，双方都以为对方没回）。
+  - ② **10 分钟上限 ⇒ 长任务两段式**：第一段做完即回，第二段另起一次 ask；**禁**调大 `PI_INTERCOM_ASK_TIMEOUT_MS` 把超时藏起来。
+  - ③ **答复必须自足**：回话里直接给结论 + 命令 + 输出 + 路径，不能只写「见 PR / 见报告」—— PM 读到的是工具结果，二次往返成本落在它身上。
+- **PM 侧拉取**：交付时刻由 PM `ask` 拉一次（不靠 worker 主动 `send`）；派单末句与拉取话术见 @.agents/skills/pm-operations.md §一「派发协议」。
 - **回执 = 已核对清单**：回执须声明已读 `checklists/<role>.md` 并逐项核对（未过项必须列出）；未核对不回执。
 - **回执「测试」字段 = 全量门禁精确数字（硬性）**：必须给 `命令 + exit code + 文件数/例数/红数（或错误数）`，并含**三件套**（口径单源见 @.agents/common/output-format.md「回执硬性」第 3 条，本处不复写；可复制形态见 @.agents/checklists/comm-templates.md）；**只跑子目录、或只写「pass」不算回执** → PM 打回。**跑子目录不算验收**：全范围口径见项目 `AGENTS.md`。
 - 短消息（≤150 字摘要 + 结论/决策点 + 详情落盘路径）；**禁止**把长报告全文 `send` 污染线程（output-format「反模式」）。
