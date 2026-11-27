@@ -91,6 +91,8 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 【仅 feat】需新开的会话已 `ensure` 并经 `list` 验证
 - [ ] 【仅 feat】派生会话已回收（验收通过后 `close --task <编号> <别名>`；常驻会话**不回收**，需重开时 `ensure --force`）
 - [ ] 【仅 feat】全程 PM 未触碰代码
+- [ ] 【仅 feat】**开工确认卡已落盘** `docs/<任务号>-<slug>/kickoff.md`（10 字段齐，模板 `@.agents/templates/task-docs/kickoff.md.example`），且台账该批次段有 6 列卡摘要行（字段与表头正文见 @.agents/checklists/deliverable-docs.md §十一）
+- [ ] 【仅 feat】台账结构合规：`## 批次索引` 一行对应一条归档批次 · 活批次段内 6 列摘要 · 状态 6 值之一 · 完成即收（完成后删摘要只留索引行）—— 正文见 @.agents/checklists/deliverable-docs.md §十一
 - [ ] 【仅 feat】PRD 已落**任务目录** `prd.md` 并在 `docs/README.md` 任务段登记一行（新增目录必须同批加行，否则 `check` 报「未在任务段登记」；约定见 @.agents/checklists/deliverable-docs.md §十）
 - [ ] 【仅 feat】项目 `AGENTS.md` 已建立/同步（项目级属性与约束，见 @.agents/skills/pm-operations.md §四）
 - [ ] 【仅 feat】**QA 报告**含全量门禁精确数字（命令 + exit code + 例数/断言数/红数）与四段结论；PM 只核对报告 + 读变更文件，**不重复跑测试**（2026-11-26 用户拍板：测试只归 QA）
