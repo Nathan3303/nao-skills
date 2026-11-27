@@ -1,6 +1,6 @@
 # v0.37.0
 
-- 状态：待核验 · 更新：2026-11-27 · Owner：pm
+- 状态：**已核验**（2026-11-27 · `dist-tags.latest` = `0.37.0` · `dist.integrity` = `sha512-WSpFVYYHfFi0rRXQ7KVVLmh/uQS4L7xyyFlHXOgCRE4/fHuCVNB/K6UbT+X9xW0mORpHIWBRAympSeUS4rFpAw==` · 与本地 `npm pack` tarball **逐字节一致**，`nao-fleet-0.37.0.tgz` **294,023 B / 76 文件**）· 更新：2026-11-27 · Owner：pm
 
 ## 本次更新
 
