@@ -374,6 +374,49 @@
   text-underline-offset: 6px;
 }
 
+/* ── 舰队实录 banner（Hero 之下的画面证据 · T587 最终形态：纯装饰，无控件无文案） ── */
+
+.nh .banner {
+  padding: var(--nh-sp-8) 0;
+}
+
+/* Hero 紧跟 banner 时让出下内边距，避免「Hero 下内边距 + banner 上内边距」叠加：
+   本段留白以 banner 自己的 padding 为准（宽 32 / 窄 24，即设计值），Hero 的 40 / 48 只在没有 banner 时才需要。
+   用相邻关系选择器限定场景，banner 一旦移除 Hero 立刻恢复原值；不支持 :has() 的旧浏览器退化为原叠加（不影响结构）。 */
+.nh .hero:has(+ .banner) {
+  padding-bottom: 0;
+}
+
+/* 比例锁素材原比 1896/1030（=1.841）：套 16:9 会裁切或加黑边，违反「不裁不改」 */
+.nh .banner-figure {
+  position: relative; /* sr-only fallback 的包含块 —— 它属于 figure，不落到更上层 */
+  margin: 0;
+  aspect-ratio: 1896 / 1030;
+  background: var(--nh-sunken);
+  border: 1px solid var(--nh-border);
+  border-radius: var(--nh-r-14);
+  overflow: hidden;
+}
+
+.nh .banner-image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* 图加载失败时只留读屏一句，屏上不加可见文字行（用户拍板：只要画面） */
+.nh .banner-fallback {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ── 区块 / 卡片 ──────────────────────────────────────── */
 
 .nh .section {
@@ -774,6 +817,14 @@
 
   .nh .term {
     display: none;
+  }
+
+  .nh .banner {
+    padding: var(--nh-sp-6) 0;
+  }
+
+  .nh .banner-figure {
+    border-radius: var(--nh-r-12);
   }
 
   .nh .section {

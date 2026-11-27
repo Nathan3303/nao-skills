@@ -4,6 +4,7 @@
 -->
 <script setup lang="ts">
 import { useData } from 'vitepress'
+import HomeBanner from './home/HomeBanner.vue'
 import HomeFaq from './home/HomeFaq.vue'
 import HomeFooter from './home/HomeFooter.vue'
 import HomeHero from './home/HomeHero.vue'
@@ -27,6 +28,7 @@ if (!home) {
 <template>
   <main id="main" class="nh">
     <HomeHero :home="home" />
+    <HomeBanner :banner="home.banner" />
     <JumpNav :items="home.jumpNav" />
     <HomeProblems :home="home" />
     <HomeRoles :home="home" />
