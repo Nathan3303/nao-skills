@@ -138,7 +138,7 @@ cd <repo> && codegraph init                # 建索引（不带 -i；该 flag �
 | `fleet.yaml` 的 `slug:` | 同上（`repos:` 仍有效，见下节） |
 | 会话名带 `@<fleet>` | 新会话**不再产生**；在场遗留会话仍能被 `list`/`status` 看见，`ask` 可按精确名命中，但 **`send`/`handover` 会把含 `@` 的 `to` 当跨机地址 ⇒ 本机不可达** |
 
-> **迁移**：想继续用旧语义 ⇒ 把旧包 `@nathan33/nao-skill` pin 回 `≤0.27.x`（新包无 tmux 后端）。不想迁移 ⇒ 删掉 `--fleet`/`--scope` 调用与 `.agents/fleet-scope` 文件即可，其余不动也能跑。
+> **迁移**：截至旧包末版可继续用旧语义 ⇒ 把 `@nathan33/nao-skill` pin 回 `≤0.27.x`（新包 `nao-fleet` 无 tmux 后端）。不想迁移 ⇒ 删掉 `--fleet`/`--scope` 调用与 `.agents/fleet-scope` 文件即可，其余不动也能跑。
 
 ## session 记录存放与保留（`logs`）
 
@@ -212,7 +212,7 @@ NAO_TERMINAL=herdr .agents/scripts/nao-fleet.sh status
 
 **从 tmux 迁过来（v0.28.0 破坏性变更）**：
 
-- `NAO_TERMINAL=tmux` ⇒ **`rc=2`** + 一行指路（不会静默改用 herdr）。**还需要 tmux 就 pin 回旧包 `@nathan33/nao-skill@≤0.27.x`**（`pi install -l npm:@nathan33/nao-skill@0.27.0`；新包 `nao-fleet` 从 0.37.0 起无此后端）。
+- `NAO_TERMINAL=tmux` ⇒ **`rc=2`** + 一行指路。**截至旧包末版**才有 tmux 后端 ⇒ 还需要它就 pin 回 `@nathan33/nao-skill@≤0.27.x`（`pi install -l npm:@nathan33/nao-skill@0.27.0`；新包 `nao-fleet` 从 0.37.0 起无）。
 - `NAO_TMUX_LAYOUT` / `NAO_TMUX_MAIN_WIDTH` / `NAO_TMUX_MIN_PANE_WIDTH` 三个变量与 `check` 的「tmux 布局」节**整组删除**（布局改由 herdr 的 tab 拓扑决定，不再有几何算式与窄列回退）。
 - `cleanup -S <socket>` **已移除**（`-S` 是 tmux 调用面）⇒ 改用 `cleanup --session <名>`；`-S` 现在是 `rc=2` + 指路。
 - 自检命令统一为 `herdr --version`（旧的 `herdr --version || tmux -V` 写法随回退面一起作废，见上节自检）。
