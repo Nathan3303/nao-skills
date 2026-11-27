@@ -176,9 +176,10 @@ check_stash_residue() {
 #        老 PRD 不追溯（前缀 `YYYY-MM-DD-`；无前缀 / 不可解析 ⇒ 不查，`-v` 给一条跳过注记，**不猜**）。
 #     ② `docs/<任务号>-<slug>/prd.md`（一任务一目录，ADR 2026-11-27；路径约定正文见 checklists/deliverable-docs.md §十）—— 目录形态即「已在新布局」的证据
 #        ⇒ **不套** `NAO_PRD_STRUCT_SINCE`（该变量只回答「旧 PRD 追溯面」，与此问的不是一件事）。
-#   三条判据：① 必含 9 个 `## ` 模块标题（TL;DR + 一…九；`## 附录` 可缺）
+#   四条判据：① 必含 9 个 `## ` 模块标题（TL;DR + 一…九；`## 附录` 可缺）
 #             ② §七 AC 节内 `### ` 组 ≥5（五覆盖：主路径/异常/边界/负向闭环/设计一致性）
 #             ③ 全文 ≤150 行（PRD 上限，见 checklists §一）
+#             ④ 新布局 `prd.md` 正文禁表格（T580 · §三 表格边界；历史 `docs/prds/` 不追溯）
 #   违反 ⇒ **恰一条** `  ! PRD 结构…`（排除计入 warn 的名单见 cmd_check 摘要处）；`-v` 逐文件展开（路径相对仓根）。
 #   **防假绿**：文件不可读 / 0 字节 **不算通过** —— 单列「不可读/空」，不得当「结构合格」放行。
 #   局限（可接受）：统计按行首标记，不区分数围栏内的示例；warn-only 不阻断，误报代价低。
@@ -216,7 +217,7 @@ check_prd_structure() {
     files+=("$f"); rels+=("$rel")
   done
   (( ${#files[@]} > 0 )) || return 0
-  local i nlines ac_groups miss h total=0 bad=0 first="" detail=""
+  local i nlines ac_groups miss h tbl total=0 bad=0 first="" detail=""
   local -a req=("TL;DR" "一、" "二、" "三、" "四、" "五、" "六、" "七、" "八、" "九、")
   for i in "${!files[@]}"; do
     f="${files[$i]}"; rel="${rels[$i]}"
@@ -242,6 +243,13 @@ check_prd_structure() {
       [[ "$ac_groups" =~ ^[0-9]+$ ]] || ac_groups=0
       (( ac_groups < 5 )) && miss+="AC 分组 ${ac_groups} < 5；"
       (( nlines > 150 )) && miss+="${nlines} 行 > 150；"
+      # T580：**新布局** `docs/<任务号>-*/prd.md` 正文禁表格（§三 表格边界）；历史 `docs/prds/` 不追溯
+      #   （冻结语料里的既有表格不作违规，否则等于要求追改历史）。
+      if [[ "$rel" == docs/*/prd.md && "$rel" != docs/prds/* ]]; then
+        tbl="$(awk '/^[[:space:]]*```/ { fence = !fence; next } !fence && /^\|/ { c++ } END { print c + 0 }' "$f" 2>/dev/null || echo 0)"
+        [[ "$tbl" =~ ^[0-9]+$ ]] || tbl=0
+        (( tbl > 0 )) && miss+="正文含表格 ${tbl} 行（§三：PRD 正文禁表格，改用列表 + 加粗字段名）；"
+      fi
       # 防御：读成功但三条全空（含 0 行且标记齐的神文件）⇒ 合格
       miss="${miss%；}"
     fi
@@ -423,6 +431,145 @@ check_docs_index() {
   printf '  ! 索引（warn-only，不计 warn / 不改 rc）：%s 项不一致（%s）⇒ -v 看明细（规范：checklists/deliverable-docs.md §十）\n' \
     "$cnt" "$(printf '%s\n' "$probs" | head -1)"
   $VERBOSE && printf '%s\n' "$probs" | sed 's/^/  · 索引：/'
+  return 0
+}
+
+# 台账 / 开工卡结构探针（T580 · **warn-only**：只提示，**不进 warn 计数、不改 rc**）。
+#   动机：开工确认卡从对话搬进 `docs/<任务号>-<slug>/kickoff.md`，台账按批次切 `##` 并加「流转状态 / 完成日期」；
+#     结构要能机判，否则「完成即收」「有卡无行」全靠人自觉。
+#   正文（字段集 / 表头 / 状态值域 / 完成即收 / 归档规则）单源见 checklists/deliverable-docs.md §十一。
+#   判据（违反项聚合**恰一条** `  ! 台账…`，`-v` 逐项展开）：
+#     ① 主台账 ≤300 行（PRD T580 目标；超了先搬历史批次）
+#     ② 「批次索引」段 + 表头 `| 任务号 | 归档锚点 | 状态 | 完成日期 |` 逐字；每行锚点须在归档文件里存在
+#     ③ 卡摘要表头逐字 `| 任务号 | 目标 | 角色链 | 状态 | 完成日期 | 卡指针 |`；列数 6
+#     ④ 状态值域 = 6 值（待开工/进行中/待验收/已合并/已发布/已关闭）；完成日期 = ISO 或 `—`
+#     ⑤ 完成即收：状态进完成态后**不得**再占卡摘要行（只留批次索引一行）
+#     ⑥ 有卡无台账行：`docs/<任务号>-*/kickoff.md` ⇒ 台账须有同名 `##` 段（或被索引行点名）
+#     ⑦ 卡缺字段：kickoff.md 表头逐字 + 10 字段齐（缺哪项点名哪项）
+#   局限（可接受）：只认逐字表头与固定段名；markdown 变体判「结构非法」，不给容错。
+check_ledger_structure() {
+  local root="$PWD" ledger="${NAO_TASKS_STATE:-$PWD/docs/tasks-state.md}" archive="$PWD/docs/tasks-archive.md"
+  [[ -r "$ledger" ]] || return 0            # 无台账（下游仓 / 纯文档仓）⇒ 零输出
+  local -a kdirs=() anchors=()
+  local f base anchor line
+  shopt -s nullglob
+  for f in "$root"/docs/T*-*/ "$root"/docs/M*-*/; do
+    [[ -f "${f}kickoff.md" ]] || continue
+    base="${f%/}"; kdirs+=("${base##*/}")
+  done
+  if [[ -r "$archive" ]]; then
+    while IFS= read -r anchor; do anchors+=("$anchor"); done < <(
+      awk 'match($0, /<a id="[A-Za-z0-9._-]+"><\/a>/) { print substr($0, RSTART + 7, RLENGTH - 13) }' "$archive")
+  fi
+  shopt -u nullglob
+
+  # ⑦ 卡缺字段（bash 侧逐文件，避免把 10 个字段塞进 awk）
+  local -a probs=() reqf=("任务号" "目标（一句话）" "角色链" "AC 指针" "门禁" "红线" "待澄清 / 待拍" "设计类" "发布节奏" "用户确认结论")
+  local k miss
+  for k in "${kdirs[@]}"; do
+    f="$root/docs/$k/kickoff.md"
+    if ! grep -qxF '| 字段 | 内容 |' "$f"; then
+      probs+=("docs/$k/kickoff.md 表头非逐字（应为 \`| 字段 | 内容 |\`）")
+      continue
+    fi
+    miss=""
+    for line in "${reqf[@]}"; do
+      grep -qF "| $line |" "$f" || miss+="$line；"
+    done
+    [[ -z "$miss" ]] || probs+=("docs/$k/kickoff.md 缺字段：${miss%；}")
+  done
+
+  # ①②③④⑤⑥ 台账结构（awk 解析；批量列表按 TAB 传入）
+  local s_k="" s_a="" out summary body cnt
+  (( ${#kdirs[@]} )) && s_k="$(printf '%s\n' "${kdirs[@]}" | paste -sd $'\t' -)"
+  (( ${#anchors[@]} )) && s_a="$(printf '%s\n' "${anchors[@]}" | paste -sd $'\t' -)"
+  out="$(awk -v kdirs="$s_k" -v anchors="$s_a" -v nlines="$(wc -l <"$ledger" | tr -d ' ')" '
+    function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+    function report(m) { np++; P[np] = m }
+    function inlist(v, A, n,   k) { for (k = 1; k <= n; k++) if (A[k] == v) return 1; return 0 }
+    BEGIN {
+      HDRIDX = "| 任务号 | 归档锚点 | 状态 | 完成日期 |"
+      HDRSUM = "| 任务号 | 目标 | 角色链 | 状态 | 完成日期 | 卡指针 |"
+      nD = (kdirs == "" ? 0 : split(kdirs, KD, "\t"))
+      nA = (anchors == "" ? 0 : split(anchors, AN, "\t"))
+      split("待开工 进行中 待验收 已合并 已发布 已关闭", ST, " ")
+    }
+    { if ($0 ~ /^[ \t]*```/) { fence = !fence; next } }
+    fence { next }
+    /^##[ \t]/ { sec = $0; mode = ""; next }
+    { if ($0 !~ /^\|/) next }
+    {
+      line = trim($0)
+      if (line ~ /^[|: -]+$/) next
+      # 表头识别（逐字判；不匹配 ⇒ 结构非法，后续行不猜）
+      if (line ~ /^\| 任务号 \| 归档锚点/) {
+        if (line != HDRIDX) report("批次索引段表头非逐字（应为 `" HDRIDX "`）")
+        hdrseen["idx"] = 1; mode = "idx"; next
+      }
+      if (line ~ /^\| 任务号 \| 目标/) {
+        if (line != HDRSUM) report("卡摘要表头非逐字（应为 `" HDRSUM "`）")
+        mode = "sum"; next
+      }
+      if (mode == "") next
+      row = line; sub(/^\|/, "", row); sub(/\|$/, "", row)
+      nc = split(row, C, "|")
+      for (k = 1; k <= nc; k++) C[k] = trim(C[k])
+      if (mode == "idx") {
+        if (nc != 4) { report("批次索引行 " C[1] " 列数 " nc " ≠ 4"); next }
+        anc2 = C[2]; gsub(/`/, "", anc2)
+        if (anc2 !~ /^docs\/tasks-archive\.md#/) { report("批次索引行 " C[1] " 归档锚点须形如 `docs/tasks-archive.md#<锚点>`：实际 " C[2]) ; next }
+        anc = anc2; sub(/.*#/, "", anc)
+        if (!inlist(anc, AN, nA)) report("批次索引行 " C[1] " 锚点不存在于 docs/tasks-archive.md：#" anc)
+        if (C[3] !~ /^(待开工|进行中|待验收|已合并|已发布|已关闭)$/) report("批次索引行 " C[1] " 状态值域外：" C[3])
+        ids[++nI] = C[1]
+        next
+      }
+      # 卡摘要行
+      if (nc != 6) { report("卡摘要行 " C[1] " 列数 " nc " ≠ 6") ; next }
+      ids[++nI] = C[1]
+      if (C[4] !~ /^(待开工|进行中|待验收|已合并|已发布|已关闭)$/) {
+        report("卡摘要行 " C[1] " 状态值域外：" C[4] "（应为 6 值之一：待开工 / 进行中 / 待验收 / 已合并 / 已发布 / 已关闭）")
+        next
+      }
+      if (C[5] != "—" && C[5] !~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/) report("卡摘要行 " C[1] " 完成日期非法：" C[5] "（应为 YYYY-MM-DD 或 —）")
+      if (C[4] == "已合并" || C[4] == "已发布" || C[4] == "已关闭")
+        report("已完成批次 " C[1] " 仍占卡摘要（状态 " C[4] " ⇒ 完成即收：删摘要行，只留批次索引一行）")
+      if (C[6] != "—" && C[6] != "") {
+        ptr = C[6]; gsub(/`/, "", ptr)
+        if (index(ptr, "docs/") == 1) {
+          split(ptr, PP, "/"); kd = PP[2]
+          if (!inlist(kd, KD, nD)) report("卡摘要行 " C[1] " 卡指针指向不存在的文件：" ptr)
+        }
+      }
+    }
+    END {
+      if (nlines + 0 > 300) report("主台账 " nlines " 行 > 300（已完成批次搬 docs/tasks-archive.md，主台账只留活批次 + 批次索引）")
+      if (!hdrseen["idx"]) report("缺「批次索引」表（表头 `" HDRIDX "`；每条归档批次一行）")
+      for (i = 1; i <= nD; i++) {
+        ok = 0
+        for (j = 1; j <= nI; j++) if (index(KD[i], ids[j] "-") == 1) ok = 1
+        if (!ok) report("docs/" KD[i] "/kickoff.md 有卡但台账无对应段/行（有卡无台账行）")
+      }
+      printf "SUMMARY\t%d\t%d\t%d\n", nD, nA, np
+      for (i = 1; i <= np; i++) print P[i]
+    }
+  ' "$ledger" 2>/dev/null)" || out=""
+  summary="${out%%$'\n'*}"
+  if [[ "$out" == *$'\n'* ]]; then body="${out#*$'\n'}"; else body=""; fi
+  # 汇总 bash 侧发现的卡缺字段项
+  local extra="" p
+  for p in "${probs[@]}"; do extra+="$p"$'\n'; done
+  local all="${body:+$body$'\n'}$extra"
+  all="${all%$'\n'}"
+  if [[ -z "${all//[[:space:]]/}" ]]; then
+    $VERBOSE && printf '  ✓ 台账：活批次 %s 个 · 归档锚点 %s 个 · 结构齐（docs/tasks-state.md）\n' \
+      "$(printf '%s' "$summary" | cut -f2)" "$(printf '%s' "$summary" | cut -f3)"
+    return 0
+  fi
+  cnt="$(printf '%s\n' "$all" | grep -c . || true)"
+  printf '  ! 台账（warn-only，不计 warn / 不改 rc）：%s 项不一致（%s）⇒ -v 看明细（规范：checklists/deliverable-docs.md §十一）\n' \
+    "$cnt" "$(printf '%s\n' "$all" | head -1)"
+  $VERBOSE && printf '%s\n' "$all" | sed 's/^/  · 台账：/'
   return 0
 }
 
@@ -699,6 +846,9 @@ cmd_check() {
 
   # T579：docs 一级索引一致性探针（warn-only ⇒ 不计 warn、不改 rc；老仓 / 一致 ⇒ 零输出）
   check_docs_index || true
+
+  # T580：台账 / 开工卡结构探针（warn-only ⇒ 不计 warn、不改 rc；无台账 / 结构齐 ⇒ 零输出）
+  check_ledger_structure || true
 
   echo "== 按需技能 =="
   if [[ -d "$SKILLS_SUB" ]]; then

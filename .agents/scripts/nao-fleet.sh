@@ -294,7 +294,8 @@ case "$CMD" in
       # 六条 CG_MSG_* 全以 `codegraph ` 开头 ⇒ 前缀匹配不误伤其它体检项（grep -c 0 命中 rc=1，|| true 别丢）。
       # M20261118：PRD 结构探针同理**不计入**（`  ! PRD 结构` 单列；「不计数的可见性」由它自己那行承担）。
       # T579：docs 索引一致性探针同理**不计入**（`  ! 索引` 单列，同上）。
-      WARNS="$(grep '^  !' "$REPFILE" | grep -v -e '^  ! codegraph ' -e '^  ! PRD 结构' -e '^  ! 索引' | grep -c . || true)"
+      # T580：台账/开工卡结构探针同理**不计入**（`  ! 台账` 单列，同上）。
+      WARNS="$(grep '^  !' "$REPFILE" | grep -v -e '^  ! codegraph ' -e '^  ! PRD 结构' -e '^  ! 索引' -e '^  ! 台账' | grep -c . || true)"
       ROLES_N="$(grep -oE '解析成功，[0-9]+ 个角色' "$REPFILE" | grep -oE '[0-9]+' | head -1 || true)"
       FILES_N="$(grep -oE '[0-9]+ 个文本文件全 LF' "$REPFILE" | grep -oE '^[0-9]+' | head -1 || true)"
       if (( WARNS > 0 )); then
@@ -311,6 +312,8 @@ case "$CMD" in
       grep -m1 -E '^  ! PRD 结构' "$REPFILE" || true
       # T579：docs 索引不一致同样常驻回显（同上：不计入 warn，但**不得**藏进 -v —— 索引是唯一发现入口）
       grep -m1 -E '^  ! 索引' "$REPFILE" || true
+      # T580：台账/开工卡结构提示同样常驻回显（不计入 warn，但**不得**藏进 -v —— 台账是唯一运行态入口）
+      grep -m1 -E '^  ! 台账' "$REPFILE" || true
       # B1（BR1 六条机械保证之「check 打印生效后端」）：herdr 形态（默认）⇒ 恒打印（与 -v 报告同文案）
       if [[ "$NAO_TERMINAL" == "app" ]]; then
         echo '  · 生效后端 NAO_TERMINAL=app（第二后端；status/ensure/close/cleanup 走门面；core 由 desktop app 管理；session-start 不适用）'
