@@ -25,7 +25,8 @@
 - 版心：套在 `.wrap` 内（1128 / 内容 1080），画面卡宽 100%，不破栏。
 - 间距：section 上 `--nh-sp-8`（32）下 `--nh-sp-8`（32）；≤720 上下 `--nh-sp-6`（24）。紧跟 Hero 时 Hero 让出下内边距，避免叠加（实现见 PR #252）。
 - 卡：`border-radius: var(--nh-r-14)` + `overflow: hidden` + 底边渐隐 `mask-image: linear-gradient(to bottom, #000 74%, transparent 100%)`（`mask-repeat: no-repeat` · `mask-size: 100% 100%` · 带 `-webkit-` 同值）；**内边距 0**（画面满宽，不嵌边）；**不设 `background`** —— 淡出区要露页面底色。
-- 环：1px 用**内层 img 的 `box-shadow: inset 0 0 0 1px var(--nh-border)`**（外扩 1px 会被卡上的 `overflow: hidden` 整条裁掉，实测见 PR #259），这样环跟着 mask 一起淡出，亮暗自动取 token。
+- 环：1px 用 **`:after` 伪元素边框**（`inset: 0` + `border: 1px solid var(--nh-border)` + `border-radius: inherit` + `pointer-events: none`）—— 外扩 `box-shadow` 会被卡上的 `overflow: hidden` 整条裁掉、`inset` shadow 又会被不透明位图盖住（两轮实测见 PR #259），伪元素是唯一既在圆角内、又不被图片遮挡、还能随 mask 淡出的写法；不用 `outline`（四角直角）。亮暗自动取 token。
+- 可执行判据（环）：**顶边中点 + 距左 20px（共三点）** 取色 = `--nh-border` 的计算值 —— 亮 `rgb(227,232,239)` / 暗 `rgb(39,49,63)`；不写「灰阶 231/48」这种要换算的口径。
 - 比例：`aspect-ratio: 1896 / 1030`（=1.841），`img{display:block;width:100%;height:auto}`。不套 16:9 —— 套则必裁切或加黑边，违反「不裁不改」。
 - **不用 `--nh-shadow-1`**：该档只服务可交互卡片 hover；静态媒体卡用描边分层，暗色亦不加投影。
 - 屏上零文字：无 caption / 无 h2 / 无播放图标遮罩（用户拍板「只要画面」）。
@@ -41,7 +42,9 @@
 
 - 无交互状态：没有播放/暂停、没有 hover/focus 反馈（纯装饰画面）。
 - 结束态：不适用：动画循环、无结束画面。
-- 资源不可用：静态首帧或 `--nh-sunken` 占位，卡仍占位不塌陷；读屏只读 `fallback` 一句，屏上不加文字。
+- 资源不可用（解码失败，T592）：`failed` 态给 `.banner-figure` 加 `--nh-sunken` 底色，**mask 保留**（解除会出现硬底边 + 灰块描边，与正常态「底边渐隐收口」打架；保留后卡形 / 高度 / 渐隐 / 环与正常态同形），`aspect-ratio` 保住占位高度、不塌陷；**正常态绝不能有底色**（否则淡出区露灰）。
+- 失败态文字：**加 1 行状态文案（唯一允许的文字）**，`.banner-failed` **铺满卡片 + 网格居中**（`inset: 0` + `display: grid` + `place-items: center`），13px `--nh-text-3`（on `--nh-sunken` 对比亮 4.68:1 / 暗 5.96:1）。文案 `这段录屏没能加载出来 · 刷新可重试` —— 「刷新」是用户唯一能做的恢复动作，不给就成死路。
+- 失败态竞态（T592）：`loading="lazy"` 的请求可能早于水合，`@error` 会错过 ⇒ 挂载时补判 `img.complete && img.naturalWidth === 0`。
 
 ## 六、断点
 
@@ -61,7 +64,8 @@
 - 裁定：`prefers-reduced-motion: reduce` ⇒ **只渲染静态图**（`<source media>` 换源），无播放按钮、无替代链接 —— 用户拍板取舍。
 - 已知偏差：普通模式动画自动循环（15s > 5s）且**无暂停入口** ⇒ **与 WCAG 2.2.2 存在偏差**；理由是用户拍板「装饰性小动画不带控件」，缓解只有静态替代。**不声称满足 2.2.2**，偏差记录见实现报告（PR #252）。
 - 语义：`<figure>` + `<picture>` + `<img>`；`img` 收 **`alt=""` + `aria-hidden="true"`** —— 纯装饰、无替代信息，读屏跳过（原 `alt`「七个 AI 角色…」改判删除：媒体本身没有可比对的替代文本，念了反而更差）。
-- 降级：`fallback` 只在**解码失败**时以 sr-only 渲染（正常路径 DOM 里没有这句，屏上永远无文字）。无音轨 ⇒ 不需字幕与音量；**不用**任何原生控件。
+- 降级：`fallback` 只在**解码失败**时渲染成一行**可见**状态文案，带 `role="status"`（失败被读屏播报）。**sr-only 与可见文案二选一，不得重复** —— 同一句读两遍比不读更糟；正常路径 DOM 里没有这句，正常态屏上零文字。
+- 无音轨 ⇒ 不需字幕与音量；**不用**任何原生控件。
 - 键盘：无控件 ⇒ Tab 顺序 Hero CTA → 跳读条，不插入额外停点。
 
 ## 九、降级产物
