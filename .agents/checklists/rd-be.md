@@ -17,13 +17,13 @@ description: 后端研发交付核对清单（按需，交付前读取）
 - [ ] 业务逻辑禁 `panic`（仅哨兵错误）
 - [ ] VO 用工厂函数（`NewMoney`），禁裸结构体
 - [ ] 所有 I/O 方法首参 `context.Context`
-- [ ] 未把**测试套件**（`tests/` / `npm test`）当自己的活？（2026-11-26 起测试**只归 QA**；RD 只允许**单条命令自查**、不产出测试数字；交付时给 QA「可复现命令 + 改动面 + 预期」）
+- [ ] 未把**测试套件**当自己的活？（**测试执行只归 QA**，口径见 @.agents/common/output-format.md「测试执行只归 QA」）
 
 ## 命名速查
 
 `XxxRepository`（接口）/ `GormXxxRepository`（实现）/ `XxxService`（应用）/ `XxxHandler`（接口）/ `ErrXxx`（哨兵）/ `NewXxx`（工厂）。
 
-## 交付检查清单（完整 14 项）
+## 交付检查清单（完整 13 项）
 
 - [ ] 业务本质已评估（CRUD 走脚本 / 复杂规则选 L1/L2/L3），未过度设计
 - [ ] `internal/domain/` 零外部依赖，实体方法承载业务规则
@@ -37,5 +37,4 @@ description: 后端研发交付核对清单（按需，交付前读取）
 - [ ] 定位/变更代码已用 CodeGraph（回退 grep 有注明）
 - [ ] 需求分支 `feat/<issue-id>-<slug>` 已 push，Draft PR 已开（填 PR 模板）
 - [ ] 提交为 `wip()` 检查点 + 路径级暂存（禁 `-A`）；无 WIP 提交落到 main
-- [ ] 通过上面全部红线
 - [ ] PM 验收通过后才合并（`gh pr merge --squash --delete-branch` / 降级本地 squash）；未过验收未合并

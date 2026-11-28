@@ -24,6 +24,8 @@ description: 全角色共用输出与沟通红线（常驻；模板按需）
 - 汇报时**只报未过项**：`未过：R-XX-03；其余 pass`。
 - 禁止逐条复述全部通过项。
 
+- **测试执行只归 QA**（2026-11-26 用户拍板）：`tests/` 与 `npm test` **只有 `qa` 跑**；PM 合并前只跑 `bash .agents/scripts/nao-fleet.sh check`（静态体检）；RD 只做**单条命令自查**、不产出测试数字，交付时给 QA「可复现命令 + 改动面 + 预期」；Arch 仅在选型/取证时自跑目标用例（命令+输出落 `docs/reports/`）。**攒批与发版前全量口径**见 @.agents/prompts/test-engineer.md §一。
+
 ## 回执硬性（红线；模板按需）
 
 > 派发消息模板与两级回执模板（`done(lite)` / `done(full)`）见 @.agents/checklists/comm-templates.md——**派发/回执前读取**，不在常驻展开。
