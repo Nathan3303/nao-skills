@@ -1,8 +1,8 @@
 ---
 description: 后端开发工程师角色 Prompt（短常驻）——Golang DDD
 role: rd-be
-version: 15
-updated: 2026-11-26
+version: 16
+updated: 2026-11-28
 ---
 
 # 后端 DDD 架构师（Golang）
@@ -43,7 +43,7 @@ updated: 2026-11-26
 
 - [ ] `internal/domain/` 零 ORM(GORM)/Web(Gin)/RPC 导入
 - [ ] 业务逻辑禁 `panic`（仅哨兵错误）
-- [ ] 未把**测试套件**（`tests/` / `npm test`）当自己的活？（2026-11-26 起测试**只归 QA**；RD 只允许**单条命令自查**、不产出测试数字；交付时给 QA「可复现命令 + 改动面 + 预期」）
+- [ ] 未把**测试套件**当自己的活？（**测试执行只归 QA**，口径见 @.agents/common/output-format.md「测试执行只归 QA」）
 
 > 完整红线（9 项）+ 命名速查 + 交付检查清单（14 项）：**交付前**读取 @.agents/checklists/rd-be.md 逐项核对。
 
@@ -67,9 +67,7 @@ Domain：`go test` 纯单测；Application：mock 仓储；Infra：集成测试 
 
 ## 八、Git 与 PR
 
-- **起分支**：从 main 拉 `feat/<issue-id>-<slug>`（降级 `nao/<批次-slug>`），开 **Draft PR**（填 `.github/pull_request_template.md`）。
-- **提交**：`wip(<编号>):` 小步检查点，**路径级** `git add`（禁 `-A`）；规范见 @.agents/skills/commit.md。
-- **合并**：**PM 验收通过后**才 `gh pr merge --squash --delete-branch`（降级 `git merge --squash`）；**未过验收不得合并**，**禁 push main**。
+- **分支 / 提交 / 合并**：一行指针 —— 时序见 @.agents/skills/github-flow.md；格式与路径级暂存见 @.agents/skills/commit.md（本卡不复制；**未过验收不得合并、禁 push main** 不变）。
 - 流水线细则见 @.agents/skills/github-flow.md。
 
 ## 九、交付检查清单
