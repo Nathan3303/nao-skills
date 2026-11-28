@@ -354,6 +354,7 @@ _term_app_liveness() {  # <name> [repo] → verdict/state/seq/hook
   [[ -n "$rows" ]] || { printf 'absent\t-\t-\t-\n'; return 0; }
   if [[ -n "$repo" ]]; then
     rp="$(nao_phys_path "$repo")"
+    local all_rows="$rows"
     while IFS= read -r line; do
       [[ -n "$line" ]] || continue
       IFS=$'\t' read -r _ _ _ c1 c2 _ <<< "$line"
@@ -363,7 +364,15 @@ _term_app_liveness() {  # <name> [repo] → verdict/state/seq/hook
       fi
     done <<< "$rows"
     rows="${filtered%$'\n'}"
-    [[ -n "$rows" ]] || { printf 'absent\t-\t-\t-\n'; return 0; }
+    if [[ -z "$rows" ]]; then
+      # T597（Issue #281 · 红线族）：同名终端**存在但不属本仓**时不能一律当 absent ——
+      #   若其中存在 live 且**缺身份标签**（ws == "-"）的，属「归属不可判定」⇒ 报 unknown
+      #   （`status` 才会显示 `?` 而不是「未运行」）。label 齐的他仓终端维持旧行为（B/F 另做）。
+      if printf '%s\n' "$all_rows" | awk -F'\t' '$9 == "live" && $12 == "-" {f=1} END {exit(f?0:1)}'; then
+        printf 'unknown\t-\t-\t-\n'; return 0
+      fi
+      printf 'absent\t-\t-\t-\n'; return 0
+    fi
   fi
   # keep 换壳（BR4）：finished 终端 = pi 已退出、只剩 shell（`--keep` 语义）⇒ **不算在线**，
   #   也不参与同名歧义计数（否则一次 close/退出后的残留会把重建判成 ambiguous）；
@@ -392,16 +401,10 @@ _term_app_liveness() {  # <name> [repo] → verdict/state/seq/hook
     #   若 labels 与 status **两项都缺** ⇒ 按 AC8 主形态判 `integration-missing`（更强的缺陷），
     #   不降级成 unknown（否则 status 会把「集成缺失」证据行吞掉）。
     if [[ "$ws" == "-" ]]; then
-      # 只对**舰队形状的会话名**告警（非舰队终端 —— 如用户自己开的窗口、夹具的 self 终端 —— 不归我们管，
-      #   否则每次 status 都会刷一条无意义告警）。
-      if [[ "$(fleet_name_parse "$name")" == OK* ]]; then
-        warn "集成缺 labels：无法确认放置归属（终端 $name；不判在线、不可投递）"
-      fi
-      if [[ "$st" == "-" || "$hook" != "1" ]]; then
-        [[ -z "$v" ]] && { v="integration-missing"; state="-"; }
-      else
-        [[ -z "$v" ]] && { v="unknown"; state="-"; }
-      fi
+      # T597（P3 信号收敛）：**缺身份标签 ⇒ 归属不可判定（unknown）**，与本行是否有 status 无关。
+      #   理由：`space` 缺 = 我们无法确认它属于哪个 workspace/仓 ⇒ 既不判在线、也不判「未运行」。
+      #   呈现只有**一处**：status 行内 `? 不可判定` + 处置行（不再额外 warn，也不重复打 `!` 标记）。
+      [[ -z "$v" ]] && { v="unknown"; state="${st:-}"; }
       continue
     fi
     if [[ "$st" == "-" || "$hook" != "1" ]]; then

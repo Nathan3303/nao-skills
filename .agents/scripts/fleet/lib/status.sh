@@ -206,7 +206,14 @@ cmd_status() {
         a_ok=1
       done
     fi
-    (( a_ok )) || printf '  · %-14s 未运行（ensure 拉起）\n' "$a"
+    # T597（Issue #281 · 红线族「读不到不得当成不存在」）：同名终端在场但**缺身份标签** ⇒ 归属不可判定，
+    #   显示 `?` + 一行处置；**不得**报「未运行」（实际在跑）。label 齐的正常路径零变化（BR1）。
+    if (( ! a_ok )) && [[ "${hv[$a]:-absent}" == "unknown" ]]; then
+      printf '  ? %-14s 不可判定（同名终端在场但缺身份标签 space/tab/name ⇒ 归属无法确认）\n' "$a"
+      printf '  %-16s 处置：`hc get <地址>` 看实况 / `hc label <地址>` 补标签 / `hc kill <地址>` 清掉（或 close --force）\n' "" 
+    elif (( ! a_ok )); then
+      printf '  · %-14s 未运行（ensure 拉起）\n' "$a"
+    fi
   done
   # D5：分节标题示例带上全名写法 —— **仅当在场确有带 scope 的会话**（scope 为空时逐字保留旧标题 ⇒ BR1）
   if (( any_scoped )); then
@@ -349,6 +356,9 @@ cmd_status() {
     [[ -n "${abn_seen[$dn]:-}" ]] || continue     # 只对已算定证据的名字（全集）
     dv="${hv[$dn]:-absent}"; ds="${hstate[$dn]:--}"
     [[ "$dv" == "absent" ]] && continue
+    # T597（P3 信号收敛）：`unknown`（缺身份标签 ⇒ 归属不可判定）已由上线状态表的 `? 行 + 处置行` 说明，
+    #   不再在「投递判定」节重复一遍（同一事实一处呈现）。
+    [[ "$dv" == "unknown" ]] && continue
     if [[ "$dv" == "online" ]] && term_deliverable "$ds"; then
       dl+=("  · $dn：可投递（状态=$ds）")
     elif [[ "$dv" == "online" ]]; then
@@ -399,17 +409,22 @@ process.stdin.on("end", () => {
   for (const line of buf.split("\n")) {
     if (!line) continue;
     const f = line.split("\t");
-    if (f.length < 13) continue;
-    const [name, kind, role, task, pane_id, cwd, repo, own, online, agent, busy, deliverable, verdict] = f;
+    if (f.length < 14) continue;
+    const [name, kind, role, task, pane_id, cwd, repo, own, online, agent, busy, deliverable, verdict, live] = f;
     const s = {
       name, kind, role, task, pane_id, cwd, repo,
       own: own === "1", online: online === "1", agent,
       busy: busy === "1", deliverable: deliverable === "1", verdict,
+      // T597：三态可区分（纯增量字段，schema 仍为 1）—— online=1 时恒 "online"；
+      //   否则透传后端终态：unknown（同名在场但缺身份标签 ⇒ 归属不可判定）/ absent（确实没有）。
+      liveness: online === "1" ? "online" : (live || "absent"),
     };
     sessions.push(s);
-    if (!roles.has(role)) roles.set(role, { role, online: false, sessions: [] });
+    if (!roles.has(role)) roles.set(role, { role, online: false, state: "absent", sessions: [] });
     const r = roles.get(role);
     if (s.online) r.online = true;
+    // 角色级三态：任一在线 ⇒ online；否则有 unknown ⇒ unknown；否则 absent（顺序即优先级）
+    if (r.state !== "unknown") r.state = s.online ? "online" : (r.state === "online" ? "online" : (s.liveness === "unknown" ? "unknown" : "absent"));
     r.sessions.push(name);
   }
   const out = {
@@ -502,7 +517,7 @@ cmd_status_json() {
       other) repo_c="${obase:--}" ;;
       *)     repo_c="" ;;
     esac
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-      "$nm" "$k" "$r" "$t" "$pid" "$cwd" "$repo_c" "$own" "$online" "$agent" "$busy" "$dl" "$verdict"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$nm" "$k" "$r" "$t" "$pid" "$cwd" "$repo_c" "$own" "$online" "$agent" "$busy" "$dl" "$verdict" "${vd:-absent}"
   done | _status_json_emit "$be" "$root"
 }

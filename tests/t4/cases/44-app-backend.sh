@@ -282,8 +282,12 @@ t4_assert_eq "1" "$APP_RC" "⑫ 缺 status ⇒ 就绪门无法确认 ⇒ rc=1（
 t4_assert_contains "$APP_ERR" "就绪门超时" "⑫ 点名就绪门超时（不退化空闲、不静默成功）"
 t4_assert_not_contains "$APP_ERR" "版本不支持" "⑫ 不误报「版本不支持」（契约缺字段 ≠ 版本旧）"
 run_app status
-t4_assert_contains "$APP_OUT" "集成缺失" "⑫ status 判「集成缺失 ⇒ 不可投递」（不退化 idle）"
+# T597（PM 裁定）：**label 不全 ⇒ 归属不可判定**（与本行有无 status 无关）⇒ 行内 `?`，不再落「集成缺失」。
+t4_assert_contains "$APP_OUT" "? rd-fe" "⑫ 缺 labels（连带缺 status）⇒ 行内「? 不可判定」（不退化 idle）"
 t4_assert_not_contains "$APP_OUT" "✓ rd-fe" "⑫ 缺 status 不得判在线"
+# 不丢失信号：`integration-missing`（labels **齐**、但 hook/status 缺）仍是独立分支存在
+t4_assert_contains "$(sed -n '/^_term_app_liveness()/,/^}/p' "$(t4_fleet_file_for "$LAB/.agents/scripts" _term_app_liveness)")" \
+  'v="integration-missing"' "⑫ 静态：labels 齐而 hook 缺的 integration-missing 分支仍在（没被这次收敛吞掉）"
 rm -f "$BE_APP_STATE/bare_get"
 # 子形态（PM 裁定）：只缺 labels、status 仍 idle ⇒ **unknown + 一行 warn，不判在线/不可投递**。
 #   理由：真 hc 恒给 `"labels":{}`，单缺键不构成「版本不支持」；但「同名未放置终端」会让 close
@@ -293,8 +297,11 @@ env HC_DOUBLE_STATE="$BE_APP_STATE" "$FIXT/hc" run --bg --no-parent --keep \
   --name rd-fe --cwd "$LAB" --label herdr.space=spx --label herdr.tab=tbx --label nao.name=rd-fe -- true >/dev/null
 printf '1' > "$BE_APP_STATE/bare_labels"
 run_app status
-t4_assert_contains "$APP_ERR" "集成缺 labels" "⑫ 子形态：只缺 labels ⇒ warn「无法确认放置归属」"
-t4_assert_eq "1" "$(grep -c '集成缺 labels' <<< "$APP_ERR" || true)" "⑫ 子形态：warn **恰 1 行**（同名被问两次会刷两条）"
+# T597（P3 信号收敛）：同一事实只在**行内**呈现一次（`? 不可判定` + 处置行）；
+#   旧的两处（顶部 warn「集成缺 labels」与投递节「不可投递（unknown…）」）已按裁定删除。
+t4_assert_contains "$APP_OUT" "? rd-fe" "⑫ 子形态：只缺 labels ⇒ 行内「?」（不可判定）"
+t4_assert_eq "0" "$(grep -c '集成缺 labels' <<< "$APP_ERR" || true)" "⑫ 子形态：**不再**打顶部 warn（信号收敛到一处）"
+t4_assert_eq "1" "$(grep -c '不可判定' <<< "$APP_OUT" || true)" "⑫ 子形态：不可判定信号**恰 1 处**（grep -c）"
 t4_assert_not_contains "$APP_OUT" "✓ rd-fe" "⑫ 子形态：缺 labels 不判在线（unknown，不退化 idle）"
 rm -f "$BE_APP_STATE/bare_labels"
 run_app status
@@ -473,5 +480,85 @@ run_app ensure "rd-be@$LAB/repo-a"
 t4_assert_eq "0" "$APP_RC" "⑭⑤ 完整 label 的 ws 外同名 ⇒ 让号成功（本单要的正常路径）"
 _n_after="$(for a in $(app_addrs); do app_field "$a" name; done | tr '\n' ' ')"
 t4_assert_contains "$_n_after" "rd-be2" "⑭⑤ 让号结果 = rd-be2（而不是失败）"
+
+# ================================================================ ⑮ T597（Issue #281）：status 对「同名但缺身份标签」的活终端必须报「不可判定」
+#   红线族「读不到不得当成不存在」。三条夹具：零 label / 只有 nao.name / 正常（label 齐）。
+#   变异：把 `_term_app_liveness` 的 unknown 分支删掉（unknown 折回 absent）⇒ ⑮①② 必红。
+#   注：夹具终端 cwd 必须**在本仓外**（/tmp）才会走到「repo 过滤后为空」那条路径 —— QA 现场就是这种。
+jstate() {  # <role> → json 里该角色的 state
+  run_app status --json
+  printf '%s' "$APP_OUT" | node -e 'let b="";process.stdin.on("data",d=>b+=d).on("end",()=>{const j=JSON.parse(b);const r=j.roles.find(x=>x.role===process.argv[1]);console.log(r?r.state:"<缺失>")})' "$1" 2>/dev/null || true
+}
+
+# ⑮① 零 label（同名、live、本仓外）
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-be --cwd /tmp -- true >/dev/null
+run_app status
+t4_assert_contains "$APP_OUT" "? rd-be" "⑮① 零 label ⇒ 显示「?」（不是「未运行」）"
+t4_assert_contains "$APP_OUT" "不可判定" "⑮① 点名「不可判定」"
+t4_assert_contains "$APP_OUT" "hc kill" "⑮① 给一行处置指路（hc get / hc label / hc kill）"
+t4_assert_not_contains "$APP_OUT" "· rd-be        未运行" "⑮① **不得**报「未运行」（实际在跑）"
+
+# ⑮② 只有 nao.name（部分 label）
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-be --cwd /tmp --label nao.name=rd-be -- true >/dev/null
+run_app status
+t4_assert_contains "$APP_OUT" "? rd-be" "⑮② 部分 label ⇒ 同样显示「?」"
+t4_assert_contains "$APP_OUT" "不可判定" "⑮② 同样报「不可判定」"
+
+# ⑮③ 正常终端（label 齐、本仓内）⇒ 显示不变（不回归）
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-fe --cwd "$LAB" \
+  --label herdr.space=spx --label herdr.tab=tbx --label nao.name=rd-fe -- true >/dev/null
+run_app status
+t4_assert_contains "$APP_OUT" "✓ rd-fe" "⑮③ 正常终端仍显示「✓ 在线」（不回归）"
+t4_assert_not_contains "$APP_OUT" "? rd-fe" "⑮③ 正常终端不出「?」行"
+
+# ⑮④ `--json` 三态可区分（online / unknown / absent）
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-fe --cwd "$LAB" \
+  --label herdr.space=spx --label herdr.tab=tbx --label nao.name=rd-fe -- true >/dev/null
+t4_assert_eq "online" "$(jstate rd-fe)" "⑮④ --json：正常 ⇒ state=online"
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-be --cwd /tmp -- true >/dev/null
+t4_assert_eq "unknown" "$(jstate rd-be)" "⑮④ --json：缺身份标签 ⇒ state=unknown"
+app_reset
+t4_assert_eq "absent" "$(jstate rd-be)" "⑮④ --json：确实没有 ⇒ state=absent（三态互不相同）"
+
+# ⑮⑤ 仓内 + 零 label / 部分 label（**真实场景**：舰队终端 cwd 就是仓根）
+#   QA 指出：只在非 git 的 $LAB 下测 ⇒ 永远走「过滤后为空」分支，仓内路径不被测。这里用**真 git 仓**。
+GITLAB="$T4_CACHE_DIR/lab44-git-$$"; rm -rf "$GITLAB"; mkdir -p "$GITLAB"
+git -C "$GITLAB" init -q 2>/dev/null && git -C "$GITLAB" config user.email t4@example.invalid && git -C "$GITLAB" config user.name t4
+status_in_gitlab() {
+  t4_run_in_dir "$GITLAB" env NAO_TERMINAL=app "HC_SCOPE=$BE_SESSION" HC_TERMINAL_ID=t0 \
+    "HC_TERMINAL_SOCKET=$BE_APP_SOCK" "XDG_RUNTIME_DIR=$BE_APP_RT" "HC_DOUBLE_STATE=$BE_APP_STATE" \
+    "PATH=$FIXT:$PATH" "HOME=$LAB/.t4-home" "PI_CODING_AGENT_DIR=$LAB/.t4-home/.pi/agent" \
+    timeout 120 bash "$LAB/.agents/scripts/nao-fleet.sh" "$@"
+  APP_RC=$T4_RC; APP_OUT="$T4_OUT"; APP_ERR="$T4_ERR"
+}
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-be --cwd "$GITLAB" -- true >/dev/null
+status_in_gitlab status
+t4_assert_contains "$APP_OUT" "? rd-be" "⑮⑤ 仓内 + 零 label ⇒ 显示「?」"
+t4_assert_not_contains "$APP_OUT" "· rd-be        未运行" "⑮⑤ 不得报「未运行」（核心：仓内路径）"
+status_in_gitlab status --json
+t4_assert_eq "unknown" "$(printf '%s' "$APP_OUT" | node -e 'let b="";process.stdin.on("data",d=>b+=d).on("end",()=>{const j=JSON.parse(b);const r=j.roles.find(x=>x.role==="rd-be");console.log(r?r.state:"<缺失>")})' 2>/dev/null || true)" \
+  "⑮⑤ --json：仓内零 label ⇒ state=unknown"
+
+# ⑮⑥ 仓内 + 部分 label（只有 nao.name）
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-be --cwd "$GITLAB" --label nao.name=rd-be -- true >/dev/null
+status_in_gitlab status
+t4_assert_contains "$APP_OUT" "? rd-be" "⑮⑥ 仓内 + 部分 label ⇒ 显示「?」"
+t4_assert_not_contains "$APP_OUT" "· rd-be        未运行" "⑮⑥ 不得报「未运行」"
+
+# ⑮⑦ 信号收敛：该场景下「不可判定」相关信号只出现一处（行内），无顶部 warn / 无重复节
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-be --cwd "$GITLAB" -- true >/dev/null
+status_in_gitlab status
+t4_assert_eq "1" "$(grep -c '不可判定' <<< "$APP_OUT$APP_ERR" || true)" "⑮⑦ 「不可判定」恰 1 处（grep -c；同一事实一处呈现）"
+t4_assert_eq "0" "$(grep -c '集成缺 labels' <<< "$APP_OUT$APP_ERR" || true)" "⑮⑦ 不再有顶部 warn「集成缺 labels」"
+t4_assert_eq "0" "$(grep -c '不可投递（unknown' <<< "$APP_OUT" || true)" "⑮⑦ 投递节不再重复同一条（unknown 已由行内承担）"
+t4_assert_contains "$APP_OUT" "hc kill" "⑮⑦ 处置行在位（hc get / hc label / hc kill）"
 
 t4_exit
