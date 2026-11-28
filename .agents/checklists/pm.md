@@ -64,7 +64,7 @@ description: PM 交付核对清单（按需，交付/派发前读取）
 - [ ] 输出里有 `warn`/`error`/`pending approval`/`N vulnerabilities` 却判完成，或遗留项未走三出口（「先放着」不算出口）？（见 @.agents/skills/task-completion.md）
 - [ ] 降级（无 `gh` / 无远端）未在 `tasks-state` 与回执中标注？
 
-## 交付检查清单（完整 44 项 · 仅 feat）
+## 交付检查清单（完整 46 项 · 仅 feat）
 
 > 通道标注：本节 44 项**仅 `feat` 通道**核对（逐项标 `【仅 feat】`）；`fix` 通道只核下一节 8 条。分流判据（能写出「期望 vs 实际」且可复现）唯一出处：@.agents/skills/github-flow.md。
 > **例外（两通道中立，非 feat 专属）**：文档 / 台账随任务 PR、工作期不落 main —— 见下节第 8 条。
