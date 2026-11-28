@@ -22,7 +22,7 @@ title: 排错
 
 - 提示必须进入终端后端：同上——先在 pane 里。
 - 提示已在运行或同名会话已存在：同一个仓里已经有这个角色的会话。要并行做另一个任务，用 `ensure --task <编号> rd-be`（会话名仍是角色名，任务号只进元数据）；确需重开同一个会话才加 `--force`。
-  跨仓同名不会冲突，因为每个仓一个 workspace，不需要设 scope。`--scope` 或 `.agents/fleet-scope` 都已弃用，写了只会打一行提示然后被忽略。
+  **TUI 形态下**跨仓同名不会冲突，因为每个仓一个 workspace；app 形态（`NAO_TERMINAL=app`）终端名字全局唯一，见[多项目布局](/advanced/multi-project)。`--scope` 或 `.agents/fleet-scope` 都已弃用，写了只会打一行提示然后被忽略。
 - 提示模型不在白名单：`ensure -m <模型>` 只接受白名单里的取值，换一个或去掉 `-m`。
 
 ## 有残留会话

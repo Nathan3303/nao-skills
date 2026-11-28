@@ -54,6 +54,7 @@ const sidebar = [
     text: '进阶用法',
     items: [
       { text: '多项目布局', link: '/advanced/multi-project' },
+      { text: '手机上看舰队', link: '/advanced/mobile' },
       { text: '自定义角色卡', link: '/advanced/custom-cards' },
     ],
   },
