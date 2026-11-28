@@ -1429,6 +1429,21 @@ PR [#148](https://github.com/Nathan3303/nao-fleet/pull/148) squash 合并 · 六
 
 - ✅ **已合并 `7f778f8`**（PR #244 · Issue #237）：`docs/<任务号>-<slug>/` + `docs/README.md` 唯一索引；`check` 新增 PRD 探针扩面与 `check_docs_index`（warn-only）；判红载体 `tests/t4/cases/53`；32 文件 +1028/−103。
 
+<a id="T595"></a>
+## T595 · multirepo-naming（多仓同名解阻塞 · 方案 F 的 A 步）
+
+- ✅ **已合并 `6c53497`**（PR #280 · Issue #273）· 发布 v0.37.2：app 后端槽位占用改**全局**（`term_live_peer_names`，herdr 侧不并全局）· `name_taken` **只对这一种**让号重试（判据用信号不用 rc）· 零/部分 label 同名 ⇒ **fail-closed 拒绝 + 指路**（`_term_app_label_state`）· 槽位段保持 2..9（扩 99 属命名契约变更，另立）。设计 `design.md`（arch，方案 F 六条裁定）。
+
+<a id="T596"></a>
+## T596 · readme-rewrite（README 按 user-guide-writing 重写）
+
+- ✅ **已合并 `57b7f14`**（PR #279 · Issue #278）· 发布 v0.37.2：结构重排（迁移信息下沉「从旧版升级」）· 散文长句 25 → 0 · 术语 5 处首现补半句 · 叫法统一（回报/回执 · shim→转发入口 …）· blockquote 4 → 0 · 事实零丢失（QA 列 25 项）· 并修掉「两个仓不撞车」缺后端限定的同族错误。
+
+<a id="T586"></a>
+## T586 · trust-project（`ensure --trust-project`）
+
+- ✅ **已合并 `76d07cd`**（PR #277 · Issue #248）· 发布 v0.37.2：显式开关（默认关）· `NAO_TRUST_NEW_REPO=1` 等价 · 只对该次 spawn 的 pi 传 `--approve` · 不写任何持久配置（三层快照断言：真实 `~/.pi` + 隔离 HOME + 项目 `.pi/`）· `docs/INSTALL` 补安全边界。
+
 <a id="T589"></a>
 ## T589 · criteria-check（判据体检）
 

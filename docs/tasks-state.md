@@ -12,6 +12,9 @@
 
 | 任务号 | 归档锚点 | 状态 | 完成日期 |
 | :--- | :--- | :--- | :--- |
+| T595 | `docs/tasks-archive.md#T595` | 已发布 | 2026-11-28 |
+| T596 | `docs/tasks-archive.md#T596` | 已发布 | 2026-11-28 |
+| T586 | `docs/tasks-archive.md#T586` | 已发布 | 2026-11-28 |
 | T589 | `docs/tasks-archive.md#T589` | 已发布 | 2026-11-28 |
 | T582 | `docs/tasks-archive.md#T582` | 已发布 | 2026-11-28 |
 | T592 | `docs/tasks-archive.md#T592` | 已发布 | 2026-11-28 |
