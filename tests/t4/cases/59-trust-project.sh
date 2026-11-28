@@ -11,7 +11,7 @@
 #   ④ `NAO_TRUST_NEW_REPO=1` ⇒ 含 1 处（等价开关）
 #   ⑤ flag + env 同给 ⇒ **仍恰 1 处**（同一个开关两种写法，不重复传参）
 #   ⑥ **不写持久配置**：spawn 前后 `$HOME/.pi` 与项目 `.pi/` 快照一致（红线）
-#   ⑦ 用法面：`--trust-project` 只给 `ensure`（其它子命令 ⇒ rc=2）
+#   ⑦ 用法面：`--trust-project` 只给 `ensure`（其它子命令 ⇒ rc≠0；本仓用法错统一走 die=1）
 #
 # 夹具：`tests/t4/fixtures/herdr-double` + `T4_HERDR_CALL_LOG`（替身把每次调用的 argv 逐行追加）——
 #   于是「pi 的 argv 里有没有 --approve」是**后端收到的原样命令串**，不是我们的自述。
@@ -53,8 +53,32 @@ run59() { # <repo 名> [env 前缀已由调用方给] <ensure 参数...>
 approve_count() { grep -c -- 'exec pi .*--approve' "$T4_HERDR_CALL_LOG" 2>/dev/null || true; }
 reset_log() { : > "$T4_HERDR_CALL_LOG"; }
 
-# ⑥ 快照：lab 的 HOME/.pi 与每个 repo 的 .pi（红线 = spawn 不写任何持久配置）
-snap59() { { find "$LAB/home/.pi" "$LAB"/repo*/.pi -type f 2>/dev/null | sort; find "$LAB/home/.pi" "$LAB"/repo*/.pi -type f -exec md5sum {} + 2>/dev/null | awk '{print $1}' | sort; } | paste -sd'|' -; }
+# ⑥ 快照：**真实 `$HOME/.pi`** + **被测进程实际继承的 HOME/.pi** + 每个 repo 的 `.pi`
+#   ⚠️ 两个对象缺一不可（这是本用例最容易写成空转的地方）：
+#     · 替身 LAB 下随手写的 `.pi` 恒为 0 文件 ⇒ 「空 vs 空」恒真（T589 R3 现场，抓不到任何东西）；
+#     · 但夹具给被测进程注入了**隔离 HOME**（`be_isolated_env`）⇒ 只快照真实 `$HOME` 也抓不到
+#       「代码里 `$HOME/.pi` 被写」这类实现（它落在隔离 HOME 里）。⇒ 两个都要，且真实面必须有文件。
+#   排除 `agent/sessions`（运行产物：本机其它 pi 会话会持续追加，比它必然抖动）——红线在意的是**配置面**。
+REAL_HOME59="${HOME:-}"; REAL_PI59="$REAL_HOME59/.pi"
+CHILD_HOME59="$(be_isolated_env | sed -n 's/^HOME=//p' | head -1)"
+[ -n "$CHILD_HOME59" ] || CHILD_HOME59="${BE_LAB:-$LAB}/.t4-home"
+snap59() {
+  { find "$REAL_PI59" -path "$REAL_PI59/agent/sessions" -prune -o -type f -print 2>/dev/null | sort
+    find "$REAL_PI59" -path "$REAL_PI59/agent/sessions" -prune -o -type f -exec md5sum {} + 2>/dev/null | awk '{print $1}' | sort
+    find "$CHILD_HOME59/.pi" -type f 2>/dev/null | sort
+    find "$CHILD_HOME59/.pi" -type f -exec md5sum {} + 2>/dev/null | awk '{print $1}' | sort
+    find "$LAB"/repo*/.pi -type f 2>/dev/null | sort
+  } | paste -sd'|' -
+}
+# 防空转：真实配置面**必须有文件**，否则这条断言又变成「空 vs 空」
+t4_require_cmd find
+if [ ! -d "$REAL_PI59/agent" ] || [ "$(find "$REAL_PI59/agent" -maxdepth 1 -type f 2>/dev/null | grep -c . || true)" = "0" ]; then
+  t4_skip "本机无真实 $REAL_PI59（无配置文件）⇒ 无法证明「不写用户配置」，跳过而非空转通过"
+fi
+t4_assert_ge 1 "$(find "$REAL_PI59/agent" -maxdepth 1 -type f 2>/dev/null | grep -c . || true)" \
+  "⑥ 前置：真实 $REAL_PI59/agent 下配置面文件 ≥1（防空集恒真）"
+t4_assert_eq "1" "$([ -d "$CHILD_HOME59" ] && echo 1 || echo 0)" \
+  "⑥ 前置：被测进程的隔离 HOME 在场（$CHILD_HOME59；快照必须覆盖它，否则抓不到 `$HOME/.pi` 写入）"
 SNAP_BEFORE="$(snap59)"
 
 # ---------------------------------------------------------------- ① help
@@ -91,7 +115,8 @@ t4_assert_eq "1" "$(grep -o -- '--approve' "$T4_HERDR_CALL_LOG" | wc -l | tr -d 
   "⑤ 两者同给仍只传 1 次 --approve（同一开关两种写法，不重复）"
 
 # ---------------------------------------------------------------- ⑥ 不写持久配置（红线）
-t4_assert_eq "$SNAP_BEFORE" "$(snap59)" "⑥ spawn 前后 $HOME/.pi 与项目 .pi/ 逐字节一致（不写任何持久配置）"
+t4_assert_eq "$SNAP_BEFORE" "$(snap59)" \
+  "⑥ spawn 前后：真实 $REAL_PI59（排除 agent/sessions）+ 隔离 HOME $CHILD_HOME59/.pi + 项目 .pi/ 逐字节一致（不写任何持久配置）"
 t4_assert_eq "0" "$(find "$LAB"/repo*/.pi -type f 2>/dev/null | grep -c . || true)" \
   "⑥ 项目侧未被写入 .pi/（--trust-project 只作用于该次进程）"
 
