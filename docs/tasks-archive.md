@@ -1429,6 +1429,18 @@ PR [#148](https://github.com/Nathan3303/nao-fleet/pull/148) squash 合并 · 六
 
 - ✅ **已合并 `7f778f8`**（PR #244 · Issue #237）：`docs/<任务号>-<slug>/` + `docs/README.md` 唯一索引；`check` 新增 PRD 探针扩面与 `check_docs_index`（warn-only）；判红载体 `tests/t4/cases/53`；32 文件 +1028/−103。
 
+<a id="T597"></a>
+## T597 · status-unknown（status 对缺身份标签的活终端报「不可判定」）
+
+- ✅ **已合并 `ee58d41`**（PR #284 · Issue #281）：`_term_app_liveness` 在**已通过 repo 过滤的行**上判「缺 `herdr.space`」⇒ 一律 `unknown`（三态在数据源分开，不在输出层拼）· `--json` 加 `liveness`/`state`（`online`/`unknown`/`absent`，schema 仍 1）· 信号收敛（原三处打架 → 行内 `? 不可判定` + 一行指路）· `integration-missing` 族保留。**首版只修了「repo 过滤后为空」路径，QA 两轮 NO-GO 逼出「本仓内才是真实场景」+「夹具必须用真实 cwd」**。
+
+<a id="T583"></a>
+## T583 · mechanism-converge（T581 报告的落地：A 纠错 / B 去重 / C 重分类）
+
+- ✅ **A 批已合并 `969573c`**（PR #276）：`grill-me` 不存在（3 处改指 `pm-to-spec §八`）· PM 卡 §互引错位 3 处 · `rd-infra` 清单「8 项」→9 · `docs/prds` 过期指引改任务目录。pm 卡 v43。
+- ✅ **B 批已合并 `0007f5c`**（PR #285）：去重单源 **净 −46 行**（F4–F13）· **规则零丢失**（QA 抽 5 条实质约束全找到单源）· **计数标签 6/6 一致**（修掉 4 处说谎：`rd-infra` 8→9 / `qa` 18→12 / `rd-be`+`rd-fe` 14→13 / `pm` 44→46）· 版本一批一档（pm 44 / infra 10 / rd-be 16 / rd-fe 17 / qa 19 / uiux 6；arch 零改动未 bump）。
+- ⏳ **C 批待派**：红线重分类 + 3 道闸（G1 计数 / G2 ADR 结构 / G3 release notes 编号）+ 补 `uiux-design.md` 清单。
+
 <a id="T595"></a>
 ## T595 · multirepo-naming（多仓同名解阻塞 · 方案 F 的 A 步）
 
