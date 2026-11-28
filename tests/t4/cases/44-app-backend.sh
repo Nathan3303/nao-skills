@@ -290,7 +290,7 @@ rm -f "$BE_APP_STATE/bare_get"
 #   因同名多命中而拒 —— 残余风险必须显式喊出（warn），不得静默当作可投递。
 app_reset
 env HC_DOUBLE_STATE="$BE_APP_STATE" "$FIXT/hc" run --bg --no-parent --keep \
-  --name rd-fe --cwd "$LAB" --label herdr.space=spx --label herdr.tab=tbx -- true >/dev/null
+  --name rd-fe --cwd "$LAB" --label herdr.space=spx --label herdr.tab=tbx --label nao.name=rd-fe -- true >/dev/null
 printf '1' > "$BE_APP_STATE/bare_labels"
 run_app status
 t4_assert_contains "$APP_ERR" "集成缺 labels" "⑫ 子形态：只缺 labels ⇒ warn「无法确认放置归属」"
@@ -305,7 +305,7 @@ app_reset
 #   缺 labels 的**在场终端**不得被当成「不在运行」而拉起第二个（否则同名多命中，close 随即拒）。
 app_reset
 env HC_DOUBLE_STATE="$BE_APP_STATE" "$FIXT/hc" run --bg --no-parent --keep \
-  --name rd-fe --cwd "$LAB" --label herdr.space=spx --label herdr.tab=tbx -- true >/dev/null
+  --name rd-fe --cwd "$LAB" --label herdr.space=spx --label herdr.tab=tbx --label nao.name=rd-fe -- true >/dev/null
 n_before="$(app_addrs | grep -c . || true)"
 printf '1' > "$BE_APP_STATE/bare_labels"
 run_app ensure rd-fe
@@ -394,5 +394,84 @@ else
   t4_assert_eq "0" "$rrt_left" "⑪ 真 hc 收尾 effect：私有运行时根下 0 个 herdr-core 进程（D1 回归）"
   _t4_rm_cache_dir "$RRT"   # 删除走 lib.sh 单点（cases/14 ⑳ 断言删除语句全仓唯一）
 fi
+
+# ================================================================ ⑭ T595-A（Issue #273）：跨仓同名解阻塞
+#   ① `_ensure_pick_num` 的占用统计：**app 看全局**（`hc` 名字 per-core 全局唯一）· herdr 仍按本 ws
+#   ② 只对 `name_taken` 让号重试（其它错误照旧 fail loud）· 槽位段 **2..9**（扩容属命名契约变更，另立）
+#   每组的**变异**都实跑过（删掉全局来源 ⇒ 本条必红；见各条注释）。
+app_reset
+mkdir -p "$LAB/repo-a" "$LAB/repo-b"
+run_app ensure "pm@$LAB/repo-a"
+t4_assert_eq "0" "$APP_RC" "⑭① 仓 A：ensure pm rc=0"
+run_app ensure "pm@$LAB/repo-b"
+t4_assert_eq "0" "$APP_RC" "⑭① 仓 B：ensure pm rc=0（app 名字全局唯一，不再撞 name_taken）"
+_ｎ="$(for a in $(app_addrs); do app_field "$a" name; done | tr '\n' ' ')"
+# 变异：删掉 `term_live_peer_names` 那个 while 循环 ⇒ 仓 B 仍取 `pm` ⇒ 替身按真机语义回 name_taken ⇒ 本条红
+t4_assert_contains "$_ｎ" "pm2" "⑭① 仓 B 的终端名 = pm2（名字 per-core 全局唯一 ⇒ 槽位 1 已被占）"
+# 变异：删掉 `_ensure_pick_num` 里的 `term_live_peer_names` 循环 ⇒ 仓 B 先取 `pm` 撞 name_taken
+#   （靠 §②b 的重试也能成功，但会多一次失败尝试 + 一行「让号重试」）⇒ 本条必红。
+t4_assert_not_contains "$APP_OUT$APP_ERR" "让号重试" \
+  "⑭① 仓 B **不是**靠撞名后重试成功的（全局占用统计在 pick 阶段就避开；变异必红）"
+
+# ② 手工占名：hc run 直接占住 `pm` 与 `pm2` ⇒ ensure pm 让号到 `pm3`（不是失败）
+app_reset
+# 占名终端要带**齐全 labels**（否则 `running_verdict` = unknown，按 T563/AC2 fail-closed 拒绝——
+#   那条语义在 ⑬ 已单独钉住，这里要验的是「归属可判 ⇒ 让号」，两件事不能混）
+stub_hc run --bg --no-parent --keep --name pm  --cwd "$LAB/repo-b" \
+  --label herdr.space=spx --label herdr.tab=tbx --label nao.name=pm  -- true >/dev/null
+stub_hc run --bg --no-parent --keep --name pm2 --cwd "$LAB/repo-b" \
+  --label herdr.space=spx --label herdr.tab=tby --label nao.name=pm2 -- true >/dev/null
+run_app ensure "pm@$LAB/repo-a"
+t4_assert_eq "0" "$APP_RC" "⑭② 目标基名被手工占用 ⇒ ensure 仍成功（让号，不是失败）"
+_ｎ2="$(for a in $(app_addrs); do app_field "$a" name; done | tr '\n' ' ')"
+t4_assert_contains "$_ｎ2" "pm3" "⑭② 占名（全局可见）⇒ 槽位直接取 3（下一档；不撞、不硬重试）"
+# ②b 竞态：pick 时看不见、run 时才撞（替身 `name_taken_once`）⇒ **只有这一种错误**会让号重试
+app_reset
+: > "$BE_APP_STATE/name_taken_once"
+run_app ensure "rd-fe@$LAB/repo-a"
+t4_assert_eq "0" "$APP_RC" "⑭②b 竞态 name_taken ⇒ 让号后仍成功（rc=0）"
+t4_assert_contains "$APP_OUT$APP_ERR" "让号" "⑭②b 让号有一行可读日志（不是静默改名）"
+_ｎ3="$(for a in $(app_addrs); do app_field "$a" name; done | tr '\n' ' ')"
+t4_assert_contains "$_ｎ3" "rd-fe2" "⑭②b 让号结果 = rd-fe2（下一个槽位，而不是同名硬重试）"
+
+# ③ 非 name_taken 不重试：run_fail ⇒ 只调 1 次 run，rc≠0，且不出现「让号」
+app_reset
+: > "$BE_APP_STATE/run_fail"
+run_app ensure "qa@$LAB/repo-a"
+rm -f "$BE_APP_STATE/run_fail"
+t4_assert_ne "0" "$APP_RC" "⑭③ run_fail（非 name_taken）⇒ rc≠0（照旧 fail loud）"
+t4_assert_not_contains "$APP_OUT$APP_ERR" "让号" "⑭③ 非 name_taken ⇒ **不**让号重试（语义不放大）"
+t4_assert_eq "1" "$(grep -c '^run ' "$BE_APP_STATE/log" 2>/dev/null || true)" \
+  "⑭③ 恰 1 次 hc run 调用（重试只留给 name_taken）"
+
+# ④ 不回归：占用来源按后端分叉 + 槽位段到 99（静态面，改实现即红）
+PICK_BODY="$(sed -n '/^_ensure_pick_num()/,/^}/p' "$(t4_fleet_file_for "$LAB/.agents/scripts" _ensure_pick_num)")"
+t4_assert_contains "$PICK_BODY" 'for n in "" 2 3 4 5 6 7 8 9' "⑭④ 槽位段仍是 2..9（扩容属命名契约变更，本单不做；改成 99 ⇒ 本条必红）"
+t4_assert_contains "$PICK_BODY" "term_live_peer_names" "⑭④ 占用统计含后端相关来源（app 全局 / herdr 本 ws）"
+APP_LIB="$(t4_fleet_file_for "$LAB/.agents/scripts" term_live_peer_names)"
+t4_assert_contains "$(sed -n '/^term_live_peer_names()/,/^}/p' "$APP_LIB")" '[[ "$(term_label)" == "app" ]] || return 0' \
+  "⑭④ herdr 不并全局名（同名合法；改成全局即回归 ⇒ 本条必红）"
+
+# ⑭⑤ 正反两向（QA 阻断 2）：同名终端**标签是否完整**决定「让号」还是「拒绝」
+#   反（缺 label）：真 hc 语义下这类终端对 `running_verdict` 是 absent（ws 外看不见）⇒ 旧实现会静默起 role2
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-be --cwd "$LAB/repo-b" -- true >/dev/null   # 一个 label 都不带
+_n_before="$(app_addrs | grep -c . || true)"
+run_app ensure "rd-be@$LAB/repo-a"
+t4_assert_ne "0" "$APP_RC" "⑭⑤ 零 label 同名 ⇒ 拒绝（rc≠0，不静默起 rd-be2）"
+t4_assert_contains "$APP_ERR" "缺身份标签" "⑭⑤ 点名「缺身份标签」（不是含糊失败）"
+t4_assert_contains "$APP_ERR" "hc kill" "⑭⑤ 指路给可执行处置（hc ls / hc kill 或 close --force）"
+t4_assert_eq "$_n_before" "$(app_addrs | grep -c . || true)" "⑭⑤ **不新增终端**（fail-closed 生效）"
+# 不覆盖（明示）：`status` 对「零 label 的活终端」仍会误报「未运行」—— 那是 status 侧的红线
+#   （「读不到不得当成不存在」，T574/T558 P0 同族），已单独登记 **T597 / Issue #281**，不在本单夹带。
+#   原这里有一条 `status 输出含 rd-be` 的断言：对每个角色都会打一行 ⇒ **恒真（T589 R3 族）**，已删。
+# 正（完整 label 的 ws 外同名）⇒ 让号成功
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-be --cwd "$LAB/repo-b" \
+  --label herdr.space=spx --label herdr.tab=tbx --label nao.name=rd-be -- true >/dev/null
+run_app ensure "rd-be@$LAB/repo-a"
+t4_assert_eq "0" "$APP_RC" "⑭⑤ 完整 label 的 ws 外同名 ⇒ 让号成功（本单要的正常路径）"
+_n_after="$(for a in $(app_addrs); do app_field "$a" name; done | tr '\n' ' ')"
+t4_assert_contains "$_n_after" "rd-be2" "⑭⑤ 让号结果 = rd-be2（而不是失败）"
 
 t4_exit

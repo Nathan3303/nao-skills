@@ -23,6 +23,8 @@
 #     ready=never     run 后**永不上报** status（就绪门超时分支）
 #     status_app=X    默认 pi      status_state=X 默认 idle
 #     run_fail=1      run 返回 error（失败分支）
+#     allow_dup       允许重名（**偏离真机**：真 hc 名字 per-core 全局唯一；仅历史用例逃生阀）
+#     name_taken_once 下一次 run 返回 name_taken（只一次）⇒ 复现并发竞态，验「让号重试」
 #     get_order=real  `get` 的键序按**真 hc 0.1.22 实测**输（foreground 在顶层 name **之前**）——
 #                     默认仍把 name 放前面（历史用例依赖「首个同名键」= 终端名）。T574/#207 用它复现
 #                     「按名定位恒空」的假成功。
@@ -168,6 +170,28 @@ case "$cmd" in
       *[!a-z0-9._-]*) printf '{"error":{"code":"invalid_name","message":"invalid terminal name: %s"}}\n' "$name"; exit 0 ;;
     esac
     [ "${#name}" -le 32 ] || { printf '{"error":{"code":"invalid_name","message":"terminal name too long: %s"}}\n' "$name"; exit 0; }
+    # T595-A：真 hc 的名字是 **per-core 全局唯一**（厂方文档：Name, unique among live terminals）——
+    #   替身按同一语义拒绝重名（只算 live）。`allow_dup` 旋钮给历史用例留逃生阀（≠ 真机行为，仅兼容）。
+    # 竞态复现（T595-A）：pick 时看不见、run 时才撞 —— 只触发一次，用来验「让号重试」这条路。
+    if [ -f "$ST/name_taken_once" ]; then
+      rm -f "$ST/name_taken_once"
+      printf '{"error":{"code":"name_taken","kind":"name_taken","message":"race: %s just taken"}}\n' "$name"
+      exit 0
+    fi
+    if [ ! -f "$ST/allow_dup" ]; then
+      _dup=""
+      for _f in "$ST"/t/*/name; do
+        [ -f "$_f" ] || continue
+        [ "$(cat "$_f")" = "$name" ] || continue
+        _a="$(basename "$(dirname "$_f")")"
+        [ "$(cat "$ST/t/$_a/state" 2>/dev/null)" = "live" ] || continue
+        _dup="$_a"; break
+      done
+      if [ -n "$_dup" ]; then
+        printf '{"error":{"code":"name_taken","kind":"name_taken","message":"terminal name already in use: %s (live %s)"}}\n' "$name" "$_dup"
+        exit 0
+      fi
+    fi
     if [ -f "$ST/run_fail" ]; then
       printf '{"error":{"code":"denied","message":"simulated run failure"}}\n'
       exit 0
