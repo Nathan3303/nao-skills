@@ -34,7 +34,7 @@ nao **只支持 pi**。它不为其他编程 Agent（Claude Code / Codex / Curso
   - **herdr TUI（默认）**：在专用会话里跑。另需装 pi 集成：`herdr integration install pi`。
   - **herdr desktop app**：在桌面版窗口里跑。切换前 `export NAO_TERMINAL=app`，并确保桌面版开着、`hc` 命令可用。
   - 两种形态**不共享会话**：TUI 里起的舰队，桌面版里看不到，反之亦然。
-  - 更多细节：前提链、空间判据、pin 回旧版。见 [docs/INSTALL.md](docs/INSTALL.md) 的「herdr 后端」与「desktop app 后端」两节。
+  - 更多细节：前提链、空间判据、把版本锁回旧版。见 [docs/INSTALL.md](docs/INSTALL.md) 的「herdr 后端」与「desktop app 后端」两节。
 - **Node.js ≥ 18**。命令入口是 Node 脚本。
 - **git**，建议顺手装 **GitHub CLI `gh`**。分支、PR、发版都走它。没有 `gh` 时这些步骤降级成手动或本地操作，流程不变。
 
