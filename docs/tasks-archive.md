@@ -1429,6 +1429,12 @@ PR [#148](https://github.com/Nathan3303/nao-fleet/pull/148) squash 合并 · 六
 
 - ✅ **已合并 `7f778f8`**（PR #244 · Issue #237）：`docs/<任务号>-<slug>/` + `docs/README.md` 唯一索引；`check` 新增 PRD 探针扩面与 `check_docs_index`（warn-only）；判红载体 `tests/t4/cases/53`；32 文件 +1028/−103。
 
+<a id="T600"></a>
+## T600 · parallel-dev（并行开发 SKILL：worktree 多任务在飞）
+
+- ✅ **已合并**（PR #288 · Issue #287）：新增 `.agents/skills/parallel-dev.md` + `github-flow.md §工作区纪律` 末尾**触发式指针**（「并行 ≥2 任务 / 开第 2 个 worktree / 跑另一版基线 ⇒ 读」）。正文 = 何时需要 / 命名一任务一树一分支 / **worktree 缺什么**（无 `.codegraph/` 索引 · 无 `node_modules` 且本仓不需要 · `docs/` 是副本）/ **冲突热点承运制**（并行 PR 只有一个碰 `tasks-state`+`README`）/ 端口一树一套（假绿主因；实测 5173+5180 双监听且 vitepress 未设 `--strictPort`）/ **不要在 worktree 里再 `ensure` 舰队会话**（同 git-common-dir ⇒ 复用同 workspace）/ 收尾三件事 + 残留判据 / PM WIP 上限 2–3 / 九条反模式。**零改角色卡**（指针链已闭合，不重犯 T583-B 刚去掉的重复）。
+- QA 实测 4/4 技术断言成立：无索引向上逐级 · 无 `node_modules` 时 `node bin/nao-skill.js --help` 可跑 · `ensure.sh:131` 用 `--git-common-dir` · 端口被占 Vite 静默换端口。两条 P3 已改（判例改指针、`remove` 补「未跟踪文件」）。
+
 <a id="T597"></a>
 ## T597 · status-unknown（status 对缺身份标签的活终端报「不可判定」）
 

@@ -12,6 +12,7 @@
 
 | 任务号 | 归档锚点 | 状态 | 完成日期 |
 | :--- | :--- | :--- | :--- |
+| T600 | `docs/tasks-archive.md#T600` | 已合并 | 2026-11-28 |
 | T597 | `docs/tasks-archive.md#T597` | 已合并 | 2026-11-28 |
 | T583 | `docs/tasks-archive.md#T583` | 已合并 | 2026-11-28 |
 | T595 | `docs/tasks-archive.md#T595` | 已发布 | 2026-11-28 |
