@@ -234,13 +234,13 @@ t4_assert_eq "0" "$(lint4 "$SUBJECT_BUNDLE" || true)" "C3④ 真脚本：spawn �
 t4_assert_eq "0" "$(lint4b "$SUBJECT_BUNDLE" || true)" "C3④ 真脚本：spawn 内不重算 place_key_label"
 NEG_D="$T4_CACHE_DIR/c28-c3-neg-d.sh"
 if mutate_file "$SUBJECT_BUNDLE" "$NEG_D" \
-     '  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" task="${7-}" pl="" obj js line' \
-     '  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" task="${7-}" pl="" obj js line; : "${HERDR_SESSION:-}"'; then
+     '  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" task="${7-}" repo_key="${8-}" pl="" obj js line' \
+     '  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" task="${7-}" repo_key="${8-}" pl="" obj js line; : "${HERDR_SESSION:-}"'; then
   t4_assert_eq "1" "$(lint4 "$NEG_D" || true)" "C3④ 负控：spawn 内注入 HERDR_SESSION ⇒ 命中 1（判据非空转）"
 else t4_bad "C3④ 负控锚点未命中"; fi
 NEG_D2="$T4_CACHE_DIR/c28-c3-neg-d2.sh"
 if mutate_file "$SUBJECT_BUNDLE" "$NEG_D2" \
-     '  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" task="${7-}" pl="" obj js line' \
+     '  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" task="${7-}" repo_key="${8-}" pl="" obj js line' \
      '  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="$(place_key_label "$repo")" group="${6-}" task="${7-}" pl="" obj js line'; then
   t4_assert_eq "1" "$(lint4b "$NEG_D2" || true)" "C3④ 负控2：spawn 内重算 slug ⇒ 命中 1（D1 零调用判据不空转）"
 else t4_bad "C3④ 负控2 锚点未命中"; fi

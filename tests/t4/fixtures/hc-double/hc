@@ -69,7 +69,7 @@ _log_call() { printf '%s\n' "$*" >> "$LOG"; }
 
 # 终端 JSON（单行；键序与真 hc 无关 —— 被测脚本的抽取按「首个同名键」，见字段抽取注释）
 _term_json() { # <addr>
-  local a="$1" name cwd state space tab app stt rep par fgname fgargv nao_task nao_name argv_name
+  local a="$1" name cwd state space tab app stt rep par fgname fgargv nao_task nao_name argv_name nao_repo nao_role nao_slot
   # bare_get=1 ⇒ 只给最小字段（模拟 app 版本不支持 labels/status 契约：AC8 负控）
   # bare_labels=1 ⇒ 只缺 labels（status 仍 reported：AC8 子形态 —— 判 unknown + warn）
   if [ -f "$ST/bare_get" ]; then
@@ -82,6 +82,7 @@ _term_json() { # <addr>
   state="$(_field "$a" state)"
   space="$(_field "$a" space)"; tab="$(_field "$a" tab)"
   nao_task="$(_field "$a" nao_task)"; nao_name="$(_field "$a" nao_name)"
+  nao_repo="$(_field "$a" nao_repo)"; nao_role="$(_field "$a" nao_role)"; nao_slot="$(_field "$a" nao_slot)"
   argv_name="$(_field "$a" argv_name)"; [ -n "$argv_name" ] || argv_name="$name"
   app="$(_field "$a" app)"; stt="$(_field "$a" stt)"; rep="$(_field "$a" reported)"
   par="$(_field "$a" parent)"; fgname="$(_field "$a" fg)"
@@ -98,6 +99,9 @@ _term_json() { # <addr>
     printf ',"labels":{"herdr.space":"%s","herdr.tab":"%s"' "$(_esc "$space")" "$(_esc "$tab")"
     [ -n "$nao_name" ] && printf ',"nao.name":"%s"' "$(_esc "$nao_name")"
     [ -n "$nao_task" ] && printf ',"nao.task":"%s"' "$(_esc "$nao_task")"
+    [ -n "${nao_repo:-}" ] && printf ',"nao.repo":"%s"' "$(_esc "$nao_repo")"
+    [ -n "${nao_role:-}" ] && printf ',"nao.role":"%s"' "$(_esc "$nao_role")"
+    [ -n "${nao_slot:-}" ] && printf ',"nao.slot":"%s"' "$(_esc "$nao_slot")"
     printf '}'
   fi
   printf ',"reported":%s' "$([ "$rep" = "1" ] && printf true || printf false)"
@@ -207,7 +211,7 @@ case "$cmd" in
     # 放置标签（T565）：先取请求值；再按「app 是否还认得这些 id」决定实际落点。
     #   真 app 的契约（厂方内嵌文档）：标签里的 id 它认识 ⇒ 收养进该 space/tab；不认识 ⇒ 自己新建 ——
     #   **但它新建的 id 是它自己的**（本替身用 spapp<N>/tbapp<N> 代表），请求的 id 就无处可去。
-    req_space=""; req_tab=""
+    req_space=""; req_tab=""; lbl_repo=""; lbl_role=""; lbl_slot=""
     for kv in "${labels[@]:-}"; do
       [ -n "$kv" ] || continue
       k="${kv%%=*}"; v="${kv#*=}"
@@ -216,11 +220,17 @@ case "$cmd" in
         herdr.tab)   req_tab="$v" ;;
         nao.task)    lbl_task="$v" ;;
         nao.name)    lbl_name="$v" ;;
+        nao.repo)    lbl_repo="$v" ;;   # T595-B：归属（仓基键）
+        nao.role)    lbl_role="$v" ;;   # T595-B：身份（角色）
+        nao.slot)    lbl_slot="$v" ;;   # T595-B：身份（槽位）
         *)           printf 'HC-DOUBLE-VIOLATION: 未知 label %s\n' "$k" >&2; exit 9 ;;
       esac
     done
     [ -n "$lbl_task" ] && _put "$a" nao_task "$lbl_task"
     [ -n "$lbl_name" ] && _put "$a" nao_name "$lbl_name"
+    [ -n "$lbl_repo" ] && _put "$a" nao_repo "$lbl_repo"
+    [ -n "$lbl_role" ] && _put "$a" nao_role "$lbl_role"
+    [ -n "$lbl_slot" ] && _put "$a" nao_slot "$lbl_slot"
     stale=0
     if [ -f "$ST/space_refuse" ]; then stale=1; fi
     if [ -f "$ST/stale_ids" ] && { [ -n "$req_space" ] || [ -n "$req_tab" ]; }; then

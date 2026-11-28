@@ -37,6 +37,10 @@ TERM_APP_LABEL_TAB="herdr.tab"
 # 命名契约 v3 元数据（ADR 2026-11-25 决策一）：app 有键值 label ⇒ task + 原始名直接落标签。
 TERM_APP_LABEL_TASK="nao.task"
 TERM_APP_LABEL_NAME="nao.name"
+# T595-B：归属/身份结构化事实（app 键值 label）
+TERM_APP_LABEL_REPO="nao.repo"
+TERM_APP_LABEL_ROLE="nao.role"
+TERM_APP_LABEL_SLOT="nao.slot"
 # 收养轮询（T565/#175 · AC2）：app 的收养是**异步**的 —— 厂方内嵌文档原文：
 #   「acknowledge with `pending: true`, then apply after the machine replies」
 #   ⇒ 写完标签**立刻**读 doc 必然假失败（用户实机：t10 不在目标 tab 的 root 树里 ⇒ 回滚）。
@@ -281,8 +285,8 @@ _term_app_name() {  # <json> → 终端名（顶层 name；空/null ⇒ 空）
 }
 
 _term_app_facts() {
-  local ls="" g addr name cwd tstate st fg fgcwd sp tb hook task
-  local nl ncwd nfgcwd nsp ntb nfgp nst nts ntask
+  local ls="" g addr name cwd tstate st fg fgcwd sp tb hook task repo
+  local nl ncwd nfgcwd nsp ntb nfgp nst nts ntask nrepo
   ls="$(_term_app_exec ls --all --json)" || { warn "hc ls 失败（app core 未就绪？）"; return 1; }
   if ! _term_app_payload_ok "$ls"; then
     warn "hc ls 不可用：$(printf '%s' "$ls" | head -c 200)"
@@ -305,6 +309,7 @@ _term_app_facts() {
     sp="$(_term_app_field "$g" "$TERM_APP_LABEL_SPACE")"
     tb="$(_term_app_field "$g" "$TERM_APP_LABEL_TAB")"
     task="$(_term_app_field "$g" "$TERM_APP_LABEL_TASK")"
+    repo="$(_term_app_field "$g" "$TERM_APP_LABEL_REPO")"
     case "$g" in *'"reported":true'*) hook=1 ;; *) hook=0 ;; esac
     _term_tsv_norm "$name";  nl="$_TSV_NORM"
     _term_tsv_norm "$cwd";   ncwd="$_TSV_NORM"
@@ -315,9 +320,10 @@ _term_app_facts() {
     _term_tsv_norm "$st";    nst="$_TSV_NORM"
     _term_tsv_norm "$tstate"; nts="$_TSV_NORM"
     _term_tsv_norm "$task";  ntask="$_TSV_NORM"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    _term_tsv_norm "$repo";  nrepo="$_TSV_NORM"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$nl" "$addr" "$addr" "$ncwd" "$nfgcwd" "$nfgp" \
-      "$nst" - "$nts" - "$hook" "$nsp" "$ntask"
+      "$nst" - "$nts" - "$hook" "$nsp" "$ntask" "$nrepo"
   done < <(printf '%s' "$ls" | grep -o '"address":"[^"]*"' | cut -d'"' -f4)
   return 0
 }
@@ -325,7 +331,7 @@ _term_app_facts() {
 # 5 列中性投影（app 13 列 → 业务契约）：无身份省略；空值 `-`。
 _term_app_project5() {
   local name pid tid cwd fgcwd fg astat seq sess avname hook wsid task status c
-  while IFS=$'\t' read -r name pid tid cwd fgcwd fg astat seq sess avname hook wsid task; do
+  while IFS=$'\t' read -r name pid tid cwd fgcwd fg astat seq sess avname hook wsid task repo; do
     [[ -n "$name" ]] || continue
     c="$cwd"; [[ "$c" == "-" || -z "$c" ]] && c="$fgcwd"
     if [[ "$sess" != "live" ]]; then status=alive
@@ -379,7 +385,7 @@ _term_app_liveness() {  # <name> [repo] → verdict/state/seq/hook
   #   只有残留时给 `ghost`（label 在、agent 无）—— 比 absent 更诚实，status 会单列进证据异常节。
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
-    IFS=$'\t' read -r _l _p _t _ _ fg st seq sess av hook ws _task <<< "$line"
+    IFS=$'\t' read -r _l _p _t _ _ fg st seq sess av hook ws _task _repo <<< "$line"
     if [[ "$sess" == "live" ]]; then
       live_rows+="$line"$'\n'
     else
@@ -395,7 +401,7 @@ _term_app_liveness() {  # <name> [repo] → verdict/state/seq/hook
   fi
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
-    IFS=$'\t' read -r _l _p _t _ _ fg st seq sess av hook ws _task <<< "$line"
+    IFS=$'\t' read -r _l _p _t _ _ fg st seq sess av hook ws _task _repo <<< "$line"
     # 缺 `labels`（AC8 子形态，PM 裁定）：真 hc 恒给 `"labels":{}`，**单缺键**不构成「版本不支持」，
     #   但「有名字、无放置键」⇒ 无法确认归属 ⇒ 判 `unknown`（**不判在线/不可投递**）+ 一行 warn。
     #   若 labels 与 status **两项都缺** ⇒ 按 AC8 主形态判 `integration-missing`（更强的缺陷），
@@ -485,7 +491,7 @@ _term_app_place_begin() {  # → 0 已建快照 / 1 后端不可用（fail loud 
     fi
   fi
   snap="$(_term_app_facts)" || return 1
-  while IFS=$'\t' read -r label addr _tid cwd fgcwd _fg _st _seq _sess _av _hook sp _task; do
+  while IFS=$'\t' read -r label addr _tid cwd fgcwd _fg _st _seq _sess _av _hook sp _task _repo; do
     [[ -n "$label" ]] || continue
     [[ -n "$sp" && "$sp" != "-" ]] || continue    # `-` = 快照里“该字段为空”的占位（非舰队终端/无标签）
     _term_app_doc_has_space "$sp" && continue
@@ -636,8 +642,8 @@ _term_app_wait_ready() {  # <addr> <name> → 0 就绪 / 1 超时（终端保留
   return 1
 }
 
-_term_app_spawn() {  # <name> <inner> <repo> [force] <label> [group] [task] → SPAWN_RC_OK|FAIL
-  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" task="${7-}"
+_term_app_spawn() {  # <name> <inner> <repo> [force] <label> [group] [task] [repo_key] → SPAWN_RC_OK|FAIL
+  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" task="${7-}" repo_key="${8-}"
   local sp tb out addr legal="" line llegal llabel
   [[ -n "$name" && -n "$inner" ]] || { warn "app spawn 参数缺失（name/inner）"; return "$SPAWN_RC_FAIL"; }
   [[ -n "$label" ]] || { warn "app spawn 缺放置键（期望 = 仓基键；repo=$repo）"; return "$SPAWN_RC_FAIL"; }
@@ -705,6 +711,16 @@ _term_app_spawn() {  # <name> <inner> <repo> [force] <label> [group] [task] → 
   fi
   local -a lbl=(--label "$TERM_APP_LABEL_SPACE=$sp" --label "$TERM_APP_LABEL_TAB=$tb" --label "$TERM_APP_LABEL_NAME=$name")
   [[ -n "$task" ]] && lbl+=(--label "$TERM_APP_LABEL_TASK=$task")
+  # T595-B（Issue #273 · 方案 F B 步）：**归属用结构化 label 承载**（names 名字一旦合法化/加后缀就解析不出仓）
+  #   `nao.repo` = 放置键（仓基键 ≤16，**禁绝对路径**）；`nao.role`/`nao.slot` = 身份事实（不靠名字文法）。
+  local _pn _pk _pr _pt _ps
+  _pn="$(fleet_name_parse "$name" 2>/dev/null || true)"
+  if [[ "$_pn" == "OK "* || "$_pn" == "LEGACY OK "* ]]; then
+    IFS=',' read -r _pk _pr _pt _ps <<< "${_pn#*OK }"
+    lbl+=(--label "$TERM_APP_LABEL_ROLE=$_pr" --label "$TERM_APP_LABEL_SLOT=${_ps:-1}")
+  fi
+  # `nao.repo` = **仓基键**（≤16、不含路径）—— 由 ensure 相位 1 算定传入（**不在 spawn 内重算**，D1 判据）
+  [[ -n "$repo_key" ]] && lbl+=(--label "$TERM_APP_LABEL_REPO=$repo_key")
   out="$(_term_app_exec run --bg --no-parent --keep --name "$legal" --cwd "$repo" \
         "${lbl[@]}" -- "${SHELL:-/bin/bash}" -lc "$inner")" || true
   if ! _term_app_payload_ok "$out"; then

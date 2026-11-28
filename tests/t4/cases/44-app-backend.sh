@@ -561,4 +561,72 @@ t4_assert_eq "0" "$(grep -c '集成缺 labels' <<< "$APP_OUT$APP_ERR" || true)" 
 t4_assert_eq "0" "$(grep -c '不可投递（unknown' <<< "$APP_OUT" || true)" "⑮⑦ 投递节不再重复同一条（unknown 已由行内承担）"
 t4_assert_contains "$APP_OUT" "hc kill" "⑮⑦ 处置行在位（hc get / hc label / hc kill）"
 
+# ================================================================ ⑯ T595-B（Issue #273 · 方案 F B 步）：归属由 `nao.repo` 承载
+#   判据：① 两仓同名并存 ⇒ 各自 status 只认自己的（按 label，不靠 cwd 猜）
+#         ② 冲突（nao.repo 指 A / pane cwd 在 B）⇒ unknown + 一行指路（不猜、不误杀）
+#         ③ legacy（无 nao.repo）⇒ 仍按 cwd（不回归）
+#         ④ `--json` 的 repoSource 三值可辨（label | cwd | conflict）
+A_REPO="$T4_CACHE_DIR/lab44-rA-$$"; B_REPO="$T4_CACHE_DIR/lab44-rB-$$"
+for d in "$A_REPO" "$B_REPO"; do
+  rm -rf "$d"; mkdir -p "$d"
+  git -C "$d" init -q 2>/dev/null && git -C "$d" config user.email t4@example.invalid && git -C "$d" config user.name t4
+done
+A_KEY="$("$LAB/.agents/scripts/nao-fleet.sh" --help >/dev/null 2>&1; true)"   # 占位（真键在下面用同一实现算）
+A_KEY="$(bash -c 'source "$1/.agents/scripts/fleet/lib/core.sh" 2>/dev/null; source "$1/.agents/scripts/fleet/lib/manifest.sh" 2>/dev/null; place_key_label "$2"' _ "$LAB" "$A_REPO" 2>/dev/null || true)"
+B_KEY="$(bash -c 'source "$1/.agents/scripts/fleet/lib/core.sh" 2>/dev/null; source "$1/.agents/scripts/fleet/lib/manifest.sh" 2>/dev/null; place_key_label "$2"' _ "$LAB" "$B_REPO" 2>/dev/null || true)"
+t4_info "DBG7 A_KEY=[$A_KEY] B_KEY=[$B_KEY]"
+status_in() { # <cwd> [args...]
+  local wd="$1"; shift
+  t4_run_in_dir "$wd" env NAO_DEBUG_REPO=1 NAO_TERMINAL=app "HC_SCOPE=$BE_SESSION" HC_TERMINAL_ID=t0 \
+    "HC_TERMINAL_SOCKET=$BE_APP_SOCK" "XDG_RUNTIME_DIR=$BE_APP_RT" "HC_DOUBLE_STATE=$BE_APP_STATE" \
+    "PATH=$FIXT:$PATH" "HOME=$LAB/.t4-home" "PI_CODING_AGENT_DIR=$LAB/.t4-home/.pi/agent" \
+    timeout 120 bash "$LAB/.agents/scripts/nao-fleet.sh" "$@"
+  APP_RC=$T4_RC; APP_OUT="$T4_OUT"; APP_ERR="$T4_ERR"
+}
+app_reset
+stub_hc run --bg --no-parent --keep --name pm --cwd "$A_REPO" \
+  --label herdr.space=spA --label herdr.tab=tbA --label nao.name=pm --label nao.repo="$A_KEY" -- true >/dev/null
+stub_hc run --bg --no-parent --keep --name pm2 --cwd "$B_REPO" \
+  --label herdr.space=spB --label herdr.tab=tbB --label nao.name=pm2 --label nao.repo="$B_KEY" -- true >/dev/null
+status_in "$A_REPO" status
+t4_info "DBG8 $(printf '%s' "$APP_ERR" | grep '\[DBG\]' | head -1)"
+t4_assert_contains "$APP_OUT" "✓ pm " "⑯① 仓 A 看到自己的 pm（按 nao.repo 归属）"
+t4_assert_not_contains "$APP_OUT" "✓ pm           在线（--name pm2" "⑯① 仓 A **不**把仓 B 的 pm2 当本仓"
+status_in "$B_REPO" status
+t4_assert_contains "$APP_OUT" "✓ pm " "⑯② 仓 B 看到自己的 pm2（作为 pm 的槽位 2）"
+
+# ③ 冲突：nao.repo 指 A，但 pane cwd 在 B
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-fe2 --cwd "$B_REPO" \
+  --label herdr.space=spB --label herdr.tab=tbB --label nao.name=rd-fe2 --label nao.task=T1 --label nao.repo="$A_KEY" -- true >/dev/null
+status_in "$A_REPO" status
+t4_assert_contains "$APP_OUT" "归属不可判定" "⑯③ 冲突 ⇒ 归属不可判定（不猜、不误杀）"
+t4_assert_contains "$APP_OUT" "nao.repo=" "⑯③ 冲突行点名两侧证据（nao.repo=… 与 cwd 冲突）"
+t4_assert_contains "$APP_OUT" "ensure --force" "⑯③ 给一行指路"
+
+# ④ legacy：无 nao.repo ⇒ 仍按 cwd
+app_reset
+stub_hc run --bg --no-parent --keep --name qa --cwd "$A_REPO" \
+  --label herdr.space=spA --label herdr.tab=tbA --label nao.name=qa -- true >/dev/null
+status_in "$A_REPO" status
+t4_assert_contains "$APP_OUT" "✓ qa " "⑯④ legacy（无 nao.repo）仍按 cwd 判本仓（不回归）"
+
+# ⑤ --json：repoSource 三值
+json_rs() { # <cwd> <role> → repoSource
+  status_in "$1" status --json
+  printf '%s' "$APP_OUT" | node -e 'let b="";process.stdin.on("data",d=>b+=d).on("end",()=>{const j=JSON.parse(b);const s=j.sessions.find(x=>x.name===process.argv[1]);console.log(s?s.repoSource:"<缺失>")})' "$2" 2>/dev/null || true
+}
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-fe --cwd "$A_REPO" \
+  --label herdr.space=spA --label herdr.tab=tbA --label nao.name=rd-fe --label nao.repo="$A_KEY" -- true >/dev/null
+t4_assert_eq "label" "$(json_rs "$A_REPO" rd-fe)" "⑯⑤ --json：label 归属 ⇒ repoSource=label"
+app_reset
+stub_hc run --bg --no-parent --keep --name qa --cwd "$A_REPO" \
+  --label herdr.space=spA --label herdr.tab=tbA --label nao.name=qa -- true >/dev/null
+t4_assert_eq "cwd" "$(json_rs "$A_REPO" qa)" "⑯⑤ --json：legacy ⇒ repoSource=cwd"
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-fe2 --cwd "$B_REPO" \
+  --label herdr.space=spB --label herdr.tab=tbB --label nao.name=rd-fe2 --label nao.task=T1 --label nao.repo="$A_KEY" -- true >/dev/null
+t4_assert_eq "conflict" "$(json_rs "$A_REPO" rd-fe2)" "⑯⑤ --json：冲突 ⇒ repoSource=conflict"
+
 t4_exit

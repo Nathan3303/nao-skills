@@ -183,13 +183,13 @@ fleet_meta_wsref() {  # <workspace_id> → <session>__<workspace_id>
   printf '%s__%s\n' "${HERDR_SESSION:-${HC_SCOPE:-_}}" "${1-}"
 }
 
-fleet_meta_write() {  # <workspace_ref> <handle> <task> <name> → 0 / 1（仅 warn）
-  local ws="${1-}" h="${2-}" task="${3-}" name="${4-}" dir tmp
+fleet_meta_write() {  # <workspace_ref> <handle> <task> <name> [repo] → 0 / 1（仅 warn）
+  local ws="${1-}" h="${2-}" task="${3-}" name="${4-}" repo="${5-}" dir tmp
   [[ -n "$ws" && -n "$h" ]] || { warn "元数据未落盘：缺 workspace_ref/handle（ws=$ws handle=$h）"; return 1; }
   dir="$FLEET_META_ROOT/$ws"
   mkdir -p "$dir" 2>/dev/null || { warn "元数据目录不可建：$dir（task=$task；不阻断启动）"; return 1; }
   tmp="$dir/.$h.tmp.$$"
-  if ! { printf 'task=%s\n' "$task"; printf 'name=%s\n' "$name"; } > "$tmp" 2>/dev/null; then
+  if ! { printf 'task=%s\n' "$task"; printf 'name=%s\n' "$name"; [[ -n "$repo" ]] && printf 'repo=%s\n' "$repo"; } > "$tmp" 2>/dev/null; then
     rm -f "$tmp" 2>/dev/null || true
     warn "元数据写入失败：$tmp（task=$task；不阻断启动）"; return 1
   fi

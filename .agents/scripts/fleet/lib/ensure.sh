@@ -40,12 +40,12 @@ build_system_prompt() {
 #   为什么放在这里：`hc` 名字 per-core 全局唯一 ⇒ 并发 ensure / 他仓占名时首次必撞；
 #   撞了要换**下一个槽位**再试（不是同一名字硬重试）。其它错误不重试（fail loud，语义不变）。
 #   上限 = 槽位段耗尽（99）；每次都重算名字（`pm` → `pm2` → `pm3` …）。
-_spawn_try() { # <disp> <repo> <model> <card_override> <role_id> <card_name> <force> <label> <task> <trust>
-  local disp="$1" repo="$2" model="$3" card_o="$4" role_id="$5" card_n="$6" force="$7" label="$8" task="$9" trust="${10:-false}"
+_spawn_try() { # <disp> <repo> <model> <card_override> <role_id> <card_name> <force> <label> <task> <trust> <repo_key>
+  local disp="$1" repo="$2" model="$3" card_o="$4" role_id="$5" card_n="$6" force="$7" label="$8" task="$9" trust="${10:-false}" repo_key="${11:-}"
   local rc=0 guard=0 pn pk pr pt ps next
   while :; do
     _TERM_SPAWN_NAME_TAKEN=0
-    spawn_one "$disp" "$repo" "$model" "$card_o" "$role_id" "$card_n" "$force" "$label" "" "$task" "$trust"; rc=$?
+    spawn_one "$disp" "$repo" "$model" "$card_o" "$role_id" "$card_n" "$force" "$label" "" "$task" "$trust" "$repo_key"; rc=$?
     # 判据用**信号**而不是 rc：`spawn_one` 按三态计数后自身返回 0（rc 是它的内部账），
     #   所以「是否 name_taken」只能看 `_term_app_spawn` 置的标志。
     [[ "${_TERM_SPAWN_NAME_TAKEN:-0}" == 1 && "$(term_label)" == "app" ]] || return "$rc"
@@ -60,7 +60,7 @@ _spawn_try() { # <disp> <repo> <model> <card_override> <role_id> <card_name> <fo
 }
 
 spawn_one() {
-  local name="$1" repo="$2" model="$3" card_override="${4:-}" role_id="${5:-}" card_name="${6:-}" force="${7:-false}" label="${8:-}" group="${9:-}" task="${10:-}" trust="${11:-false}" card prompt_file inner session_dir
+  local name="$1" repo="$2" model="$3" card_override="${4:-}" role_id="${5:-}" card_name="${6:-}" force="${7:-false}" label="${8:-}" group="${9:-}" task="${10:-}" trust="${11:-false}" repo_key="${12:-}" card prompt_file inner session_dir
   # T537：卡路径可由调用方显式给出（下游仓卡）；未给出时仍走清单（PROMPTS_DIR/<card>）逐字不变
   # #75：**两条取卡通道分两个参数，禁混用** ——
   #   ④ card_override = `--card` 的**完整路径**（下游卡，已由 resolve_card 限定在 <repo>/.agents/prompts/ 内）
@@ -104,7 +104,7 @@ spawn_one() {
   #   `|| rc=$?` 是 set -e 下的必需写法（|| 列表豁免 errexit）；函数返回值即结果契约。
   local rc=0
   _TERM_SPAWN_PANE=""
-  term_spawn "$name" "$inner" "$repo" "$force" "$label" "$group" "$task" || rc=$?
+  term_spawn "$name" "$inner" "$repo" "$force" "$label" "$group" "$task" "${repo_key:-}" || rc=$?
   case "$rc" in
     "$SPAWN_RC_OK")   SPAWN_OK=$((SPAWN_OK + 1))
                       # T573：记录↔角色/任务绑定（供保留分级用；失败只 warn，不阻断启动）
@@ -502,7 +502,7 @@ cmd_ensure() {
         continue
       fi
     fi
-    _spawn_try "$disp" "$repo" "$model" "${t_cards[$i]:-}" "${t_roles[$i]:-}" "${t_prompts[$i]:-}" "$force" "${t_labels[$i]}" "$task" "$trust"
+    _spawn_try "$disp" "$repo" "$model" "${t_cards[$i]:-}" "${t_roles[$i]:-}" "${t_prompts[$i]:-}" "$force" "${t_labels[$i]}" "$task" "$trust" "$base_label"
   done
   term_place_end
   # T573：顺手清理过期会话记录（幂等；失败只 warn、不改 rc；真删了才打一行）

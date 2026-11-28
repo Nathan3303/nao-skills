@@ -225,7 +225,16 @@ cmd_status() {
   #   （他仓不查本仓 tasks-state，杜绝误读；本仓行 cls tag 逐字不变）
   local roots_blob="" rl
   while IFS= read -r rl; do [[ -n "$rl" ]] && roots_blob+="$rl"$'\n'; done < <(repo_anchor_roots)
+  # T595-B：归属 label 表（只读快照，零额外后端调用）+ 本仓基键（与 --json 同源）
+  local -A STATUS_REPO_BY_NAME=()
+  local _rlbl _rname
+  while IFS=$'\t' read -r _rname _rlbl; do
+    [[ -n "$_rname" ]] && STATUS_REPO_BY_NAME["$_rname"]="$_rlbl"
+  done < <(term_repo_label_rows)
+  STATUS_ROOTS_BLOB="$roots_blob"
+  STATUS_MY_KEY="$(place_key_label "$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || nao_phys_path "$PWD")")"
   local -A pane_cwds=() roster_cwds=()
+  local verdict src
   local pn pname pcwd rn rcwd prev
   # M20261101：pane_cwd_snapshot 字段序 = `会话名<TAB>pane_id<TAB>cwd` ⇒ 必须按**会话名**建键
   #   （与下面 pane_cwds["$dname"] 的查询口径一致）。此前误读成 `pane_id<TAB>…`，键成了 pane_id
@@ -264,12 +273,16 @@ cmd_status() {
       derived)
         # ---- P2 后缀/角色一律取 parse 结果（禁再对 $dname 做前缀比较）----
         role="$p_role"; id="$p_task"
-        IFS=$'\t' read -r verdict obase <<< "$(session_repo_verdict "$roots_blob" "${pane_cwds[$dname]:-}" "${roster_cwds[$dname]:-}")"
+        IFS=$'\t' read -r verdict obase src <<< "$(_status_repo_verdict "$dname" "${pane_cwds[$dname]:-}" "${roster_cwds[$dname]:-}")"
+        [[ "$obase" == "-" ]] && obase=""
         case "$verdict" in
           # D5：他仓会话**列出并标注**（不静默隐藏），整行不含任何可执行 close 命令（BR2）
           other)   printf '  ~ %s（他仓 @ %s）他仓会话，勿在本仓回收%s\n' "$dname" "${obase:-?}" "$scope_tag"; found=1; continue ;;
           # fail-closed（T530 对偶）：不可判定时不得声称「是本仓残留」，只标注不给命令
-          unknown) printf '  ? %s（归属不可判定）→ 人工核对（勿在本仓回收）%s\n' "$dname" "$scope_tag"; found=1; continue ;;
+          unknown) printf '  ? %s（归属不可判定%s）→ 人工核对（勿在本仓回收）%s\n' "$dname" \
+                     "$([[ "$src" == conflict ]] && printf '：nao.repo=%s 与 pane cwd 冲突' "${obase:-?}")" "$scope_tag"
+                   [[ "$src" == conflict ]] && printf '  %-16s 处置：核对 `hc get <地址>` 的 nao.repo 与 cwd；确属本仓就用 `ensure --force` 重开该项目\n' ""
+                   found=1; continue ;;
         esac
         # ---- P3 分类输入取 parse 的 task；回收命令的角色名取 parse 的 role ----
         #   （旧 `${dname%-"$id"}` 尾剥法在带 scope 时剥错 ⇒ 命令指向不存在的名字）
@@ -287,7 +300,8 @@ cmd_status() {
       card)
         # ---- P2 卡集：最长前缀已由 parse 判定（禁再遍历 card_path 比较前缀）----
         role="$p_role"
-        IFS=$'\t' read -r verdict obase <<< "$(session_repo_verdict "$roots_blob" "${pane_cwds[$dname]:-}" "${roster_cwds[$dname]:-}")"
+        IFS=$'\t' read -r verdict obase src <<< "$(_status_repo_verdict "$dname" "${pane_cwds[$dname]:-}" "${roster_cwds[$dname]:-}")"
+        [[ "$obase" == "-" ]] && obase=""
         case "$verdict" in
           # F2：他仓卡会话只标注（不读他仓 .agents/prompts）
           other)   printf '  ~ %s（他仓 @ %s）他仓会话，勿在本仓回收%s\n' "$dname" "${obase:-?}" "$scope_tag"; found=1; continue ;;
@@ -322,7 +336,8 @@ cmd_status() {
         # ---- parse 不识别（ERR）：T525 子代理单列计数；F3「角色未识别」不得静默 ----
         [[ "$dname" == subagent-* ]] && continue
         if [[ "$dname" =~ (^|-)T[0-9]+$ || "$dname" =~ (^|-)M[0-9]{8}(-|$) ]]; then
-          IFS=$'\t' read -r verdict obase <<< "$(session_repo_verdict "$roots_blob" "${pane_cwds[$dname]:-}" "${roster_cwds[$dname]:-}")"
+          IFS=$'\t' read -r verdict obase src <<< "$(_status_repo_verdict "$dname" "${pane_cwds[$dname]:-}" "${roster_cwds[$dname]:-}")"
+        [[ "$obase" == "-" ]] && obase=""
           case "$verdict" in
             other)   unrecognized+=("  ? $dname（他仓 @ ${obase:-?}）角色未识别（疑似 fleet 遗留）：卡被删除/改名、卡在他仓、或 overlay 改名？核对后人工处理（本行不给回收命令）") ;;
             unknown) unrecognized+=("  ? $dname（归属不可判定）角色未识别（疑似 fleet 遗留）：卡被删除/改名、卡在他仓、或 overlay 改名？核对后人工处理（本行不给回收命令）") ;;
@@ -397,6 +412,26 @@ cmd_status() {
 #     与任何非 idle/working 的 agent_status（fail-closed：不可投递 ≠ 空闲）。
 #   own/online/busy/deliverable = 布尔；`verdict` 为归属原始判据（local|other|unknown），保留供诊断。
 # JSON 由 node 生成（转义交给 JSON.stringify，禁 bash 手拼）：node 已是 fleet 的既有前提（check/session 用）。
+# T595-B（Issue #273 · 方案 F B 步）：**归属裁决** —— `nao.repo`(label) → pane cwd → 名字(legacy)。
+#   规则（arch 设计 §3）：**一致才采信，冲突 ⇒ unknown**（守 T551/T552 不猜不误杀）；
+#   唯一例外：label 在、cwd 不可读（pane 死）⇒ 采信 label。
+#   输出：`<verdict>\t<obase>\t<source>`，source ∈ label|cwd|conflict（`--json` 用它区分来源）。
+_status_repo_verdict() {  # <name> <pane_cwd> <roster_cwd>
+  local nm="${1-}" pcwd="${2-}" rcwd="${3-}" lbl="" v="" ob="" src="cwd" mykey="${STATUS_MY_KEY:-}"
+  IFS=$'\t' read -r v ob <<< "$(session_repo_verdict "${STATUS_ROOTS_BLOB:-}" "$pcwd" "$rcwd")"
+  lbl="${STATUS_REPO_BY_NAME[$nm]:-}"; [[ "$lbl" == "-" ]] && lbl=""
+  [[ -n "$ob" ]] || ob="-"   # 空 obase 用 `-` 占位：`read` 会把连续 TAB 折叠 ⇒ 第三段会丢
+  if [[ -z "$lbl" ]]; then printf '%s\t%s\tcwd\n' "${v:-unknown}" "$ob"; return 0; fi
+  if [[ -n "$mykey" && "$lbl" == "$mykey" ]]; then
+    # label 指本仓：cwd 说他仓 ⇒ 冲突（不采信任一方）
+    if [[ "$v" == "other" ]]; then printf 'unknown\t%s\tconflict\n' "$lbl"; return 0; fi
+    printf 'local\t-\tlabel\n'; return 0
+  fi
+  # label 指别的仓：cwd 说本仓 ⇒ 冲突；cwd 不可判 ⇒ 采信 label
+  if [[ "$v" == "local" ]]; then printf 'unknown\t%s\tconflict\n' "$lbl"; return 0; fi
+  printf 'other\t%s\tlabel\n' "$lbl"
+}
+
 _status_json_emit() {  # <backend> <repo_root>（TSV 行来自 stdin）
   node -e '
 const [backend, repoRoot] = process.argv.slice(1);
@@ -409,8 +444,8 @@ process.stdin.on("end", () => {
   for (const line of buf.split("\n")) {
     if (!line) continue;
     const f = line.split("\t");
-    if (f.length < 14) continue;
-    const [name, kind, role, task, pane_id, cwd, repo, own, online, agent, busy, deliverable, verdict, live] = f;
+    if (f.length < 15) continue;
+    const [name, kind, role, task, pane_id, cwd, repo, own, online, agent, busy, deliverable, verdict, live, rsrc] = f;
     const s = {
       name, kind, role, task, pane_id, cwd, repo,
       own: own === "1", online: online === "1", agent,
@@ -418,6 +453,8 @@ process.stdin.on("end", () => {
       // T597：三态可区分（纯增量字段，schema 仍为 1）—— online=1 时恒 "online"；
       //   否则透传后端终态：unknown（同名在场但缺身份标签 ⇒ 归属不可判定）/ absent（确实没有）。
       liveness: online === "1" ? "online" : (live || "absent"),
+      // T595-B：归属来源可辨（label | cwd | conflict）—— 三态与 verdict 正交
+      repoSource: rsrc || "cwd",
     };
     sessions.push(s);
     if (!roles.has(role)) roles.set(role, { role, online: false, state: "absent", sessions: [] });
@@ -460,6 +497,13 @@ cmd_status_json() {
   be="$(term_label)"
   root="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || true)"
   [[ -n "$root" ]] || root="$(nao_phys_path "$PWD")"
+  # T595-B：归属 label 表 + 本仓基键（与文本路径同源；`--json` 的 repoSource 依赖它们）
+  local -A STATUS_REPO_BY_NAME=()
+  local _rlbl _rname
+  while IFS=$'\t' read -r _rname _rlbl; do
+    [[ -n "$_rname" ]] && STATUS_REPO_BY_NAME["$_rname"]="$_rlbl"
+  done < <(term_repo_label_rows)
+  STATUS_MY_KEY="$(place_key_label "$root")"
   # 会话全集：先常驻（ROLE_ORDER，未在线也要出现 —— 需要「角色缺席」这一事实），再现场名册
   for nm in "${ROLE_ORDER[@]}"; do
     [[ -n "$nm" && -z "${seen[$nm]:-}" ]] || continue
@@ -481,6 +525,7 @@ cmd_status_json() {
   done < <(pane_cwd_snapshot)
   local roots_blob="" rl
   while IFS= read -r rl; do [[ -n "$rl" ]] && roots_blob+="$rl"$'\n'; done < <(repo_anchor_roots)
+  STATUS_ROOTS_BLOB="$roots_blob"   # T595-B：归属裁决用同一份根集合（与文本路径同源）
   for nm in "${names[@]}"; do
     k=""; r=""; t=""; num=""; sc=""
     po="$(fleet_name_parse "$nm")"
@@ -510,14 +555,15 @@ cmd_status_json() {
     busy=0; [[ "$agent" == "working" ]] && busy=1
     dl=0; (( online )) && term_deliverable "${st:--}" && dl=1
     cwd="${cwds[$nm]:-}"; pid="${pids[$nm]:-}"
-    IFS=$'\t' read -r verdict obase <<< "$(session_repo_verdict "$roots_blob" "$cwd" "")"
+    IFS=$'\t' read -r verdict obase rs_src <<< "$(_status_repo_verdict "$nm" "$cwd" "")"
+    [[ "$obase" == "-" ]] && obase=""
     own=0; repo_c=""
     case "$verdict" in
       local) own=1; repo_c="$root" ;;
       other) repo_c="${obase:--}" ;;
       *)     repo_c="" ;;
     esac
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-      "$nm" "$k" "$r" "$t" "$pid" "$cwd" "$repo_c" "$own" "$online" "$agent" "$busy" "$dl" "$verdict" "${vd:-absent}"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$nm" "$k" "$r" "$t" "$pid" "$cwd" "$repo_c" "$own" "$online" "$agent" "$busy" "$dl" "$verdict" "${vd:-absent}" "${rs_src:-cwd}"
   done | _status_json_emit "$be" "$root"
 }

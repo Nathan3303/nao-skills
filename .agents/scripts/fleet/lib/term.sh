@@ -134,6 +134,11 @@ term_snapshot() {
 #   阶梯（定序，避免一条残留同时进多桶）：absent → ghost → dead → mismatch →
 #   integration-missing → online；`hook_authority` = agent list 的 screen_detection_skipped
 #   （1 = 状态来自生命周期 hook（可信）/ 0 = 屏幕启发式或缺失（保守不可投递））。
+# 归属 label 投影（T595-B）：每行 `<name>\t<nao.repo>`（缺失 ⇒ `-`）。只读快照，零额外后端调用。
+term_repo_label_rows() {
+  _term_facts 2>/dev/null | awk -F'\t' 'NF>=14 && $1 != "" { printf "%s\t%s\n", $1, ($14 == "" ? "-" : $14) }' | awk '!seen[$0]++'
+}
+
 term_liveness() {  # <name> [repo]
   if _term_app_backend; then _term_app_liveness "${1-}" "${2-}"; else _term_herdr_liveness "${1-}" "${2-}"; fi
 }
@@ -148,9 +153,10 @@ term_argv() {  # <pane_id>
 #   ⇒ `pane move --new-tab` + `tab rename` 迁移（pane_id 不变、被搬空的 tab 由 herdr 自动关闭）。
 # 返回三态码（SPAWN_RC_*）：0 成功 · 2 跳过 · 3 失败（含就绪超时 / 0 尺寸 pane；调用方计入 SPAWN_FAIL）。
 # 成功时**必须**回填 `_TERM_SPAWN_PANE`（T548 投递点依赖它）。
-term_spawn() {  # <name> <inner> <repo> [force] [label] [group] [task]
-  if _term_app_backend; then _term_app_spawn "${1-}" "${2-}" "${3-}" "${4:-false}" "${5-}" "${6-}" "${7-}"
-  else _term_herdr_spawn "${1-}" "${2-}" "${3-}" "${4:-false}" "${5-}" "${6-}" "${7-}"; fi
+term_spawn() {  # <name> <inner> <repo> [force] [label] [group] [task] [repo_key]
+  # T595-B：第 8 参 `repo_key` = 仓基键（ensure 相位 1 算定，**spawn 内禁止重算** —— D1 判据）
+  if _term_app_backend; then _term_app_spawn "${1-}" "${2-}" "${3-}" "${4:-false}" "${5-}" "${6-}" "${7-}" "${8-}"
+  else _term_herdr_spawn "${1-}" "${2-}" "${3-}" "${4:-false}" "${5-}" "${6-}" "${7-}" "${8-}"; fi
 }
 
 # ---- 6/8 起 server（B2 · BR6）：唯一生产入口 ----

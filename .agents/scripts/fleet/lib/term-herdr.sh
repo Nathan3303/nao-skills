@@ -147,7 +147,7 @@ _term_herdr_facts() {
     case "$hook" in true) ag_hook["$pid"]=1 ;; *) ag_hook["$pid"]=0 ;; esac
   done < <(_term_json_objs <<< "$al")
   # pane list → 每行一个带 label 的 pane（无 label 的 pane 不属舰队会话，B1 不判）
-  local label cwd fgcwd astat tid fg pname avline avname st wsid nlabel ntid ncwd nfgcwd nwsid task ntask
+  local label cwd fgcwd astat tid fg pname avline avname st wsid nlabel ntid ncwd nfgcwd nwsid task ntask repo nrepo
   while IFS= read -r obj; do
     label="$(_term_json_str "$obj" label)"
     [[ -n "$label" ]] || continue
@@ -155,6 +155,7 @@ _term_herdr_facts() {
     pid="$(_term_json_str "$obj" pane_id)"
     wsid="$(_term_json_str "$obj" workspace_id)"
     task="$(fleet_meta_read "$(fleet_meta_wsref "$wsid")" "$pid")"
+    repo="$(fleet_meta_read "$(fleet_meta_wsref "$wsid")" "$pid" repo)"
     tid="$(_term_json_str "$obj" terminal_id)"
     cwd="$(_term_json_str "$obj" cwd)"
     fgcwd="$(_term_json_str "$obj" foreground_cwd)"
@@ -164,6 +165,7 @@ _term_herdr_facts() {
     _term_tsv_norm "$fgcwd"; nfgcwd="$_TSV_NORM"
     _term_tsv_norm "$wsid";  nwsid="$_TSV_NORM"
     _term_tsv_norm "$task";  ntask="$_TSV_NORM"
+    _term_tsv_norm "$repo";  nrepo="$_TSV_NORM"
     fg=""; avname=""
     while IFS=$'\t' read -r pname avline; do
       [[ -n "$pname" ]] || continue
@@ -175,14 +177,14 @@ _term_herdr_facts() {
     st="${ag_stat[$pid]:-}"; [[ -n "$st" ]] || st="${astat:--}"
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$nlabel" "$pid" "$ntid" "$ncwd" "$nfgcwd" "${fg:--}" \
-      "$st" "${ag_seq[$pid]:--}" "${ag_sess[$pid]:--}" "${avname:--}" "${ag_hook[$pid]:-0}" "$nwsid" "$ntask"
+      "$st" "${ag_seq[$pid]:--}" "${ag_sess[$pid]:--}" "${avname:--}" "${ag_hook[$pid]:-0}" "$nwsid" "$ntask" "$nrepo"
   done < <(_term_json_objs <<< "$pl")
 }
 
 # 5 列中性投影（后端私有 13 列 → 业务契约）：身份无 ⇒ 整行省略；空值 `-`。
 _term_herdr_project5() {
   local name pid tid cwd fgcwd fg astat seq sess avname hook wsid task status c
-  while IFS=$'\t' read -r name pid tid cwd fgcwd fg astat seq sess avname hook wsid task; do
+  while IFS=$'\t' read -r name pid tid cwd fgcwd fg astat seq sess avname hook wsid task repo; do
     [[ -n "$name" ]] || continue
     c="$cwd"; [[ "$c" == "-" || -z "$c" ]] && c="$fgcwd"
     if [[ "$seq" == "-" ]]; then status=alive
@@ -230,7 +232,7 @@ _term_herdr_liveness() {  # <name> [repo] → verdict/state/seq/hook（只读快
   fi
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
-    IFS=$'\t' read -r _ _ _ _ _ fg astat seq sess avname hook _ws _task <<< "$line"
+    IFS=$'\t' read -r _ _ _ _ _ fg astat seq sess avname hook _ws _task _repo <<< "$line"
     # 阶梯（定序）：ghost（label 在、agent 条目无）→ dead（前台非 pi）→ mismatch（argv --name 不符）
     #             → integration-missing（会话身份/钩子权威缺）→ online
     if [[ "$seq" == "-" ]]; then rv="ghost"
@@ -354,7 +356,7 @@ _term_herdr_close_pane() {  # <name> <pane> <repo> <cwd> <fgcwd>
 # 单行快照行 → verdict（与 term_liveness 同一阶梯，供「同名多 pane」逐行判定）
 _term_herdr_row_verdict() {  # <name> <row>
   local name="${1-}" line="${2-}" fg="" astat="" seq="" sess="" avname="" hook=""
-  IFS=$'\t' read -r _ _ _ _ _ fg astat seq sess avname hook _ws _task <<< "$line"
+  IFS=$'\t' read -r _ _ _ _ _ fg astat seq sess avname hook _ws _task _repo <<< "$line"
   if [[ "$seq" == "-" ]]; then printf 'ghost\n'
   elif [[ "$fg" != "pi" ]]; then printf 'dead\n'
   elif [[ -n "$avname" && "$avname" != "-" && "$avname" != "$name" ]]; then printf 'mismatch\n'
@@ -978,8 +980,8 @@ _term_herdr_layout_converge() {  # <pane_id> <name> [group] → 0 布局 A 达�
   return 0
 }
 
-_term_herdr_spawn() {  # <name> <inner> <repo> [force] <label> [group] [task] → SPAWN_RC_OK|FAIL
-  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" task="${7-}" pl="" obj js line
+_term_herdr_spawn() {  # <name> <inner> <repo> [force] <label> [group] [task] [repo_key] → SPAWN_RC_OK|FAIL
+  local name="${1-}" inner="${2-}" repo="${3-}" force="${4:-false}" label="${5-}" group="${6-}" task="${7-}" repo_key="${8-}" pl="" obj js line
   local pane="" wsid="" tid="" first="" nmatch=0 hit="" verdict="" seq="" launched=0 live_n=""
   # T554：tab 标签 = 名字（**组前缀退役** —— 1 workspace = 1 仓，同仓无需 `code/` 分组）。
   local tablabel="$name"
@@ -1156,7 +1158,8 @@ _term_herdr_spawn() {  # <name> <inner> <repo> [force] <label> [group] [task] �
   fi
   _TERM_SPAWN_PANE="$pane"; _TERM_SPAWN_WSID="$wsid"; _TERM_SPAWN_TID="$tid"
   # v3 元数据：herdr 无键值 label ⇒ sidecar（失败仅 warn，不阻断启动）
-  [[ -n "$task" ]] && fleet_meta_write "$(fleet_meta_wsref "$wsid")" "$pane" "$task" "$name"
+  # T595-B：sidecar 增 `repo=`（= 放置键/仓基键，≤16 且**不含路径**）—— 与 app 的 `nao.repo` label 同源语义
+  fleet_meta_write "$(fleet_meta_wsref "$wsid")" "$pane" "$task" "$name" "$repo_key"
   # 快照失效：本命令后续目标（判重/归属）必须看到新 pane，不得复用 spawn 前的旧快照
   if [[ -n "${_TERM_SNAP_FILE:-}" ]]; then rm -f "$_TERM_SNAP_FILE" 2>/dev/null || true; _TERM_SNAP_FILE=""; fi
   # 放置快照回填（T554）：新 pane 进本命令快照（不再为后续目标重查 pane list）
