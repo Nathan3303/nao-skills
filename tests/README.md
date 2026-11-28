@@ -14,7 +14,7 @@ bash tests/t4/run.sh --case 03                 # 单跑
 T4_ALLOW_MISSING=1 bash tests/t4/run.sh        # 宽松：缺产物=BLOCKED（仅显式 1）
 T4_REQUIRE_FULL=1 bash tests/t4/run.sh         # 发布前置：SKIP/DEGRADE>0 或非白名单 NOTE 即 FAIL
 bash tests/t4/run.sh --case 27                 # 后端夹具自检（隔离 / 零渗透 / 拆场幂等 / 零残留）
-npm test                                       # 唯一机械门禁 = test:agents + test:t4（全量 47 例，不变）
+npm test                                       # 唯一机械门禁 = test:agents + test:t4（全量 48 例，不变）
 npm run test:fast                              # 快档：test:agents + run.sh --fast（白名单 14 例，≈95s）
 bash tests/t4/run.sh --fast -t                  # 快档 + per-case 耗时（-t 可组合）
 bash tests/t4/run.sh --fast -v                  # 快档 + 逐例展开跳过原因（AC5）
@@ -23,7 +23,7 @@ npm run test:t4:full                           # 发布前置双轴（= 上面�
 # T555：后端唯一（herdr）⇒ 旧 `test:t4:full:dual`（双后端串跑）已删除；`NAO_TEST_TERMINAL=<任意值>` ⇒ rc=1（开关已移除）
 ```
 
-- **快档 / 全量分档（PRD #143）**：`npm run test:fast` 只跑白名单（当前 14 例，实测 ≈95s），**`npm test` 仍是全量唯一机械门禁**（47 例，PR CI / 合并前 / 发布前照跑；发布前置再加 `test:t4:full`）。
+- **快档 / 全量分档（PRD #143）**：`npm run test:fast` 只跑白名单（当前 14 例，实测 ≈95s），**`npm test` 仍是全量唯一机械门禁**（48 例，PR CI / 合并前 / 发布前照跑；发布前置再加 `test:t4:full`）。
   - 白名单与判据**单点**在 `tests/t4/run.sh` 的 `FAST_CASES`（每项一行注释：不 exec 真 pi / 不起真 server / 实测单价 ≤15s）；其余例分三组（真机类 · 替身重档 · 单价超限），起跑即打印「跳过 N 例（真机类/重档）：编号…」+「本档未覆盖」声明，`-v` 逐例展开 —— **禁止静默跳过**（AC5/AC9）。
   - **新增用例必须登记**白名单或跳过分组，否则 `--fast` 硬错（防新用例被悄悄漏测）；未覆盖面、单价与 profile 见 `docs/reports/143-profile.md`。
   - 发布前置 `T4_REQUIRE_FULL=1` 与 `--fast` **互斥**（快档跳过 30 例却可能报 PASS ⇒ 假绿）；发布前置一律 `npm run test:t4:full`。
@@ -107,6 +107,7 @@ npm run test:t4:full                           # 发布前置双轴（= 上面�
 | 53 | docs 一级索引一致性探针（T579）：三段标题启用谓词 + 剥 ``` 围栏 + 目录↔行 / 版本↔文件 / ADR↔时间线三处双向 + 半启用提示 · warn-only（不计 `warn=`、不改 rc、摘要常驻）· 老仓零输出 · 本仓零输出 + md5 · 三条变异负控（删调用 / 去排除名单 / 取反幽灵判据） | AC1/AC2/AC3/AC5/AC7 · PRD #237 | 无（纯 bash + `.agents` 夹具；不建 terminal server、不跑真 pi） |
 | 54 | 台账 / 开工卡结构探针（T580）：批次索引锚点双向 + 流转状态 6 值域 + 完成即收 + 有卡无台账行 + 卡 10 字段齐 + 主台账 ≤300 行 + 表格边界两向（PRD 正文含表格仍点名 / kickoff 用表格不报）· warn-only（不计 `warn=`、不改 rc、摘要常驻）· 本仓零输出 + md5 · 三条变异负控 | AC1/AC2/AC3/AC5/AC6/AC7/AC8/AC9 · PRD #238 | 无（纯 bash + `.agents` 夹具；不建 terminal server、不跑真 pi） |
 | 58 | 判据体检 lint（T589 · #253）：R1–R6 反例 6/6 逐条点名 + 合格 5/5 零误报 + 无 `Then` 块跳过计数 rc≠0 + 围栏不参与 + 三条变异负控（抑制词 ×2 / 规则关闭 ×1；规则开关 `c58_r5_enabled` **仅测试侧注入**，生产路径无开关）| 规格 `docs/T589-criteria-check/review.md` | 无（纯文件读取；零网络、不 exec 真 pi、不起 server） |
+| 59 | `ensure --trust-project`（T586-B · #248）：只给**本次** spawn 的 pi 加 `--approve`（argv 级取证：带 flag / 带 `NAO_TRUST_NEW_REPO=1` / 同给不重复 / 不带默认无）+ **不写任何持久配置**（`$HOME/.pi` 与项目 `.pi/` 快照 diff）+ 只许 `ensure`（用法守卫 rc=2） | PRD Issue #248 · 前置 T584 | 无（herdr 替身 + `T4_HERDR_CALL_LOG`；不 exec 真 pi、不起真 server） |
 
 ## NOTE 白名单（T531 · `t4_note <tag> <msg>`）
 

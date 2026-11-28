@@ -298,6 +298,9 @@ npx nao-fleet migrate   # 旧文件备份到 .agents/.nao-obsolete/，再按需�
   - 交互使用：在 pane 里按 <kbd>Enter</kbd> 选 `Trust`（选 `Trust parent folder` 可覆盖同一父目录下的后续仓）；事后可用 `/trust` 固化。
   - **无人值守 / 自动化**：在该 pi 的 **agent-dir settings** 里预置 `{"defaultProjectTrust":"always"}`（此键只能在 agent-directory settings 里设，即 `$PI_CODING_AGENT_DIR/settings.json`；仓库内 `.agents/tests` 的夹具就是这么做）。也可对单次运行显式 `pi --approve`。
   - 信任决策的优先级（pi 文档）：`--approve/--no-approve` > 扩展的 `project_trust` > `~/.pi/agent/trust.json` 的已存决策 > `defaultProjectTrust`。
+- **产品开关（T586-B · 0.37.1 起）**：不想手点、也不想改配置 ⇒ `nao-fleet.sh ensure --trust-project <角色>[@<仓>]` —— 只给**本次**拉起的 `pi` 加 `--approve`（该进程免确认），**不写任何持久配置**（不碰 `~/.pi/agent/settings.json`、不碰项目 `.pi/`）。还有等价环境变量 **`NAO_TRUST_NEW_REPO=1`**（无人值守 / 一次性夹具用；与 flag 同时给仍只传一次，不重复）。
+  - **默认关闭**：不带开关时行为与旧版完全一致（弹提示、就绪门超时点名指路）。
+  - ⚠️ **安全边界**：`--trust-project` 让该次 `pi` 加载目录里的项目级资源（扩展 / 设置 / MCP）——只在**你自己信任**的目录用；别对着陌生仓库或别人的工作副本开。
 - **边界**：`defaultProjectTrust=always` 等于「该 agent-dir 下的项目都免确认」——只在自己的机器/一次性夹具里用，别写进共享配置。
 
 ## 文档站（`apps/document`）

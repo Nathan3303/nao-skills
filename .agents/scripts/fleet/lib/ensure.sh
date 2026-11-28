@@ -37,7 +37,7 @@ build_system_prompt() {
 }
 
 spawn_one() {
-  local name="$1" repo="$2" model="$3" card_override="${4:-}" role_id="${5:-}" card_name="${6:-}" force="${7:-false}" label="${8:-}" group="${9:-}" task="${10:-}" card prompt_file inner session_dir
+  local name="$1" repo="$2" model="$3" card_override="${4:-}" role_id="${5:-}" card_name="${6:-}" force="${7:-false}" label="${8:-}" group="${9:-}" task="${10:-}" trust="${11:-false}" card prompt_file inner session_dir
   # T537：卡路径可由调用方显式给出（下游仓卡）；未给出时仍走清单（PROMPTS_DIR/<card>）逐字不变
   # #75：**两条取卡通道分两个参数，禁混用** ——
   #   ④ card_override = `--card` 的**完整路径**（下游卡，已由 resolve_card 限定在 <repo>/.agents/prompts/ 内）
@@ -59,6 +59,10 @@ spawn_one() {
   #   此处只走唯一路径（BR1/BR3）。
   prompt_file="$(build_system_prompt "$card")"
   inner="cd $(printf %q "$repo") && export CODEGRAPH_TELEMETRY=0 && exec pi --name $(printf %q "$name")"
+  # T586-B/Issue #248：`--trust-project`（或 NAO_TRUST_NEW_REPO=1）⇒ 只给**本次**的 pi 加 `--approve`：
+  #   pi 在未信任目录首启会停在 `Trust project folder?`（T584 已在就绪门点名）；本开关让无人值守能自己过门。
+  #   边界：**不写任何持久配置**（不碰 ~/.pi/agent/settings.json、不碰项目 .pi/）；默认不带 ⇒ 行为与旧版逐字一致。
+  [[ "$trust" == true ]] && inner+=" --approve"
   [[ -n "$model" ]] && inner+=" --model $(printf %q "$model")"
   inner+=" --append-system-prompt $(printf %q "$prompt_file")"
   inner+=" --session-dir $(printf %q "$session_dir")"
@@ -241,7 +245,11 @@ _ensure_pick_num() {  # <wsid> <role> <task> <kind> → stdout num（空 = 槽�
 }
 
 cmd_ensure() {
-  local force="$1" model="$2" task="$3"
+  local force="$1" model="$2" task="$3" trust_arg="${4:-false}"
+  # T586-B：等价环境变量 NAO_TRUST_NEW_REPO=1（给无人值守/一次性夹具用）；与 --trust-project 同时给 ⇒
+  #   仍然**只传一次** `--approve`（两者是同一个开关的两种写法，不是两个参数）。默认关闭。
+  local trust="$trust_arg"
+  case "${NAO_TRUST_NEW_REPO:-}" in 1|true|yes|TRUE|YES) trust=true ;; esac
   local i spec role repo key seen k card_arg card_as disp role_id scope_name=""
   local chk_name chk_p vrd
   local _res_ok="" pout_tmp="" _p_kind="" _p_role="" _p_task=""
@@ -444,9 +452,9 @@ cmd_ensure() {
       fi
     fi
     if [[ -n "${t_cards[$i]}" ]]; then
-      spawn_one "$disp" "$repo" "$model" "${t_cards[$i]}" "${t_roles[$i]:-}" "" "$force" "${t_labels[$i]}" "" "$task"
+      spawn_one "$disp" "$repo" "$model" "${t_cards[$i]}" "${t_roles[$i]:-}" "" "$force" "${t_labels[$i]}" "" "$task" "$trust"
     else
-      spawn_one "$disp" "$repo" "$model" "" "${t_roles[$i]:-}" "${t_prompts[$i]:-}" "$force" "${t_labels[$i]}" "" "$task"
+      spawn_one "$disp" "$repo" "$model" "" "${t_roles[$i]:-}" "${t_prompts[$i]:-}" "$force" "${t_labels[$i]}" "" "$task" "$trust"
     fi
   done
   term_place_end
