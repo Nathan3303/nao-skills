@@ -19,7 +19,7 @@ nao-fleet 给你的项目装一支由 AI 组成的开发小队：**角色卡 + �
 
 你只做两件事：回答问题、点确认。
 
-推荐配合模型 `deepseek-v4.1-flash`。舰队是 7 个常驻会话加长链路交接（派活 → 回执 → 验收），这个模型在长上下文稳定性和单轮成本上实测最省心。换成别的模型也能跑，只是纪律遵守和回执质量会有差异。
+推荐配合模型 `deepseek-v4.1-flash`。舰队是 7 个常驻会话加长链路交接（派活 → **回执** → 验收；回执就是干完交给 PM 的结论单，写明改了什么、验过什么），这个模型在长上下文稳定性和单轮成本上实测最省心。换成别的模型也能跑，只是纪律遵守和回执质量会有差异。
 
 ## 前置环境
 
@@ -60,12 +60,12 @@ pi --version && node -v && git --version && herdr --version
 
 1. **装好前置**（pi / herdr / Node，见上一节）。
 
-2. **把机制装进你的项目**。装项目级，版本 pin 写进仓库，团队 clone 下来就是同款：
+2. **把机制装进你的项目**。装项目级，把版本号 pin 写进仓库（pin＝把版本锁死），团队 clone 下来就是同款：
 
    ```bash
    cd 你的项目
    pi install --local npm:nao-fleet@0.37.0   # 声明 pin，并把机制包物化到项目内 .pi/npm（版本随发版更新）
-   npx nao-fleet init                        # 写入转发入口 shim + 生成 AGENTS.md
+   npx nao-fleet init                        # 写入转发入口 + 生成 AGENTS.md
    ```
 
    只想跟最新版就省略 `@0.37.0`：`pi install --local npm:nao-fleet`。
@@ -76,7 +76,7 @@ pi --version && node -v && git --version && herdr --version
    npx nao-fleet plugins install-all
    ```
 
-升级同理：改 `.pi/settings.json` 里的 pin 版本，再跑 `pi update --extensions`。机制以 npm 包为准，项目里只有转发入口，你不用手动同步文件。
+升级同理：改 `.pi/settings.json` 里的 pin（锁定的版本号），再跑 `pi update --extensions`。机制以 npm 包为准，项目里只有转发入口，你不用手动同步文件。
 
 ## 第一次跑起来
 
@@ -88,7 +88,9 @@ cd 你的项目
 
 角色名可以写**别名**或规范名，两者等价：`arch` 就是 `arch-designer`，`infra` 就是 `rd-infra`。上例混着写也照常拉起。完整别名见 `.agents/roles.yaml` 或 `nao-fleet.sh --help`。
 
-会话名形如 `pm`、`qa2`、`rd-be`：重名时自动加数字后缀，`>9` 直接报错。**名字里不含仓库位置**——绑定单位是 herdr workspace，1 个仓对应 1 个 workspace，两个仓各跑各的、不撞车。跨仓发消息时用会话 id，不要用名字。
+会话名形如 `pm`、`qa2`、`rd-be`：重名时自动加数字后缀，`>9` 直接报错。**名字里不含仓库位置**——绑定单位是 herdr workspace（herdr 里的工作空间，一个仓一个）。
+
+**TUI 形态下**两个仓各跑各的、不撞车。**桌面 app 形态（`NAO_TERMINAL=app`）终端名字全局唯一**，两个仓同时起同名角色会报 `name_taken`，需要给第二个仓让号（`pm2`…）。跨仓发消息时用会话 id，不要用名字。
 
 会话命名、任务派生、多仓细节见 [docs/INSTALL.md](docs/INSTALL.md)「会话命名与多仓」。
 
@@ -98,14 +100,14 @@ cd 你的项目
 
 ```text
 你：想加个「导出 CSV」功能
-PM：问几个问题 → 给出 PRD + 优先级 + 开工确认卡
+PM：问几个问题 → 给出需求说明 + 优先级 + 开工确认卡
 你：开工
 PM：拉起缺的角色 → 让 qa 先写用例 → 指派给 rd-be
-rd-be：（做完）[T1] done | 测试：npm test exit=0 128例/0红 | PR #12
-PM：在 PR 核验收标准并评论 → 验收通过（授权合并）→ rd-be squash 合并 → 归档 → 回收派生会话
+rd-be：（做完）[T1] done | 测试：npm test exit=0 128例/0红 | PR #12     ← 数字随你的项目变
+PM：在 PR 核验收标准并评论 → 验收通过（授权合并）→ rd-be 压成一条提交合并 → 归档 → 回收临时会话
 ```
 
-每个任务完成后，`docs/` 里都会留下痕迹（需求说明、任务状态、回报），不依赖聊天记录。所以会话聊久了可以直接重开，不会丢事。
+每个任务完成后，`docs/` 里都会留下痕迹（需求说明、任务状态、回执），不依赖聊天记录。所以会话聊久了可以直接重开，不会丢事。
 
 ## 七个角色
 
@@ -126,13 +128,13 @@ PM：在 PR 核验收标准并评论 → 验收通过（授权合并）→ rd-be
 
 **除了 pi，能配别的编程 Agent 吗？** 不能。机制文件本身是 Markdown，别的工具理论上读得懂。但派活、回执、回收全依赖 pi 和 pi-intercom，其他 Agent 不在支持范围内。
 
-**它会在 GitHub 上开 PR 吗？** 会。每个需求一条分支、一个 PR，早早开成 Draft 让检查先跑。你确认验收后，由研发角色 squash 合并，main 上只留 1 条可读提交。没有远端或 `gh` 时降级为本地分支，流程不变。
+**它会在 GitHub 上开 PR 吗？** 会。每个需求一条分支、一个 PR，早早开成草案让检查先跑。你确认验收后，由研发角色把分支压成一条提交再合并，main 上只留 1 条可读提交。没有远端或 `gh` 时降级为本地分支，流程不变。
 
-**跑完的会话要留着吗？** 派生会话验收完就回收：`nao-fleet.sh close --task T1 rd-be`。它按元数据精确匹配，旧名 `rd-be(T1)` / `rd-be-T1` 仍能被识别和回收。常驻角色留着复用。`nao-fleet.sh status` 会提示哪些是残留。目标在别的项目里也能回收；定位不到时**非 0 退出并打印诊断**，不会假装已回收。
+**跑完的会话要留着吗？** 任务临时开的会话（派生会话）验收完就回收：`nao-fleet.sh close --task T1 rd-be`。它按会话记录里的任务号精确匹配，旧名 `rd-be(T1)` / `rd-be-T1` 仍能被识别和回收。常驻角色留着复用。`nao-fleet.sh status` 会提示哪些是残留。目标在别的项目里也能回收；定位不到时**非 0 退出并打印诊断**，不会假装已回收。
 
 **为什么需要终端后端？** 舰队要把 7 个角色会话放进终端，还要能可靠地「找回来」和「收掉」。
 
-- 唯一后端是 herdr。每个角色一个 tab，身份靠结构化事实判定（pane 标签 + agent 状态），不依赖终端标题。需要 `herdr integration install pi`，命令要在 herdr 的 pane 内执行。
+- 唯一后端是 herdr。每个角色一个 tab，身份靠结构化事实判定（终端窗格标签 + agent 状态），不依赖终端标题。需要 `herdr integration install pi`，命令要在 herdr 的终端窗格里执行。
 - tmux 后端已在 v0.28.0 移除。`NAO_TERMINAL=tmux` 会 **rc=2 并给一行指路**，不会静默按 herdr 跑。还需要 tmux 的话，把旧包 `@nathan33/nao-skill` pin 回 `≤0.27.x`；新包 `nao-fleet` 从 0.37.0 起没有这个后端。
 - **不会自动回落**：静默换后端会让同一条命令在不同机器上跑出不同结果。所以移除时也选了明确报错，而不是悄悄换掉。
 
@@ -145,7 +147,7 @@ PM：在 PR 核验收标准并评论 → 验收通过（授权合并）→ rd-be
 ├── AGENTS.md              # 项目级约定（PM 维护，AI 每次都会读）
 ├── .github/               # PR 模板（PM 建，GitHub Flow 用）
 ├── .pi/
-│   ├── settings.json      # 记录机制包的 pin 版本（进仓库）
+│   ├── settings.json      # 记录机制包锁定的版本（进仓库）
 │   └── npm/               # pi 把机制包物化在这里（pi 自建 gitignore，不提交）
 └── .agents/
     └── scripts/
