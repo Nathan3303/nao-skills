@@ -427,7 +427,7 @@ cmd_ensure() {
           IFS=',' read -r _p_kind _p_role _p_task slot <<< "${pout_tmp#OK }"
         else
           slot="$(_ensure_pick_num "$wsid" "$NAME" "$task" "derived")" \
-            || die "ensure 中止：角色槽位已满（$NAME 的 2..99 全占；该怎么办：先 close 无用会话再重试）"
+            || die "ensure 中止：角色槽位已满（$NAME 的 2..9 全占；该怎么办：先 close 无用会话再重试）"
           disp="$(fleet_name_build derived "$NAME" "$slot")"
         fi
       else

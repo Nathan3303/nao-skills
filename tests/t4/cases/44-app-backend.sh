@@ -397,7 +397,7 @@ fi
 
 # ================================================================ ⑭ T595-A（Issue #273）：跨仓同名解阻塞
 #   ① `_ensure_pick_num` 的占用统计：**app 看全局**（`hc` 名字 per-core 全局唯一）· herdr 仍按本 ws
-#   ② 只对 `name_taken` 让号重试（其它错误照旧 fail loud）· 槽位段 2..99
+#   ② 只对 `name_taken` 让号重试（其它错误照旧 fail loud）· 槽位段 **2..9**（扩容属命名契约变更，另立）
 #   每组的**变异**都实跑过（删掉全局来源 ⇒ 本条必红；见各条注释）。
 app_reset
 mkdir -p "$LAB/repo-a" "$LAB/repo-b"
@@ -462,8 +462,9 @@ t4_assert_ne "0" "$APP_RC" "⑭⑤ 零 label 同名 ⇒ 拒绝（rc≠0，不静
 t4_assert_contains "$APP_ERR" "缺身份标签" "⑭⑤ 点名「缺身份标签」（不是含糊失败）"
 t4_assert_contains "$APP_ERR" "hc kill" "⑭⑤ 指路给可执行处置（hc ls / hc kill 或 close --force）"
 t4_assert_eq "$_n_before" "$(app_addrs | grep -c . || true)" "⑭⑤ **不新增终端**（fail-closed 生效）"
-run_app status
-t4_assert_contains "$APP_OUT$APP_ERR" "rd-be" "⑭⑤ status 仍能看到那个同名终端（不报成「未运行」）"
+# 不覆盖（明示）：`status` 对「零 label 的活终端」仍会误报「未运行」—— 那是 status 侧的红线
+#   （「读不到不得当成不存在」，T574/T558 P0 同族），已单独登记 **T597 / Issue #281**，不在本单夹带。
+#   原这里有一条 `status 输出含 rd-be` 的断言：对每个角色都会打一行 ⇒ **恒真（T589 R3 族）**，已删。
 # 正（完整 label 的 ws 外同名）⇒ 让号成功
 app_reset
 stub_hc run --bg --no-parent --keep --name rd-be --cwd "$LAB/repo-b" \
