@@ -16,6 +16,8 @@ title: 多项目布局
 
 所以两个仓的 `rd-be` 各在自己的 workspace 里，互不干扰、也不会互相顶掉。
 
+**注意后端差异**：上面说的是 Herdr TUI 形态（名字按 workspace 隔离，跨仓同名互不影响）。用桌面 app 形态（`NAO_TERMINAL=app`）时，终端名字在 `herdr-core` 里**全局唯一** —— 两个仓同时起同名角色会报 `name_taken`，需要给第二个仓让号（`pm2`…）。详见[手机上看舰队](/advanced/mobile)。
+
 - 不用写任何配置文件：两个仓各自在自己的目录里 `ensure rd-be` 即可。
 - 要显式指定目标仓：`ensure rd-be@main` —— `@main` 指 `.agents/fleet.yaml` 所在的主仓，不需要在 manifest 里定义。本仓没有 manifest 时它会直接报错，这时改用 `ensure rd-be@<仓路径>`，或者直接 `cd` 到目标仓再 `ensure`。
 - scope 家族已弃用：`--scope`、`--fleet`、`.agents/fleet-scope`、`fleet.yaml` 的 `slug:` 都只打一行提示后被忽略，放置键恒为仓基键；旧文档里 `rd-be@api` 那种会话名不会再生成。

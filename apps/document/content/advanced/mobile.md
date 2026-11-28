@@ -40,14 +40,14 @@ description: 用手机连上桌面端的 herdr-core，看七个角色在干什�
 
 ## 这套配置现在长什么样
 
-以下是我在自己机器上实测的状态（版本与数量随升级会变，判据以命令为准）：
+以下是本机实测的状态（版本与数量随升级会变，判据以命令为准）：
 
 - `hc --version` → **0.1.22**（`herdr-core` 与 `hc` 同版本）
 - Herdr 桌面端 → **0.1.16**；`herdr`（TUI）→ **0.9.5**
 - `hc server status` → 一个 core 在跑，**7 个终端在线**（pm、qa、arch-designer、rd-fe、rd-infra、uiux-designer，外加一个普通 shell）
 - 同一个输出里 `keeps_running_after_logout: true` —— **注销后舰队继续跑**，这是「电脑锁屏/合盖后手机还能连」的关键
 - `ss -ltn` → `sshd` 在监听 22
-- `tailscale status` → 组网已连接，1 个对端设备
+- `tailscale status` → 组网已连接，1 个对端设备（用别的组网工具就敲它的等价命令）
 
 ## 边界（很重要，别踩）
 
