@@ -354,6 +354,7 @@ _term_app_liveness() {  # <name> [repo] → verdict/state/seq/hook
   [[ -n "$rows" ]] || { printf 'absent\t-\t-\t-\n'; return 0; }
   if [[ -n "$repo" ]]; then
     rp="$(nao_phys_path "$repo")"
+    local all_rows="$rows"
     while IFS= read -r line; do
       [[ -n "$line" ]] || continue
       IFS=$'\t' read -r _ _ _ c1 c2 _ <<< "$line"
@@ -363,7 +364,15 @@ _term_app_liveness() {  # <name> [repo] → verdict/state/seq/hook
       fi
     done <<< "$rows"
     rows="${filtered%$'\n'}"
-    [[ -n "$rows" ]] || { printf 'absent\t-\t-\t-\n'; return 0; }
+    if [[ -z "$rows" ]]; then
+      # T597（Issue #281 · 红线族）：同名终端**存在但不属本仓**时不能一律当 absent ——
+      #   若其中存在 live 且**缺身份标签**（ws == "-"）的，属「归属不可判定」⇒ 报 unknown
+      #   （`status` 才会显示 `?` 而不是「未运行」）。label 齐的他仓终端维持旧行为（B/F 另做）。
+      if printf '%s\n' "$all_rows" | awk -F'\t' '$9 == "live" && $12 == "-" {f=1} END {exit(f?0:1)}'; then
+        printf 'unknown\t-\t-\t-\n'; return 0
+      fi
+      printf 'absent\t-\t-\t-\n'; return 0
+    fi
   fi
   # keep 换壳（BR4）：finished 终端 = pi 已退出、只剩 shell（`--keep` 语义）⇒ **不算在线**，
   #   也不参与同名歧义计数（否则一次 close/退出后的残留会把重建判成 ambiguous）；

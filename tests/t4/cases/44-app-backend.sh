@@ -474,4 +474,48 @@ t4_assert_eq "0" "$APP_RC" "⑭⑤ 完整 label 的 ws 外同名 ⇒ 让号成�
 _n_after="$(for a in $(app_addrs); do app_field "$a" name; done | tr '\n' ' ')"
 t4_assert_contains "$_n_after" "rd-be2" "⑭⑤ 让号结果 = rd-be2（而不是失败）"
 
+# ================================================================ ⑮ T597（Issue #281）：status 对「同名但缺身份标签」的活终端必须报「不可判定」
+#   红线族「读不到不得当成不存在」。三条夹具：零 label / 只有 nao.name / 正常（label 齐）。
+#   变异：把 `_term_app_liveness` 的 unknown 分支删掉（unknown 折回 absent）⇒ ⑮①② 必红。
+#   注：夹具终端 cwd 必须**在本仓外**（/tmp）才会走到「repo 过滤后为空」那条路径 —— QA 现场就是这种。
+jstate() {  # <role> → json 里该角色的 state
+  run_app status --json
+  printf '%s' "$APP_OUT" | node -e 'let b="";process.stdin.on("data",d=>b+=d).on("end",()=>{const j=JSON.parse(b);const r=j.roles.find(x=>x.role===process.argv[1]);console.log(r?r.state:"<缺失>")})' "$1" 2>/dev/null || true
+}
+
+# ⑮① 零 label（同名、live、本仓外）
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-be --cwd /tmp -- true >/dev/null
+run_app status
+t4_assert_contains "$APP_OUT" "? rd-be" "⑮① 零 label ⇒ 显示「?」（不是「未运行」）"
+t4_assert_contains "$APP_OUT" "不可判定" "⑮① 点名「不可判定」"
+t4_assert_contains "$APP_OUT" "hc kill" "⑮① 给一行处置指路（hc get / hc label / hc kill）"
+t4_assert_not_contains "$APP_OUT" "· rd-be        未运行" "⑮① **不得**报「未运行」（实际在跑）"
+
+# ⑮② 只有 nao.name（部分 label）
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-be --cwd /tmp --label nao.name=rd-be -- true >/dev/null
+run_app status
+t4_assert_contains "$APP_OUT" "? rd-be" "⑮② 部分 label ⇒ 同样显示「?」"
+t4_assert_contains "$APP_OUT" "不可判定" "⑮② 同样报「不可判定」"
+
+# ⑮③ 正常终端（label 齐、本仓内）⇒ 显示不变（不回归）
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-fe --cwd "$LAB" \
+  --label herdr.space=spx --label herdr.tab=tbx --label nao.name=rd-fe -- true >/dev/null
+run_app status
+t4_assert_contains "$APP_OUT" "✓ rd-fe" "⑮③ 正常终端仍显示「✓ 在线」（不回归）"
+t4_assert_not_contains "$APP_OUT" "? rd-fe" "⑮③ 正常终端不出「?」行"
+
+# ⑮④ `--json` 三态可区分（online / unknown / absent）
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-fe --cwd "$LAB" \
+  --label herdr.space=spx --label herdr.tab=tbx --label nao.name=rd-fe -- true >/dev/null
+t4_assert_eq "online" "$(jstate rd-fe)" "⑮④ --json：正常 ⇒ state=online"
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-be --cwd /tmp -- true >/dev/null
+t4_assert_eq "unknown" "$(jstate rd-be)" "⑮④ --json：缺身份标签 ⇒ state=unknown"
+app_reset
+t4_assert_eq "absent" "$(jstate rd-be)" "⑮④ --json：确实没有 ⇒ state=absent（三态互不相同）"
+
 t4_exit
