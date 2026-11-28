@@ -1429,6 +1429,24 @@ PR [#148](https://github.com/Nathan3303/nao-fleet/pull/148) squash 合并 · 六
 
 - ✅ **已合并 `7f778f8`**（PR #244 · Issue #237）：`docs/<任务号>-<slug>/` + `docs/README.md` 唯一索引；`check` 新增 PRD 探针扩面与 `check_docs_index`（warn-only）；判红载体 `tests/t4/cases/53`；32 文件 +1028/−103。
 
+<a id="T600"></a>
+## T600 · parallel-dev（并行开发 SKILL：worktree 多任务在飞）
+
+- ✅ **已合并**（PR #288 · Issue #287）：新增 `.agents/skills/parallel-dev.md` + `github-flow.md §工作区纪律` 末尾**触发式指针**（「并行 ≥2 任务 / 开第 2 个 worktree / 跑另一版基线 ⇒ 读」）。正文 = 何时需要 / 命名一任务一树一分支 / **worktree 缺什么**（无 `.codegraph/` 索引 · 无 `node_modules` 且本仓不需要 · `docs/` 是副本）/ **冲突热点承运制**（并行 PR 只有一个碰 `tasks-state`+`README`）/ 端口一树一套（假绿主因；实测 5173+5180 双监听且 vitepress 未设 `--strictPort`）/ **不要在 worktree 里再 `ensure` 舰队会话**（同 git-common-dir ⇒ 复用同 workspace）/ 收尾三件事 + 残留判据 / PM WIP 上限 2–3 / 九条反模式。**零改角色卡**（指针链已闭合，不重犯 T583-B 刚去掉的重复）。
+- QA 实测 4/4 技术断言成立：无索引向上逐级 · 无 `node_modules` 时 `node bin/nao-skill.js --help` 可跑 · `ensure.sh:131` 用 `--git-common-dir` · 端口被占 Vite 静默换端口。两条 P3 已改（判例改指针、`remove` 补「未跟踪文件」）。
+
+<a id="T597"></a>
+## T597 · status-unknown（status 对缺身份标签的活终端报「不可判定」）
+
+- ✅ **已合并 `ee58d41`**（PR #284 · Issue #281）：`_term_app_liveness` 在**已通过 repo 过滤的行**上判「缺 `herdr.space`」⇒ 一律 `unknown`（三态在数据源分开，不在输出层拼）· `--json` 加 `liveness`/`state`（`online`/`unknown`/`absent`，schema 仍 1）· 信号收敛（原三处打架 → 行内 `? 不可判定` + 一行指路）· `integration-missing` 族保留。**首版只修了「repo 过滤后为空」路径，QA 两轮 NO-GO 逼出「本仓内才是真实场景」+「夹具必须用真实 cwd」**。
+
+<a id="T583"></a>
+## T583 · mechanism-converge（T581 报告的落地：A 纠错 / B 去重 / C 重分类）
+
+- ✅ **A 批已合并 `969573c`**（PR #276）：`grill-me` 不存在（3 处改指 `pm-to-spec §八`）· PM 卡 §互引错位 3 处 · `rd-infra` 清单「8 项」→9 · `docs/prds` 过期指引改任务目录。pm 卡 v43。
+- ✅ **B 批已合并 `0007f5c`**（PR #285）：去重单源 **净 −46 行**（F4–F13）· **规则零丢失**（QA 抽 5 条实质约束全找到单源）· **计数标签 6/6 一致**（修掉 4 处说谎：`rd-infra` 8→9 / `qa` 18→12 / `rd-be`+`rd-fe` 14→13 / `pm` 44→46）· 版本一批一档（pm 44 / infra 10 / rd-be 16 / rd-fe 17 / qa 19 / uiux 6；arch 零改动未 bump）。
+- ⏳ **C 批待派**：红线重分类 + 3 道闸（G1 计数 / G2 ADR 结构 / G3 release notes 编号）+ 补 `uiux-design.md` 清单。
+
 <a id="T595"></a>
 ## T595 · multirepo-naming（多仓同名解阻塞 · 方案 F 的 A 步）
 

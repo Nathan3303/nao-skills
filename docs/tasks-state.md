@@ -12,6 +12,9 @@
 
 | 任务号 | 归档锚点 | 状态 | 完成日期 |
 | :--- | :--- | :--- | :--- |
+| T600 | `docs/tasks-archive.md#T600` | 已合并 | 2026-11-28 |
+| T597 | `docs/tasks-archive.md#T597` | 已合并 | 2026-11-28 |
+| T583 | `docs/tasks-archive.md#T583` | 已合并 | 2026-11-28 |
 | T595 | `docs/tasks-archive.md#T595` | 已发布 | 2026-11-28 |
 | T596 | `docs/tasks-archive.md#T596` | 已发布 | 2026-11-28 |
 | T586 | `docs/tasks-archive.md#T586` | 已发布 | 2026-11-28 |
@@ -155,11 +158,10 @@
 
 | 任务编号 | 目标会话 | 概要 | 排队原因 |
 | :--- | :--- | :--- | :--- |
-| **T589** | `qa` → `rd-infra` | 判据体检：`Total 不变 / 计数基数混轴 / innerText 为空 / 恒真命令` 四类不可达判据的静态拦截 + 反例清单（#253） | 待派发（T588 已合并，可开工） |
-| **T583** | `pm` → `rd-infra` → `qa` | T581 机制收敛 A/B/C（A 纠错净 +7 · B 去重单源 −59 · C 红线重分类 34→18 + 3 道闸 + 补 uiux 清单）（#243） | 待用户拍板（改 7 张卡行为面） |
-| **T584** | `rd-infra` | case 32 真机就绪门：A 方案夹具预置 `defaultProjectTrust` 已实测通过；B 就绪门识别 Trust 提示并指路（#245） | 待派发（A 随下一测试批） |
-| **T586** | 用户拍板 | `ensure` 在全新仓路径撞 pi 首启 Trust 提示并阻塞 —— A 保持人工 / B 显式 `--trust-project` / C 自动信任（#248） | 产品行为待拍 |
-| **T582** | `rd-infra` | `close` 对 `status=idle` 的会话直接杀、未走忙闲闸门且无 `--force` 提示（#240） | 低优，排队 |
+| **T595-B/F** | `rd-infra` | 多仓命名 B/F 步：label 承载归属（`nao.repo`/`role`/`slot`）+ app 里 `tab.rename` 显示
+  `pm · omarchy` | 进行中（B 步）+ 排队（F 步） |
+| **T583-C** | `pm` → `rd-infra` → `qa` | T581 C 批：红线重分类（pm 34→18 / 清单 44→38）+ 3 道闸（G1 计数 / G2 ADR 结构 / G3 release notes 编号）+ 补 `uiux-design.md` 清单 | 待派（B 批已合并） |
+| **T598** | 待立项 | 槽位扩容 2..99：属命名契约变更（`fleet_core_build`/`parse` + 名长预算 + `cases/28` + 文档） | 按需（当前 2..9 够用） |
 
 > **T556 候选已划销（2026-11-24 · PM）**：目标「舰队机制配合 herdr desktop app」已被 T562（app 第二后端 · 合并 `bc6c0c3` · v0.30.0）与 T565（app 后端放置验证修复 · v0.31.1）交付覆盖 ⇒ 不再单独立项。
 
