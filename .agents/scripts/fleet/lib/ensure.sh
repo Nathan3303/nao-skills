@@ -36,6 +36,29 @@ build_system_prompt() {
   echo "$f"
 }
 
+# T595-A/Issue #273：一次 spawn + **只对 name_taken 让号重试**。
+#   为什么放在这里：`hc` 名字 per-core 全局唯一 ⇒ 并发 ensure / 他仓占名时首次必撞；
+#   撞了要换**下一个槽位**再试（不是同一名字硬重试）。其它错误不重试（fail loud，语义不变）。
+#   上限 = 槽位段耗尽（99）；每次都重算名字（`pm` → `pm2` → `pm3` …）。
+_spawn_try() { # <disp> <repo> <model> <card_override> <role_id> <card_name> <force> <label> <task> <trust>
+  local disp="$1" repo="$2" model="$3" card_o="$4" role_id="$5" card_n="$6" force="$7" label="$8" task="$9" trust="${10:-false}"
+  local rc=0 guard=0 pn pk pr pt ps next
+  while :; do
+    _TERM_SPAWN_NAME_TAKEN=0
+    spawn_one "$disp" "$repo" "$model" "$card_o" "$role_id" "$card_n" "$force" "$label" "" "$task" "$trust"; rc=$?
+    # 判据用**信号**而不是 rc：`spawn_one` 按三态计数后自身返回 0（rc 是它的内部账），
+    #   所以「是否 name_taken」只能看 `_term_app_spawn` 置的标志。
+    [[ "${_TERM_SPAWN_NAME_TAKEN:-0}" == 1 && "$(term_label)" == "app" ]] || return "$rc"
+    guard=$((guard + 1)); (( guard > 98 )) && return "$rc"
+    pn="$(fleet_name_parse "$disp")"
+    [[ "$pn" == "OK "* ]] || return "$rc"
+    IFS=',' read -r pk pr pt ps <<< "${pn#OK }"
+    next=$(( ${ps:-1} + 1 )); (( next > 99 )) && return "$rc"
+    disp="$(fleet_name_build "$pk" "$pr" "$next")"
+    log "让号重试：名字被占 ⇒ 改用 $disp（name_taken，第 $guard 次）"
+  done
+}
+
 spawn_one() {
   local name="$1" repo="$2" model="$3" card_override="${4:-}" role_id="${5:-}" card_name="${6:-}" force="${7:-false}" label="${8:-}" group="${9:-}" task="${10:-}" trust="${11:-false}" card prompt_file inner session_dir
   # T537：卡路径可由调用方显式给出（下游仓卡）；未给出时仍走清单（PROMPTS_DIR/<card>）逐字不变
@@ -233,9 +256,18 @@ _ensure_pick_num() {  # <wsid> <role> <task> <kind> → stdout num（空 = 槽�
     [[ -z "${_T_RSV_WS[$i]:-}" || "${_T_RSV_WS[$i]}" == "$wsid" ]] || continue
     [[ "${_T_RSV_ROLE[$i]}" == "$role" ]] && occ+=("${_T_RSV_NUM[$i]:-1}")
   done
+  # T595-A/Issue #273：**名字唯一性按后端定** —— app 的 hc 名字是 per-core 全局唯一（跨 space / 跨仓），
+  #   只看本 ws 必然撞 `name_taken`；herdr 的 pane label 只在 workspace 内唯一（同名合法）⇒ 不并全局。
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    out="$(fleet_name_parse "$name")"
+    [[ "$out" == "OK "* ]] || continue
+    IFS=',' read -r k r t s <<< "${out#OK }"
+    [[ "$r" == "$role" ]] && occ+=("${s:-1}")
+  done < <(term_live_peer_names)
   # v3：task 不进名字 ⇒ 槽位号只用于区分同 role 多会话，**不得**复用已占槽位
   #   （v2 的「派生复用已有次槽位」会让两个不同 task 撞同一个 `role2` 名）。
-  for n in "" 2 3 4 5 6 7 8 9; do
+  for n in "" $(seq 2 99); do        # T595-A：槽位段 2..99（多仓场景；名字总长仍受 32 字符限制）
     local hit=0
     for i in "${occ[@]:-}"; do [[ "$i" == "${n:-1}" ]] && { hit=1; break; }; done
     (( hit )) && continue
@@ -395,7 +427,7 @@ cmd_ensure() {
           IFS=',' read -r _p_kind _p_role _p_task slot <<< "${pout_tmp#OK }"
         else
           slot="$(_ensure_pick_num "$wsid" "$NAME" "$task" "derived")" \
-            || die "ensure 中止：角色槽位已满（$NAME 的 2..9 全占；该怎么办：先 close 无用会话再重试）"
+            || die "ensure 中止：角色槽位已满（$NAME 的 2..99 全占；该怎么办：先 close 无用会话再重试）"
           disp="$(fleet_name_build derived "$NAME" "$slot")"
         fi
       else
@@ -451,11 +483,17 @@ cmd_ensure() {
         continue
       fi
     fi
-    if [[ -n "${t_cards[$i]}" ]]; then
-      spawn_one "$disp" "$repo" "$model" "${t_cards[$i]}" "${t_roles[$i]:-}" "" "$force" "${t_labels[$i]}" "" "$task" "$trust"
-    else
-      spawn_one "$disp" "$repo" "$model" "" "${t_roles[$i]:-}" "${t_prompts[$i]:-}" "$force" "${t_labels[$i]}" "" "$task" "$trust"
+    # T595-A：app 下槽位会让号（名字全局唯一）⇒ 若**基名**（槽位 1）已被占但放置归属不可判定，
+    #   仍按 T563/AC2 fail-closed 拒绝（否则会静默拉起 `role2`，把「归属不可判」变成「多一个终端」）。
+    if [[ "$(term_label)" == "app" && "$disp" != "$NAME" ]]; then
+      vrd="$(running_verdict "$NAME" "$repo")"
+      if [[ "$vrd" == "unknown" ]]; then
+        warn "无法确认放置归属（$NAME 在场但集成缺 labels）⇒ 不为 $disp 让号拉起；人工核对该终端后在 herdr desktop app 确认，确需重开请加 --force 重试"
+        SPAWN_FAIL=$((SPAWN_FAIL + 1))
+        continue
+      fi
     fi
+    _spawn_try "$disp" "$repo" "$model" "${t_cards[$i]:-}" "${t_roles[$i]:-}" "${t_prompts[$i]:-}" "$force" "${t_labels[$i]}" "$task" "$trust"
   done
   term_place_end
   # T573：顺手清理过期会话记录（幂等；失败只 warn、不改 rc；真删了才打一行）

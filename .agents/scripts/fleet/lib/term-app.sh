@@ -235,6 +235,22 @@ _term_app_identity() {  # <get-json> → 身份名（无 ⇒ 空）
 #   顶层 `name` 出现；老实现「取首个同名键」因此永远拿到 "pi" ⇒ 按名定位恒空 ⇒ close 打印
 #   「未发现 app 终端（幂等成功）」而终端仍在（假成功 + 占名撞 name_taken）。
 #   修法：先把 `foreground` / `labels` 两个嵌套块整体剔掉，再取首个 `name`（= 顶层名）；null ⇒ 空。
+term_live_peer_names() {  # 每行一个**活终端名**（app：per-core 全局；供 ensure 的槽位占用统计用）
+  # T595-A/Issue #273：`hc` 的终端名是 **per-core 全局唯一**（厂方文档：Name, unique among live terminals），
+  #   而 herdr 的 pane label 只在 workspace 内唯一（同名合法）⇒ 只有 app 需要跨 space 收名字。
+  #   herdr 侧仍由 ensure 的「本 ws 行表」统计（不要改成全局：那是回归）。
+  [[ "$(term_label)" == "app" ]] || return 0
+  local ls js nm
+  ls="$(_term_app_exec ls --all 2>/dev/null)" || return 0
+  _term_app_payload_ok "$ls" || return 0
+  while IFS= read -r js; do
+    [[ -n "$js" ]] || continue
+    nm="$(_term_app_name "$js")"; [[ -n "$nm" ]] || continue
+    [[ "$(_term_app_term_state "$js")" == "live" ]] || continue
+    printf '%s\n' "$nm"
+  done < <(_term_json_objs <<< "$ls")
+}
+
 _term_app_name() {  # <json> → 终端名（顶层 name；空/null ⇒ 空）
   local j="${1-}" v=""
   j="$(printf '%s\n' "$j" | sed -E -e 's/"foreground":\{[^}]*\},?//' -e 's/"labels":\{[^}]*\},?//')"
@@ -668,6 +684,13 @@ _term_app_spawn() {  # <name> <inner> <repo> [force] <label> [group] [task] → 
   out="$(_term_app_exec run --bg --no-parent --keep --name "$legal" --cwd "$repo" \
         "${lbl[@]}" -- "${SHELL:-/bin/bash}" -lc "$inner")" || true
   if ! _term_app_payload_ok "$out"; then
+    # T595-A：**只对 `name_taken` 让号重试**（app 名字 per-core 全局唯一 ⇒ 并发/他仓占名会撞）；
+    #   其它错误（含 unavailable / denied / invalid_name）**不重试**，照旧 fail loud。
+    if [[ "$out" == *'"kind":"name_taken"'* || "$out" == *'"code":"name_taken"'* ]]; then
+      _TERM_SPAWN_NAME_TAKEN=1
+      warn "hc 终端名已被占用（name=$legal）⇒ 让号重试（只这一种错误会重试）"
+      return "$SPAWN_RC_FAIL"
+    fi
     warn "hc run 失败（name=$name）：$(printf '%s' "$out" | head -c 200)"
     return "$SPAWN_RC_FAIL"
   fi
