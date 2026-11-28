@@ -401,16 +401,10 @@ _term_app_liveness() {  # <name> [repo] → verdict/state/seq/hook
     #   若 labels 与 status **两项都缺** ⇒ 按 AC8 主形态判 `integration-missing`（更强的缺陷），
     #   不降级成 unknown（否则 status 会把「集成缺失」证据行吞掉）。
     if [[ "$ws" == "-" ]]; then
-      # 只对**舰队形状的会话名**告警（非舰队终端 —— 如用户自己开的窗口、夹具的 self 终端 —— 不归我们管，
-      #   否则每次 status 都会刷一条无意义告警）。
-      if [[ "$(fleet_name_parse "$name")" == OK* ]]; then
-        warn "集成缺 labels：无法确认放置归属（终端 $name；不判在线、不可投递）"
-      fi
-      if [[ "$st" == "-" || "$hook" != "1" ]]; then
-        [[ -z "$v" ]] && { v="integration-missing"; state="-"; }
-      else
-        [[ -z "$v" ]] && { v="unknown"; state="-"; }
-      fi
+      # T597（P3 信号收敛）：**缺身份标签 ⇒ 归属不可判定（unknown）**，与本行是否有 status 无关。
+      #   理由：`space` 缺 = 我们无法确认它属于哪个 workspace/仓 ⇒ 既不判在线、也不判「未运行」。
+      #   呈现只有**一处**：status 行内 `? 不可判定` + 处置行（不再额外 warn，也不重复打 `!` 标记）。
+      [[ -z "$v" ]] && { v="unknown"; state="${st:-}"; }
       continue
     fi
     if [[ "$st" == "-" || "$hook" != "1" ]]; then

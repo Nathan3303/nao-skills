@@ -356,6 +356,9 @@ cmd_status() {
     [[ -n "${abn_seen[$dn]:-}" ]] || continue     # 只对已算定证据的名字（全集）
     dv="${hv[$dn]:-absent}"; ds="${hstate[$dn]:--}"
     [[ "$dv" == "absent" ]] && continue
+    # T597（P3 信号收敛）：`unknown`（缺身份标签 ⇒ 归属不可判定）已由上线状态表的 `? 行 + 处置行` 说明，
+    #   不再在「投递判定」节重复一遍（同一事实一处呈现）。
+    [[ "$dv" == "unknown" ]] && continue
     if [[ "$dv" == "online" ]] && term_deliverable "$ds"; then
       dl+=("  · $dn：可投递（状态=$ds）")
     elif [[ "$dv" == "online" ]]; then
