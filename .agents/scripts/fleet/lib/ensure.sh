@@ -267,7 +267,7 @@ _ensure_pick_num() {  # <wsid> <role> <task> <kind> → stdout num（空 = 槽�
   done < <(term_live_peer_names)
   # v3：task 不进名字 ⇒ 槽位号只用于区分同 role 多会话，**不得**复用已占槽位
   #   （v2 的「派生复用已有次槽位」会让两个不同 task 撞同一个 `role2` 名）。
-  for n in "" $(seq 2 99); do        # T595-A：槽位段 2..99（多仓场景；名字总长仍受 32 字符限制）
+  for n in "" 2 3 4 5 6 7 8 9; do    # 槽位段 2..9（T595-A 回退：扩容属命名契约变更，本单不做）
     local hit=0
     for i in "${occ[@]:-}"; do [[ "$i" == "${n:-1}" ]] && { hit=1; break; }; done
     (( hit )) && continue
@@ -483,9 +483,18 @@ cmd_ensure() {
         continue
       fi
     fi
-    # T595-A：app 下槽位会让号（名字全局唯一）⇒ 若**基名**（槽位 1）已被占但放置归属不可判定，
-    #   仍按 T563/AC2 fail-closed 拒绝（否则会静默拉起 `role2`，把「归属不可判」变成「多一个终端」）。
+    # T595-A（QA 阻断 2）：app 下让号前先判「同名那个终端标签是否完整」——
+    #   为什么不能只用 `running_verdict`：它对「workspace 外 + 零 label」的终端返回 `absent`（看不见），
+    #   于是让号会静默起 `role2`，用户以为旧终端没在跑（实测：`hc run --name rd-be` 不带任何 label ⇒ 起了 rd-be2）。
+    #   规则：完整（space/tab/身份齐）但不属本 ws ⇒ 让号；缺标签 ⇒ **拒**（T563/AC2 fail-closed），不新增终端。
     if [[ "$(term_label)" == "app" && "$disp" != "$NAME" ]]; then
+      _ls_state="$(_term_app_label_state "$NAME")"
+      if [[ "$_ls_state" == "incomplete" ]]; then
+        warn "拒绝让号：无法确认放置归属（$NAME 在场但缺身份标签：space/tab/name 不全）⇒ 不自动起 $disp"
+        warn "  该怎么办：先把那个同名终端处理掉（\`hc ls\` 看地址 → \`hc kill <地址>\`）；确需重开请加 --force 重试"
+        SPAWN_FAIL=$((SPAWN_FAIL + 1))
+        continue
+      fi
       vrd="$(running_verdict "$NAME" "$repo")"
       if [[ "$vrd" == "unknown" ]]; then
         warn "无法确认放置归属（$NAME 在场但集成缺 labels）⇒ 不为 $disp 让号拉起；人工核对该终端后在 herdr desktop app 确认，确需重开请加 --force 重试"

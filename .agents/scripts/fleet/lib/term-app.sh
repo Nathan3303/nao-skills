@@ -235,6 +235,27 @@ _term_app_identity() {  # <get-json> → 身份名（无 ⇒ 空）
 #   顶层 `name` 出现；老实现「取首个同名键」因此永远拿到 "pi" ⇒ 按名定位恒空 ⇒ close 打印
 #   「未发现 app 终端（幂等成功）」而终端仍在（假成功 + 占名撞 name_taken）。
 #   修法：先把 `foreground` / `labels` 两个嵌套块整体剔掉，再取首个 `name`（= 顶层名）；null ⇒ 空。
+_term_app_label_state() {  # <name> → complete | incomplete | absent
+  # T595-A（QA 阻断 2）：**不能只靠 `running_verdict`** —— 它对「workspace 外 + 零 label」的终端返回
+  #   `absent`（看不见），于是让号会静默起 `role2`，用户以为旧终端没在跑。
+  #   做法：按名找到地址 → `get --json` 看**标签是否完整**（space/tab/身份 name 齐）；据此决定让号 vs 拒绝。
+  local name="${1-}" addr js
+  [[ -n "$name" ]] || { printf 'absent\n'; return 0; }
+  while IFS= read -r addr; do
+    [[ -n "$addr" ]] || continue
+    js="$(_term_app_exec get "$addr" --json 2>/dev/null)" || continue
+    _term_app_payload_ok "$js" || continue
+    [[ "$(_term_app_term_state "$js")" == "live" ]] || continue
+    if [[ "$js" == *"\"$TERM_APP_LABEL_SPACE\":"* && "$js" == *"\"$TERM_APP_LABEL_TAB\":"* && "$js" == *"\"$TERM_APP_LABEL_NAME\":"* ]]; then
+      printf 'complete\n'
+    else
+      printf 'incomplete\n'
+    fi
+    return 0
+  done < <(_term_app_find_by_name "$name" 2>/dev/null || true)
+  printf 'absent\n'
+}
+
 term_live_peer_names() {  # 每行一个**活终端名**（app：per-core 全局；供 ensure 的槽位占用统计用）
   # T595-A/Issue #273：`hc` 的终端名是 **per-core 全局唯一**（厂方文档：Name, unique among live terminals），
   #   而 herdr 的 pane label 只在 workspace 内唯一（同名合法）⇒ 只有 app 需要跨 space 收名字。

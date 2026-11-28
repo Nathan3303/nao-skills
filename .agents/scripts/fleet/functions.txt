@@ -1,7 +1,7 @@
 # fleet/functions.txt — 顶层函数清单（T567-A 拆分基线）
 #
 # 格式：<脚本路径（相对 .agents/scripts/）>\t<函数名>
-# total: 238（T579：+check_docs_index；T580：+check_ledger_structure；T594：+check_env_alias；T584：+_term_herdr_trust_hint；T595-A：+term_live_peer_names +_spawn_try）
+# total: 239（T579：+check_docs_index；T580：+check_ledger_structure；T594：+check_env_alias；T584：+_term_herdr_trust_hint；T595-A：+term_live_peer_names +_spawn_try +_term_app_label_state）
 # 断言（tests/t4/cases/06）：① 各模块顶层函数并集 == 本清单（无漏登记/无重名/无孤儿）
 #   ② 总数守恒（纯搬迁 ⇒ 174；新增函数须同行加一行并改本头的 total）
 fleet/lib/status.sh	_status_json_emit
@@ -132,6 +132,7 @@ fleet/lib/term-app.sh	_term_app_verify_place
 fleet/lib/term-app.sh	_term_app_poll_place
 fleet/lib/term-app.sh	_term_app_wait_ready
 fleet/lib/term-app.sh	term_live_peer_names
+fleet/lib/term-app.sh	_term_app_label_state
 fleet/lib/term-app.sh	_term_app_spawn
 fleet/lib/term-app.sh	_term_app_deliver
 fleet/lib/term-app.sh	_term_app_find_by_name

@@ -290,7 +290,7 @@ rm -f "$BE_APP_STATE/bare_get"
 #   因同名多命中而拒 —— 残余风险必须显式喊出（warn），不得静默当作可投递。
 app_reset
 env HC_DOUBLE_STATE="$BE_APP_STATE" "$FIXT/hc" run --bg --no-parent --keep \
-  --name rd-fe --cwd "$LAB" --label herdr.space=spx --label herdr.tab=tbx -- true >/dev/null
+  --name rd-fe --cwd "$LAB" --label herdr.space=spx --label herdr.tab=tbx --label nao.name=rd-fe -- true >/dev/null
 printf '1' > "$BE_APP_STATE/bare_labels"
 run_app status
 t4_assert_contains "$APP_ERR" "集成缺 labels" "⑫ 子形态：只缺 labels ⇒ warn「无法确认放置归属」"
@@ -305,7 +305,7 @@ app_reset
 #   缺 labels 的**在场终端**不得被当成「不在运行」而拉起第二个（否则同名多命中，close 随即拒）。
 app_reset
 env HC_DOUBLE_STATE="$BE_APP_STATE" "$FIXT/hc" run --bg --no-parent --keep \
-  --name rd-fe --cwd "$LAB" --label herdr.space=spx --label herdr.tab=tbx -- true >/dev/null
+  --name rd-fe --cwd "$LAB" --label herdr.space=spx --label herdr.tab=tbx --label nao.name=rd-fe -- true >/dev/null
 n_before="$(app_addrs | grep -c . || true)"
 printf '1' > "$BE_APP_STATE/bare_labels"
 run_app ensure rd-fe
@@ -418,9 +418,9 @@ app_reset
 # 占名终端要带**齐全 labels**（否则 `running_verdict` = unknown，按 T563/AC2 fail-closed 拒绝——
 #   那条语义在 ⑬ 已单独钉住，这里要验的是「归属可判 ⇒ 让号」，两件事不能混）
 stub_hc run --bg --no-parent --keep --name pm  --cwd "$LAB/repo-b" \
-  --label herdr.space=spx --label herdr.tab=tbx --label herdr.name=pm  --label nao.name=pm  -- true >/dev/null
+  --label herdr.space=spx --label herdr.tab=tbx --label nao.name=pm  -- true >/dev/null
 stub_hc run --bg --no-parent --keep --name pm2 --cwd "$LAB/repo-b" \
-  --label herdr.space=spx --label herdr.tab=tby --label herdr.name=pm2 --label nao.name=pm2 -- true >/dev/null
+  --label herdr.space=spx --label herdr.tab=tby --label nao.name=pm2 -- true >/dev/null
 run_app ensure "pm@$LAB/repo-a"
 t4_assert_eq "0" "$APP_RC" "⑭② 目标基名被手工占用 ⇒ ensure 仍成功（让号，不是失败）"
 _ｎ2="$(for a in $(app_addrs); do app_field "$a" name; done | tr '\n' ' ')"
@@ -446,10 +446,31 @@ t4_assert_eq "1" "$(grep -c '^run ' "$BE_APP_STATE/log" 2>/dev/null || true)" \
 
 # ④ 不回归：占用来源按后端分叉 + 槽位段到 99（静态面，改实现即红）
 PICK_BODY="$(sed -n '/^_ensure_pick_num()/,/^}/p' "$(t4_fleet_file_for "$LAB/.agents/scripts" _ensure_pick_num)")"
-t4_assert_contains "$PICK_BODY" "seq 2 99" "⑭④ 槽位段 2..99（旧实现 2..9 ⇒ 本条必红）"
+t4_assert_contains "$PICK_BODY" 'for n in "" 2 3 4 5 6 7 8 9' "⑭④ 槽位段仍是 2..9（扩容属命名契约变更，本单不做；改成 99 ⇒ 本条必红）"
 t4_assert_contains "$PICK_BODY" "term_live_peer_names" "⑭④ 占用统计含后端相关来源（app 全局 / herdr 本 ws）"
 APP_LIB="$(t4_fleet_file_for "$LAB/.agents/scripts" term_live_peer_names)"
 t4_assert_contains "$(sed -n '/^term_live_peer_names()/,/^}/p' "$APP_LIB")" '[[ "$(term_label)" == "app" ]] || return 0' \
   "⑭④ herdr 不并全局名（同名合法；改成全局即回归 ⇒ 本条必红）"
+
+# ⑭⑤ 正反两向（QA 阻断 2）：同名终端**标签是否完整**决定「让号」还是「拒绝」
+#   反（缺 label）：真 hc 语义下这类终端对 `running_verdict` 是 absent（ws 外看不见）⇒ 旧实现会静默起 role2
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-be --cwd "$LAB/repo-b" -- true >/dev/null   # 一个 label 都不带
+_n_before="$(app_addrs | grep -c . || true)"
+run_app ensure "rd-be@$LAB/repo-a"
+t4_assert_ne "0" "$APP_RC" "⑭⑤ 零 label 同名 ⇒ 拒绝（rc≠0，不静默起 rd-be2）"
+t4_assert_contains "$APP_ERR" "缺身份标签" "⑭⑤ 点名「缺身份标签」（不是含糊失败）"
+t4_assert_contains "$APP_ERR" "hc kill" "⑭⑤ 指路给可执行处置（hc ls / hc kill 或 close --force）"
+t4_assert_eq "$_n_before" "$(app_addrs | grep -c . || true)" "⑭⑤ **不新增终端**（fail-closed 生效）"
+run_app status
+t4_assert_contains "$APP_OUT$APP_ERR" "rd-be" "⑭⑤ status 仍能看到那个同名终端（不报成「未运行」）"
+# 正（完整 label 的 ws 外同名）⇒ 让号成功
+app_reset
+stub_hc run --bg --no-parent --keep --name rd-be --cwd "$LAB/repo-b" \
+  --label herdr.space=spx --label herdr.tab=tbx --label nao.name=rd-be -- true >/dev/null
+run_app ensure "rd-be@$LAB/repo-a"
+t4_assert_eq "0" "$APP_RC" "⑭⑤ 完整 label 的 ws 外同名 ⇒ 让号成功（本单要的正常路径）"
+_n_after="$(for a in $(app_addrs); do app_field "$a" name; done | tr '\n' ' ')"
+t4_assert_contains "$_n_after" "rd-be2" "⑭⑤ 让号结果 = rd-be2（而不是失败）"
 
 t4_exit
