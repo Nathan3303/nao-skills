@@ -53,6 +53,8 @@
 #                                                 （TMUX/TMUX_PANE/TMUX_TMPDIR）+ **枚举清 HERDR_***（BR6），
 #                                                 50×100ms / 5s 轮询就绪，超时 fail loud
 #   nao-fleet.sh ensure --force <别名>...          忽略"已在运行"判重
+#   nao-fleet.sh ensure --trust-project <别名>...   给**本次**拉起的 pi 加 `--approve`（首次在未信任目录免确认；
+#                                                 只影响该次 spawn，不写任何持久配置；等价环境变量 NAO_TRUST_NEW_REPO=1）
 #                                                 （目标解析为 pm 时，**就绪后**投递一条固定用户消息：机制包版本自检，
 #                                                  仅提示不自动升级；关闭用 NAO_UPDATE_ON_ENSURE=0）
 #   nao-fleet.sh close <别名|派生会话名|legacy 全名> [--task <编号>] [--force]
@@ -131,7 +133,7 @@ usage() {
 }
 
 # ---- 入口 ----
-CMD=""; FORCE=false; STRICT=false; MODEL=""; TASK=""; CLEANUP_SOCK=""; SESSION_ARG=""; TARGETS=()
+CMD=""; FORCE=false; STRICT=false; MODEL=""; TASK=""; TRUST_PROJECT=false; CLEANUP_SOCK=""; SESSION_ARG=""; TARGETS=()
 # T567-B：`status --json`（编排器唯一跨进程契约）。默认关 ⇒ 文本路径逐字不变（AC1）。
 JSON_OUT=false
 # T554/D7：`--fleet` / `--scope` 已弃用 —— 只保留「给参但空 ⇒ 用法错」守卫；非空仅打一行 warn 后丢弃（放置键恒为仓基键）
@@ -204,6 +206,8 @@ while [[ $# -gt 0 ]]; do
       [[ -n "$MODEL" ]] || die "-m 需要模型参数"
       check_model "$MODEL" || die "模型 '$MODEL' 不在白名单内。允许: $MODEL_WHITELIST（可通过 NAO_MODEL_WHITELIST 覆盖）"
       shift 2 ;;
+    # T586-B/Issue #248：显式信任开关 —— **只影响本次 spawn 的 pi**（传 `--approve`），不写任何持久配置
+    --trust-project) _need_ensure "--trust-project"; TRUST_PROJECT=true; shift ;;
     --force)  FORCE=true;  shift ;;
     --task)   TASK="${2:-}"; [[ -n "$TASK" ]] || die "--task 需要任务编号（如 T1）"; [[ "$TASK" =~ ^[A-Za-z0-9_-]+$ ]] || die "--task 非法: $TASK（仅字母/数字/-/_）"; shift 2 ;;
     # T554/D7 · --fleet：**弃用** —— 给参但空仍是用法错；非空 ⇒ 恰一行 warn 后忽略（不校验、不影响放置）。
@@ -331,7 +335,7 @@ case "$CMD" in
   close)  cmd_close "$FORCE" "$TASK" "${TARGETS[0]:-}" ;;
   cleanup) cmd_cleanup ;;
   session-start) term_session_start "$SESSION_ARG" ;;
-  ensure) cmd_ensure "$FORCE" "$MODEL" "$TASK" ;;
+  ensure) cmd_ensure "$FORCE" "$MODEL" "$TASK" "$TRUST_PROJECT" ;;
   logs)   cmd_logs ;;
   *) usage ;;
 esac
